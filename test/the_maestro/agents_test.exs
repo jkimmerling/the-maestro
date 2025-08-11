@@ -22,15 +22,33 @@ defmodule TheMaestro.AgentsTest do
 
   describe "send_message/2" do
     test "sends message to agent and receives response" do
-      agent_id = "message_agent_#{System.unique_integer()}"
-      {:ok, _pid} = Agents.start_agent(agent_id)
+      # Skip this test in CI environments where no API key is available
+      if System.get_env("GEMINI_API_KEY") do
+        agent_id = "message_agent_#{System.unique_integer()}"
+        {:ok, _pid} = Agents.start_agent(agent_id)
 
-      message = "Hello, agent!"
-      assert {:ok, response} = Agents.send_message(agent_id, message)
+        message = "Hello, agent!"
+        assert {:ok, response} = Agents.send_message(agent_id, message)
 
-      assert response.type == :assistant
-      assert response.content =~ message
-      assert %DateTime{} = response.timestamp
+        assert response.type == :assistant
+        assert is_binary(response.content)
+        assert String.length(response.content) > 0
+        assert %DateTime{} = response.timestamp
+      else
+        # Test without LLM - expect the error response
+        agent_id = "message_agent_#{System.unique_integer()}"
+        {:ok, _pid} = Agents.start_agent(agent_id)
+
+        message = "Hello, agent!"
+        assert {:ok, response} = Agents.send_message(agent_id, message)
+
+        assert response.type == :assistant
+
+        assert response.content ==
+                 "I'm sorry, I encountered an error processing your request. Please check your authentication configuration."
+
+        assert %DateTime{} = response.timestamp
+      end
     end
 
     test "updates agent state with message history" do

@@ -43,6 +43,20 @@ Learn how to implement stateful GenServer processes for managing AI agent conver
 
 **Difficulty**: Intermediate
 
+### [Story 1.4: LLMProvider Behaviour & Gemini Adapter with OAuth](epic1/story1.4/)
+
+Learn how to build model-agnostic LLM provider systems with comprehensive OAuth authentication:
+
+- Design extensible interfaces using Elixir behaviours
+- Implement OAuth2 flows (device authorization, web-based) with PKCE security
+- Build secure credential caching and token refresh mechanisms
+- Integrate HTTP APIs with proper error handling patterns
+- Update GenServer state management for external service integration
+
+**Key Concepts**: Behaviours, OAuth2 security, credential management, HTTP client integration, GenServer patterns
+
+**Difficulty**: Advanced
+
 ---
 
 ## Coming Soon
@@ -51,7 +65,6 @@ More tutorials will be added as development progresses through the epics:
 
 ### Epic 1 Remaining Stories
 - Story 1.2: Core Application & Supervision Tree
-- Story 1.4: LLMProvider Behaviour & Gemini Adapter
 - Story 1.5: Tooling DSL & Sandboxed File Tool
 - Story 1.6: Epic 1 Demo Creation
 

@@ -5,7 +5,12 @@ defmodule TheMaestro.Agents.AgentTest do
 
   setup do
     agent_id = "test_agent_#{System.unique_integer()}"
-    {:ok, pid} = Agent.start_link(agent_id: agent_id)
+
+    {:ok, pid} =
+      Agent.start_link(
+        agent_id: agent_id,
+        llm_provider: TheMaestro.Providers.TestProvider
+      )
 
     {:ok, agent_id: agent_id, pid: pid}
   end
@@ -85,7 +90,12 @@ defmodule TheMaestro.Agents.AgentTest do
   describe "registry integration" do
     test "agent is registered with unique name" do
       agent_id = "registry_test_#{System.unique_integer()}"
-      {:ok, pid} = Agent.start_link(agent_id: agent_id)
+
+      {:ok, pid} =
+        Agent.start_link(
+          agent_id: agent_id,
+          llm_provider: TheMaestro.Providers.TestProvider
+        )
 
       # Should be able to find the process via registry
       registry_result = Registry.lookup(TheMaestro.Agents.Registry, agent_id)
