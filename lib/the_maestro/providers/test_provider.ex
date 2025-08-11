@@ -21,7 +21,7 @@ defmodule TheMaestro.Providers.TestProvider do
   end
 
   @impl LLMProvider
-  def complete_text(auth_context, messages, opts \\ %{}) do
+  def complete_text(_auth_context, messages, _opts \\ %{}) do
     # Return a hardcoded response that echoes the last user message
     last_user_message =
       messages

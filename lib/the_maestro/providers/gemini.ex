@@ -129,7 +129,9 @@ defmodule TheMaestro.Providers.Gemini do
   end
 
   def refresh_auth(%{type: :service_account, credentials: %{source: source}} = auth_context) do
-    case Goth.Token.for_scope(@oauth_scopes, source: source) do
+    opts = [source: source, scopes: @oauth_scopes]
+
+    case Goth.fetch(opts) do
       {:ok, %Goth.Token{token: token}} ->
         {:ok, %{auth_context | credentials: %{access_token: token, source: source}}}
 
@@ -170,7 +172,7 @@ defmodule TheMaestro.Providers.Gemini do
   Returns a URL that the user should visit in their browser and a polling function
   to check for completion.
   """
-  def device_authorization_flow(config \\ %{}) do
+  def device_authorization_flow(_config \\ %{}) do
     state = generate_state()
     code_verifier = generate_code_verifier()
     code_challenge = generate_code_challenge(code_verifier)
@@ -209,7 +211,7 @@ defmodule TheMaestro.Providers.Gemini do
   Returns a URL for browser-based authentication and starts a local server
   to handle the callback.
   """
-  def web_authorization_flow(config \\ %{}) do
+  def web_authorization_flow(_config \\ %{}) do
     port = get_available_port_number()
     redirect_uri = String.replace(@oauth_redirect_uri_pattern, "%d", Integer.to_string(port))
     state = generate_state()
@@ -278,7 +280,9 @@ defmodule TheMaestro.Providers.Gemini do
   end
 
   defp initialize_service_account_auth(creds_path, config) do
-    case Goth.Token.for_scope(@oauth_scopes, source: creds_path) do
+    opts = [source: creds_path, scopes: @oauth_scopes]
+
+    case Goth.fetch(opts) do
       {:ok, %Goth.Token{token: token}} ->
         {:ok,
          %{
@@ -292,7 +296,7 @@ defmodule TheMaestro.Providers.Gemini do
     end
   end
 
-  defp detect_auth_method(config) do
+  defp detect_auth_method(_config) do
     cond do
       # Check for API key first
       api_key = get_api_key() ->
