@@ -35,5 +35,6 @@ the_maestro-*.tar
 npm-debug.log
 /assets/node_modules/
 
-agent-os/*
+.agent-os/*
 gemini-cli-source/*
+/gemini-cli-source/*

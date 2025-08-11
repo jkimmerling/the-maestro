@@ -37,49 +37,17 @@ defmodule TheMaestro.Providers.Gemini do
   def initialize_auth(config \\ %{}) do
     case detect_auth_method(config) do
       {:api_key, api_key} ->
-        {:ok,
-         %{
-           type: :api_key,
-           credentials: %{api_key: api_key},
-           config: config
-         }}
+        create_api_key_auth_context(api_key, config)
 
       {:oauth, :cached} ->
-        case load_cached_oauth_credentials() do
-          {:ok, credentials} ->
-            auth_context = %{
-              type: :oauth,
-              credentials: credentials,
-              config: config
-            }
-
-            # Validate and refresh if needed
-            case validate_and_refresh_oauth(auth_context) do
-              {:ok, refreshed_context} -> {:ok, refreshed_context}
-              {:error, _} -> initialize_oauth_flow(config)
-            end
-
-          {:error, _} ->
-            initialize_oauth_flow(config)
-        end
+        initialize_cached_oauth(config)
 
       {:oauth, :new} ->
         # In non-interactive mode or tests, return an error instead of starting OAuth flow
         {:error, :oauth_initialization_required}
 
       {:service_account, creds_path} ->
-        case Goth.Token.for_scope(@oauth_scopes, source: creds_path) do
-          {:ok, %Goth.Token{token: token}} ->
-            {:ok,
-             %{
-               type: :service_account,
-               credentials: %{access_token: token, source: creds_path},
-               config: config
-             }}
-
-          {:error, reason} ->
-            {:error, {:service_account_auth_failed, reason}}
-        end
+        initialize_service_account_auth(creds_path, config)
 
       {:error, reason} ->
         {:error, reason}
@@ -280,6 +248,50 @@ defmodule TheMaestro.Providers.Gemini do
 
   # Private Authentication Detection and Flow Management
 
+  defp create_api_key_auth_context(api_key, config) do
+    {:ok,
+     %{
+       type: :api_key,
+       credentials: %{api_key: api_key},
+       config: config
+     }}
+  end
+
+  defp initialize_cached_oauth(config) do
+    case load_cached_oauth_credentials() do
+      {:ok, credentials} ->
+        auth_context = %{
+          type: :oauth,
+          credentials: credentials,
+          config: config
+        }
+
+        # Validate and refresh if needed
+        case validate_and_refresh_oauth(auth_context) do
+          {:ok, refreshed_context} -> {:ok, refreshed_context}
+          {:error, _} -> initialize_oauth_flow(config)
+        end
+
+      {:error, _} ->
+        initialize_oauth_flow(config)
+    end
+  end
+
+  defp initialize_service_account_auth(creds_path, config) do
+    case Goth.Token.for_scope(@oauth_scopes, source: creds_path) do
+      {:ok, %Goth.Token{token: token}} ->
+        {:ok,
+         %{
+           type: :service_account,
+           credentials: %{access_token: token, source: creds_path},
+           config: config
+         }}
+
+      {:error, reason} ->
+        {:error, {:service_account_auth_failed, reason}}
+    end
+  end
+
   defp detect_auth_method(config) do
     cond do
       # Check for API key first
@@ -430,27 +442,35 @@ defmodule TheMaestro.Providers.Gemini do
         {:error, :no_refresh_token}
 
       refresh_token ->
-        case exchange_refresh_token(refresh_token) do
-          {:ok, new_tokens} ->
-            # Preserve refresh token if not provided in response
-            final_tokens =
-              if new_tokens[:refresh_token] do
-                new_tokens
-              else
-                Map.put(new_tokens, :refresh_token, refresh_token)
-              end
-
-            updated_context = %{auth_context | credentials: final_tokens}
-
-            # Cache the updated credentials
-            cache_oauth_credentials(final_tokens)
-
-            {:ok, updated_context}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
+        handle_token_refresh(auth_context, refresh_token)
     end
+  end
+
+  defp handle_token_refresh(auth_context, refresh_token) do
+    case exchange_refresh_token(refresh_token) do
+      {:ok, new_tokens} ->
+        process_new_tokens(auth_context, new_tokens, refresh_token)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp process_new_tokens(auth_context, new_tokens, original_refresh_token) do
+    # Preserve refresh token if not provided in response
+    final_tokens =
+      if new_tokens[:refresh_token] do
+        new_tokens
+      else
+        Map.put(new_tokens, :refresh_token, original_refresh_token)
+      end
+
+    updated_context = %{auth_context | credentials: final_tokens}
+
+    # Cache the updated credentials
+    cache_oauth_credentials(final_tokens)
+
+    {:ok, updated_context}
   end
 
   # OAuth Flow Implementation
