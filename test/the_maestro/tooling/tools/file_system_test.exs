@@ -1,5 +1,6 @@
 defmodule TheMaestro.Tooling.Tools.FileSystemTest do
-  use ExUnit.Case, async: false  # File operations should not run concurrently
+  # File operations should not run concurrently
+  use ExUnit.Case, async: false
   doctest TheMaestro.Tooling.Tools.FileSystem
 
   alias TheMaestro.Tooling.Tools.FileSystem
@@ -7,27 +8,28 @@ defmodule TheMaestro.Tooling.Tools.FileSystemTest do
   # Setup test directory structure
   @test_sandbox_dir "/tmp/maestro_test_sandbox"
   @test_file_content "Hello, World!\nThis is a test file.\n"
-  
+
   setup do
     # Clean up and create test sandbox
     if File.exists?(@test_sandbox_dir), do: File.rm_rf!(@test_sandbox_dir)
     File.mkdir_p!(@test_sandbox_dir)
-    
+
     # Create some test files and directories
     File.mkdir_p!(Path.join(@test_sandbox_dir, "subdir"))
     File.write!(Path.join(@test_sandbox_dir, "test.txt"), @test_file_content)
     File.write!(Path.join(@test_sandbox_dir, "subdir/nested.txt"), "Nested file content")
-    
+
     # Set up configuration for testing
-    Application.put_env(:the_maestro, :file_system_tool, [
+    Application.put_env(:the_maestro, :file_system_tool,
       allowed_directories: [@test_sandbox_dir],
-      max_file_size: 10 * 1024 * 1024  # 10MB
-    ])
-    
+      # 10MB
+      max_file_size: 10 * 1024 * 1024
+    )
+
     on_exit(fn ->
       if File.exists?(@test_sandbox_dir), do: File.rm_rf!(@test_sandbox_dir)
     end)
-    
+
     {:ok, sandbox_dir: @test_sandbox_dir}
   end
 
@@ -39,7 +41,7 @@ defmodule TheMaestro.Tooling.Tools.FileSystemTest do
 
     test "returns proper tool definition" do
       definition = FileSystem.definition()
-      
+
       assert definition["name"] == "read_file"
       assert is_binary(definition["description"])
       assert is_map(definition["parameters"])
@@ -86,7 +88,7 @@ defmodule TheMaestro.Tooling.Tools.FileSystemTest do
     test "reads file content successfully", %{sandbox_dir: sandbox_dir} do
       file_path = Path.join(sandbox_dir, "test.txt")
       assert {:ok, result} = FileSystem.execute(%{"path" => file_path})
-      
+
       assert result["content"] == @test_file_content
       assert result["path"] == file_path
       assert is_integer(result["size"])
@@ -96,7 +98,7 @@ defmodule TheMaestro.Tooling.Tools.FileSystemTest do
     test "reads nested file content", %{sandbox_dir: sandbox_dir} do
       nested_path = Path.join(sandbox_dir, "subdir/nested.txt")
       assert {:ok, result} = FileSystem.execute(%{"path" => nested_path})
-      
+
       assert result["content"] == "Nested file content"
       assert result["path"] == nested_path
     end
@@ -104,7 +106,7 @@ defmodule TheMaestro.Tooling.Tools.FileSystemTest do
     test "handles empty files", %{sandbox_dir: sandbox_dir} do
       empty_file = Path.join(sandbox_dir, "empty.txt")
       File.write!(empty_file, "")
-      
+
       assert {:ok, result} = FileSystem.execute(%{"path" => empty_file})
       assert result["content"] == ""
       assert result["size"] == 0
@@ -113,9 +115,9 @@ defmodule TheMaestro.Tooling.Tools.FileSystemTest do
     test "includes file metadata in response", %{sandbox_dir: sandbox_dir} do
       file_path = Path.join(sandbox_dir, "test.txt")
       assert {:ok, result} = FileSystem.execute(%{"path" => file_path})
-      
+
       assert Map.has_key?(result, "content")
-      assert Map.has_key?(result, "path") 
+      assert Map.has_key?(result, "path")
       assert Map.has_key?(result, "size")
       assert is_integer(result["size"])
     end
@@ -140,15 +142,17 @@ defmodule TheMaestro.Tooling.Tools.FileSystemTest do
     test "handles permission errors gracefully" do
       # This test may be environment-dependent
       # Try to read a file that typically requires elevated permissions
-      restricted_path = "/root/.bashrc"  # Typically not readable by regular users
-      
+      # Typically not readable by regular users
+      restricted_path = "/root/.bashrc"
+
       result = FileSystem.execute(%{"path" => restricted_path})
-      
+
       case result do
         {:error, reason} ->
           assert is_binary(reason)
           # Should get either permission denied or outside sandbox error
           :ok
+
         {:ok, _} ->
           # File was readable, test still passes
           :ok
@@ -158,17 +162,19 @@ defmodule TheMaestro.Tooling.Tools.FileSystemTest do
 
   describe "performance and resource management" do
     test "handles reasonably large files", %{sandbox_dir: sandbox_dir} do
-      large_content = String.duplicate("x", 1024 * 10)  # 10KB
+      # 10KB
+      large_content = String.duplicate("x", 1024 * 10)
       large_file = Path.join(sandbox_dir, "large.txt")
       File.write!(large_file, large_content)
-      
-      {time_microseconds, result} = :timer.tc(fn ->
-        FileSystem.execute(%{"path" => large_file})
-      end)
-      
+
+      {time_microseconds, result} =
+        :timer.tc(fn ->
+          FileSystem.execute(%{"path" => large_file})
+        end)
+
       assert {:ok, file_result} = result
       assert file_result["content"] == large_content
-      
+
       # Should complete within reasonable time (less than 1 second)
       assert time_microseconds < 1_000_000
     end

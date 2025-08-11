@@ -34,13 +34,15 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
   def definition do
     %{
       "name" => "read_file",
-      "description" => "Reads the contents of a file from the local filesystem. Only files within pre-configured allowed directories can be accessed.",
+      "description" =>
+        "Reads the contents of a file from the local filesystem. Only files within pre-configured allowed directories can be accessed.",
       "parameters" => %{
         "type" => "object",
         "properties" => %{
           "path" => %{
             "type" => "string",
-            "description" => "Absolute or relative file path to read. Path must be within allowed directories."
+            "description" =>
+              "Absolute or relative file path to read. Path must be within allowed directories."
           }
         },
         "required" => ["path"]
@@ -54,11 +56,12 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
 
     with {:ok, validated_path} <- validate_path(path),
          {:ok, content} <- read_file_safely(validated_path) do
-      {:ok, %{
-        "content" => content,
-        "path" => validated_path,
-        "size" => byte_size(content)
-      }}
+      {:ok,
+       %{
+         "content" => content,
+         "path" => validated_path,
+         "size" => byte_size(content)
+       }}
     else
       {:error, reason} ->
         Logger.warning("FileSystem tool failed: #{reason}")
@@ -109,9 +112,11 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
       case Path.type(path) do
         :absolute ->
           {:ok, Path.expand(path)}
+
         :relative ->
           # For relative paths, resolve against current working directory
           {:ok, Path.expand(path, File.cwd!())}
+
         :volumerelative ->
           {:error, "Volume-relative paths are not supported"}
       end
@@ -122,14 +127,15 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
 
   defp check_path_allowed(path) do
     allowed_dirs = get_allowed_directories()
-    
+
     if length(allowed_dirs) == 0 do
       Logger.warning("No allowed directories configured for FileSystem tool")
       {:error, "File system access is not configured"}
     else
-      path_allowed = Enum.any?(allowed_dirs, fn allowed_dir ->
-        String.starts_with?(path, Path.expand(allowed_dir))
-      end)
+      path_allowed =
+        Enum.any?(allowed_dirs, fn allowed_dir ->
+          String.starts_with?(path, Path.expand(allowed_dir))
+        end)
 
       if path_allowed do
         :ok
@@ -143,14 +149,19 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
     case File.stat(path) do
       {:ok, %File.Stat{type: :regular}} ->
         :ok
+
       {:ok, %File.Stat{type: :directory}} ->
         {:error, "Path is a directory, not a file"}
+
       {:ok, %File.Stat{type: other}} ->
         {:error, "Path is not a regular file (type: #{other})"}
+
       {:error, :enoent} ->
         {:error, "File does not exist"}
+
       {:error, :eacces} ->
         {:error, "Permission denied"}
+
       {:error, reason} ->
         {:error, "Cannot access file: #{reason}"}
     end
@@ -162,15 +173,16 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
     case File.stat(path) do
       {:ok, %File.Stat{size: size}} when size > max_size ->
         {:error, "File too large (#{size} bytes, max: #{max_size} bytes)"}
-      
+
       {:ok, _stat} ->
         case File.read(path) do
           {:ok, content} ->
             {:ok, content}
+
           {:error, reason} ->
             {:error, "Failed to read file: #{reason}"}
         end
-      
+
       {:error, reason} ->
         {:error, "Cannot stat file: #{reason}"}
     end
@@ -183,7 +195,8 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
 
   defp get_max_file_size do
     Application.get_env(:the_maestro, :file_system_tool, [])
-    |> Keyword.get(:max_file_size, 10 * 1024 * 1024)  # 10MB default
+    # 10MB default
+    |> Keyword.get(:max_file_size, 10 * 1024 * 1024)
   end
 
   defp default_allowed_directories do

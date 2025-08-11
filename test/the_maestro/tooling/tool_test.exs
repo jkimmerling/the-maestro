@@ -89,7 +89,7 @@ defmodule TheMaestro.Tooling.ToolTest do
     test "validates arguments against schema" do
       # Valid arguments
       assert :ok = TestTool.validate_arguments(%{"action" => "test"})
-      
+
       # Missing required parameter
       assert {:error, reason} = TestTool.validate_arguments(%{})
       assert String.contains?(reason, "Missing required parameters")
@@ -103,7 +103,7 @@ defmodule TheMaestro.Tooling.ToolTest do
   describe "Tool definition format" do
     test "returns proper OpenAI function format" do
       definition = TestTool.definition()
-      
+
       assert is_map(definition)
       assert definition["name"] == "test_tool"
       assert is_binary(definition["description"])
@@ -116,14 +116,14 @@ defmodule TheMaestro.Tooling.ToolTest do
     test "includes required parameters list" do
       definition = TestTool.definition()
       required = definition["parameters"]["required"]
-      
+
       assert "action" in required
     end
 
     test "includes parameter descriptions" do
       definition = TestTool.definition()
       properties = definition["parameters"]["properties"]
-      
+
       assert Map.has_key?(properties, "action")
       assert is_binary(properties["action"]["description"])
     end

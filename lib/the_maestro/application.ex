@@ -36,6 +36,7 @@ defmodule TheMaestro.Application do
         # Register built-in tools
         TheMaestro.Tooling.Tools.FileSystem.register_self()
         result
+
       error ->
         error
     end

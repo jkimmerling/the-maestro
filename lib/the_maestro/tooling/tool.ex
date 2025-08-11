@@ -140,7 +140,7 @@ defmodule TheMaestro.Tooling.Tool do
       def validate_arguments(arguments) do
         definition = definition()
         schema = definition["parameters"]
-        
+
         case validate_against_schema(arguments, schema) do
           :ok -> :ok
           {:error, reason} -> {:error, "Invalid arguments: #{reason}"}
@@ -150,12 +150,13 @@ defmodule TheMaestro.Tooling.Tool do
       defp validate_against_schema(arguments, schema) do
         required_params = Map.get(schema, "required", [])
         properties = Map.get(schema, "properties", %{})
-        
+
         # Check required parameters
-        missing_required = Enum.filter(required_params, fn param ->
-          not Map.has_key?(arguments, param)
-        end)
-        
+        missing_required =
+          Enum.filter(required_params, fn param ->
+            not Map.has_key?(arguments, param)
+          end)
+
         if length(missing_required) > 0 do
           {:error, "Missing required parameters: #{inspect(missing_required)}"}
         else

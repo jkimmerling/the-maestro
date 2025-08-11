@@ -233,9 +233,11 @@ defmodule TheMaestro.Agents.Agent do
           {0, _} ->
             # No tools available, use basic completion
             basic_completion_opts = Map.delete(completion_opts, :tools)
+
             case state.llm_provider.complete_text(auth_context, messages, basic_completion_opts) do
               {:ok, %{content: content}} ->
                 {:ok, content}
+
               {:error, reason} ->
                 {:error, reason}
             end
@@ -262,9 +264,11 @@ defmodule TheMaestro.Agents.Agent do
             else
               # Provider doesn't support tool completion, fallback to basic
               basic_completion_opts = Map.delete(completion_opts, :tools)
+
               case provider.complete_text(auth_context, messages, basic_completion_opts) do
                 {:ok, %{content: content}} ->
                   {:ok, content}
+
                 {:error, reason} ->
                   {:error, reason}
               end
@@ -277,9 +281,10 @@ defmodule TheMaestro.Agents.Agent do
     require Logger
 
     # Execute each tool call
-    tool_results = Enum.map(tool_calls, fn tool_call ->
-      execute_tool_call(tool_call)
-    end)
+    tool_results =
+      Enum.map(tool_calls, fn tool_call ->
+        execute_tool_call(tool_call)
+      end)
 
     # Add tool call messages and results to conversation
     updated_messages = messages ++ build_tool_messages(tool_calls, tool_results, initial_content)
@@ -326,42 +331,48 @@ defmodule TheMaestro.Agents.Agent do
 
   defp build_tool_messages(tool_calls, tool_results, initial_content) do
     # Add assistant message with tool calls if there was initial content
-    assistant_msg = if initial_content do
-      [%{role: :assistant, content: initial_content}]
-    else
-      []
-    end
-
-    # Add tool result messages
-    tool_messages = Enum.zip(tool_calls, tool_results)
-    |> Enum.map(fn {tool_call, result} ->
-      result_content = case result do
-        {:ok, data} -> Jason.encode!(data)
-        {:error, reason} -> "Error: #{reason}"
+    assistant_msg =
+      if initial_content do
+        [%{role: :assistant, content: initial_content}]
+      else
+        []
       end
 
-      %{
-        role: :tool,
-        content: result_content,
-        tool_call_id: Map.get(tool_call, "id", "unknown")
-      }
-    end)
+    # Add tool result messages
+    tool_messages =
+      Enum.zip(tool_calls, tool_results)
+      |> Enum.map(fn {tool_call, result} ->
+        result_content =
+          case result do
+            {:ok, data} -> Jason.encode!(data)
+            {:error, reason} -> "Error: #{reason}"
+          end
+
+        %{
+          role: :tool,
+          content: result_content,
+          tool_call_id: Map.get(tool_call, "id", "unknown")
+        }
+      end)
 
     assistant_msg ++ tool_messages
   end
 
   defp format_tool_response(tool_calls, tool_results, final_content) do
-    tool_summary = Enum.zip(tool_calls, tool_results)
-    |> Enum.map(fn {tool_call, result} ->
-      tool_name = Map.get(tool_call, "name", "unknown")
-      case result do
-        {:ok, data} ->
-          "✅ **#{tool_name}**: #{format_tool_result(data)}"
-        {:error, reason} ->
-          "❌ **#{tool_name}**: #{reason}"
-      end
-    end)
-    |> Enum.join("\n")
+    tool_summary =
+      Enum.zip(tool_calls, tool_results)
+      |> Enum.map(fn {tool_call, result} ->
+        tool_name = Map.get(tool_call, "name", "unknown")
+
+        case result do
+          {:ok, data} ->
+            "✅ **#{tool_name}**: #{format_tool_result(data)}"
+
+          {:error, reason} ->
+            "❌ **#{tool_name}**: #{reason}"
+        end
+      end)
+      |> Enum.join("\n")
 
     "#{tool_summary}\n\n#{final_content}"
   end
@@ -370,9 +381,11 @@ defmodule TheMaestro.Agents.Agent do
     Enum.zip(tool_calls, tool_results)
     |> Enum.map(fn {tool_call, result} ->
       tool_name = Map.get(tool_call, "name", "unknown")
+
       case result do
         {:ok, data} ->
           "✅ **#{tool_name}**: #{format_tool_result(data)}"
+
         {:error, reason} ->
           "❌ **#{tool_name}**: #{reason}"
       end
@@ -386,6 +399,7 @@ defmodule TheMaestro.Agents.Agent do
       Map.has_key?(data, "content") ->
         content = Map.get(data, "content")
         size = Map.get(data, "size")
+
         if size do
           "Read #{size} bytes from file"
         else

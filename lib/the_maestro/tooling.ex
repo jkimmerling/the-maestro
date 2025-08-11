@@ -43,12 +43,13 @@ defmodule TheMaestro.Tooling do
   """
   def __registry__ do
     case Process.whereis(__MODULE__) do
-      nil -> 
+      nil ->
         case start_link() do
           {:ok, _pid} -> :ok
           {:error, {:already_started, _pid}} -> :ok
         end
-      _pid -> 
+
+      _pid ->
         :ok
     end
   end
@@ -64,14 +65,14 @@ defmodule TheMaestro.Tooling do
   """
   def register_tool(name, module, definition, executor) when is_function(executor, 1) do
     __registry__()
-    
+
     tool_entry = %{
       name: name,
       module: module,
       definition: definition,
       executor: executor
     }
-    
+
     GenServer.call(__MODULE__, {:register_tool, name, tool_entry})
   end
 
@@ -103,7 +104,7 @@ defmodule TheMaestro.Tooling do
   @spec execute_tool(String.t(), tool_arguments()) :: tool_result()
   def execute_tool(tool_name, arguments) when is_map(arguments) do
     __registry__()
-    
+
     case GenServer.call(__MODULE__, {:get_tool, tool_name}) do
       {:ok, tool_entry} ->
         with :ok <- validate_tool_arguments(tool_entry, arguments),
@@ -112,7 +113,7 @@ defmodule TheMaestro.Tooling do
         else
           {:error, reason} -> {:error, reason}
         end
-        
+
       {:error, :not_found} ->
         {:error, "Tool '#{tool_name}' not found"}
     end
@@ -133,7 +134,7 @@ defmodule TheMaestro.Tooling do
   @spec tool_exists?(String.t()) :: boolean()
   def tool_exists?(tool_name) do
     __registry__()
-    
+
     case GenServer.call(__MODULE__, {:get_tool, tool_name}) do
       {:ok, _} -> true
       {:error, :not_found} -> false
@@ -155,11 +156,11 @@ defmodule TheMaestro.Tooling do
 
   @impl true
   def handle_call(:get_tool_definitions, _from, state) do
-    definitions = 
+    definitions =
       state
       |> Map.values()
       |> Enum.map(& &1.definition)
-    
+
     {:reply, definitions, state}
   end
 
@@ -173,11 +174,11 @@ defmodule TheMaestro.Tooling do
 
   @impl true
   def handle_call(:list_tools, _from, state) do
-    tools_list = 
+    tools_list =
       state
       |> Enum.map(fn {name, tool_entry} -> {name, tool_entry.module} end)
       |> Map.new()
-    
+
     {:reply, tools_list, state}
   end
 
@@ -196,16 +197,17 @@ defmodule TheMaestro.Tooling do
   defp validate_basic_arguments(definition, arguments) do
     case definition do
       %{"parameters" => %{"required" => required_params}} when is_list(required_params) ->
-        missing_required = Enum.filter(required_params, fn param ->
-          not Map.has_key?(arguments, param)
-        end)
-        
+        missing_required =
+          Enum.filter(required_params, fn param ->
+            not Map.has_key?(arguments, param)
+          end)
+
         if length(missing_required) > 0 do
           {:error, "Missing required parameters: #{inspect(missing_required)}"}
         else
           :ok
         end
-      
+
       _ ->
         :ok
     end
@@ -220,6 +222,7 @@ defmodule TheMaestro.Tooling do
     catch
       :exit, reason ->
         {:error, "Tool execution exited: #{inspect(reason)}"}
+
       :throw, value ->
         {:error, "Tool execution threw: #{inspect(value)}"}
     end
