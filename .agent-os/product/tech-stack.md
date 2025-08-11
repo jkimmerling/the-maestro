@@ -18,7 +18,7 @@
 
 ## Authentication & Security
 - **Web Authentication:** Ueberauth (Google) ~> 0.10
-- **Cloud Authentication:** Goth ~> 1.3 (for Google Cloud/Vertex AI)
+- **Cloud Authentication:** Goth ~> 1.3 (for Google Cloud/Vertex AI and LLM provider OAuth)
 - **Authorization:** Built-in Phoenix session management
 
 ## LLM Integrations

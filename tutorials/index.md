@@ -30,6 +30,19 @@ Learn how to set up and configure essential code quality tools for Elixir projec
 
 **Difficulty**: Beginner
 
+### [Story 1.3: Agent State Management & ReAct Loop Stub](epic1/story1.3/)
+
+Learn how to implement stateful GenServer processes for managing AI agent conversations:
+
+- Design proper state structures with type specifications
+- Implement message handling patterns in OTP applications
+- Build a placeholder ReAct loop foundation
+- Best practices for process management and supervision
+
+**Key Concepts**: GenServer state management, OTP patterns, ReAct loops, process supervision
+
+**Difficulty**: Intermediate
+
 ---
 
 ## Coming Soon
@@ -38,7 +51,6 @@ More tutorials will be added as development progresses through the epics:
 
 ### Epic 1 Remaining Stories
 - Story 1.2: Core Application & Supervision Tree
-- Story 1.3: Agent State Management & ReAct Loop Stub  
 - Story 1.4: LLMProvider Behaviour & Gemini Adapter
 - Story 1.5: Tooling DSL & Sandboxed File Tool
 - Story 1.6: Epic 1 Demo Creation

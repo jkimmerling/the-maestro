@@ -258,30 +258,64 @@ This epic's purpose is to construct the skeleton of our application and implemen
 5. A tutorial for this story, explaining GenServer state and message handling, is created in `tutorials/epic1/story1.3/` and the main `tutorials/index.md` is updated.
     
 
-### Story 1.4: LLMProvider Behaviour & Gemini Adapter
+### Story 1.4: LLMProvider Behaviour & Gemini Adapter with OAuth
 
 - **As a** Developer,
     
-- **I want** a model-agnostic `LLMProvider` behaviour and a concrete Gemini adapter,
+- **I want** a model-agnostic `LLMProvider` behaviour and a concrete Gemini adapter with flexible authentication,
     
-- **so that** the agent can communicate with the Gemini LLM.
+- **so that** the agent can communicate with the Gemini LLM using both API keys and OAuth credentials.
     
 
 **Acceptance Criteria**
 
-1. An `LLMProvider` behaviour is defined with callbacks for text completions and tool-use completions.
+1. An `LLMProvider` behaviour is defined with callbacks for text completions, tool-use completions, and authentication management.
     
-2. The `gemini_ex` library is added as a dependency.
+2. The following dependencies are added:
+   - `gemini_ex` library for Gemini API integration
+   - `goth` library for OAuth2 authentication with Google services
+   - `jason` for JSON handling (if not already present)
     
-3. A `MyApp.Providers.Gemini` module is created that implements the `LLMProvider` behaviour.
+3. A `TheMaestro.Providers.Gemini` module is created that implements the `LLMProvider` behaviour with support for multiple authentication methods:
+   - **API Key authentication**: Using `GEMINI_API_KEY` environment variable
+   - **OAuth authentication**: Using Google OAuth2 flow with proper scopes for Gemini/Google AI services
+   - **Service Account authentication**: Using `GOOGLE_APPLICATION_CREDENTIALS` for enterprise deployments
     
-4. The Gemini adapter is configured with an API key via application environment variables.
+4. OAuth authentication implementation includes:
+   - Device authorization flow for CLI/headless environments (similar to gemini-cli's user code flow)
+   - Web-based OAuth flow for browser-based authentication  
+   - Credential caching and refresh token management
+   - Proper error handling for authentication failures
+   - Security best practices (PKCE, state validation, secure token storage)
     
-5. The `Agent` GenServer is updated to use the `LLMProvider` behaviour, which is configurable at runtime.
+5. The Gemini adapter supports the same OAuth scopes as the original gemini-cli:
+   - `https://www.googleapis.com/auth/cloud-platform`
+   - `https://www.googleapis.com/auth/userinfo.email`
+   - `https://www.googleapis.com/auth/userinfo.profile`
     
-6. Given a valid API key, the agent can successfully get a simple text response from the Gemini API and add it to its state.
+6. Authentication configuration is flexible and supports:
+   - Environment variable detection for auth method selection
+   - Fallback authentication strategies (OAuth -> API Key -> Service Account)
+   - Non-interactive mode support for CI/CD environments
+   - Credential validation and refresh handling
     
-7. A tutorial for this story, explaining the behaviour-based adapter pattern, is created in `tutorials/epic1/story1.4/` and the main `tutorials/index.md` is updated.
+7. The `Agent` GenServer is updated to use the `LLMProvider` behaviour with authentication context passed through the provider interface.
+    
+8. Given valid credentials (API key, OAuth tokens, or service account), the agent can successfully get a simple text response from the Gemini API and add it to its state.
+    
+9. The authentication system includes proper credential management:
+   - Secure storage of OAuth tokens in the user's home directory (`.maestro/oauth_creds.json`)
+   - Automatic token refresh when expired
+   - Clean credential cleanup/logout functionality
+   - Protection against credential exposure in logs or error messages
+    
+10. A comprehensive tutorial for this story is created in `tutorials/epic1/story1.4/` explaining:
+    - The behaviour-based adapter pattern
+    - OAuth2 implementation in Elixir using Goth
+    - Authentication flow comparison with the original gemini-cli
+    - Security considerations and best practices
+    - Configuration examples for different deployment scenarios
+    - The main `tutorials/index.md` is updated with a link to the new tutorial
     
 
 ### Story 1.5: Tooling DSL & Sandboxed File Tool
