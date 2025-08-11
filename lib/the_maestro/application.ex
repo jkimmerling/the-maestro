@@ -5,6 +5,8 @@ defmodule TheMaestro.Application do
 
   use Application
 
+  alias TheMaestro.Tooling.Tools.FileSystem
+
   @impl true
   def start(_type, _args) do
     children = [
@@ -34,7 +36,7 @@ defmodule TheMaestro.Application do
     case Supervisor.start_link(children, opts) do
       {:ok, pid} = result ->
         # Register built-in tools
-        TheMaestro.Tooling.Tools.FileSystem.register_self()
+        FileSystem.register_self()
         result
 
       error ->

@@ -214,17 +214,15 @@ defmodule TheMaestro.Tooling do
   end
 
   defp safe_execute_tool(tool_entry, arguments) do
-    try do
-      tool_entry.executor.(arguments)
-    rescue
-      error ->
-        {:error, "Tool execution failed: #{inspect(error)}"}
-    catch
-      :exit, reason ->
-        {:error, "Tool execution exited: #{inspect(reason)}"}
+    tool_entry.executor.(arguments)
+  rescue
+    error ->
+      {:error, "Tool execution failed: #{inspect(error)}"}
+  catch
+    :exit, reason ->
+      {:error, "Tool execution exited: #{inspect(reason)}"}
 
-      :throw, value ->
-        {:error, "Tool execution threw: #{inspect(value)}"}
-    end
+    :throw, value ->
+      {:error, "Tool execution threw: #{inspect(value)}"}
   end
 end

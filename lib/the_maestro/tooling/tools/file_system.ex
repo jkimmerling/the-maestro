@@ -108,27 +108,25 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
   end
 
   defp resolve_path(path) do
-    try do
-      case Path.type(path) do
-        :absolute ->
-          {:ok, Path.expand(path)}
+    case Path.type(path) do
+      :absolute ->
+        {:ok, Path.expand(path)}
 
-        :relative ->
-          # For relative paths, resolve against current working directory
-          {:ok, Path.expand(path, File.cwd!())}
+      :relative ->
+        # For relative paths, resolve against current working directory
+        {:ok, Path.expand(path, File.cwd!())}
 
-        :volumerelative ->
-          {:error, "Volume-relative paths are not supported"}
-      end
-    rescue
-      error -> {:error, "Invalid path format: #{inspect(error)}"}
+      :volumerelative ->
+        {:error, "Volume-relative paths are not supported"}
     end
+  rescue
+    error -> {:error, "Invalid path format: #{inspect(error)}"}
   end
 
   defp check_path_allowed(path) do
     allowed_dirs = get_allowed_directories()
 
-    if length(allowed_dirs) == 0 do
+    if Enum.empty?(allowed_dirs) do
       Logger.warning("No allowed directories configured for FileSystem tool")
       {:error, "File system access is not configured"}
     else
