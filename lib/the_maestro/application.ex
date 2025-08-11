@@ -7,6 +7,12 @@ defmodule TheMaestro.Application do
 
   @impl true
   def start(_type, _args) do
+    # Initialize the tool registry first
+    TheMaestro.Tooling.__registry__()
+    
+    # Load all tool modules to auto-register them
+    Application.load(:the_maestro)
+    
     children = [
       TheMaestroWeb.Telemetry,
       TheMaestro.Repo,
