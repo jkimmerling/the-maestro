@@ -295,7 +295,7 @@ defmodule TheMaestro.Providers.Gemini do
         {:oauth, :cached}
 
       # Default to OAuth flow for interactive environments
-      !is_non_interactive() ->
+      !non_interactive?() ->
         {:oauth, :new}
 
       true ->
@@ -311,7 +311,7 @@ defmodule TheMaestro.Providers.Gemini do
     System.get_env("GOOGLE_APPLICATION_CREDENTIALS")
   end
 
-  defp is_non_interactive do
+  defp non_interactive? do
     # Check if running in CI or non-interactive environment
     System.get_env("CI") == "true" or
       System.get_env("NON_INTERACTIVE") == "true" or
@@ -319,7 +319,7 @@ defmodule TheMaestro.Providers.Gemini do
   end
 
   defp initialize_oauth_flow(config) do
-    if is_non_interactive() do
+    if non_interactive?() do
       {:error, :oauth_not_available_in_non_interactive}
     else
       case config[:auth_flow] do
