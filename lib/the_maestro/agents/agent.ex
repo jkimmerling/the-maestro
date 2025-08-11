@@ -210,29 +210,216 @@ defmodule TheMaestro.Agents.Agent do
 
   defp get_llm_response(state, _current_message) do
     case state.auth_context do
-      nil ->
-        {:error, :no_auth_context}
+      nil -> {:error, :no_auth_context}
+      auth_context -> perform_llm_completion(state, auth_context)
+    end
+  end
 
-      auth_context ->
-        # Convert message history to LLM provider format
-        messages = convert_message_history_to_llm_format(state.message_history)
+  defp perform_llm_completion(state, auth_context) do
+    messages = convert_message_history_to_llm_format(state.message_history)
+    tool_definitions = TheMaestro.Tooling.get_tool_definitions()
+    completion_opts = build_completion_opts(tool_definitions)
 
-        # Basic completion options
-        completion_opts = %{
-          model: "gemini-1.5-pro",
-          temperature: 0.7,
-          max_tokens: 8192
+    if Enum.empty?(tool_definitions) do
+      execute_basic_completion(state.llm_provider, auth_context, messages, completion_opts)
+    else
+      execute_tool_enabled_completion(state, auth_context, messages, completion_opts)
+    end
+  end
+
+  defp build_completion_opts(tool_definitions) do
+    %{
+      model: "gemini-1.5-pro",
+      temperature: 0.7,
+      max_tokens: 8192,
+      tools: tool_definitions
+    }
+  end
+
+  defp execute_basic_completion(provider, auth_context, messages, completion_opts) do
+    basic_opts = Map.delete(completion_opts, :tools)
+
+    case provider.complete_text(auth_context, messages, basic_opts) do
+      {:ok, %{content: content}} -> {:ok, content}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp execute_tool_enabled_completion(state, auth_context, messages, completion_opts) do
+    provider = state.llm_provider
+
+    if function_exported?(provider, :complete_with_tools, 3) do
+      handle_tool_completion(state, auth_context, messages, completion_opts)
+    else
+      execute_basic_completion(provider, auth_context, messages, completion_opts)
+    end
+  end
+
+  defp handle_tool_completion(state, auth_context, messages, completion_opts) do
+    case state.llm_provider.complete_with_tools(auth_context, messages, completion_opts) do
+      {:ok, %{content: content, tool_calls: []}} ->
+        {:ok, content}
+
+      {:ok, %{content: content, tool_calls: [_ | _] = tool_calls}} ->
+        handle_tool_calls(state, auth_context, messages, tool_calls, content)
+
+      {:ok, %{tool_calls: [_ | _] = tool_calls}} ->
+        handle_tool_calls(state, auth_context, messages, tool_calls, nil)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp handle_tool_calls(state, auth_context, messages, tool_calls, initial_content) do
+    require Logger
+
+    # Execute each tool call
+    tool_results =
+      Enum.map(tool_calls, fn tool_call ->
+        execute_tool_call(tool_call)
+      end)
+
+    # Add tool call messages and results to conversation
+    updated_messages = messages ++ build_tool_messages(tool_calls, tool_results, initial_content)
+
+    # Get follow-up response from LLM with tool results
+    completion_opts = %{
+      model: "gemini-1.5-pro",
+      temperature: 0.7,
+      max_tokens: 8192
+    }
+
+    case state.llm_provider.complete_text(auth_context, updated_messages, completion_opts) do
+      {:ok, %{content: content}} ->
+        # Return both the tool usage summary and the final response
+        final_content = format_tool_response(tool_calls, tool_results, content)
+        {:ok, final_content}
+
+      {:error, reason} ->
+        Logger.error("Failed to get follow-up response after tool calls: #{inspect(reason)}")
+        # Return tool results even if follow-up fails
+        tool_summary = format_tool_results_only(tool_calls, tool_results)
+        {:ok, tool_summary}
+    end
+  end
+
+  defp execute_tool_call(%{"name" => tool_name, "arguments" => arguments}) do
+    require Logger
+    Logger.info("Executing tool: #{tool_name} with arguments: #{inspect(arguments)}")
+
+    case TheMaestro.Tooling.execute_tool(tool_name, arguments) do
+      {:ok, result} ->
+        Logger.info("Tool #{tool_name} executed successfully")
+        {:ok, result}
+
+      {:error, reason} ->
+        Logger.warning("Tool #{tool_name} failed: #{reason}")
+        {:error, reason}
+    end
+  end
+
+  defp execute_tool_call(invalid_tool_call) do
+    require Logger
+    Logger.error("Invalid tool call format: #{inspect(invalid_tool_call)}")
+    {:error, "Invalid tool call format"}
+  end
+
+  defp build_tool_messages(tool_calls, tool_results, initial_content) do
+    # Add assistant message with tool calls if there was initial content
+    assistant_msg =
+      if initial_content do
+        [%{role: :assistant, content: initial_content}]
+      else
+        []
+      end
+
+    # Add tool result messages
+    tool_messages =
+      Enum.zip(tool_calls, tool_results)
+      |> Enum.map(fn {tool_call, result} ->
+        result_content =
+          case result do
+            {:ok, data} -> Jason.encode!(data)
+            {:error, reason} -> "Error: #{reason}"
+          end
+
+        %{
+          role: :tool,
+          content: result_content,
+          tool_call_id: Map.get(tool_call, "id", "unknown")
         }
+      end)
 
-        # Call the LLM provider
-        case state.llm_provider.complete_text(auth_context, messages, completion_opts) do
-          {:ok, %{content: content}} ->
-            {:ok, content}
+    assistant_msg ++ tool_messages
+  end
+
+  defp format_tool_response(tool_calls, tool_results, final_content) do
+    tool_summary =
+      Enum.zip(tool_calls, tool_results)
+      |> Enum.map(fn {tool_call, result} ->
+        tool_name = Map.get(tool_call, "name", "unknown")
+
+        case result do
+          {:ok, data} ->
+            "✅ **#{tool_name}**: #{format_tool_result(data)}"
 
           {:error, reason} ->
-            {:error, reason}
+            "❌ **#{tool_name}**: #{reason}"
         end
+      end)
+      |> Enum.join("\n")
+
+    "#{tool_summary}\n\n#{final_content}"
+  end
+
+  defp format_tool_results_only(tool_calls, tool_results) do
+    Enum.zip(tool_calls, tool_results)
+    |> Enum.map(fn {tool_call, result} ->
+      tool_name = Map.get(tool_call, "name", "unknown")
+
+      case result do
+        {:ok, data} ->
+          "✅ **#{tool_name}**: #{format_tool_result(data)}"
+
+        {:error, reason} ->
+          "❌ **#{tool_name}**: #{reason}"
+      end
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp format_tool_result(data) when is_map(data) do
+    # Format based on common tool result patterns
+    cond do
+      Map.has_key?(data, "content") ->
+        format_content_result(data)
+
+      Map.has_key?(data, "result") ->
+        "Result: #{Map.get(data, "result")}"
+
+      true ->
+        inspect(data)
     end
+  end
+
+  defp format_tool_result(data), do: inspect(data)
+
+  defp format_content_result(data) do
+    content = Map.get(data, "content")
+    size = Map.get(data, "size")
+
+    if size do
+      "Read #{size} bytes from file"
+    else
+      format_truncated_content(content)
+    end
+  end
+
+  defp format_truncated_content(content) do
+    truncated = String.slice(content, 0, 100)
+    suffix = if String.length(content) > 100, do: "...", else: ""
+    "Content: #{truncated}#{suffix}"
   end
 
   defp convert_message_history_to_llm_format(message_history) do

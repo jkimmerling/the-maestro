@@ -57,6 +57,21 @@ Learn how to build model-agnostic LLM provider systems with comprehensive OAuth 
 
 **Difficulty**: Advanced
 
+### [Story 1.5: Tooling DSL & Sandboxed File Tool](epic1/story1.5/)
+
+Learn how to build secure, extensible tool systems for AI agents using Test-Driven Development:
+
+- Design tool behaviour interfaces with proper validation patterns
+- Build thread-safe tool registries using GenServer architecture  
+- Implement sandboxed file operations with security validation
+- Integrate tools with LLM providers using OpenAI Function Calling
+- Apply comprehensive TDD methodology (RED-GREEN-REFACTOR)
+- Implement security measures against directory traversal attacks
+
+**Key Concepts**: Tool architecture, security sandboxing, TDD methodology, concurrent systems, LLM integration
+
+**Difficulty**: Advanced
+
 ---
 
 ## Coming Soon
@@ -65,7 +80,6 @@ More tutorials will be added as development progresses through the epics:
 
 ### Epic 1 Remaining Stories
 - Story 1.2: Core Application & Supervision Tree
-- Story 1.5: Tooling DSL & Sandboxed File Tool
 - Story 1.6: Epic 1 Demo Creation
 
 ### Epic 2: Phoenix LiveView UI & User Authentication
