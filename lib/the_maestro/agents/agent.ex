@@ -260,10 +260,10 @@ defmodule TheMaestro.Agents.Agent do
       {:ok, %{content: content, tool_calls: []}} ->
         {:ok, content}
 
-      {:ok, %{content: content, tool_calls: tool_calls}} when length(tool_calls) > 0 ->
+      {:ok, %{content: content, tool_calls: [_ | _] = tool_calls}} ->
         handle_tool_calls(state, auth_context, messages, tool_calls, content)
 
-      {:ok, %{tool_calls: tool_calls}} when length(tool_calls) > 0 ->
+      {:ok, %{tool_calls: [_ | _] = tool_calls}} ->
         handle_tool_calls(state, auth_context, messages, tool_calls, nil)
 
       {:error, reason} ->
@@ -305,6 +305,7 @@ defmodule TheMaestro.Agents.Agent do
   end
 
   defp execute_tool_call(%{"name" => tool_name, "arguments" => arguments}) do
+    require Logger
     Logger.info("Executing tool: #{tool_name} with arguments: #{inspect(arguments)}")
 
     case TheMaestro.Tooling.execute_tool(tool_name, arguments) do
@@ -319,6 +320,7 @@ defmodule TheMaestro.Agents.Agent do
   end
 
   defp execute_tool_call(invalid_tool_call) do
+    require Logger
     Logger.error("Invalid tool call format: #{inspect(invalid_tool_call)}")
     {:error, "Invalid tool call format"}
   end
@@ -401,6 +403,8 @@ defmodule TheMaestro.Agents.Agent do
     end
   end
 
+  defp format_tool_result(data), do: inspect(data)
+
   defp format_content_result(data) do
     content = Map.get(data, "content")
     size = Map.get(data, "size")
@@ -417,8 +421,6 @@ defmodule TheMaestro.Agents.Agent do
     suffix = if String.length(content) > 100, do: "...", else: ""
     "Content: #{truncated}#{suffix}"
   end
-
-  defp format_tool_result(data), do: inspect(data)
 
   defp convert_message_history_to_llm_format(message_history) do
     Enum.map(message_history, fn message ->
