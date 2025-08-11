@@ -26,7 +26,13 @@
           "test/",
           "config/"
         ],
-        excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/", ~r"/test/support/", "lib/the_maestro_web/components/core_components.ex"]
+        excluded: [
+          ~r"/_build/",
+          ~r"/deps/",
+          ~r"/node_modules/",
+          ~r"/test/support/",
+          "lib/the_maestro_web/components/core_components.ex"
+        ]
       },
       #
       # Load and configure plugins here:
