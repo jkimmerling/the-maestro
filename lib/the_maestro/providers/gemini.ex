@@ -37,11 +37,12 @@ defmodule TheMaestro.Providers.Gemini do
   def initialize_auth(config \\ %{}) do
     case detect_auth_method(config) do
       {:api_key, api_key} ->
-        {:ok, %{
-          type: :api_key,
-          credentials: %{api_key: api_key},
-          config: config
-        }}
+        {:ok,
+         %{
+           type: :api_key,
+           credentials: %{api_key: api_key},
+           config: config
+         }}
 
       {:oauth, :cached} ->
         case load_cached_oauth_credentials() do
@@ -51,6 +52,7 @@ defmodule TheMaestro.Providers.Gemini do
               credentials: credentials,
               config: config
             }
+
             # Validate and refresh if needed
             case validate_and_refresh_oauth(auth_context) do
               {:ok, refreshed_context} -> {:ok, refreshed_context}
@@ -68,11 +70,12 @@ defmodule TheMaestro.Providers.Gemini do
       {:service_account, creds_path} ->
         case Goth.Token.for_scope(@oauth_scopes, source: creds_path) do
           {:ok, %Goth.Token{token: token}} ->
-            {:ok, %{
-              type: :service_account,
-              credentials: %{access_token: token, source: creds_path},
-              config: config
-            }}
+            {:ok,
+             %{
+               type: :service_account,
+               credentials: %{access_token: token, source: creds_path},
+               config: config
+             }}
 
           {:error, reason} ->
             {:error, {:service_account_auth_failed, reason}}
@@ -89,7 +92,7 @@ defmodule TheMaestro.Providers.Gemini do
       {:ok, token} ->
         gemini_messages = convert_messages_to_gemini(messages)
         model = Map.get(opts, :model, "gemini-1.5-pro")
-        
+
         request_body = %{
           contents: gemini_messages,
           generationConfig: %{
@@ -100,11 +103,12 @@ defmodule TheMaestro.Providers.Gemini do
 
         case make_gemini_request(token, model, request_body) do
           {:ok, response} ->
-            {:ok, %{
-              content: extract_text_content(response),
-              model: model,
-              usage: extract_usage_info(response)
-            }}
+            {:ok,
+             %{
+               content: extract_text_content(response),
+               model: model,
+               usage: extract_usage_info(response)
+             }}
 
           {:error, reason} ->
             {:error, reason}
@@ -122,7 +126,7 @@ defmodule TheMaestro.Providers.Gemini do
         gemini_messages = convert_messages_to_gemini(messages)
         gemini_tools = convert_tools_to_gemini(Map.get(opts, :tools, []))
         model = Map.get(opts, :model, "gemini-1.5-pro")
-        
+
         request_body = %{
           contents: gemini_messages,
           tools: gemini_tools,
@@ -134,12 +138,13 @@ defmodule TheMaestro.Providers.Gemini do
 
         case make_gemini_request(token, model, request_body) do
           {:ok, response} ->
-            {:ok, %{
-              content: extract_text_content(response),
-              tool_calls: extract_tool_calls(response),
-              model: model,
-              usage: extract_usage_info(response)
-            }}
+            {:ok,
+             %{
+               content: extract_text_content(response),
+               tool_calls: extract_tool_calls(response),
+               model: model,
+               usage: extract_usage_info(response)
+             }}
 
           {:error, reason} ->
             {:error, reason}
@@ -193,7 +198,7 @@ defmodule TheMaestro.Providers.Gemini do
 
   @doc """
   Initiates device authorization flow for CLI environments.
-  
+
   Returns a URL that the user should visit in their browser and a polling function
   to check for completion.
   """
@@ -203,17 +208,18 @@ defmodule TheMaestro.Providers.Gemini do
     code_challenge = generate_code_challenge(code_verifier)
 
     auth_url = build_device_auth_url(state, code_challenge)
-    
+
     polling_fn = fn ->
       prompt_for_authorization_code()
     end
 
-    {:ok, %{
-      auth_url: auth_url,
-      state: state,
-      code_verifier: code_verifier,
-      polling_fn: polling_fn
-    }}
+    {:ok,
+     %{
+       auth_url: auth_url,
+       state: state,
+       code_verifier: code_verifier,
+       polling_fn: polling_fn
+     }}
   end
 
   @doc """
@@ -231,7 +237,7 @@ defmodule TheMaestro.Providers.Gemini do
 
   @doc """
   Initiates web-based OAuth flow.
-  
+
   Returns a URL for browser-based authentication and starts a local server
   to handle the callback.
   """
@@ -241,14 +247,15 @@ defmodule TheMaestro.Providers.Gemini do
     state = generate_state()
 
     auth_url = build_web_auth_url(redirect_uri, state)
-    
+
     server_pid = start_callback_server(port, state, redirect_uri)
 
-    {:ok, %{
-      auth_url: auth_url,
-      server_pid: server_pid,
-      port: port
-    }}
+    {:ok,
+     %{
+       auth_url: auth_url,
+       server_pid: server_pid,
+       port: port
+     }}
   end
 
   @doc """
@@ -256,13 +263,17 @@ defmodule TheMaestro.Providers.Gemini do
   """
   def logout do
     credential_path = get_credential_path()
+
     case File.rm(credential_path) do
-      :ok -> 
+      :ok ->
         Logger.info("Cached credentials cleared")
         :ok
-      {:error, :enoent} -> 
-        :ok  # Already deleted
-      {:error, reason} -> 
+
+      {:error, :enoent} ->
+        # Already deleted
+        :ok
+
+      {:error, reason} ->
         {:error, {:failed_to_clear_credentials, reason}}
     end
   end
@@ -302,9 +313,9 @@ defmodule TheMaestro.Providers.Gemini do
 
   defp is_non_interactive do
     # Check if running in CI or non-interactive environment
-    System.get_env("CI") == "true" or 
-    System.get_env("NON_INTERACTIVE") == "true" or
-    !System.get_env("TERM")
+    System.get_env("CI") == "true" or
+      System.get_env("NON_INTERACTIVE") == "true" or
+      !System.get_env("TERM")
   end
 
   defp initialize_oauth_flow(config) do
@@ -312,9 +323,13 @@ defmodule TheMaestro.Providers.Gemini do
       {:error, :oauth_not_available_in_non_interactive}
     else
       case config[:auth_flow] do
-        :device -> device_authorization_flow(config)
-        :web -> web_authorization_flow(config)
-        _ -> 
+        :device ->
+          device_authorization_flow(config)
+
+        :web ->
+          web_authorization_flow(config)
+
+        _ ->
           # Default to device flow for CLI environments
           device_authorization_flow(config)
       end
@@ -325,12 +340,13 @@ defmodule TheMaestro.Providers.Gemini do
 
   defp load_cached_oauth_credentials do
     credential_path = get_credential_path()
-    
+
     case File.read(credential_path) do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, credentials} ->
             {:ok, atomize_keys(credentials)}
+
           {:error, reason} ->
             {:error, {:invalid_credential_format, reason}}
         end
@@ -346,10 +362,11 @@ defmodule TheMaestro.Providers.Gemini do
   defp cache_oauth_credentials(credentials) do
     credential_path = get_credential_path()
     credential_dir = Path.dirname(credential_path)
-    
+
     case File.mkdir_p(credential_dir) do
       :ok ->
         content = Jason.encode!(credentials, pretty: true)
+
         case File.write(credential_path, content, [:write]) do
           :ok ->
             # Set restrictive permissions (equivalent to chmod 600)
@@ -373,7 +390,7 @@ defmodule TheMaestro.Providers.Gemini do
 
   defp validate_and_refresh_oauth(auth_context) do
     %{credentials: credentials} = auth_context
-    
+
     case validate_token(credentials.access_token) do
       :ok ->
         {:ok, auth_context}
@@ -388,7 +405,7 @@ defmodule TheMaestro.Providers.Gemini do
 
   defp validate_token(access_token) do
     url = "https://www.googleapis.com/oauth2/v2/tokeninfo?access_token=#{access_token}"
-    
+
     case HTTPoison.get(url) do
       {:ok, %HTTPoison.Response{status_code: 200}} ->
         :ok
@@ -416,17 +433,18 @@ defmodule TheMaestro.Providers.Gemini do
         case exchange_refresh_token(refresh_token) do
           {:ok, new_tokens} ->
             # Preserve refresh token if not provided in response
-            final_tokens = if new_tokens[:refresh_token] do
-              new_tokens
-            else
-              Map.put(new_tokens, :refresh_token, refresh_token)
-            end
+            final_tokens =
+              if new_tokens[:refresh_token] do
+                new_tokens
+              else
+                Map.put(new_tokens, :refresh_token, refresh_token)
+              end
 
             updated_context = %{auth_context | credentials: final_tokens}
-            
+
             # Cache the updated credentials
             cache_oauth_credentials(final_tokens)
-            
+
             {:ok, updated_context}
 
           {:error, reason} ->
@@ -438,54 +456,59 @@ defmodule TheMaestro.Providers.Gemini do
   # OAuth Flow Implementation
 
   defp build_device_auth_url(state, code_challenge) do
-    params = URI.encode_query(%{
-      client_id: @oauth_client_id,
-      redirect_uri: @device_auth_redirect_uri,
-      response_type: "code",
-      scope: Enum.join(@oauth_scopes, " "),
-      state: state,
-      code_challenge: code_challenge,
-      code_challenge_method: "S256",
-      access_type: "offline",
-      prompt: "consent"
-    })
+    params =
+      URI.encode_query(%{
+        client_id: @oauth_client_id,
+        redirect_uri: @device_auth_redirect_uri,
+        response_type: "code",
+        scope: Enum.join(@oauth_scopes, " "),
+        state: state,
+        code_challenge: code_challenge,
+        code_challenge_method: "S256",
+        access_type: "offline",
+        prompt: "consent"
+      })
 
     "https://accounts.google.com/o/oauth2/v2/auth?#{params}"
   end
 
   defp build_web_auth_url(redirect_uri, state) do
-    params = URI.encode_query(%{
-      client_id: @oauth_client_id,
-      redirect_uri: redirect_uri,
-      response_type: "code",
-      scope: Enum.join(@oauth_scopes, " "),
-      state: state,
-      access_type: "offline",
-      prompt: "consent"
-    })
+    params =
+      URI.encode_query(%{
+        client_id: @oauth_client_id,
+        redirect_uri: redirect_uri,
+        response_type: "code",
+        scope: Enum.join(@oauth_scopes, " "),
+        state: state,
+        access_type: "offline",
+        prompt: "consent"
+      })
 
     "https://accounts.google.com/o/oauth2/v2/auth?#{params}"
   end
 
   defp prompt_for_authorization_code do
     IO.puts("Enter the authorization code from the browser:")
+
     case IO.read(:line) do
       data when is_binary(data) ->
         String.trim(data)
+
       _ ->
         ""
     end
   end
 
   defp exchange_code_for_tokens(code, code_verifier, redirect_uri) do
-    body = URI.encode_query(%{
-      client_id: @oauth_client_id,
-      client_secret: @oauth_client_secret,
-      code: code,
-      code_verifier: code_verifier,
-      grant_type: "authorization_code",
-      redirect_uri: redirect_uri
-    })
+    body =
+      URI.encode_query(%{
+        client_id: @oauth_client_id,
+        client_secret: @oauth_client_secret,
+        code: code,
+        code_verifier: code_verifier,
+        grant_type: "authorization_code",
+        redirect_uri: redirect_uri
+      })
 
     headers = [{"content-type", "application/x-www-form-urlencoded"}]
     url = "https://oauth2.googleapis.com/token"
@@ -506,12 +529,13 @@ defmodule TheMaestro.Providers.Gemini do
   end
 
   defp exchange_refresh_token(refresh_token) do
-    body = URI.encode_query(%{
-      client_id: @oauth_client_id,
-      client_secret: @oauth_client_secret,
-      refresh_token: refresh_token,
-      grant_type: "refresh_token"
-    })
+    body =
+      URI.encode_query(%{
+        client_id: @oauth_client_id,
+        client_secret: @oauth_client_secret,
+        refresh_token: refresh_token,
+        grant_type: "refresh_token"
+      })
 
     headers = [{"content-type", "application/x-www-form-urlencoded"}]
     url = "https://oauth2.googleapis.com/token"
@@ -534,7 +558,7 @@ defmodule TheMaestro.Providers.Gemini do
   # OAuth Server for Web Flow
 
   defp start_callback_server(port, state, redirect_uri) do
-    spawn(fn -> 
+    spawn(fn ->
       callback_server_loop(port, state, redirect_uri)
     end)
   end
@@ -543,10 +567,11 @@ defmodule TheMaestro.Providers.Gemini do
     # This would need a proper HTTP server implementation
     # For now, this is a placeholder that would integrate with Bandit or similar
     Logger.info("OAuth callback server would start on port #{port}")
-    
+
     receive do
       {:authorization_code, code, state} when state == expected_state ->
         code_verifier = generate_code_verifier()
+
         case exchange_code_for_tokens(code, code_verifier, redirect_uri) do
           {:ok, tokens} ->
             cache_oauth_credentials(tokens)
@@ -594,24 +619,26 @@ defmodule TheMaestro.Providers.Gemini do
 
   defp make_gemini_request(token, model, request_body) do
     url = "https://generativelanguage.googleapis.com/v1beta/models/#{model}:generateContent"
-    
-    headers = case String.starts_with?(token, "AIza") do
-      true ->
-        # API Key authentication
-        [{"content-type", "application/json"}]
-      
-      false ->
-        # OAuth or Service Account token
-        [
-          {"authorization", "Bearer #{token}"},
-          {"content-type", "application/json"}
-        ]
-    end
 
-    final_url = case String.starts_with?(token, "AIza") do
-      true -> "#{url}?key=#{token}"
-      false -> url
-    end
+    headers =
+      case String.starts_with?(token, "AIza") do
+        true ->
+          # API Key authentication
+          [{"content-type", "application/json"}]
+
+        false ->
+          # OAuth or Service Account token
+          [
+            {"authorization", "Bearer #{token}"},
+            {"content-type", "application/json"}
+          ]
+      end
+
+    final_url =
+      case String.starts_with?(token, "AIza") do
+        true -> "#{url}?key=#{token}"
+        false -> url
+      end
 
     case HTTPoison.post(final_url, Jason.encode!(request_body), headers) do
       {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
@@ -650,11 +677,13 @@ defmodule TheMaestro.Providers.Gemini do
 
   defp convert_messages_to_gemini(messages) do
     Enum.map(messages, fn message ->
-      role = case message.role do
-        :user -> "user"
-        :assistant -> "model"
-        :system -> "user"  # Gemini doesn't have system role, treat as user
-      end
+      role =
+        case message.role do
+          :user -> "user"
+          :assistant -> "model"
+          # Gemini doesn't have system role, treat as user
+          :system -> "user"
+        end
 
       %{
         role: role,
@@ -664,13 +693,14 @@ defmodule TheMaestro.Providers.Gemini do
   end
 
   defp convert_tools_to_gemini(tools) do
-    function_declarations = Enum.map(tools, fn tool ->
-      %{
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters
-      }
-    end)
+    function_declarations =
+      Enum.map(tools, fn tool ->
+        %{
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      end)
 
     [%{function_declarations: function_declarations}]
   end

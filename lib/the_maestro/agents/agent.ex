@@ -59,13 +59,13 @@ defmodule TheMaestro.Agents.Agent do
     agent_id = Keyword.fetch!(opts, :agent_id)
     llm_provider = Keyword.get(opts, :llm_provider, TheMaestro.Providers.Gemini)
     auth_context = Keyword.get(opts, :auth_context)
-    
+
     init_args = %{
       agent_id: agent_id,
       llm_provider: llm_provider,
       auth_context: auth_context
     }
-    
+
     GenServer.start_link(__MODULE__, init_args, name: via_tuple(agent_id))
   end
 
@@ -107,18 +107,27 @@ defmodule TheMaestro.Agents.Agent do
   @impl true
   def init(%{agent_id: agent_id, llm_provider: llm_provider, auth_context: auth_context}) do
     # Initialize authentication if auth_context is nil
-    final_auth_context = case auth_context do
-      nil ->
-        case llm_provider.initialize_auth() do
-          {:ok, context} -> context
-          {:error, reason} -> 
-            # Log error but don't fail initialization - will handle during message processing
-            require Logger
-            Logger.warning("Failed to initialize LLM auth during agent startup: #{inspect(reason)}")
-            nil
-        end
-      context -> context
-    end
+    final_auth_context =
+      case auth_context do
+        nil ->
+          case llm_provider.initialize_auth() do
+            {:ok, context} ->
+              context
+
+            {:error, reason} ->
+              # Log error but don't fail initialization - will handle during message processing
+              require Logger
+
+              Logger.warning(
+                "Failed to initialize LLM auth during agent startup: #{inspect(reason)}"
+              )
+
+              nil
+          end
+
+        context ->
+          context
+      end
 
     state = %__MODULE__{
       agent_id: agent_id,
@@ -135,7 +144,7 @@ defmodule TheMaestro.Agents.Agent do
   @impl true
   def handle_call({:send_message, message}, _from, state) do
     require Logger
-    
+
     # Add user message to history
     user_message = %{
       type: :user,
@@ -145,9 +154,10 @@ defmodule TheMaestro.Agents.Agent do
     }
 
     # Update state to thinking mode
-    thinking_state = %{state | 
-      message_history: state.message_history ++ [user_message],
-      loop_state: :thinking
+    thinking_state = %{
+      state
+      | message_history: state.message_history ++ [user_message],
+        loop_state: :thinking
     }
 
     # Attempt to get response from LLM provider
@@ -161,27 +171,30 @@ defmodule TheMaestro.Agents.Agent do
         }
 
         # Update state with assistant response
-        final_state = %{thinking_state | 
-          message_history: thinking_state.message_history ++ [assistant_message],
-          loop_state: :idle
+        final_state = %{
+          thinking_state
+          | message_history: thinking_state.message_history ++ [assistant_message],
+            loop_state: :idle
         }
 
         {:reply, {:ok, assistant_message}, final_state}
 
       {:error, reason} ->
         Logger.error("Failed to get LLM response: #{inspect(reason)}")
-        
+
         # Return error response but still update state
         error_message = %{
           type: :assistant,
           role: :assistant,
-          content: "I'm sorry, I encountered an error processing your request. Please check your authentication configuration.",
+          content:
+            "I'm sorry, I encountered an error processing your request. Please check your authentication configuration.",
           timestamp: DateTime.utc_now()
         }
 
-        error_state = %{thinking_state | 
-          message_history: thinking_state.message_history ++ [error_message],
-          loop_state: :idle
+        error_state = %{
+          thinking_state
+          | message_history: thinking_state.message_history ++ [error_message],
+            loop_state: :idle
         }
 
         {:reply, {:ok, error_message}, error_state}
@@ -203,7 +216,7 @@ defmodule TheMaestro.Agents.Agent do
       auth_context ->
         # Convert message history to LLM provider format
         messages = convert_message_history_to_llm_format(state.message_history)
-        
+
         # Basic completion options
         completion_opts = %{
           model: "gemini-1.5-pro",
