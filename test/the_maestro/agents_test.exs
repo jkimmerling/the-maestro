@@ -43,7 +43,10 @@ defmodule TheMaestro.AgentsTest do
         assert {:ok, response} = Agents.send_message(agent_id, message)
 
         assert response.type == :assistant
-        assert response.content == "I'm sorry, I encountered an error processing your request. Please check your authentication configuration."
+
+        assert response.content ==
+                 "I'm sorry, I encountered an error processing your request. Please check your authentication configuration."
+
         assert %DateTime{} = response.timestamp
       end
     end
