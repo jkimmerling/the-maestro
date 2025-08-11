@@ -210,70 +210,64 @@ defmodule TheMaestro.Agents.Agent do
 
   defp get_llm_response(state, _current_message) do
     case state.auth_context do
-      nil ->
-        {:error, :no_auth_context}
+      nil -> {:error, :no_auth_context}
+      auth_context -> perform_llm_completion(state, auth_context)
+    end
+  end
 
-      auth_context ->
-        # Convert message history to LLM provider format
-        messages = convert_message_history_to_llm_format(state.message_history)
+  defp perform_llm_completion(state, auth_context) do
+    messages = convert_message_history_to_llm_format(state.message_history)
+    tool_definitions = TheMaestro.Tooling.get_tool_definitions()
+    completion_opts = build_completion_opts(tool_definitions)
 
-        # Get available tool definitions
-        tool_definitions = TheMaestro.Tooling.get_tool_definitions()
+    if Enum.empty?(tool_definitions) do
+      execute_basic_completion(state.llm_provider, auth_context, messages, completion_opts)
+    else
+      execute_tool_enabled_completion(state, auth_context, messages, completion_opts)
+    end
+  end
 
-        # Tool-enabled completion options
-        completion_opts = %{
-          model: "gemini-1.5-pro",
-          temperature: 0.7,
-          max_tokens: 8192,
-          tools: tool_definitions
-        }
+  defp build_completion_opts(tool_definitions) do
+    %{
+      model: "gemini-1.5-pro",
+      temperature: 0.7,
+      max_tokens: 8192,
+      tools: tool_definitions
+    }
+  end
 
-        # Try tool-enabled completion first if tools are available
-        case {length(tool_definitions), state.llm_provider} do
-          {0, _} ->
-            # No tools available, use basic completion
-            basic_completion_opts = Map.delete(completion_opts, :tools)
+  defp execute_basic_completion(provider, auth_context, messages, completion_opts) do
+    basic_opts = Map.delete(completion_opts, :tools)
 
-            case state.llm_provider.complete_text(auth_context, messages, basic_completion_opts) do
-              {:ok, %{content: content}} ->
-                {:ok, content}
+    case provider.complete_text(auth_context, messages, basic_opts) do
+      {:ok, %{content: content}} -> {:ok, content}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-              {:error, reason} ->
-                {:error, reason}
-            end
+  defp execute_tool_enabled_completion(state, auth_context, messages, completion_opts) do
+    provider = state.llm_provider
 
-          {_, provider} ->
-            # Tools available, try tool-enabled completion
-            if function_exported?(provider, :complete_with_tools, 3) do
-              case provider.complete_with_tools(auth_context, messages, completion_opts) do
-                {:ok, %{content: content, tool_calls: []}} ->
-                  # No tools called, return content
-                  {:ok, content}
+    if function_exported?(provider, :complete_with_tools, 3) do
+      handle_tool_completion(state, auth_context, messages, completion_opts)
+    else
+      execute_basic_completion(provider, auth_context, messages, completion_opts)
+    end
+  end
 
-                {:ok, %{content: content, tool_calls: tool_calls}} when length(tool_calls) > 0 ->
-                  # Tools were called, execute them and get follow-up response
-                  handle_tool_calls(state, auth_context, messages, tool_calls, content)
+  defp handle_tool_completion(state, auth_context, messages, completion_opts) do
+    case state.llm_provider.complete_with_tools(auth_context, messages, completion_opts) do
+      {:ok, %{content: content, tool_calls: []}} ->
+        {:ok, content}
 
-                {:ok, %{tool_calls: tool_calls}} when length(tool_calls) > 0 ->
-                  # Only tool calls, no content
-                  handle_tool_calls(state, auth_context, messages, tool_calls, nil)
+      {:ok, %{content: content, tool_calls: tool_calls}} when length(tool_calls) > 0 ->
+        handle_tool_calls(state, auth_context, messages, tool_calls, content)
 
-                {:error, reason} ->
-                  {:error, reason}
-              end
-            else
-              # Provider doesn't support tool completion, fallback to basic
-              basic_completion_opts = Map.delete(completion_opts, :tools)
+      {:ok, %{tool_calls: tool_calls}} when length(tool_calls) > 0 ->
+        handle_tool_calls(state, auth_context, messages, tool_calls, nil)
 
-              case provider.complete_text(auth_context, messages, basic_completion_opts) do
-                {:ok, %{content: content}} ->
-                  {:ok, content}
-
-                {:error, reason} ->
-                  {:error, reason}
-              end
-            end
-        end
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -397,14 +391,7 @@ defmodule TheMaestro.Agents.Agent do
     # Format based on common tool result patterns
     cond do
       Map.has_key?(data, "content") ->
-        content = Map.get(data, "content")
-        size = Map.get(data, "size")
-
-        if size do
-          "Read #{size} bytes from file"
-        else
-          "Content: #{String.slice(content, 0, 100)}#{if String.length(content) > 100, do: "...", else: ""}"
-        end
+        format_content_result(data)
 
       Map.has_key?(data, "result") ->
         "Result: #{Map.get(data, "result")}"
@@ -412,6 +399,23 @@ defmodule TheMaestro.Agents.Agent do
       true ->
         inspect(data)
     end
+  end
+
+  defp format_content_result(data) do
+    content = Map.get(data, "content")
+    size = Map.get(data, "size")
+
+    if size do
+      "Read #{size} bytes from file"
+    else
+      format_truncated_content(content)
+    end
+  end
+
+  defp format_truncated_content(content) do
+    truncated = String.slice(content, 0, 100)
+    suffix = if String.length(content) > 100, do: "...", else: ""
+    "Content: #{truncated}#{suffix}"
   end
 
   defp format_tool_result(data), do: inspect(data)
