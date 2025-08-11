@@ -7,7 +7,7 @@ defmodule TheMaestro.Agents do
   agent processes through the DynamicSupervisor.
   """
 
-  alias TheMaestro.Agents.{DynamicSupervisor, Agent}
+  alias TheMaestro.Agents.{Agent, DynamicSupervisor}
 
   @doc """
   Starts a new agent process with the given ID.
