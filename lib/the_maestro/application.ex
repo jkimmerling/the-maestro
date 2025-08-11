@@ -14,6 +14,10 @@ defmodule TheMaestro.Application do
       {Phoenix.PubSub, name: TheMaestro.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: TheMaestro.Finch},
+      # Start the Registry for agent processes
+      {Registry, keys: :unique, name: TheMaestro.Agents.Registry},
+      # Start the DynamicSupervisor for agent processes
+      {TheMaestro.Agents.DynamicSupervisor, []},
       # Start a worker by calling: TheMaestro.Worker.start_link(arg)
       # {TheMaestro.Worker, arg},
       # Start to serve requests, typically the last entry
