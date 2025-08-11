@@ -62,7 +62,8 @@ defmodule TheMaestro.Providers.Gemini do
         end
 
       {:oauth, :new} ->
-        initialize_oauth_flow(config)
+        # In non-interactive mode or tests, return an error instead of starting OAuth flow
+        {:error, :oauth_initialization_required}
 
       {:service_account, creds_path} ->
         case Goth.Token.for_scope(@oauth_scopes, source: creds_path) do
