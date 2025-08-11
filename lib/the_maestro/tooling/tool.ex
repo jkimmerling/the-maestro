@@ -49,33 +49,18 @@ defmodule TheMaestro.Tooling.Tool do
   that will be sent to the LLM provider to enable function calling.
   """
   @type definition :: %{
-          String.t() => String.t() | map(),
-          "name" => String.t(),
-          "description" => String.t(),
-          "parameters" => parameter_schema()
+          required(String.t()) => String.t() | map()
         }
 
   @typedoc """
   JSON Schema definition for tool parameters.
-
-  This follows the JSON Schema specification and defines what parameters
-  the tool accepts, their types, and which are required.
   """
-  @type parameter_schema :: %{
-          String.t() => term(),
-          "type" => String.t(),
-          "properties" => %{String.t() => parameter_property()},
-          "required" => [String.t()]
-        }
+  @type parameter_schema :: map()
 
   @typedoc """
   Individual parameter property definition.
   """
-  @type parameter_property :: %{
-          String.t() => term(),
-          "type" => String.t(),
-          "description" => String.t()
-        }
+  @type parameter_property :: map()
 
   @typedoc """
   Arguments passed to the tool execution function.

@@ -66,6 +66,18 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
     end
   end
 
+  def execute(%{}) do
+    {:error, "Path cannot be empty"}
+  end
+
+  def execute(nil) do
+    {:error, "Invalid arguments. Expected a map with 'path' key."}
+  end
+
+  def execute(_invalid_args) do
+    {:error, "Invalid arguments. Expected a map with 'path' key."}
+  end
+
   @impl true
   def validate_arguments(%{"path" => path}) when is_binary(path) do
     if String.trim(path) == "" do
@@ -188,7 +200,7 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
 
   # Register this tool when the module is loaded
   @doc false
-  def __register_tool__ do
+  def register_self do
     TheMaestro.Tooling.register_tool(
       "read_file",
       __MODULE__,
@@ -196,7 +208,4 @@ defmodule TheMaestro.Tooling.Tools.FileSystem do
       &execute/1
     )
   end
-  
-  # Auto-register when module is loaded
-  __register_tool__()
 end

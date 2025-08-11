@@ -4,38 +4,48 @@ defmodule TheMaestro.ToolingTest do
 
   alias TheMaestro.Tooling
 
+  # Test tool definition and executor
+  @test_tool_definition %{
+    "name" => "test_registry_tool",
+    "description" => "Test tool for registry",
+    "parameters" => %{
+      "type" => "object",
+      "properties" => %{
+        "input" => %{"type" => "string", "description" => "Test input"}
+      },
+      "required" => ["input"]
+    }
+  }
+  
+  # Helper to create the test tool executor
+  defp test_tool_executor do
+    fn %{"input" => input} ->
+      {:ok, %{"output" => "processed: #{input}"}}
+    end
+  end
+
+  # Helper to register the test tool
+  defp setup_test_tool do
+    Tooling.register_tool("test_registry_tool", __MODULE__, @test_tool_definition, test_tool_executor())
+  end
+
   describe "tool registry functionality" do
     test "registers tools with proper format" do
-      # Register a test tool
-      definition = %{
-        "name" => "test_registry_tool",
-        "description" => "Test tool for registry",
-        "parameters" => %{
-          "type" => "object",
-          "properties" => %{
-            "input" => %{"type" => "string", "description" => "Test input"}
-          },
-          "required" => ["input"]
-        }
-      }
-      
-      executor = fn %{"input" => input} ->
-        {:ok, %{"output" => "processed: #{input}"}}
-      end
-      
-      assert :ok = Tooling.register_tool("test_registry_tool", __MODULE__, definition, executor)
+      assert :ok = setup_test_tool()
     end
 
     test "get_tool_definitions/0 returns list of definitions" do
+      setup_test_tool()
       definitions = Tooling.get_tool_definitions()
       
       assert is_list(definitions)
-      # Should include the tool we registered in previous test
+      # Should include the tool we registered
       tool_names = Enum.map(definitions, & &1["name"])
       assert "test_registry_tool" in tool_names
     end
 
     test "execute_tool/2 runs registered tools" do
+      setup_test_tool()
       # Should be able to execute the tool we registered
       result = Tooling.execute_tool("test_registry_tool", %{"input" => "hello"})
       
@@ -49,6 +59,7 @@ defmodule TheMaestro.ToolingTest do
     end
 
     test "execute_tool/2 validates arguments" do
+      setup_test_tool()
       # Missing required parameter
       result = Tooling.execute_tool("test_registry_tool", %{})
       
@@ -57,11 +68,13 @@ defmodule TheMaestro.ToolingTest do
     end
 
     test "tool_exists?/1 checks tool registration" do
+      setup_test_tool()
       assert Tooling.tool_exists?("test_registry_tool") == true
       assert Tooling.tool_exists?("nonexistent_tool") == false
     end
 
     test "list_tools/0 returns all registered tools" do
+      setup_test_tool()
       tools = Tooling.list_tools()
       
       assert is_map(tools)
@@ -109,6 +122,8 @@ defmodule TheMaestro.ToolingTest do
 
   describe "concurrent tool operations" do
     test "handles concurrent tool executions" do
+      setup_test_tool()
+      
       tasks = for i <- 1..10 do
         Task.async(fn ->
           Tooling.execute_tool("test_registry_tool", %{"input" => "test#{i}"})

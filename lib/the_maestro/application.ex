@@ -7,12 +7,6 @@ defmodule TheMaestro.Application do
 
   @impl true
   def start(_type, _args) do
-    # Initialize the tool registry first
-    TheMaestro.Tooling.__registry__()
-    
-    # Load all tool modules to auto-register them
-    Application.load(:the_maestro)
-    
     children = [
       TheMaestroWeb.Telemetry,
       TheMaestro.Repo,
@@ -24,6 +18,8 @@ defmodule TheMaestro.Application do
       {Registry, keys: :unique, name: TheMaestro.Agents.Registry},
       # Start the DynamicSupervisor for agent processes
       {TheMaestro.Agents.DynamicSupervisor, []},
+      # Start the Tooling registry GenServer
+      TheMaestro.Tooling,
       # Start a worker by calling: TheMaestro.Worker.start_link(arg)
       # {TheMaestro.Worker, arg},
       # Start to serve requests, typically the last entry
@@ -33,7 +29,16 @@ defmodule TheMaestro.Application do
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: TheMaestro.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    # Register all tools after supervisor starts
+    case Supervisor.start_link(children, opts) do
+      {:ok, pid} = result ->
+        # Register built-in tools
+        TheMaestro.Tooling.Tools.FileSystem.register_self()
+        result
+      error ->
+        error
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration
