@@ -83,3 +83,14 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# File system tool configuration for development
+config :the_maestro, :file_system_tool,
+  allowed_directories: [
+    "/tmp",
+    System.tmp_dir!(),
+    Path.join([File.cwd!(), "demos"]),
+    Path.join([File.cwd!(), "test", "fixtures"]),
+    Path.join([File.cwd!(), "priv"])
+  ],
+  max_file_size: 10 * 1024 * 1024  # 10MB

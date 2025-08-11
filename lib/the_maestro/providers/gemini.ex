@@ -720,9 +720,9 @@ defmodule TheMaestro.Providers.Gemini do
     function_declarations =
       Enum.map(tools, fn tool ->
         %{
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters
+          name: tool["name"],
+          description: tool["description"],
+          parameters: tool["parameters"]
         }
       end)
 
