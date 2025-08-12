@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>The Maestro - Device Authorization</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        text-align: center;
+        padding: 50px 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 40px;
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #4ade80;
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+      }
+      p {
+        font-size: 1.1rem;
+        line-height: 1.6;
+        margin-bottom: 1rem;
+      }
+      .device-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+      }
+      .form-group {
+        margin: 20px 0;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        font-size: 1.1rem;
+      }
+      input[type="text"] {
+        width: 200px;
+        padding: 15px 20px;
+        font-size: 1.2rem;
+        border: none;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        color: #333;
+        text-align: center;
+        letter-spacing: 2px;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+      input[type="text"]:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.5);
+      }
+      .btn {
+        background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 10px;
+      }
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(74, 222, 128, 0.3);
+      }
+      .instructions {
+        background: rgba(0, 0, 0, 0.2);
+        padding: 20px;
+        border-radius: 10px;
+        margin: 20px 0;
+        text-align: left;
+      }
+      .step {
+        margin: 10px 0;
+        padding-left: 25px;
+        position: relative;
+      }
+      .step::before {
+        content: "→";
+        position: absolute;
+        left: 0;
+        color: #4ade80;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="device-icon">📱</div>
+      <h1>Authorize Device</h1>
+      <p>To continue, please enter the code displayed in your terminal:</p>
+      
+      <form method="post" action="/api/cli/auth/authorize">
+        <div class="form-group">
+          <label for="user_code">Device Code:</label>
+          <input 
+            type="text" 
+            id="user_code" 
+            name="user_code" 
+            value={@user_code} 
+            placeholder="XXXXXX"
+            maxlength="6"
+            required
+            autofocus
+          />
+        </div>
+        
+        <button type="submit" class="btn">Authorize Device</button>
+      </form>
+      
+      <div class="instructions">
+        <strong>What happens next:</strong>
+        <div class="step">You'll be redirected to sign in with Google</div>
+        <div class="step">After signing in, your terminal will be authorized</div>
+        <div class="step">You can close this browser tab once complete</div>
+      </div>
+    </div>
+
+    <script>
+      // Auto-format user input (uppercase, space every 3 chars if needed)
+      document.getElementById('user_code').addEventListener('input', function(e) {
+        let value = e.target.value.replace(/[^A-Z0-9]/g, '').toUpperCase();
+        if (value.length > 6) {
+          value = value.substring(0, 6);
+        }
+        e.target.value = value;
+      });
+      
+      // Auto-submit if user_code is pre-filled and valid
+      window.addEventListener('load', function() {
+        const input = document.getElementById('user_code');
+        if (input.value && input.value.length === 6) {
+          // Don't auto-submit, let user click authorize
+        }
+      });
+    </script>
+  </body>
+</html>
