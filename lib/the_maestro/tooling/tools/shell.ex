@@ -87,15 +87,17 @@ defmodule TheMaestro.Tooling.Tools.Shell do
           "properties" => %{
             "command" => %{
               "type" => "string",
-              "description" => "The shell command to execute. Will be run with 'bash -c' in the sandbox."
+              "description" =>
+                "The shell command to execute. Will be run with 'bash -c' in the sandbox."
             },
             "description" => %{
-              "type" => "string", 
+              "type" => "string",
               "description" => "Optional description of what the command does for user clarity."
             },
             "directory" => %{
               "type" => "string",
-              "description" => "Optional working directory for command execution (defaults to /workspace in container)."
+              "description" =>
+                "Optional working directory for command execution (defaults to /workspace in container)."
             }
           },
           "required" => ["command"]
@@ -108,7 +110,7 @@ defmodule TheMaestro.Tooling.Tools.Shell do
       Logger.info("Shell tool: Executing command '#{command}'")
 
       # Check if shell tool is enabled
-      unless Shell.enabled? do
+      unless Shell.enabled?() do
         Logger.warning("Shell tool: Tool is disabled")
         {:error, "Shell command execution is disabled in the current configuration"}
       else
@@ -193,7 +195,7 @@ defmodule TheMaestro.Tooling.Tools.Shell do
   def execute_sandboxed(%{"command" => _command} = params) do
     sandboxed = sandbox_enabled?()
     Logger.info("Shell tool: Sandbox enabled? #{sandboxed}")
-    
+
     if sandboxed do
       Logger.info("Shell tool: Taking Docker path")
       execute_in_docker(params)
@@ -217,42 +219,48 @@ defmodule TheMaestro.Tooling.Tools.Shell do
 
   defp execute_directly(%{"command" => command} = params) do
     Logger.warning("Shell tool: Executing command directly (sandbox disabled)")
-    
+
     directory = Map.get(params, "directory", File.cwd!())
-    
+
     start_time = System.monotonic_time(:millisecond)
-    
+
     # Build options list correctly
     opts = [stderr_to_stdout: true]
-    opts = if directory != File.cwd!() do
-      [{:cd, directory} | opts]
-    else
-      opts
-    end
-    
+
+    opts =
+      if directory != File.cwd!() do
+        [{:cd, directory} | opts]
+      else
+        opts
+      end
+
     Logger.debug("Shell tool: About to execute System.cmd with opts: #{inspect(opts)}")
+
     case System.cmd("bash", ["-c", command], opts) do
       {output, exit_code} ->
         end_time = System.monotonic_time(:millisecond)
         execution_time = end_time - start_time
 
         max_output_size = get_config(:max_output_size, 1024 * 1024)
-        output = if byte_size(output) > max_output_size do
-          truncated_output = binary_part(output, 0, max_output_size)
-          truncated_output <> "\n... [output truncated at #{max_output_size} bytes]"
-        else
-          output
-        end
 
-        {:ok, %{
-          "command" => command,
-          "directory" => directory,
-          "stdout" => output,
-          "stderr" => "",
-          "exit_code" => exit_code,
-          "execution_time_ms" => execution_time,
-          "sandboxed" => false
-        }}
+        output =
+          if byte_size(output) > max_output_size do
+            truncated_output = binary_part(output, 0, max_output_size)
+            truncated_output <> "\n... [output truncated at #{max_output_size} bytes]"
+          else
+            output
+          end
+
+        {:ok,
+         %{
+           "command" => command,
+           "directory" => directory,
+           "stdout" => output,
+           "stderr" => "",
+           "exit_code" => exit_code,
+           "execution_time_ms" => execution_time,
+           "sandboxed" => false
+         }}
     end
   rescue
     error ->
@@ -260,9 +268,10 @@ defmodule TheMaestro.Tooling.Tools.Shell do
   end
 
   defp check_docker_available do
-    case System.cmd("docker", ["version"], [stderr_to_stdout: true]) do
+    case System.cmd("docker", ["version"], stderr_to_stdout: true) do
       {_output, 0} ->
         :ok
+
       {output, _exit_code} ->
         Logger.error("Docker not available: #{output}")
         {:error, "Docker is not available. Please install Docker or disable sandboxing."}
@@ -276,24 +285,38 @@ defmodule TheMaestro.Tooling.Tools.Shell do
   defp build_docker_command(%{"command" => command} = params) do
     docker_image = get_config(:docker_image, "ubuntu:22.04")
     directory = Map.get(params, "directory", "/workspace")
-    
+
     # Create a safe, isolated Docker command
     docker_args = [
       "run",
-      "--rm",                    # Remove container after execution
-      "--interactive",           # Keep STDIN open
-      "--tty",                   # Allocate a pseudo-TTY
-      "--network=none",          # Disable network access
-      "--user=nobody:nogroup",   # Run as unprivileged user
-      "--read-only",             # Make filesystem read-only
-      "--tmpfs=/tmp:rw,noexec,nosuid,size=100m",  # Limited temp space
-      "--workdir=#{directory}",  # Set working directory
-      "--cpus=0.5",              # Limit CPU usage
-      "--memory=256m",           # Limit memory usage
-      "--ulimit=nproc=10",       # Limit number of processes
-      "--ulimit=fsize=10485760", # Limit file size (10MB)
+      # Remove container after execution
+      "--rm",
+      # Keep STDIN open
+      "--interactive",
+      # Allocate a pseudo-TTY
+      "--tty",
+      # Disable network access
+      "--network=none",
+      # Run as unprivileged user
+      "--user=nobody:nogroup",
+      # Make filesystem read-only
+      "--read-only",
+      # Limited temp space
+      "--tmpfs=/tmp:rw,noexec,nosuid,size=100m",
+      # Set working directory
+      "--workdir=#{directory}",
+      # Limit CPU usage
+      "--cpus=0.5",
+      # Limit memory usage
+      "--memory=256m",
+      # Limit number of processes
+      "--ulimit=nproc=10",
+      # Limit file size (10MB)
+      "--ulimit=fsize=10485760",
       docker_image,
-      "bash", "-c", command
+      "bash",
+      "-c",
+      command
     ]
 
     {:ok, docker_args}
@@ -302,25 +325,28 @@ defmodule TheMaestro.Tooling.Tools.Shell do
   defp run_docker_command(docker_args) do
     start_time = System.monotonic_time(:millisecond)
 
-    case System.cmd("docker", docker_args, [stderr_to_stdout: true]) do
+    case System.cmd("docker", docker_args, stderr_to_stdout: true) do
       {output, exit_code} ->
         end_time = System.monotonic_time(:millisecond)
         execution_time = end_time - start_time
 
         max_output_size = get_config(:max_output_size, 1024 * 1024)
-        output = if byte_size(output) > max_output_size do
-          truncated_output = binary_part(output, 0, max_output_size)
-          truncated_output <> "\n... [output truncated at #{max_output_size} bytes]"
-        else
-          output
-        end
 
-        {:ok, %{
-          stdout: output,
-          stderr: "",
-          exit_code: exit_code,
-          execution_time_ms: execution_time
-        }}
+        output =
+          if byte_size(output) > max_output_size do
+            truncated_output = binary_part(output, 0, max_output_size)
+            truncated_output <> "\n... [output truncated at #{max_output_size} bytes]"
+          else
+            output
+          end
+
+        {:ok,
+         %{
+           stdout: output,
+           stderr: "",
+           exit_code: exit_code,
+           execution_time_ms: execution_time
+         }}
     end
   rescue
     error ->
@@ -328,35 +354,37 @@ defmodule TheMaestro.Tooling.Tools.Shell do
   end
 
   defp parse_docker_result(result, original_command) do
-    {:ok, %{
-      "command" => original_command,
-      "directory" => "/workspace",
-      "stdout" => result.stdout,
-      "stderr" => result.stderr,
-      "exit_code" => result.exit_code,
-      "execution_time_ms" => result.execution_time_ms,
-      "sandboxed" => true
-    }}
+    {:ok,
+     %{
+       "command" => original_command,
+       "directory" => "/workspace",
+       "stdout" => result.stdout,
+       "stderr" => result.stderr,
+       "exit_code" => result.exit_code,
+       "execution_time_ms" => result.execution_time_ms,
+       "sandboxed" => true
+     }}
   end
 
   defp blocked_command?(command) do
-    blocked_commands = get_config(:blocked_commands, [
-      "rm -rf",
-      "dd if=",
-      "mkfs",
-      "fdisk",
-      "parted",
-      "shutdown",
-      "reboot",
-      "halt",
-      "init 0",
-      "init 6",
-      "kill -9 -1",
-      "fork bomb"
-    ])
+    blocked_commands =
+      get_config(:blocked_commands, [
+        "rm -rf",
+        "dd if=",
+        "mkfs",
+        "fdisk",
+        "parted",
+        "shutdown",
+        "reboot",
+        "halt",
+        "init 0",
+        "init 6",
+        "kill -9 -1",
+        "fork bomb"
+      ])
 
     command_lower = String.downcase(command)
-    
+
     Enum.any?(blocked_commands, fn blocked ->
       String.contains?(command_lower, String.downcase(blocked))
     end)
@@ -369,12 +397,12 @@ defmodule TheMaestro.Tooling.Tools.Shell do
 
   defp allowed_command?(command) do
     allowed_commands = get_config(:allowed_commands, [])
-    
+
     if Enum.empty?(allowed_commands) do
       true
     else
       command_lower = String.downcase(command)
-      
+
       Enum.any?(allowed_commands, fn allowed ->
         String.starts_with?(command_lower, String.downcase(allowed))
       end)

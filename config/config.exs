@@ -104,17 +104,24 @@ config :the_maestro, :providers,
 
 # Configure Shell Tool
 config :the_maestro, :shell_tool,
-  enabled: true,                    # Enable/disable the shell tool
-  sandbox_enabled: true,            # Enable/disable sandboxing (SECURITY: enabled by default)
-  docker_image: "ubuntu:22.04",    # Docker image for sandbox
-  timeout_seconds: 30,              # Command execution timeout
-  max_output_size: 1024 * 1024,     # Maximum output size (1MB)
-  allowed_commands: [],             # Optional allowlist of commands (empty = allow all)
-  blocked_commands: [               # Blocked dangerous commands
+  # Enable/disable the shell tool
+  enabled: true,
+  # Enable/disable sandboxing (SECURITY: enabled by default)
+  sandbox_enabled: true,
+  # Docker image for sandbox
+  docker_image: "ubuntu:22.04",
+  # Command execution timeout
+  timeout_seconds: 30,
+  # Maximum output size (1MB)
+  max_output_size: 1024 * 1024,
+  # Optional allowlist of commands (empty = allow all)
+  allowed_commands: [],
+  # Blocked dangerous commands
+  blocked_commands: [
     "rm -rf",
     "dd if=",
     "mkfs",
-    "fdisk", 
+    "fdisk",
     "parted",
     "shutdown",
     "reboot",
