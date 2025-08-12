@@ -26,7 +26,7 @@ defmodule TheMaestroWeb.AgentLiveTest do
     test "redirects to home when not logged in", %{conn: conn} do
       conn = init_test_session(conn, %{})
 
-      # When authentication is enabled and no user is logged in, 
+      # When authentication is enabled and no user is logged in,
       # the RequireAuth plug should redirect to home
       assert {:error,
               {:redirect, %{to: "/", flash: %{"error" => "You must log in to access this page."}}}} =
