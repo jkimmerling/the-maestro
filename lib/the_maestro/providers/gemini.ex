@@ -707,8 +707,8 @@ defmodule TheMaestro.Providers.Gemini do
           :assistant -> "model"
           # Gemini doesn't have system role, treat as user
           :system -> "user"
-          # Tool results are handled as function responses in Gemini
-          :tool -> "function"
+          # Tool results should be treated as model responses in Gemini
+          :tool -> "model"
         end
 
       %{

@@ -350,6 +350,63 @@ The demo serves as a comprehensive integration test:
 4. **Security Layer**: File system sandboxing and path validation
 5. **Error Handling**: Graceful degradation and recovery patterns
 
+## Critical Bug Fixes During Implementation
+
+During the development of this demo, we discovered and fixed several critical bugs in the Gemini provider integration. These fixes highlight the value of comprehensive end-to-end testing:
+
+### Tool Call Format Bug
+
+**Issue**: The `extract_tool_calls` function was returning maps with atom keys (`:name`, `:arguments`), but the `execute_tool_call` function expected string keys (`"name"`, `"arguments"`).
+
+```elixir
+# Before (broken):
+%{
+  name: call["name"],           # atom key
+  arguments: call["args"] || %{}  # atom key
+}
+
+# After (fixed):
+%{
+  "name" => call["name"],        # string key
+  "arguments" => call["args"] || %{}  # string key
+}
+```
+
+**Impact**: Tool calls were failing with `Invalid tool call format` errors, preventing the ReAct loop from completing.
+
+### Message Role Handling Bug  
+
+**Issue**: The `convert_messages_to_gemini` function didn't handle `:tool` role messages, causing `CaseClauseError` when processing tool results.
+
+```elixir
+# Before (broken):
+case message.role do
+  :user -> "user"
+  :assistant -> "model"
+  :system -> "user"
+  # :tool -> ??? (unhandled, causing crash)
+end
+
+# After (fixed):
+case message.role do
+  :user -> "user"
+  :assistant -> "model"
+  :system -> "user"
+  :tool -> "model"  # Tool results treated as model responses
+end
+```
+
+**Impact**: Agent processes were crashing when trying to send tool results back to the LLM for follow-up responses.
+
+### Learning Points
+
+These bugs demonstrate important principles:
+
+1. **End-to-End Testing**: Unit tests passed, but integration revealed format mismatches
+2. **External API Constraints**: Gemini only accepts `"user"` and `"model"` roles, not custom roles like `"function"`
+3. **Data Format Consistency**: String vs atom keys must be consistent across the entire pipeline
+4. **Error Propagation**: Well-designed error handling helped identify the exact failure points
+
 ## Real-World Demo Output Analysis
 
 Let's analyze the actual demo output to understand what it reveals about the system:
