@@ -58,7 +58,7 @@ defmodule TheMaestro.Agents.Agent do
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     agent_id = Keyword.fetch!(opts, :agent_id)
-    
+
     # Resolve LLM provider - support both module names and provider atoms
     llm_provider = resolve_llm_provider(opts)
     auth_context = Keyword.get(opts, :auth_context)
@@ -251,7 +251,9 @@ defmodule TheMaestro.Agents.Agent do
   defp perform_llm_completion_with_streaming(state, auth_context) do
     messages = convert_message_history_to_llm_format(state.message_history)
     tool_definitions = TheMaestro.Tooling.get_tool_definitions()
-    completion_opts = build_completion_opts_with_streaming(state.agent_id, tool_definitions, state.llm_provider)
+
+    completion_opts =
+      build_completion_opts_with_streaming(state.agent_id, tool_definitions, state.llm_provider)
 
     if Enum.empty?(tool_definitions) do
       execute_basic_completion_with_streaming(
@@ -535,13 +537,14 @@ defmodule TheMaestro.Agents.Agent do
 
   defp resolve_provider_by_name(provider_name) when is_atom(provider_name) do
     providers = Application.get_env(:the_maestro, :providers, %{})
-    
+
     # Convert keyword list to map if needed
     providers_map = if is_list(providers), do: Map.new(providers), else: providers
 
     case Map.get(providers_map, provider_name) do
       %{module: module} -> module
-      nil -> TheMaestro.Providers.Gemini # fallback
+      # fallback
+      nil -> TheMaestro.Providers.Gemini
     end
   end
 
@@ -554,7 +557,8 @@ defmodule TheMaestro.Agents.Agent do
 
     case find_provider_by_module(providers_map, provider_module) do
       {_name, %{models: [first_model | _]}} -> first_model
-      _ -> "gemini-2.5-flash" # fallback
+      # fallback
+      _ -> "gemini-2.5-flash"
     end
   end
 

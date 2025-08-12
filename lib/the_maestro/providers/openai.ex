@@ -638,15 +638,19 @@ defmodule TheMaestro.Providers.OpenAI do
 
       %{
         "name" => Map.get(function, "name"),
-        "arguments" => 
+        "arguments" =>
           case Map.get(function, "arguments") do
             args when is_binary(args) ->
               case Jason.decode(args) do
                 {:ok, parsed} -> parsed
                 {:error, _} -> %{}
               end
-            args when is_map(args) -> args
-            _ -> %{}
+
+            args when is_map(args) ->
+              args
+
+            _ ->
+              %{}
           end
       }
     end)

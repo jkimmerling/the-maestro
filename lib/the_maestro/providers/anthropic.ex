@@ -20,7 +20,8 @@ defmodule TheMaestro.Providers.Anthropic do
 
   # OAuth Configuration for Anthropic
   @oauth_client_id System.get_env("ANTHROPIC_OAUTH_CLIENT_ID") || "anthropic-client-id"
-  @oauth_client_secret System.get_env("ANTHROPIC_OAUTH_CLIENT_SECRET") || "anthropic-client-secret"
+  @oauth_client_secret System.get_env("ANTHROPIC_OAUTH_CLIENT_SECRET") ||
+                         "anthropic-client-secret"
   @oauth_scopes ["api"]
   @phoenix_redirect_uri "http://localhost:4000/oauth2callback/anthropic"
   @device_auth_redirect_uri "urn:ietf:wg:oauth:2.0:oob"
@@ -385,12 +386,13 @@ defmodule TheMaestro.Providers.Anthropic do
   defp validate_token(access_token) do
     # Determine auth type based on token format
     auth_type = if String.starts_with?(access_token, "sk-ant-oat"), do: :oauth, else: :api_key
-    
+
     # Create appropriate client
-    client = case auth_type do
-      :oauth -> {:oauth_client, access_token}
-      :api_key -> {:http_client, access_token}
-    end
+    client =
+      case auth_type do
+        :oauth -> {:oauth_client, access_token}
+        :api_key -> {:http_client, access_token}
+      end
 
     # Make a minimal request to validate the token
     case make_anthropic_request(client, %{
@@ -593,7 +595,7 @@ defmodule TheMaestro.Providers.Anthropic do
 
   defp make_direct_http_request(token, request_params, auth_type) do
     url = "https://api.anthropic.com/v1/messages"
-    
+
     headers = build_anthropic_headers(token, auth_type)
     body = Jason.encode!(request_params)
 
