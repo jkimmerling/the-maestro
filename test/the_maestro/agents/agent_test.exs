@@ -87,6 +87,60 @@ defmodule TheMaestro.Agents.AgentTest do
     end
   end
 
+  describe "streaming functionality" do
+    @tag :streaming
+    test "sends stream_chunk messages during processing", %{agent_id: agent_id} do
+      # Subscribe to PubSub for this agent
+      Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent:#{agent_id}")
+
+      # Send message to trigger streaming
+      task = Task.async(fn -> Agent.send_message(agent_id, "Stream test message") end)
+
+      # Should receive streaming status messages
+      assert_receive {:status_update, :thinking}, 1000
+      assert_receive {:stream_chunk, chunk} when is_binary(chunk), 2000
+
+      # Wait for completion
+      assert {:ok, response} = Task.await(task, 5000)
+      assert response.type == :assistant
+    end
+
+    @tag :streaming
+    test "sends tool_call_start and tool_call_end messages", %{agent_id: agent_id} do
+      # Subscribe to PubSub for this agent
+      Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent:#{agent_id}")
+
+      # Send message that will trigger tool usage
+      task = Task.async(fn -> Agent.send_message(agent_id, "read_file test_file.txt") end)
+
+      # Should receive tool call status messages
+      assert_receive {:status_update, :thinking}, 1000
+      assert_receive {:tool_call_start, %{name: tool_name}}, 2000
+      assert_receive {:tool_call_end, %{name: ^tool_name, result: _}}, 2000
+
+      # Wait for completion
+      assert {:ok, response} = Task.await(task, 5000)
+      assert response.type == :assistant
+    end
+
+    @tag :streaming
+    test "sends processing_complete message when finished", %{agent_id: agent_id} do
+      # Subscribe to PubSub for this agent
+      Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent:#{agent_id}")
+
+      # Send message
+      task = Task.async(fn -> Agent.send_message(agent_id, "Test completion message") end)
+
+      # Should receive completion status
+      assert_receive {:status_update, :thinking}, 1000
+      assert_receive {:processing_complete, _final_response}, 3000
+
+      # Wait for completion
+      assert {:ok, response} = Task.await(task, 5000)
+      assert response.type == :assistant
+    end
+  end
+
   describe "registry integration" do
     test "agent is registered with unique name" do
       agent_id = "registry_test_#{System.unique_integer()}"
