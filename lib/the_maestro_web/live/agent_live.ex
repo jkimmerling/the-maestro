@@ -12,11 +12,11 @@ defmodule TheMaestroWeb.AgentLive do
   def mount(_params, session, socket) do
     require Logger
     Logger.debug("AgentLive mount session: #{inspect(Map.keys(session))}")
-    
+
     current_user = Map.get(session, "current_user")
     oauth_credentials = Map.get(session, "oauth_credentials")
     Logger.debug("oauth_credentials from session: #{inspect(oauth_credentials)}")
-    
+
     authentication_enabled = authentication_enabled?()
 
     agent_id = determine_agent_id(authentication_enabled, current_user, session, socket)
@@ -224,8 +224,8 @@ defmodule TheMaestroWeb.AgentLive do
               Welcome, {@current_user["name"] || @current_user["email"]}!
             </p>
             <div class="mt-3">
-              <.link 
-                href={~p"/auth/logout"} 
+              <.link
+                href={~p"/auth/logout"}
                 class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
               >
                 Logout
@@ -417,10 +417,12 @@ defmodule TheMaestroWeb.AgentLive do
     if oauth_credentials && oauth_credentials["access_token"] do
       %{
         type: :oauth,
-        access_token: oauth_credentials["access_token"],
-        refresh_token: oauth_credentials["refresh_token"],
-        expires_at: oauth_credentials["expires_at"],
-        token_type: oauth_credentials["token_type"] || "Bearer"
+        credentials: %{
+          access_token: oauth_credentials["access_token"],
+          refresh_token: oauth_credentials["refresh_token"],
+          expires_at: oauth_credentials["expires_at"],
+          token_type: oauth_credentials["token_type"] || "Bearer"
+        }
       }
     else
       nil
