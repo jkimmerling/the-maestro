@@ -3,6 +3,8 @@ defmodule TheMaestroWeb.OAuthController do
 
   require Logger
 
+  alias TheMaestro.Providers.Gemini
+
   @doc """
   Handles OAuth2 callback from Google OAuth service.
 
@@ -52,9 +54,9 @@ defmodule TheMaestroWeb.OAuthController do
     # Build the redirect URI for token exchange
     redirect_uri = build_redirect_uri(conn)
 
-    case TheMaestro.Providers.Gemini.exchange_authorization_code(code, redirect_uri) do
+    case Gemini.exchange_authorization_code(code, redirect_uri) do
       {:ok, tokens} ->
-        case TheMaestro.Providers.Gemini.cache_oauth_credentials(tokens) do
+        case Gemini.cache_oauth_credentials(tokens) do
           {:ok, _} ->
             Logger.info("OAuth flow completed successfully!")
             render_success_page(conn)
