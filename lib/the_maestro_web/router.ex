@@ -14,10 +14,22 @@ defmodule TheMaestroWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :oauth do
+    plug :accepts, ["html"]
+    plug :fetch_query_params
+  end
+
   scope "/", TheMaestroWeb do
     pipe_through :browser
 
     get "/", PageController, :home
+  end
+
+  # OAuth callback endpoint (separate pipeline to avoid CSRF protection)
+  scope "/", TheMaestroWeb do
+    pipe_through :oauth
+
+    get "/oauth2callback", OAuthController, :callback
   end
 
   # Other scopes may use custom stacks.

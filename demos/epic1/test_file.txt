@@ -1,0 +1,14 @@
+Hello from Epic 1 Demo!
+
+This is a test file that demonstrates the file reading capability
+of The Maestro AI agent system.
+
+Epic 1 has successfully implemented:
+- Core OTP application with supervision tree
+- Agent GenServer with state management
+- LLMProvider behavior with Gemini adapter
+- OAuth authentication for Gemini API
+- Tooling DSL with sandboxed file operations
+
+The agent can now read files like this one and interact with
+external LLM providers to provide intelligent responses.

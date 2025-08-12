@@ -72,6 +72,20 @@ Learn how to build secure, extensible tool systems for AI agents using Test-Driv
 
 **Difficulty**: Advanced
 
+### [Story 1.6: Epic 1 Demo Creation](epic1/story1.6/)
+
+Learn how to create comprehensive, runnable demos for complex Elixir/OTP applications:
+
+- Design self-contained demo scripts for OTP applications
+- Test complete system integration with external services
+- Handle authentication and configuration in demo environments
+- Implement progressive demonstration patterns with error handling
+- Create educational documentation with troubleshooting guides
+
+**Key Concepts**: Demo architecture, integration testing, user experience design, error handling patterns, documentation strategies
+
+**Difficulty**: Intermediate to Advanced
+
 ---
 
 ## Coming Soon
@@ -80,7 +94,6 @@ More tutorials will be added as development progresses through the epics:
 
 ### Epic 1 Remaining Stories
 - Story 1.2: Core Application & Supervision Tree
-- Story 1.6: Epic 1 Demo Creation
 
 ### Epic 2: Phoenix LiveView UI & User Authentication
 - Phoenix project integration

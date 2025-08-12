@@ -26,7 +26,7 @@ defmodule TheMaestro.Providers.Gemini do
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile"
   ]
-  @oauth_redirect_uri_pattern "http://localhost:%d/oauth2callback"
+  @phoenix_redirect_uri "http://localhost:4000/oauth2callback"
   @device_auth_redirect_uri "https://codeassist.google.com/authcode"
 
   # File paths for credential storage
@@ -56,30 +56,22 @@ defmodule TheMaestro.Providers.Gemini do
 
   @impl LLMProvider
   def complete_text(auth_context, messages, opts \\ %{}) do
-    case get_access_token(auth_context) do
-      {:ok, token} ->
-        gemini_messages = convert_messages_to_gemini(messages)
-        model = Map.get(opts, :model, "gemini-1.5-pro")
+    # Validate auth_context has the required structure
+    case validate_auth_context(auth_context) do
+      :ok ->
+        with {:ok, token} <- get_access_token(auth_context) do
+          model = Map.get(opts, :model, "gemini-2.5-pro")
 
-        request_body = %{
-          contents: gemini_messages,
-          generationConfig: %{
-            temperature: Map.get(opts, :temperature, 0.7),
-            maxOutputTokens: Map.get(opts, :max_tokens, 8192)
-          }
-        }
+          request_body =
+            build_text_request_body(auth_context.type, messages, opts, model, auth_context)
 
-        case make_gemini_request(token, model, request_body) do
-          {:ok, response} ->
-            {:ok,
-             %{
-               content: extract_text_content(response),
-               model: model,
-               usage: extract_usage_info(response)
-             }}
+          case make_gemini_request(token, model, request_body, auth_context.type) do
+            {:ok, response} ->
+              {:ok, build_text_response(response, model)}
 
-          {:error, reason} ->
-            {:error, reason}
+            {:error, reason} ->
+              {:error, reason}
+          end
         end
 
       {:error, reason} ->
@@ -87,40 +79,151 @@ defmodule TheMaestro.Providers.Gemini do
     end
   end
 
+  defp build_text_request_body(:api_key, messages, opts, _model, _auth_context) do
+    # Direct Generative Language API format for API keys
+    gemini_messages = convert_messages_to_gemini(messages)
+
+    %{
+      contents: gemini_messages,
+      generationConfig: %{
+        temperature: Map.get(opts, :temperature, 0.7),
+        maxOutputTokens: Map.get(opts, :max_tokens, 8192)
+      }
+    }
+  end
+
+  defp build_text_request_body(_auth_type, messages, opts, model, auth_context) do
+    # Code Assist API format - NO tools field, model generates function calls directly
+    gemini_messages = convert_messages_to_gemini(messages)
+
+    %{
+      model: model,
+      project: get_project_id_from_context(auth_context),
+      user_prompt_id: generate_user_prompt_id(),
+      request: %{
+        contents: gemini_messages,
+        generationConfig: %{
+          temperature: Map.get(opts, :temperature, 0.0),
+          topP: 1
+        }
+      }
+    }
+  end
+
+  defp build_text_response(response, model) do
+    %{
+      content: extract_text_content(response),
+      model: model,
+      usage: extract_usage_info(response)
+    }
+  end
+
   @impl LLMProvider
   def complete_with_tools(auth_context, messages, opts \\ %{}) do
-    case get_access_token(auth_context) do
-      {:ok, token} ->
-        gemini_messages = convert_messages_to_gemini(messages)
-        gemini_tools = convert_tools_to_gemini(Map.get(opts, :tools, []))
-        model = Map.get(opts, :model, "gemini-1.5-pro")
+    # Validate auth_context has the required structure
+    case validate_auth_context(auth_context) do
+      :ok ->
+        with {:ok, token} <- get_access_token(auth_context) do
+          tools = Map.get(opts, :tools, [])
+          model = Map.get(opts, :model, "gemini-2.5-pro")
 
-        request_body = %{
-          contents: gemini_messages,
-          tools: gemini_tools,
-          generationConfig: %{
-            temperature: Map.get(opts, :temperature, 0.7),
-            maxOutputTokens: Map.get(opts, :max_tokens, 8192)
-          }
-        }
+          request_body =
+            build_tools_request_body(
+              auth_context.type,
+              messages,
+              tools,
+              opts,
+              model,
+              auth_context
+            )
 
-        case make_gemini_request(token, model, request_body) do
-          {:ok, response} ->
-            {:ok,
-             %{
-               content: extract_text_content(response),
-               tool_calls: extract_tool_calls(response),
-               model: model,
-               usage: extract_usage_info(response)
-             }}
+          case make_gemini_request(token, model, request_body, auth_context.type) do
+            {:ok, response} ->
+              {:ok, build_tools_response(response, model)}
 
-          {:error, reason} ->
-            {:error, reason}
+            {:error, reason} ->
+              {:error, reason}
+          end
         end
 
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp validate_auth_context(%{type: _type, credentials: _credentials}), do: :ok
+  defp validate_auth_context(_), do: {:error, :invalid_auth_context}
+
+  defp build_tools_request_body(:api_key, messages, tools, opts, _model, _auth_context) do
+    # Direct Generative Language API format for API keys
+    gemini_messages = convert_messages_to_gemini(messages)
+    gemini_tools = convert_tools_to_gemini(tools)
+
+    %{
+      contents: gemini_messages,
+      tools: gemini_tools,
+      generationConfig: %{
+        temperature: Map.get(opts, :temperature, 0.7),
+        maxOutputTokens: Map.get(opts, :max_tokens, 8192)
+      }
+    }
+  end
+
+  defp build_tools_request_body(_auth_type, messages, tools, opts, model, auth_context) do
+    # Code Assist API format - use systemInstruction and tools fields like original gemini-cli
+    gemini_messages = convert_messages_to_gemini(messages)
+    gemini_tools = convert_tools_to_gemini(tools)
+
+    request_content = build_base_request_content(gemini_messages, opts)
+    request_content = maybe_add_system_instruction(request_content, tools)
+    request_content = maybe_add_tools(request_content, gemini_tools)
+
+    %{
+      model: model,
+      project: get_project_id_from_context(auth_context),
+      user_prompt_id: generate_user_prompt_id(),
+      request: request_content
+    }
+  end
+
+  defp build_base_request_content(gemini_messages, opts) do
+    %{
+      contents: gemini_messages,
+      generationConfig: %{
+        temperature: Map.get(opts, :temperature, 0.0),
+        topP: 1
+      }
+    }
+  end
+
+  defp maybe_add_system_instruction(request_content, tools) do
+    if Enum.empty?(tools) do
+      request_content
+    else
+      system_instruction = build_system_instruction_with_tools(tools)
+
+      Map.put(request_content, :systemInstruction, %{
+        role: "user",
+        parts: [%{text: system_instruction}]
+      })
+    end
+  end
+
+  defp maybe_add_tools(request_content, gemini_tools) do
+    if Enum.empty?(gemini_tools) do
+      request_content
+    else
+      Map.put(request_content, :tools, gemini_tools)
+    end
+  end
+
+  defp build_tools_response(response, model) do
+    %{
+      content: extract_text_content(response),
+      tool_calls: extract_tool_calls(response),
+      model: model,
+      usage: extract_usage_info(response)
+    }
   end
 
   @impl LLMProvider
@@ -198,7 +301,7 @@ defmodule TheMaestro.Providers.Gemini do
   def complete_device_authorization(auth_code, code_verifier) do
     case exchange_code_for_tokens(auth_code, code_verifier, @device_auth_redirect_uri) do
       {:ok, tokens} ->
-        cache_oauth_credentials(tokens)
+        cache_oauth_credentials_private(tokens)
 
       {:error, reason} ->
         {:error, reason}
@@ -208,24 +311,36 @@ defmodule TheMaestro.Providers.Gemini do
   @doc """
   Initiates web-based OAuth flow.
 
-  Returns a URL for browser-based authentication and starts a local server
-  to handle the callback.
+  Returns a URL for browser-based authentication. Uses the existing Phoenix
+  server to handle the OAuth callback.
   """
   def web_authorization_flow(_config \\ %{}) do
-    port = get_available_port_number()
-    redirect_uri = String.replace(@oauth_redirect_uri_pattern, "%d", Integer.to_string(port))
     state = generate_state()
-
-    auth_url = build_web_auth_url(redirect_uri, state)
-
-    server_pid = start_callback_server(port, state, redirect_uri)
+    auth_url = build_web_auth_url(@phoenix_redirect_uri, state)
 
     {:ok,
      %{
        auth_url: auth_url,
-       server_pid: server_pid,
-       port: port
+       state: state
      }}
+  end
+
+  @doc """
+  Exchanges authorization code for OAuth tokens.
+
+  This is called by the OAuth controller when handling the callback.
+  """
+  def exchange_authorization_code(code, redirect_uri) do
+    exchange_code_for_tokens(code, nil, redirect_uri)
+  end
+
+  @doc """
+  Caches OAuth credentials to the filesystem.
+
+  This is called by the OAuth controller after successful token exchange.
+  """
+  def cache_oauth_credentials(credentials) do
+    cache_oauth_credentials_private(credentials)
   end
 
   @doc """
@@ -260,22 +375,35 @@ defmodule TheMaestro.Providers.Gemini do
   end
 
   defp initialize_cached_oauth(config) do
-    case load_cached_oauth_credentials() do
-      {:ok, credentials} ->
-        auth_context = %{
-          type: :oauth,
-          credentials: credentials,
-          config: config
-        }
-
-        # Validate and refresh if needed
-        case validate_and_refresh_oauth(auth_context) do
-          {:ok, refreshed_context} -> {:ok, refreshed_context}
-          {:error, _} -> initialize_oauth_flow(config)
-        end
-
-      {:error, _} ->
+    with {:ok, credentials} <- load_cached_oauth_credentials(),
+         {:ok, refreshed_context} <- setup_auth_context_and_refresh(credentials, config),
+         {:ok, final_context} <- setup_code_assist_integration(refreshed_context) do
+      {:ok, final_context}
+    else
+      {:error, _reason} ->
         initialize_oauth_flow(config)
+    end
+  end
+
+  defp setup_auth_context_and_refresh(credentials, config) do
+    auth_context = %{
+      type: :oauth,
+      credentials: credentials,
+      config: config
+    }
+
+    validate_and_refresh_oauth(auth_context)
+  end
+
+  defp setup_code_assist_integration(refreshed_context) do
+    case setup_code_assist_user(refreshed_context) do
+      {:ok, user_data} ->
+        updated_context = Map.put(refreshed_context, :user_data, user_data)
+        {:ok, updated_context}
+
+      {:error, reason} ->
+        Logger.error("Failed to set up Code Assist user: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -375,7 +503,7 @@ defmodule TheMaestro.Providers.Gemini do
     end
   end
 
-  defp cache_oauth_credentials(credentials) do
+  defp cache_oauth_credentials_private(credentials) do
     credential_path = get_credential_path()
     credential_dir = Path.dirname(credential_path)
 
@@ -472,7 +600,7 @@ defmodule TheMaestro.Providers.Gemini do
     updated_context = %{auth_context | credentials: final_tokens}
 
     # Cache the updated credentials
-    cache_oauth_credentials(final_tokens)
+    cache_oauth_credentials_private(final_tokens)
 
     {:ok, updated_context}
   end
@@ -579,50 +707,7 @@ defmodule TheMaestro.Providers.Gemini do
     end
   end
 
-  # OAuth Server for Web Flow
-
-  defp start_callback_server(port, state, redirect_uri) do
-    spawn(fn ->
-      callback_server_loop(port, state, redirect_uri)
-    end)
-  end
-
-  defp callback_server_loop(port, expected_state, redirect_uri) do
-    # This would need a proper HTTP server implementation
-    # For now, this is a placeholder that would integrate with Bandit or similar
-    Logger.info("OAuth callback server would start on port #{port}")
-
-    receive do
-      {:authorization_code, code, state} when state == expected_state ->
-        code_verifier = generate_code_verifier()
-
-        case exchange_code_for_tokens(code, code_verifier, redirect_uri) do
-          {:ok, tokens} ->
-            cache_oauth_credentials(tokens)
-            Logger.info("OAuth flow completed successfully")
-
-          {:error, reason} ->
-            Logger.error("Failed to exchange authorization code: #{inspect(reason)}")
-        end
-
-      _ ->
-        Logger.error("Invalid authorization callback")
-    end
-  end
-
-  defp get_available_port_number do
-    # Find available port for OAuth callback
-    case :gen_tcp.listen(0, []) do
-      {:ok, socket} ->
-        {:ok, port} = :inet.port(socket)
-        :gen_tcp.close(socket)
-        port
-
-      _ ->
-        # Fallback to a high port number
-        8080 + :rand.uniform(1000)
-    end
-  end
+  # OAuth Server functions removed - now using Phoenix endpoint
 
   # Token and Request Management
 
@@ -641,39 +726,79 @@ defmodule TheMaestro.Providers.Gemini do
     {:ok, token}
   end
 
-  defp make_gemini_request(token, model, request_body) do
-    url = "https://generativelanguage.googleapis.com/v1beta/models/#{model}:generateContent"
+  defp make_gemini_request(token, model, request_body, auth_type) do
+    url = build_api_endpoint(model, auth_type)
+    headers = build_request_headers(token)
+    final_url = build_final_url(url, token)
 
-    headers =
-      case String.starts_with?(token, "AIza") do
-        true ->
-          # API Key authentication
-          [{"content-type", "application/json"}]
+    log_request_details(final_url, request_body, headers)
 
-        false ->
-          # OAuth or Service Account token
-          [
-            {"authorization", "Bearer #{token}"},
-            {"content-type", "application/json"}
-          ]
-      end
+    HTTPoison.post(final_url, Jason.encode!(request_body), headers)
+    |> handle_api_response()
+  end
 
-    final_url =
-      case String.starts_with?(token, "AIza") do
-        true -> "#{url}?key=#{token}"
-        false -> url
-      end
+  defp build_api_endpoint(model, auth_type) do
+    case auth_type do
+      :api_key ->
+        # Direct Generative Language API for API keys
+        "https://generativelanguage.googleapis.com/v1beta/models/#{model}:generateContent"
 
-    case HTTPoison.post(final_url, Jason.encode!(request_body), headers) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-        Jason.decode(response_body)
-
-      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
-        {:error, {:gemini_request_failed, status, response_body}}
-
-      {:error, reason} ->
-        {:error, {:request_failed, reason}}
+      _ ->
+        # Code Assist API for OAuth and service accounts
+        "https://cloudcode-pa.googleapis.com/v1internal:generateContent"
     end
+  end
+
+  defp build_request_headers(token) do
+    if api_key_token?(token) do
+      # API Key authentication
+      [{"content-type", "application/json"}]
+    else
+      # OAuth or Service Account token - match original gemini-cli headers
+      [
+        {"authorization", "Bearer #{token}"},
+        {"content-type", "application/json"},
+        {"user-agent", "TheMaestro/v0.1.0 (darwin; arm64) elixir-httpoison"},
+        {"x-goog-api-client", "gl-elixir/1.0.0"},
+        {"accept", "application/json"}
+      ]
+    end
+  end
+
+  defp build_final_url(url, token) do
+    if api_key_token?(token) do
+      "#{url}?key=#{token}"
+    else
+      url
+    end
+  end
+
+  defp api_key_token?(token), do: String.starts_with?(token, "AIza")
+
+  defp log_request_details(final_url, request_body, headers) do
+    Logger.debug("Making request to: #{final_url}")
+    Logger.debug("Request body: #{Jason.encode!(request_body, pretty: true)}")
+    Logger.debug("Headers: #{inspect(headers)}")
+  end
+
+  defp handle_api_response({:ok, %HTTPoison.Response{status_code: 200, body: response_body}}) do
+    case Jason.decode(response_body) do
+      {:ok, decoded} = result ->
+        Logger.debug("Raw API response: #{Jason.encode!(decoded, pretty: true)}")
+        result
+
+      error ->
+        error
+    end
+  end
+
+  defp handle_api_response({:ok, %HTTPoison.Response{status_code: status, body: response_body}}) do
+    Logger.error("Request failed with status #{status}: #{response_body}")
+    {:error, {:gemini_request_failed, status, response_body}}
+  end
+
+  defp handle_api_response({:error, reason}) do
+    {:error, {:request_failed, reason}}
   end
 
   # Utility Functions
@@ -688,6 +813,11 @@ defmodule TheMaestro.Providers.Gemini do
 
   defp generate_code_challenge(code_verifier) do
     :crypto.hash(:sha256, code_verifier) |> Base.url_encode64(padding: false)
+  end
+
+  defp generate_user_prompt_id do
+    # Generate a unique user prompt ID (like gemini-cli)
+    32 |> :crypto.strong_rand_bytes() |> Base.encode64(padding: false)
   end
 
   defp atomize_keys(map) when is_map(map) do
@@ -707,6 +837,8 @@ defmodule TheMaestro.Providers.Gemini do
           :assistant -> "model"
           # Gemini doesn't have system role, treat as user
           :system -> "user"
+          # Tool results should be treated as model responses in Gemini
+          :tool -> "model"
         end
 
       %{
@@ -716,18 +848,114 @@ defmodule TheMaestro.Providers.Gemini do
     end)
   end
 
+  defp build_system_instruction_with_tools(tools) do
+    tool_descriptions = build_tool_descriptions(tools)
+
+    """
+    You are an interactive CLI agent specializing in software engineering tasks. Your primary goal is to help users safely and efficiently, adhering strictly to the following instructions and utilizing your available tools.
+
+    # Core Mandates
+
+    - **Conventions:** Rigorously adhere to existing project conventions when reading or modifying code. Analyze surrounding code, tests, and configuration first.
+    - **Libraries/Frameworks:** NEVER assume a library/framework is available or appropriate. Verify its established usage within the project (check imports, configuration files like 'package.json', 'Cargo.toml', 'requirements.txt', 'build.gradle', etc., or observe neighboring files) before employing it.
+    - **Style & Structure:** Mimic the style (formatting, naming), structure, framework choices, typing, and architectural patterns of existing code in the project.
+    - **Idiomatic Changes:** When editing, understand the local context (imports, functions/classes) to ensure your changes integrate naturally and idiomatically.
+    - **Comments:** Add code comments sparingly. Focus on *why* something is done, especially for complex logic, rather than *what* is done. Only add high-value comments if necessary for clarity or if requested by the user.
+    - **Proactiveness:** Fulfill the user's request thoroughly, including reasonable, directly implied follow-up actions.
+    - **Path Construction:** Before using any file system tool, you must construct the full absolute path for the file_path argument. Always combine the absolute path of the project's root directory with the file's path relative to the root.
+
+    # Available Tools
+
+    You have access to the following tools. When you need to use a tool, generate a functionCall with the exact tool name and required arguments:
+
+    #{tool_descriptions}
+
+    # Tool Usage
+
+    To use a tool, you must generate a functionCall part in your response. The functionCall format is:
+
+    {
+      "functionCall": {
+        "name": "tool_name",
+        "args": {
+          "parameter_name": "parameter_value"
+        }
+      }
+    }
+
+    For example, to read a file:
+    {
+      "functionCall": {
+        "name": "read_file", 
+        "args": {
+          "path": "/path/to/file.txt"
+        }
+      }
+    }
+
+    Always use tools when appropriate to fulfill user requests that require file system access, code analysis, or other operations beyond text generation. The system will execute the tool and provide results back to you in a functionResponse.
+    """
+  end
+
+  defp build_tool_descriptions(tools) do
+    tools
+    |> Enum.map(&format_tool_description/1)
+    |> Enum.join("\n\n")
+  end
+
+  defp format_tool_description(%{
+         "name" => name,
+         "description" => description,
+         "parameters" => parameters
+       }) do
+    # Format parameters for display
+    params_desc = format_parameters(parameters)
+
+    """
+    ## #{name}
+    #{description}
+
+    Parameters:
+    #{params_desc}
+    """
+  end
+
+  defp format_parameters(%{
+         "type" => "object",
+         "properties" => properties,
+         "required" => required
+       }) do
+    properties
+    |> Enum.map(fn {param_name, param_info} ->
+      required_marker = if param_name in required, do: " (required)", else: ""
+      param_type = Map.get(param_info, "type", "string")
+      param_desc = Map.get(param_info, "description", "")
+
+      "- **#{param_name}** (#{param_type})#{required_marker}: #{param_desc}"
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp format_parameters(parameters) do
+    inspect(parameters)
+  end
+
   defp convert_tools_to_gemini(tools) do
+    # Code Assist API and Generative Language API use the same function_declarations format
+    # The original gemini-cli uses function_declarations for custom tools
     function_declarations =
       Enum.map(tools, fn tool ->
         %{
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters
+          name: tool["name"],
+          description: tool["description"],
+          parameters: tool["parameters"]
         }
       end)
 
     [%{function_declarations: function_declarations}]
   end
+
+  defp extract_text_content(%{"response" => response}), do: extract_text_content(response)
 
   defp extract_text_content(%{"candidates" => [%{"content" => %{"parts" => parts}} | _]}) do
     parts
@@ -740,19 +968,189 @@ defmodule TheMaestro.Providers.Gemini do
 
   defp extract_text_content(_), do: ""
 
+  defp extract_tool_calls(%{"response" => response}), do: extract_tool_calls(response)
+
   defp extract_tool_calls(%{"candidates" => [%{"content" => %{"parts" => parts}} | _]}) do
     parts
     |> Enum.filter(&Map.has_key?(&1, "functionCall"))
     |> Enum.map(fn %{"functionCall" => call} ->
       %{
-        name: call["name"],
-        arguments: call["args"] || %{}
+        "name" => call["name"],
+        "arguments" => call["args"] || %{}
       }
     end)
   end
 
   defp extract_tool_calls(_), do: []
 
+  defp extract_usage_info(%{"response" => response}), do: extract_usage_info(response)
   defp extract_usage_info(%{"usageMetadata" => usage}), do: usage
   defp extract_usage_info(_), do: %{}
+
+  # Code Assist Setup Functions (mimicking original gemini-cli setup.ts)
+
+  defp setup_code_assist_user(auth_context) do
+    Logger.info("Setting up Code Assist user...")
+    project_id = System.get_env("GOOGLE_CLOUD_PROJECT")
+
+    with {:ok, token} <- get_access_token(auth_context),
+         {:ok, load_response} <- load_code_assist(token, project_id),
+         {:ok, user_data} <- complete_code_assist_setup(token, project_id, load_response) do
+      {:ok, user_data}
+    end
+  end
+
+  defp complete_code_assist_setup(token, project_id, load_response) do
+    final_project_id = project_id || Map.get(load_response, "cloudaicompanionProject")
+    tier = get_onboard_tier(load_response)
+
+    case onboard_user(token, final_project_id, tier) do
+      {:ok, onboard_response} ->
+        extract_final_user_data(onboard_response, final_project_id, tier)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp extract_final_user_data(onboard_response, fallback_project_id, tier) do
+    result_project_id =
+      get_in(onboard_response, ["response", "cloudaicompanionProject", "id"]) ||
+        fallback_project_id
+
+    if result_project_id do
+      {:ok, %{project_id: result_project_id, user_tier: tier["id"]}}
+    else
+      {:error, :project_id_required}
+    end
+  end
+
+  defp load_code_assist(token, project_id) do
+    url = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
+
+    headers = [
+      {"authorization", "Bearer #{token}"},
+      {"content-type", "application/json"}
+    ]
+
+    # Client metadata (like original gemini-cli)
+    client_metadata = %{
+      "ideType" => "IDE_UNSPECIFIED",
+      "platform" => "PLATFORM_UNSPECIFIED",
+      "pluginType" => "GEMINI",
+      "duetProject" => project_id
+    }
+
+    request_body = %{
+      "cloudaicompanionProject" => project_id,
+      "metadata" => client_metadata
+    }
+
+    case HTTPoison.post(url, Jason.encode!(request_body), headers) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
+        Jason.decode(response_body)
+
+      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
+        {:error, {:load_code_assist_failed, status, response_body}}
+
+      {:error, reason} ->
+        {:error, {:load_code_assist_request_failed, reason}}
+    end
+  end
+
+  defp onboard_user(token, project_id, tier) do
+    url = "https://cloudcode-pa.googleapis.com/v1internal:onboardUser"
+
+    headers = [
+      {"authorization", "Bearer #{token}"},
+      {"content-type", "application/json"}
+    ]
+
+    # Client metadata (like original gemini-cli)
+    client_metadata = %{
+      "ideType" => "IDE_UNSPECIFIED",
+      "platform" => "PLATFORM_UNSPECIFIED",
+      "pluginType" => "GEMINI",
+      "duetProject" => project_id
+    }
+
+    request_body = %{
+      "tierId" => tier["id"],
+      "cloudaicompanionProject" => project_id,
+      "metadata" => client_metadata
+    }
+
+    # Poll until operation is complete (like original gemini-cli)
+    poll_onboard_user(url, request_body, headers, 0)
+  end
+
+  defp poll_onboard_user(url, request_body, headers, attempt) do
+    case HTTPoison.post(url, Jason.encode!(request_body), headers) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
+        case Jason.decode(response_body) do
+          {:ok, %{"done" => true} = response} ->
+            {:ok, response}
+
+          {:ok, %{"done" => false}} when attempt < 10 ->
+            # Wait 5 seconds and retry (like original gemini-cli)
+            Logger.info("Waiting for onboard operation to complete... (attempt #{attempt + 1})")
+            Process.sleep(5000)
+            poll_onboard_user(url, request_body, headers, attempt + 1)
+
+          {:ok, %{"done" => false}} ->
+            {:error, :onboard_timeout}
+
+          {:error, reason} ->
+            {:error, {:onboard_decode_failed, reason}}
+        end
+
+      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
+        {:error, {:onboard_failed, status, response_body}}
+
+      {:error, reason} ->
+        {:error, {:onboard_request_failed, reason}}
+    end
+  end
+
+  defp get_onboard_tier(load_response) do
+    cond do
+      # If current tier exists, use it
+      current_tier = Map.get(load_response, "currentTier") ->
+        current_tier
+
+      # Otherwise find default tier from allowed tiers
+      allowed_tiers = Map.get(load_response, "allowedTiers", []) ->
+        Enum.find(allowed_tiers, fn tier -> Map.get(tier, "isDefault") end) ||
+          %{
+            "name" => "",
+            "description" => "",
+            "id" => "LEGACY",
+            "userDefinedCloudaicompanionProject" => true
+          }
+
+      # Fallback
+      true ->
+        %{
+          "name" => "",
+          "description" => "",
+          "id" => "LEGACY",
+          "userDefinedCloudaicompanionProject" => true
+        }
+    end
+  end
+
+  # Update request to use project ID from user_data
+  defp get_project_id_from_context(auth_context) do
+    project_id =
+      case auth_context do
+        %{user_data: %{project_id: project_id}} when not is_nil(project_id) ->
+          project_id
+
+        _ ->
+          System.get_env("GOOGLE_CLOUD_PROJECT")
+      end
+
+    Logger.debug("Using project ID: #{inspect(project_id)}")
+    project_id
+  end
 end
