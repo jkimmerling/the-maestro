@@ -88,19 +88,97 @@ Learn how to create comprehensive, runnable demos for complex Elixir/OTP applica
 
 ---
 
+## Epic 2: Phoenix LiveView UI & User Authentication
+
+Learn how to build real-time web interfaces and implement configurable authentication systems with Phoenix LiveView.
+
+### [Story 2.1: Phoenix Project Integration & Basic Layout](epic2/story2.1/)
+
+Learn how to integrate Phoenix framework into an existing OTP application and create foundational layouts:
+
+- Add Phoenix framework to existing Mix projects
+- Create responsive application layouts with Phoenix components
+- Implement basic LiveView routing and navigation
+- Integrate with existing OTP supervision trees
+
+**Key Concepts**: Phoenix integration, LiveView setup, application structure, responsive design
+
+**Difficulty**: Intermediate
+
+### [Story 2.2: Configurable Web User Authentication](epic2/story2.2/)
+
+Learn how to implement flexible authentication systems that support both authenticated and anonymous modes:
+
+- Build configurable OAuth authentication with Ueberauth and Google
+- Implement authentication plugs and route protection
+- Design single-user vs multi-user operational modes
+- Handle authentication state in LiveView applications
+
+**Key Concepts**: OAuth authentication, configurable auth systems, route protection, session management
+
+**Difficulty**: Intermediate
+
+### [Story 2.3: Main Agent LiveView Interface for All Users](epic2/story2.3/)
+
+Learn how to build real-time chat interfaces that integrate with OTP GenServer processes:
+
+- Create interactive LiveView interfaces for chat applications
+- Integrate LiveView with existing GenServer processes
+- Manage session-based and user-based process discovery
+- Handle real-time message passing between LiveView and GenServers
+
+**Key Concepts**: LiveView-GenServer integration, real-time chat interfaces, process discovery, session management
+
+**Difficulty**: Intermediate to Advanced
+
+### [Story 2.4: Real-time Streaming & Status Updates](epic2/story2.4/)
+
+Learn how to implement word-by-word streaming responses and transparent tool usage feedback:
+
+- Implement streaming text responses in LiveView applications
+- Create real-time status indicators for long-running operations
+- Build transparent feedback systems for tool usage
+- Handle asynchronous message patterns in LiveView
+
+**Key Concepts**: Real-time streaming, status updates, asynchronous messaging, transparent feedback systems
+
+**Difficulty**: Intermediate to Advanced
+
+### [Story 2.5: CLI Device Authorization Flow Backend](epic2/story2.5/)
+
+Learn how to implement OAuth 2.0 Device Authorization Grant for CLI applications:
+
+- Build device authorization flow endpoints
+- Implement polling-based authentication for headless clients
+- Create secure token exchange mechanisms
+- Handle cross-device authentication workflows
+
+**Key Concepts**: Device authorization flow, OAuth 2.0, CLI authentication, cross-device workflows
+
+**Difficulty**: Advanced
+
+### [Story 2.6: Epic 2 Demo Creation](epic2/story2.6/)
+
+Learn how to create comprehensive demos for Phoenix LiveView applications with multiple operational modes:
+
+- Design demos for multi-modal applications (authenticated vs anonymous)
+- Document complex environment variable configurations
+- Create step-by-step guides for different user workflows
+- Build verification checklists and troubleshooting guides
+- Implement maintainable documentation patterns
+
+**Key Concepts**: Demo architecture, multi-modal documentation, user experience design, configuration management
+
+**Difficulty**: Intermediate
+
+---
+
 ## Coming Soon
 
 More tutorials will be added as development progresses through the epics:
 
 ### Epic 1 Remaining Stories
 - Story 1.2: Core Application & Supervision Tree
-
-### Epic 2: Phoenix LiveView UI & User Authentication
-- [Story 2.1: Phoenix Project Integration & Basic Layout](epic2/story2.1/) - Phoenix LiveView setup and application structure
-- [Story 2.2: Configurable Web User Authentication](epic2/story2.2/) - OAuth authentication with Google, configurable auth system
-- [Story 2.3: Main Agent LiveView Interface for All Users](epic2/story2.3/) - Real-time chat interface with Agent GenServer integration
-- [Story 2.4: Real-time Streaming & Status Updates](epic2/story2.4/) - Word-by-word streaming responses and transparent tool usage feedback  
-- [Story 2.5: CLI Device Authorization Flow Backend](epic2/story2.5/) - OAuth 2.0 Device Authorization Grant implementation for CLI authentication
 
 ### Epic 3: Advanced Agent Capabilities & Tooling
 - Multi-provider LLM adapters
