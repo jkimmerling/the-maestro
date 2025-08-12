@@ -707,6 +707,8 @@ defmodule TheMaestro.Providers.Gemini do
           :assistant -> "model"
           # Gemini doesn't have system role, treat as user
           :system -> "user"
+          # Tool results are handled as function responses in Gemini
+          :tool -> "function"
         end
 
       %{
@@ -745,8 +747,8 @@ defmodule TheMaestro.Providers.Gemini do
     |> Enum.filter(&Map.has_key?(&1, "functionCall"))
     |> Enum.map(fn %{"functionCall" => call} ->
       %{
-        name: call["name"],
-        arguments: call["args"] || %{}
+        "name" => call["name"],
+        "arguments" => call["args"] || %{}
       }
     end)
   end

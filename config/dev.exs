@@ -88,6 +88,8 @@ config :swoosh, :api_client, false
 config :the_maestro, :file_system_tool,
   allowed_directories: [
     "/tmp",
+    "/Users/jasonk/Development/the-maestro/demos/epic1",
+    "/Users/jasonk/Development/the-maestro/demos",
     System.tmp_dir!(),
     Path.join([File.cwd!(), "demos"]),
     Path.join([File.cwd!(), "test", "fixtures"]),
