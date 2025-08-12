@@ -223,6 +223,14 @@ defmodule TheMaestroWeb.AgentLive do
             <p class="mt-2 text-gray-600">
               Welcome, {@current_user["name"] || @current_user["email"]}!
             </p>
+            <div class="mt-3">
+              <.link 
+                href={~p"/auth/logout"} 
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                Logout
+              </.link>
+            </div>
           <% end %>
 
           <%= if @agent_id do %>
