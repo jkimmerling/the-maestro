@@ -221,6 +221,7 @@ defmodule TheMaestro.Tooling.Tools.Shell do
     Logger.warning("Shell tool: Executing command directly (sandbox disabled)")
 
     directory = Map.get(params, "directory", File.cwd!())
+    timeout_ms = get_config(:timeout_seconds, 30) * 1000
 
     start_time = System.monotonic_time(:millisecond)
 
@@ -236,7 +237,13 @@ defmodule TheMaestro.Tooling.Tools.Shell do
 
     Logger.debug("Shell tool: About to execute System.cmd with opts: #{inspect(opts)}")
 
-    case System.cmd("bash", ["-c", command], opts) do
+    # Execute with timeout using Task.await
+    task =
+      Task.async(fn ->
+        System.cmd("bash", ["-c", command], opts)
+      end)
+
+    case Task.await(task, timeout_ms) do
       {output, exit_code} ->
         end_time = System.monotonic_time(:millisecond)
         execution_time = end_time - start_time
@@ -264,7 +271,19 @@ defmodule TheMaestro.Tooling.Tools.Shell do
     end
   rescue
     error ->
-      {:error, "Command execution error: #{inspect(error)}"}
+      timeout_config = get_config(:timeout_seconds, 30) * 1000
+
+      case error do
+        %{__struct__: :exit, reason: :timeout} ->
+          {:error, "Command execution timed out after #{timeout_config}ms"}
+
+        _ ->
+          {:error, "Command execution error: #{inspect(error)}"}
+      end
+  catch
+    :exit, {:timeout, _} ->
+      timeout_config = get_config(:timeout_seconds, 30) * 1000
+      {:error, "Command execution timed out after #{timeout_config}ms"}
   end
 
   defp check_docker_available do
@@ -286,46 +305,67 @@ defmodule TheMaestro.Tooling.Tools.Shell do
     docker_image = get_config(:docker_image, "ubuntu:22.04")
     directory = Map.get(params, "directory", "/workspace")
 
+    # Check if we have a TTY available (helps prevent CI/CD issues)
+    has_tty = match?({_, 0}, System.cmd("tty", [], stderr_to_stdout: true))
+
     # Create a safe, isolated Docker command
     docker_args = [
       "run",
       # Remove container after execution
       "--rm",
       # Keep STDIN open
-      "--interactive",
-      # Allocate a pseudo-TTY
-      "--tty",
-      # Disable network access
-      "--network=none",
-      # Run as unprivileged user
-      "--user=nobody:nogroup",
-      # Make filesystem read-only
-      "--read-only",
-      # Limited temp space
-      "--tmpfs=/tmp:rw,noexec,nosuid,size=100m",
-      # Set working directory
-      "--workdir=#{directory}",
-      # Limit CPU usage
-      "--cpus=0.5",
-      # Limit memory usage
-      "--memory=256m",
-      # Limit number of processes
-      "--ulimit=nproc=10",
-      # Limit file size (10MB)
-      "--ulimit=fsize=10485760",
-      docker_image,
-      "bash",
-      "-c",
-      command
+      "--interactive"
     ]
+
+    # Only add --tty if we actually have a TTY (prevents CI/CD issues)
+    docker_args =
+      if has_tty do
+        docker_args ++ ["--tty"]
+      else
+        docker_args
+      end
+
+    docker_args =
+      docker_args ++
+        [
+          # Disable network access
+          "--network=none",
+          # Run as unprivileged user
+          "--user=nobody:nogroup",
+          # Make filesystem read-only
+          "--read-only",
+          # Limited temp space
+          "--tmpfs=/tmp:rw,noexec,nosuid,size=100m",
+          # Set working directory
+          "--workdir=#{directory}",
+          # Limit CPU usage
+          "--cpus=0.5",
+          # Limit memory usage
+          "--memory=256m",
+          # Limit number of processes
+          "--ulimit=nproc=10",
+          # Limit file size (10MB)
+          "--ulimit=fsize=10485760",
+          docker_image,
+          "bash",
+          "-c",
+          command
+        ]
 
     {:ok, docker_args}
   end
 
   defp run_docker_command(docker_args) do
     start_time = System.monotonic_time(:millisecond)
+    timeout_ms = get_config(:timeout_seconds, 30) * 1000
 
-    case System.cmd("docker", docker_args, stderr_to_stdout: true) do
+    # Execute with timeout using Task.await
+    task =
+      Task.async(fn ->
+        System.cmd("docker", docker_args, stderr_to_stdout: true)
+      end)
+
+    case Task.await(task, timeout_ms) do
       {output, exit_code} ->
         end_time = System.monotonic_time(:millisecond)
         execution_time = end_time - start_time
@@ -350,7 +390,19 @@ defmodule TheMaestro.Tooling.Tools.Shell do
     end
   rescue
     error ->
-      {:error, "Command execution error: #{inspect(error)}"}
+      timeout_config = get_config(:timeout_seconds, 30) * 1000
+
+      case error do
+        %{__struct__: :exit, reason: :timeout} ->
+          {:error, "Command execution timed out after #{timeout_config}ms"}
+
+        _ ->
+          {:error, "Command execution error: #{inspect(error)}"}
+      end
+  catch
+    :exit, {:timeout, _} ->
+      timeout_config = get_config(:timeout_seconds, 30) * 1000
+      {:error, "Command execution timed out after #{timeout_config}ms"}
   end
 
   defp parse_docker_result(result, original_command) do
