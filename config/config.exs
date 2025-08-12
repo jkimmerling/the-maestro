@@ -66,7 +66,9 @@ config :phoenix, :json_library, Jason
 # Configure Ueberauth for OAuth authentication
 config :ueberauth, Ueberauth,
   providers: [
-    google: {Ueberauth.Strategy.Google, []}
+    google: {Ueberauth.Strategy.Google, [
+      default_scope: "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email openid"
+    ]}
   ]
 
 # Configure Ueberauth Google strategy with hardcoded credentials (like gemini-cli)
