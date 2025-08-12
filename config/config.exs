@@ -9,7 +9,9 @@ import Config
 
 config :the_maestro,
   ecto_repos: [TheMaestro.Repo],
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  # Authentication configuration - set to false to disable authentication requirement
+  require_authentication: true
 
 # Configures the endpoint
 config :the_maestro, TheMaestroWeb.Endpoint,
@@ -60,6 +62,17 @@ config :logger, :console,
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
+
+# Configure Ueberauth for OAuth authentication
+config :ueberauth, Ueberauth,
+  providers: [
+    google: {Ueberauth.Strategy.Google, []}
+  ]
+
+# Configure Ueberauth Google strategy
+config :ueberauth, Ueberauth.Strategy.Google.OAuth,
+  client_id: {:system, "GOOGLE_CLIENT_ID"},
+  client_secret: {:system, "GOOGLE_CLIENT_SECRET"}
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

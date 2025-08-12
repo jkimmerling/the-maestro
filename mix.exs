@@ -63,7 +63,10 @@ defmodule TheMaestro.MixProject do
       # LLM Provider Dependencies
       {:gemini_ex, "~> 0.2"},
       {:goth, "~> 1.3"},
-      {:httpoison, "~> 2.0"}
+      {:httpoison, "~> 2.0"},
+      # Authentication Dependencies
+      {:ueberauth, "~> 0.10"},
+      {:ueberauth_google, "~> 0.12"}
     ]
   end
 
