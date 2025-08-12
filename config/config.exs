@@ -69,10 +69,10 @@ config :ueberauth, Ueberauth,
     google: {Ueberauth.Strategy.Google, []}
   ]
 
-# Configure Ueberauth Google strategy
+# Configure Ueberauth Google strategy with hardcoded credentials (like gemini-cli)
 config :ueberauth, Ueberauth.Strategy.Google.OAuth,
-  client_id: {:system, "GOOGLE_CLIENT_ID"},
-  client_secret: {:system, "GOOGLE_CLIENT_SECRET"}
+  client_id: "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com",
+  client_secret: "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"
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
