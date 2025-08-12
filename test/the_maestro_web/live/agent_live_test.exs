@@ -46,7 +46,7 @@ defmodule TheMaestroWeb.AgentLiveTest do
       # Verify agent process exists for this user
       agent_id = "user_123"
       assert {:ok, _pid} = TheMaestro.Agents.find_or_start_agent(agent_id)
-      
+
       # Check that the view has the correct agent_id by checking internal state
       assert :sys.get_state(view.pid).socket.assigns.agent_id == agent_id
     end
@@ -68,9 +68,10 @@ defmodule TheMaestroWeb.AgentLiveTest do
 
       # Should see the user message in history
       assert has_element?(view, ".message.user", "Hello, agent!")
-      
+
       # Wait for async processing and check for agent response
-      Process.sleep(100)  # Give time for async message processing
+      # Give time for async message processing
+      Process.sleep(100)
       html = render(view)
       assert html =~ "I received your message"
     end
@@ -110,7 +111,7 @@ defmodule TheMaestroWeb.AgentLiveTest do
       conn = init_test_session(conn, %{})
 
       {:ok, view, _html} = live(conn, ~p"/agent")
-      
+
       # The view should have assigned an agent_id
       agent_id = :sys.get_state(view.pid).socket.assigns.agent_id
       assert agent_id
@@ -129,9 +130,10 @@ defmodule TheMaestroWeb.AgentLiveTest do
 
       # Should see the user message in history
       assert has_element?(view, ".message.user", "Hello from anonymous!")
-      
+
       # Wait for async processing and check for agent response
-      Process.sleep(100)  # Give time for async message processing
+      # Give time for async message processing
+      Process.sleep(100)
       html = render(view)
       assert html =~ "I received your message"
     end
@@ -165,8 +167,18 @@ defmodule TheMaestroWeb.AgentLiveTest do
       # Should see both messages in the conversation history
       assert has_element?(view, ".message.user", "First message")
       assert has_element?(view, ".message.user", "Second message")
-      assert has_element?(view, ".message.assistant", "I received your message: \"First message\"")
-      assert has_element?(view, ".message.assistant", "I received your message: \"Second message\"")
+
+      assert has_element?(
+               view,
+               ".message.assistant",
+               "I received your message: \"First message\""
+             )
+
+      assert has_element?(
+               view,
+               ".message.assistant",
+               "I received your message: \"Second message\""
+             )
     end
   end
 end
