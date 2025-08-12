@@ -173,6 +173,27 @@ Learn how to create comprehensive demos for Phoenix LiveView applications with m
 
 ---
 
+## Epic 3: Advanced Agent Capabilities & Tooling
+
+Learn how to build powerful, multi-modal AI agent capabilities with advanced tooling and multiple LLM provider support.
+
+### [Story 3.2: Full File System Tool (Write & List)](epic3/story3.2/)
+
+Learn how to extend tool systems with multiple related capabilities while maintaining security and consistency:
+
+- Organize related tools using nested module patterns
+- Implement secure file writing with automatic directory creation
+- Build directory listing tools with rich metadata
+- Share validation logic across multiple tool implementations
+- Integrate multiple tools into a cohesive tooling system
+- Test complex tool interactions with comprehensive integration tests
+
+**Key Concepts**: Multi-tool architecture, file system security, shared utilities, integration testing, tool registration patterns
+
+**Difficulty**: Intermediate to Advanced
+
+---
+
 ## Coming Soon
 
 More tutorials will be added as development progresses through the epics:
@@ -180,10 +201,10 @@ More tutorials will be added as development progresses through the epics:
 ### Epic 1 Remaining Stories
 - Story 1.2: Core Application & Supervision Tree
 
-### Epic 3: Advanced Agent Capabilities & Tooling
-- Multi-provider LLM adapters
-- Advanced sandboxed tools
-- Session checkpointing and restoration
+### Epic 3 Remaining Stories
+- Story 3.1: Multi-provider LLM adapters
+- Story 3.3: Advanced sandboxed tools
+- Story 3.4-3.6: Session checkpointing and restoration
 
 ### Epic 4: Terminal User Interface (TUI)
 - TUI framework integration
