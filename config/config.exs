@@ -102,6 +102,35 @@ config :the_maestro, :providers,
     models: ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
   }
 
+# Configure Shell Tool
+config :the_maestro, :shell_tool,
+  # Enable/disable the shell tool
+  enabled: true,
+  # Enable/disable sandboxing (SECURITY: enabled by default)
+  sandbox_enabled: true,
+  # Docker image for sandbox
+  docker_image: "ubuntu:22.04",
+  # Command execution timeout
+  timeout_seconds: 30,
+  # Maximum output size (1MB)
+  max_output_size: 1024 * 1024,
+  # Optional allowlist of commands (empty = allow all)
+  allowed_commands: [],
+  # Blocked dangerous commands
+  blocked_commands: [
+    "rm -rf",
+    "dd if=",
+    "mkfs",
+    "fdisk",
+    "parted",
+    "shutdown",
+    "reboot",
+    "halt",
+    "init 0",
+    "init 6",
+    "kill -9 -1"
+  ]
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
