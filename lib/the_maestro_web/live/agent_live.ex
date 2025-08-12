@@ -10,8 +10,13 @@ defmodule TheMaestroWeb.AgentLive do
   alias TheMaestro.Agents
 
   def mount(_params, session, socket) do
+    require Logger
+    Logger.debug("AgentLive mount session: #{inspect(Map.keys(session))}")
+    
     current_user = Map.get(session, "current_user")
     oauth_credentials = Map.get(session, "oauth_credentials")
+    Logger.debug("oauth_credentials from session: #{inspect(oauth_credentials)}")
+    
     authentication_enabled = authentication_enabled?()
 
     agent_id = determine_agent_id(authentication_enabled, current_user, session, socket)
