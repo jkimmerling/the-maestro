@@ -14,6 +14,7 @@ defmodule TheMaestro.Providers.OpenAI do
 
   @behaviour TheMaestro.Providers.LLMProvider
 
+  alias OpenaiEx.Chat.Completions
   alias TheMaestro.Providers.LLMProvider
 
   require Logger
@@ -65,7 +66,7 @@ defmodule TheMaestro.Providers.OpenAI do
             max_tokens: max_tokens
           }
 
-          case OpenaiEx.Chat.Completions.create(client, request_params) do
+          case Completions.create(client, request_params) do
             {:ok, response} ->
               {:ok, build_text_response(response, model)}
 
@@ -101,7 +102,7 @@ defmodule TheMaestro.Providers.OpenAI do
             tool_choice: "auto"
           }
 
-          case OpenaiEx.Chat.Completions.create(client, request_params) do
+          case Completions.create(client, request_params) do
             {:ok, response} ->
               {:ok, build_tools_response(response, model)}
 

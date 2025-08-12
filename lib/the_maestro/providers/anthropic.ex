@@ -558,15 +558,9 @@ defmodule TheMaestro.Providers.Anthropic do
   # Request Management
 
   defp create_anthropic_client(%{type: :api_key, credentials: %{api_key: api_key}}) do
-    # For API keys (sk-ant-api...), use the Anthropix library
-    try do
-      client = Anthropix.init(api_key: api_key)
-      {:ok, {:anthropix_client, client}}
-    rescue
-      _ ->
-        # Fallback to direct HTTP if library doesn't work
-        {:ok, {:http_client, api_key}}
-    end
+    # For API keys (sk-ant-api...), use direct HTTP for consistency
+    # The Anthropix library has configuration issues, so we use HTTP directly
+    {:ok, {:http_client, api_key}}
   end
 
   defp create_anthropic_client(%{type: :oauth, credentials: %{access_token: access_token}}) do
@@ -578,13 +572,8 @@ defmodule TheMaestro.Providers.Anthropic do
   defp validate_auth_context(_), do: {:error, :invalid_auth_context}
 
   # Request handling for different client types
-  defp make_anthropic_request({:anthropix_client, client}, request_params) do
-    # Use the Anthropix library for API key requests
-    Anthropix.chat(client, request_params)
-  end
-
   defp make_anthropic_request({:http_client, api_key}, request_params) do
-    # Direct HTTP for API key requests when library fails
+    # Direct HTTP for API key requests
     make_direct_http_request(api_key, request_params, :api_key)
   end
 

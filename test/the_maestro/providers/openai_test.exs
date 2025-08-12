@@ -1,8 +1,8 @@
 defmodule TheMaestro.Providers.OpenAITest do
   use ExUnit.Case, async: true
 
-  alias TheMaestro.Providers.OpenAI
   alias TheMaestro.Providers.LLMProvider
+  alias TheMaestro.Providers.OpenAI
 
   describe "initialize_auth/1" do
     test "initializes with API key when OPENAI_API_KEY is set" do
