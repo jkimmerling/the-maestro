@@ -52,12 +52,15 @@ defmodule TheMaestro.Agents.Agent do
 
   ## Parameters
     - `opts`: Options including `:agent_id` for the unique agent identifier,
-              `:llm_provider` for the provider module, and `:auth_context`
+              `:llm_provider` (atom or module) for the provider, `:provider_name` for named provider,
+              and `:auth_context`
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     agent_id = Keyword.fetch!(opts, :agent_id)
-    llm_provider = Keyword.get(opts, :llm_provider, TheMaestro.Providers.Gemini)
+    
+    # Resolve LLM provider - support both module names and provider atoms
+    llm_provider = resolve_llm_provider(opts)
     auth_context = Keyword.get(opts, :auth_context)
 
     init_args = %{
@@ -100,6 +103,27 @@ defmodule TheMaestro.Agents.Agent do
   @spec get_state(String.t()) :: t()
   def get_state(agent_id) do
     GenServer.call(via_tuple(agent_id), :get_state)
+  end
+
+  @doc """
+  Lists all available LLM providers and their supported models.
+  """
+  @spec list_providers() :: %{atom() => %{module: module(), models: [String.t()]}}
+  def list_providers do
+    providers = Application.get_env(:the_maestro, :providers, %{})
+    # Convert keyword list to map if needed
+    if is_list(providers), do: Map.new(providers), else: providers
+  end
+
+  @doc """
+  Gets the default LLM provider from configuration.
+  """
+  @spec get_default_provider() :: atom()
+  def get_default_provider do
+    case Application.get_env(:the_maestro, :llm_provider, %{}) do
+      %{default: provider} -> provider
+      _ -> :gemini
+    end
   end
 
   # Server Callbacks
@@ -227,7 +251,7 @@ defmodule TheMaestro.Agents.Agent do
   defp perform_llm_completion_with_streaming(state, auth_context) do
     messages = convert_message_history_to_llm_format(state.message_history)
     tool_definitions = TheMaestro.Tooling.get_tool_definitions()
-    completion_opts = build_completion_opts_with_streaming(state.agent_id, tool_definitions)
+    completion_opts = build_completion_opts_with_streaming(state.agent_id, tool_definitions, state.llm_provider)
 
     if Enum.empty?(tool_definitions) do
       execute_basic_completion_with_streaming(
@@ -246,14 +270,16 @@ defmodule TheMaestro.Agents.Agent do
     end
   end
 
-  defp build_completion_opts_with_streaming(agent_id, tool_definitions) do
+  defp build_completion_opts_with_streaming(agent_id, tool_definitions, provider_module) do
     stream_callback = fn
       {:chunk, chunk} -> broadcast_stream_chunk(agent_id, chunk)
       :complete -> :ok
     end
 
+    model = get_default_model_for_provider(provider_module)
+
     %{
-      model: "gemini-2.5-flash",
+      model: model,
       temperature: 0.0,
       max_tokens: 8192,
       tools: tool_definitions,
@@ -334,7 +360,7 @@ defmodule TheMaestro.Agents.Agent do
     end
 
     completion_opts = %{
-      model: "gemini-2.5-flash",
+      model: get_default_model_for_provider(state.llm_provider),
       temperature: 0.0,
       max_tokens: 8192,
       stream_callback: stream_callback
@@ -483,6 +509,59 @@ defmodule TheMaestro.Agents.Agent do
 
   defp via_tuple(agent_id) do
     {:via, Registry, {TheMaestro.Agents.Registry, agent_id}}
+  end
+
+  # Provider Resolution
+
+  defp resolve_llm_provider(opts) do
+    cond do
+      # Explicit module provided
+      provider_module = Keyword.get(opts, :llm_provider) ->
+        if is_atom(provider_module) and provider_module not in [:gemini, :openai, :anthropic] do
+          provider_module
+        else
+          resolve_provider_by_name(provider_module)
+        end
+
+      # Provider name provided
+      provider_name = Keyword.get(opts, :provider_name) ->
+        resolve_provider_by_name(provider_name)
+
+      true ->
+        # Use default provider
+        resolve_provider_by_name(get_default_provider())
+    end
+  end
+
+  defp resolve_provider_by_name(provider_name) when is_atom(provider_name) do
+    providers = Application.get_env(:the_maestro, :providers, %{})
+    
+    # Convert keyword list to map if needed
+    providers_map = if is_list(providers), do: Map.new(providers), else: providers
+
+    case Map.get(providers_map, provider_name) do
+      %{module: module} -> module
+      nil -> TheMaestro.Providers.Gemini # fallback
+    end
+  end
+
+  defp resolve_provider_by_name(_), do: TheMaestro.Providers.Gemini
+
+  defp get_default_model_for_provider(provider_module) do
+    providers = Application.get_env(:the_maestro, :providers, %{})
+    # Convert keyword list to map if needed
+    providers_map = if is_list(providers), do: Map.new(providers), else: providers
+
+    case find_provider_by_module(providers_map, provider_module) do
+      {_name, %{models: [first_model | _]}} -> first_model
+      _ -> "gemini-2.5-flash" # fallback
+    end
+  end
+
+  defp find_provider_by_module(providers_map, target_module) do
+    Enum.find(providers_map, fn {_name, config} ->
+      Map.get(config, :module) == target_module
+    end)
   end
 
   # Streaming and status broadcasting functions
