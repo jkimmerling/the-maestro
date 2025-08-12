@@ -85,11 +85,13 @@ defmodule TheMaestroWeb.OAuthController do
       "device_auth" ->
         # This is a CLI device authorization flow
         access_token = Map.get(tokens, :access_token) || Map.get(tokens, "access_token")
-        
+
         alias TheMaestroWeb.CliAuthController
+
         case CliAuthController.complete_device_authorization(conn, access_token) do
           {:ok, updated_conn} ->
             render_device_success_page(updated_conn)
+
           {:error, reason} ->
             Logger.error("Failed to complete device authorization: #{inspect(reason)}")
             render_error_page(conn, "Failed to complete device authorization")
@@ -106,9 +108,11 @@ defmodule TheMaestroWeb.OAuthController do
       "device_auth" ->
         # This is a CLI device authorization flow
         alias TheMaestroWeb.CliAuthController
+
         case CliAuthController.fail_device_authorization(conn, "access_denied") do
           {:ok, updated_conn} ->
             render_device_error_page(updated_conn, error_message)
+
           {:error, _reason} ->
             render_error_page(conn, error_message)
         end

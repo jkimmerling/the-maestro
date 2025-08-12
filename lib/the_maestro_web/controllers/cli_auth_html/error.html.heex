@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>The Maestro - Authorization Error</title>
     <style>
       body {
@@ -72,7 +72,7 @@
     <div class="container">
       <div class="error-icon">❌</div>
       <h1>Authorization Error</h1>
-      <div class="error-details"><%= @error_message %></div>
+      <div class="error-details">{@error_message}</div>
       <p>Please go back to your terminal and start the authentication process again.</p>
       <a href="/api/cli/auth/authorize" class="btn">Try Again</a>
     </div>

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>The Maestro - Device Authorization</title>
     <style>
       body {
@@ -108,25 +108,25 @@
       <div class="device-icon">📱</div>
       <h1>Authorize Device</h1>
       <p>To continue, please enter the code displayed in your terminal:</p>
-      
+
       <form method="post" action="/api/cli/auth/authorize">
         <div class="form-group">
           <label for="user_code">Device Code:</label>
-          <input 
-            type="text" 
-            id="user_code" 
-            name="user_code" 
-            value={@user_code} 
+          <input
+            type="text"
+            id="user_code"
+            name="user_code"
+            value={@user_code}
             placeholder="XXXXXX"
             maxlength="6"
             required
             autofocus
           />
         </div>
-        
+
         <button type="submit" class="btn">Authorize Device</button>
       </form>
-      
+
       <div class="instructions">
         <strong>What happens next:</strong>
         <div class="step">You'll be redirected to sign in with Google</div>
@@ -144,7 +144,7 @@
         }
         e.target.value = value;
       });
-      
+
       // Auto-submit if user_code is pre-filled and valid
       window.addEventListener('load', function() {
         const input = document.getElementById('user_code');
