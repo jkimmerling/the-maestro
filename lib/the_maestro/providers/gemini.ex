@@ -59,60 +59,63 @@ defmodule TheMaestro.Providers.Gemini do
     # Validate auth_context has the required structure
     case validate_auth_context(auth_context) do
       :ok ->
-        case get_access_token(auth_context) do
-          {:ok, token} ->
-            gemini_messages = convert_messages_to_gemini(messages)
-            model = Map.get(opts, :model, "gemini-2.5-pro")
+        with {:ok, token} <- get_access_token(auth_context) do
+          model = Map.get(opts, :model, "gemini-2.5-pro")
 
-            # Choose request format based on auth type (like original gemini-cli)
-            request_body =
-              case auth_context.type do
-                :api_key ->
-                  # Direct Generative Language API format for API keys
-                  %{
-                    contents: gemini_messages,
-                    generationConfig: %{
-                      temperature: Map.get(opts, :temperature, 0.7),
-                      maxOutputTokens: Map.get(opts, :max_tokens, 8192)
-                    }
-                  }
+          request_body =
+            build_text_request_body(auth_context.type, messages, opts, model, auth_context)
 
-                _ ->
-                  # Code Assist API format - NO tools field, model generates function calls directly
-                  %{
-                    model: model,
-                    project: get_project_id_from_context(auth_context),
-                    user_prompt_id: generate_user_prompt_id(),
-                    request: %{
-                      contents: gemini_messages,
-                      generationConfig: %{
-                        temperature: Map.get(opts, :temperature, 0.0),
-                        topP: 1
-                      }
-                    }
-                  }
-              end
+          case make_gemini_request(token, model, request_body, auth_context.type) do
+            {:ok, response} ->
+              {:ok, build_text_response(response, model)}
 
-            case make_gemini_request(token, model, request_body, auth_context.type) do
-              {:ok, response} ->
-                {:ok,
-                 %{
-                   content: extract_text_content(response),
-                   model: model,
-                   usage: extract_usage_info(response)
-                 }}
-
-              {:error, reason} ->
-                {:error, reason}
-            end
-
-          {:error, reason} ->
-            {:error, reason}
+            {:error, reason} ->
+              {:error, reason}
+          end
         end
 
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp build_text_request_body(:api_key, messages, opts, _model, _auth_context) do
+    # Direct Generative Language API format for API keys
+    gemini_messages = convert_messages_to_gemini(messages)
+
+    %{
+      contents: gemini_messages,
+      generationConfig: %{
+        temperature: Map.get(opts, :temperature, 0.7),
+        maxOutputTokens: Map.get(opts, :max_tokens, 8192)
+      }
+    }
+  end
+
+  defp build_text_request_body(_auth_type, messages, opts, model, auth_context) do
+    # Code Assist API format - NO tools field, model generates function calls directly
+    gemini_messages = convert_messages_to_gemini(messages)
+
+    %{
+      model: model,
+      project: get_project_id_from_context(auth_context),
+      user_prompt_id: generate_user_prompt_id(),
+      request: %{
+        contents: gemini_messages,
+        generationConfig: %{
+          temperature: Map.get(opts, :temperature, 0.0),
+          topP: 1
+        }
+      }
+    }
+  end
+
+  defp build_text_response(response, model) do
+    %{
+      content: extract_text_content(response),
+      model: model,
+      usage: extract_usage_info(response)
+    }
   end
 
   @impl LLMProvider
@@ -123,7 +126,16 @@ defmodule TheMaestro.Providers.Gemini do
         with {:ok, token} <- get_access_token(auth_context) do
           tools = Map.get(opts, :tools, [])
           model = Map.get(opts, :model, "gemini-2.5-pro")
-          request_body = build_tools_request_body(auth_context.type, messages, tools, opts, model, auth_context)
+
+          request_body =
+            build_tools_request_body(
+              auth_context.type,
+              messages,
+              tools,
+              opts,
+              model,
+              auth_context
+            )
 
           case make_gemini_request(token, model, request_body, auth_context.type) do
             {:ok, response} ->
@@ -189,6 +201,7 @@ defmodule TheMaestro.Providers.Gemini do
       request_content
     else
       system_instruction = build_system_instruction_with_tools(tools)
+
       Map.put(request_content, :systemInstruction, %{
         role: "user",
         parts: [%{text: system_instruction}]
@@ -378,6 +391,7 @@ defmodule TheMaestro.Providers.Gemini do
       credentials: credentials,
       config: config
     }
+
     validate_and_refresh_oauth(auth_context)
   end
 
