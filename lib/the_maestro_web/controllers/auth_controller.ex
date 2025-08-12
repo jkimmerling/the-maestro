@@ -20,8 +20,17 @@ defmodule TheMaestroWeb.AuthController do
       "avatar" => auth.info.image
     }
 
+    # Store OAuth credentials for LLM authentication
+    oauth_credentials = %{
+      "access_token" => auth.credentials.token,
+      "refresh_token" => auth.credentials.refresh_token,
+      "expires_at" => auth.credentials.expires_at,
+      "token_type" => auth.credentials.token_type || "Bearer"
+    }
+
     conn
     |> put_session(:current_user, user_info)
+    |> put_session(:oauth_credentials, oauth_credentials)
     |> put_flash(:info, "Successfully authenticated!")
     |> redirect(to: ~p"/agent")
   end

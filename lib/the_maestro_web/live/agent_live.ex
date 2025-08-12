@@ -11,29 +11,15 @@ defmodule TheMaestroWeb.AgentLive do
 
   def mount(_params, session, socket) do
     current_user = Map.get(session, "current_user")
+    oauth_credentials = Map.get(session, "oauth_credentials")
     authentication_enabled = authentication_enabled?()
 
-    # Determine agent_id based on authentication mode
-    agent_id =
-      if authentication_enabled && current_user do
-        "user_#{current_user["id"]}"
-      else
-        # For anonymous sessions, create session-based agent ID
-        csrf_token =
-          session["_csrf_token"] ||
-            get_connect_params(socket)["_csrf_token"] ||
-            :crypto.strong_rand_bytes(8) |> Base.encode16() |> String.downcase()
-
-        # Use a truncated version for cleaner agent IDs
-        truncated_token = csrf_token |> String.slice(0, 8)
-        "session_#{truncated_token}"
-      end
-
-    # Get LLM provider from configuration
+    agent_id = determine_agent_id(authentication_enabled, current_user, session, socket)
     llm_provider = Application.get_env(:the_maestro, :llm_provider, TheMaestro.Providers.Gemini)
+    auth_context = create_auth_context(oauth_credentials)
+    agent_opts = build_agent_opts(llm_provider, auth_context)
 
-    # Find or start the agent process
-    case Agents.find_or_start_agent(agent_id, llm_provider: llm_provider) do
+    case Agents.find_or_start_agent(agent_id, agent_opts) do
       {:ok, _pid} ->
         # Subscribe to PubSub updates for this agent
         Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent:#{agent_id}")
@@ -396,5 +382,40 @@ defmodule TheMaestroWeb.AgentLive do
     |> DateTime.to_time()
     |> Time.to_string()
     |> String.slice(0, 5)
+  end
+
+  defp determine_agent_id(authentication_enabled, current_user, session, socket) do
+    if authentication_enabled && current_user do
+      "user_#{current_user["id"]}"
+    else
+      # For anonymous sessions, create session-based agent ID
+      csrf_token =
+        session["_csrf_token"] ||
+          get_connect_params(socket)["_csrf_token"] ||
+          :crypto.strong_rand_bytes(8) |> Base.encode16() |> String.downcase()
+
+      # Use a truncated version for cleaner agent IDs
+      truncated_token = csrf_token |> String.slice(0, 8)
+      "session_#{truncated_token}"
+    end
+  end
+
+  defp create_auth_context(oauth_credentials) do
+    if oauth_credentials && oauth_credentials["access_token"] do
+      %{
+        type: :oauth,
+        access_token: oauth_credentials["access_token"],
+        refresh_token: oauth_credentials["refresh_token"],
+        expires_at: oauth_credentials["expires_at"],
+        token_type: oauth_credentials["token_type"] || "Bearer"
+      }
+    else
+      nil
+    end
+  end
+
+  defp build_agent_opts(llm_provider, auth_context) do
+    agent_opts = [llm_provider: llm_provider]
+    if auth_context, do: Keyword.put(agent_opts, :auth_context, auth_context), else: agent_opts
   end
 end
