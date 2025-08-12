@@ -271,7 +271,16 @@ export GEMINI_API_KEY="your-gemini-api-key-here"
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
 
 # Option 3 - OAuth (interactive, handled automatically)
+# OAuth uses browser-based flow with cached credentials at ~/.maestro/oauth_creds.json
+# Automatically sets up Code Assist API user during authentication
 ```
+
+**OAuth Implementation Details:**
+- **Dual API Support**: OAuth uses Google Cloud Code Assist API (`cloudcode-pa.googleapis.com`), API keys use Generative Language API
+- **Automatic User Setup**: Complete Code Assist user onboarding with proper project configuration
+- **Phoenix Integration**: OAuth callback handled by Phoenix server at `/oauth2callback`
+- **Credential Caching**: Secure credential storage with automatic token refresh
+- **Browser Integration**: Automatic browser opening for seamless user experience
 
 ## Error Handling and User Experience
 
@@ -354,6 +363,43 @@ The demo serves as a comprehensive integration test:
 
 During the development of this demo, we discovered and fixed several critical bugs in the Gemini provider integration. These fixes highlight the value of comprehensive end-to-end testing:
 
+### OAuth Code Assist API Format Bug
+
+**Issue**: The OAuth implementation was getting 404 "Requested entity was not found" errors despite successful authentication setup. Analysis of the original gemini-cli API calls revealed format mismatches in our Code Assist API requests.
+
+```elixir
+# Before (broken) - causing 404 errors:
+%{
+  model: "models/#{model}",           # Incorrect model prefix
+  user_prompt_id: generate_id(),      # Unnecessary field
+  request: %{
+    generationConfig: %{
+      temperature: 0.7,
+      maxOutputTokens: 8192           # Wrong parameter name
+    }
+  }
+}
+
+# After (fixed) - matching original gemini-cli:
+%{
+  model: model,                       # No "models/" prefix
+  project: project_id,
+  request: %{
+    generationConfig: %{
+      temperature: 0.0,               # Match original default
+      topP: 1                         # Correct parameter
+    }
+  }
+}
+```
+
+**Additional fixes required:**
+- **Model Name Consistency**: Updated agent.ex to use `"gemini-2.5-pro"` instead of `"gemini-1.5-pro"`
+- **HTTP Headers**: Added missing headers (`user-agent`, `x-goog-api-client`, `accept`) to match original
+- **Request Structure**: Removed unnecessary `user_prompt_id` field not used by original
+
+**Impact**: OAuth authentication was working correctly, but all API calls were failing with 404 errors until request format was corrected.
+
 ### Tool Call Format Bug
 
 **Issue**: The `extract_tool_calls` function was returning maps with atom keys (`:name`, `:arguments`), but the `execute_tool_call` function expected string keys (`"name"`, `"arguments"`).
@@ -402,10 +448,13 @@ end
 
 These bugs demonstrate important principles:
 
-1. **End-to-End Testing**: Unit tests passed, but integration revealed format mismatches
-2. **External API Constraints**: Gemini only accepts `"user"` and `"model"` roles, not custom roles like `"function"`
-3. **Data Format Consistency**: String vs atom keys must be consistent across the entire pipeline
-4. **Error Propagation**: Well-designed error handling helped identify the exact failure points
+1. **End-to-End Testing**: Unit tests passed, but integration revealed format mismatches between our implementation and the actual API
+2. **API Compatibility**: When integrating with existing systems (like gemini-cli), exact format matching is critical - small differences cause complete failures
+3. **External API Constraints**: Google's Code Assist API has specific requirements that differ from documentation and require reverse engineering from working implementations
+4. **Data Format Consistency**: String vs atom keys must be consistent across the entire pipeline
+5. **Error Propagation**: Well-designed error handling helped identify the exact failure points
+6. **Authentication vs. Authorization**: OAuth can succeed (authentication) while API calls fail (authorization) due to format issues
+7. **Network Analysis**: Capturing actual API calls from working implementations (like gemini-cli) is invaluable for debugging integration issues
 
 ## Real-World Demo Output Analysis
 
@@ -413,41 +462,64 @@ Let's analyze the actual demo output to understand what it reveals about the sys
 
 ```
 ✅ Application started successfully!
-🚀 Creating agent with ID: epic1_demo_1754953834
+🚀 Creating agent with ID: epic1_demo_1754994352
+🔐 Initializing authentication...
+[info] Setting up Code Assist user...
+✅ Authentication initialized successfully!
 ✅ Agent started successfully!
+
+🔬 TEST 1: Simple LLM Conversation
+Sending message: 'Hello! Please introduce yourself briefly.'
+[debug] Using project ID: "even-setup-7wxx5"
+[debug] Making request to: https://cloudcode-pa.googleapis.com/v1internal:generateContent
+✅ LLM Response received!
+💬 Agent: I am Gemini, a large language model built by Google. I'm here to help you with your requests...
 
 📊 FINAL AGENT STATE
 ──────────────────────────────
-Agent ID: epic1_demo_1754953834
+Agent ID: epic1_demo_1754994352
 Loop State: idle
 Message History: 4 messages
 LLM Provider: TheMaestro.Providers.Gemini
 Auth Status: ✅ Configured
-Created At: 2025-08-11 23:10:34.588467Z
+Created At: 2025-08-12 10:24:36.000506Z
 ```
 
 **What This Output Tells Us:**
 
+- **OAuth Flow Success**: Complete OAuth authentication and Code Assist user setup completed successfully
+- **Project Configuration**: Successfully obtained and used Google Cloud project ID (`"even-setup-7wxx5"`)
+- **API Integration**: Successful connection to Code Assist API endpoint (`cloudcode-pa.googleapis.com`)
 - **Process Management**: Agent was successfully created and supervised
 - **State Consistency**: Agent maintained proper state throughout conversation
-- **Authentication Success**: Provider was properly initialized with credentials
+- **Authentication Success**: Provider was properly initialized with OAuth credentials
 - **Message History**: Conversation context was preserved across interactions
+- **API Response**: Receiving actual Gemini LLM responses, confirming end-to-end functionality
 - **Timestamp Accuracy**: Proper UTC timestamp handling for audit trails
 
-### Error Scenarios and Learning
+### Successful OAuth Integration Evidence
 
-The demo also encountered realistic errors that provide learning opportunities:
+The debug output shows the complete OAuth integration working:
 
 ```
-[error] Failed to get LLM response: {:gemini_request_failed, 429, "You exceeded your current quota..."}
+[debug] Request body: {
+  "request": {
+    "contents": [{"role": "user", "parts": [{"text": "Hello! Please introduce yourself briefly."}]}],
+    "generationConfig": {"temperature": 0.0, "topP": 1}
+  },
+  "project": "even-setup-7wxx5",
+  "model": "gemini-2.5-pro"
+}
+[debug] Headers: [{"authorization", "Bearer ya29.a0AS3H6N..."}, {"content-type", "application/json"}, ...]
 ```
 
-**Educational Value:**
+**Technical Validation:**
 
-- **Rate Limiting**: Demonstrates proper handling of API rate limits
-- **Error Propagation**: Shows how errors flow through the system
-- **Graceful Degradation**: System continues to operate despite LLM failures
-- **User Communication**: Clear error messages with actionable guidance
+- **Request Format**: Matches original gemini-cli exactly (no `user_prompt_id`, correct `generationConfig`)
+- **Authentication**: Valid Bearer token in headers
+- **Model Selection**: Correct model name (`gemini-2.5-pro`) without invalid prefix
+- **Project Context**: Proper Google Cloud project ID integration
+- **API Response**: Successful HTTP 200 responses with valid Gemini content
 
 ## Best Practices for Demo Creation
 
