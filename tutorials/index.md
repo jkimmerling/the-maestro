@@ -98,7 +98,7 @@ More tutorials will be added as development progresses through the epics:
 ### Epic 2: Phoenix LiveView UI & User Authentication
 - [Story 2.1: Phoenix Project Integration & Basic Layout](epic2/story2.1/) - Phoenix LiveView setup and application structure
 - [Story 2.2: Configurable Web User Authentication](epic2/story2.2/) - OAuth authentication with Google, configurable auth system
-- Real-time web interfaces  
+- [Story 2.3: Main Agent LiveView Interface for All Users](epic2/story2.3/) - Real-time chat interface with Agent GenServer integration
 - CLI device authorization flows
 
 ### Epic 3: Advanced Agent Capabilities & Tooling

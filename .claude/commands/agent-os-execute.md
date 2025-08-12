@@ -13,4 +13,4 @@ Arguments:
 - Epic Number: $ARGUMENTS[0]
 - Story Number: $ARGUMENTS[1]
 
-/execute-task "Implement Epic $ARGUMENTS[0], Story $ARGUMENTS[1]. Reference the acceptance criteria in /home/jasonk/the_maestro/project_specs/prd.md and use .agent-os/product/ for technical stack and decisions. Refer to /home/jasonk/the_maestro/gemini-cli-source if you need to reference the source code we are trying to port to Elixir" --mode=tdd
+/execute-task "Implement Epic $ARGUMENTS[0], Story $ARGUMENTS[1]. Reference the acceptance criteria in /home/jasonk/the_maestro/project_specs/prd.md and use .agent-os/product/ for technical stack and decisions. Refer to /home/jasonk/the_maestro/gemini-cli-source if you need to reference the source code we are trying to port to Elixir  ---  ALWAYS MAKE THE NEW BRANCH BEFORE YOU START WRITING/EDITING" --mode=tdd
