@@ -36,7 +36,7 @@ defmodule TheMaestro.Application do
     case Supervisor.start_link(children, opts) do
       {:ok, _pid} = result ->
         # Register built-in tools
-        FileSystem.register_self()
+        FileSystem.register_tools()
         result
 
       error ->
