@@ -229,7 +229,7 @@ defmodule TheMaestro.Agents.Agent do
 
   defp build_completion_opts(tool_definitions) do
     %{
-      model: "gemini-2.5-pro",
+      model: "gemini-2.5-flash",
       temperature: 0.0,
       max_tokens: 8192,
       tools: tool_definitions
@@ -285,7 +285,7 @@ defmodule TheMaestro.Agents.Agent do
 
     # Get follow-up response from LLM with tool results
     completion_opts = %{
-      model: "gemini-2.5-pro",
+      model: "gemini-2.5-flash",
       temperature: 0.0,
       max_tokens: 8192
     }

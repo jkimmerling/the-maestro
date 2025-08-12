@@ -50,6 +50,7 @@ Get your API key from: https://makersuite.google.com/app/apikey
 ```bash
 # OAuth will be initiated automatically during demo
 # Requires browser access for authorization flow
+# Uses Google Cloud Code Assist API with automatic user setup
 ```
 
 #### Option C: Service Account (Enterprise)
@@ -157,7 +158,7 @@ config :the_maestro, :file_system_tool,
 config :the_maestro, :llm_provider,
   default_provider: TheMaestro.Providers.Gemini,
   gemini: [
-    model: "gemini-1.5-pro",
+    model: "gemini-2.5-pro",  # Updated model name
     temperature: 0.7,
     max_tokens: 8192
   ]
@@ -179,6 +180,23 @@ export GEMINI_API_KEY="your-api-key"
 # Solution: Check OAuth configuration
 # Ensure you have valid client credentials
 # Make sure redirect URLs are configured correctly
+```
+
+**Success**: `OAuth with Code Assist API Integration`
+```
+# When OAuth is working correctly, you'll see:
+[info] Setting up Code Assist user...
+✅ Authentication initialized successfully!
+[debug] Using project ID: "your-project-id"
+[info] Executing tool: read_file
+[info] Tool read_file executed successfully
+🎯 File tool execution appears successful!
+
+# This indicates:
+# - OAuth authentication completed
+# - Code Assist user properly set up
+# - Tool integration working correctly
+# - Function calling operational
 ```
 
 ### File Tool Issues

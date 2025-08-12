@@ -444,6 +444,75 @@ end
 
 **Impact**: Agent processes were crashing when trying to send tool results back to the LLM for follow-up responses.
 
+### Tool Integration with Code Assist API Bug
+
+**Issue**: The initial implementation was causing tool calls to timeout because the model wasn't generating proper `functionCall` parts, but instead generating JSON text that described function calls.
+
+**Root Cause Analysis**: By analyzing captured API calls from the original gemini-cli, we discovered that the Code Assist API requires a specific request structure that differs from our initial approach:
+
+```elixir
+# Before (broken) - tools in system instruction embedded in contents:
+%{
+  model: model,
+  project: project_id,
+  request: %{
+    contents: [
+      %{role: "user", parts: [%{text: "System instruction with tools..."}]},
+      %{role: "user", parts: [%{text: "Actual user message"}]}
+    ],
+    generationConfig: %{temperature: 0.0, topP: 1}
+    # NO tools field
+  }
+}
+
+# After (fixed) - proper systemInstruction and tools fields:
+%{
+  model: model,
+  project: project_id,
+  request: %{
+    systemInstruction: %{
+      role: "user",
+      parts: [%{text: "System instruction with tool info..."}]
+    },
+    tools: [%{
+      function_declarations: [
+        %{
+          name: "read_file",
+          description: "Reads file contents...",
+          parameters: %{...}
+        }
+      ]
+    }],
+    contents: [
+      %{role: "user", parts: [%{text: "Please read file..."}]}
+    ],
+    generationConfig: %{temperature: 0.0, topP: 1}
+  }
+}
+```
+
+**Key Discovery**: The Code Assist API DOES support the `tools` field with `functionDeclarations`, exactly like the Generative Language API. The critical difference is that it also requires a separate `systemInstruction` field to provide context about available tools.
+
+**Evidence of Success**: After the fix, the API response shows proper function call parts:
+
+```json
+{
+  "functionCall": {
+    "name": "read_file",
+    "args": {"path": "/path/to/file.txt"}
+  }
+}
+```
+
+Instead of text content like:
+```json
+{
+  "text": "{\n  \"functionCall\": {\n    \"name\": \"read_file\",\n    ..."
+}
+```
+
+**Impact**: This was the most critical bug - OAuth authentication worked, basic LLM calls worked, but tool integration was completely broken until this dual approach (systemInstruction + tools fields) was implemented.
+
 ### Learning Points
 
 These bugs demonstrate important principles:
@@ -455,6 +524,9 @@ These bugs demonstrate important principles:
 5. **Error Propagation**: Well-designed error handling helped identify the exact failure points
 6. **Authentication vs. Authorization**: OAuth can succeed (authentication) while API calls fail (authorization) due to format issues
 7. **Network Analysis**: Capturing actual API calls from working implementations (like gemini-cli) is invaluable for debugging integration issues
+8. **Tool Integration Complexity**: Code Assist API requires both `systemInstruction` AND `tools` fields - neither alone is sufficient for proper function calling
+9. **Response Format Validation**: Models can generate tool calls as text vs. structured parts - the API request format determines which happens
+10. **Dual API Architecture**: OAuth (Code Assist API) and API Key (Generative Language API) have different capabilities and request formats that must be handled separately
 
 ## Real-World Demo Output Analysis
 

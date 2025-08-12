@@ -73,10 +73,11 @@ defmodule TheMaestro.Providers.Gemini do
               }
             }
           _ ->
-            # Code Assist API format for OAuth and service accounts - match original gemini-cli
+            # Code Assist API format - NO tools field, model generates function calls directly
             %{
               model: model,
-              project: get_project_id_from_context(auth_context),
+              project: get_project_id_from_context(auth_context),  
+              user_prompt_id: generate_user_prompt_id(),
               request: %{
                 contents: gemini_messages,
                 generationConfig: %{
@@ -109,14 +110,15 @@ defmodule TheMaestro.Providers.Gemini do
   def complete_with_tools(auth_context, messages, opts \\ %{}) do
     case get_access_token(auth_context) do
       {:ok, token} ->
-        gemini_messages = convert_messages_to_gemini(messages)
-        gemini_tools = convert_tools_to_gemini(Map.get(opts, :tools, []))
+        tools = Map.get(opts, :tools, [])
         model = Map.get(opts, :model, "gemini-2.5-pro")
 
         # Choose request format based on auth type (like original gemini-cli)
         request_body = case auth_context.type do
           :api_key ->
             # Direct Generative Language API format for API keys
+            gemini_messages = convert_messages_to_gemini(messages)
+            gemini_tools = convert_tools_to_gemini(tools)
             %{
               contents: gemini_messages,
               tools: gemini_tools,
@@ -126,18 +128,41 @@ defmodule TheMaestro.Providers.Gemini do
               }
             }
           _ ->
-            # Code Assist API format for OAuth and service accounts - match original gemini-cli
+            # Code Assist API format - use systemInstruction and tools fields like original gemini-cli
+            gemini_messages = convert_messages_to_gemini(messages)
+            gemini_tools = convert_tools_to_gemini(tools)
+            system_instruction = build_system_instruction_with_tools(tools)
+            
+            request_content = %{
+              contents: gemini_messages,
+              generationConfig: %{
+                temperature: Map.get(opts, :temperature, 0.0),
+                topP: 1
+              }
+            }
+            
+            # Add systemInstruction if tools are available
+            request_content = if Enum.empty?(tools) do
+              request_content
+            else
+              Map.put(request_content, :systemInstruction, %{
+                role: "user",
+                parts: [%{text: system_instruction}]
+              })
+            end
+            
+            # Add tools if available
+            request_content = if Enum.empty?(gemini_tools) do
+              request_content
+            else
+              Map.put(request_content, :tools, gemini_tools)
+            end
+            
             %{
               model: model,
               project: get_project_id_from_context(auth_context),
-              request: %{
-                contents: gemini_messages,
-                tools: gemini_tools,
-                generationConfig: %{
-                  temperature: Map.get(opts, :temperature, 0.0),
-                  topP: 1
-                }
-              }
+              user_prompt_id: generate_user_prompt_id(),
+              request: request_content
             }
         end
 
@@ -698,7 +723,12 @@ defmodule TheMaestro.Providers.Gemini do
 
     case HTTPoison.post(final_url, Jason.encode!(request_body), headers) do
       {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-        Jason.decode(response_body)
+        case Jason.decode(response_body) do
+          {:ok, decoded} = result ->
+            Logger.debug("Raw API response: #{Jason.encode!(decoded, pretty: true)}")
+            result
+          error -> error
+        end
 
       {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
         Logger.error("Request failed with status #{status}: #{response_body}")
@@ -756,23 +786,104 @@ defmodule TheMaestro.Providers.Gemini do
     end)
   end
 
-  defp convert_tools_to_gemini(tools) do
-    # Convert to Code Assist API format - match original gemini-cli
-    Enum.map(tools, fn tool ->
-      case tool["name"] do
-        "google_search" ->
-          %{"googleSearch" => %{}}
-        _ ->
-          # For other tools, use function_declarations format as fallback
-          %{
-            "function_declarations" => [%{
-              "name" => tool["name"],
-              "description" => tool["description"],
-              "parameters" => tool["parameters"]
-            }]
-          }
-      end
+
+  defp build_system_instruction_with_tools(tools) do
+    tool_descriptions = build_tool_descriptions(tools)
+    
+    """
+    You are an interactive CLI agent specializing in software engineering tasks. Your primary goal is to help users safely and efficiently, adhering strictly to the following instructions and utilizing your available tools.
+
+    # Core Mandates
+
+    - **Conventions:** Rigorously adhere to existing project conventions when reading or modifying code. Analyze surrounding code, tests, and configuration first.
+    - **Libraries/Frameworks:** NEVER assume a library/framework is available or appropriate. Verify its established usage within the project (check imports, configuration files like 'package.json', 'Cargo.toml', 'requirements.txt', 'build.gradle', etc., or observe neighboring files) before employing it.
+    - **Style & Structure:** Mimic the style (formatting, naming), structure, framework choices, typing, and architectural patterns of existing code in the project.
+    - **Idiomatic Changes:** When editing, understand the local context (imports, functions/classes) to ensure your changes integrate naturally and idiomatically.
+    - **Comments:** Add code comments sparingly. Focus on *why* something is done, especially for complex logic, rather than *what* is done. Only add high-value comments if necessary for clarity or if requested by the user.
+    - **Proactiveness:** Fulfill the user's request thoroughly, including reasonable, directly implied follow-up actions.
+    - **Path Construction:** Before using any file system tool, you must construct the full absolute path for the file_path argument. Always combine the absolute path of the project's root directory with the file's path relative to the root.
+
+    # Available Tools
+
+    You have access to the following tools. When you need to use a tool, generate a functionCall with the exact tool name and required arguments:
+
+    #{tool_descriptions}
+
+    # Tool Usage
+
+    To use a tool, you must generate a functionCall part in your response. The functionCall format is:
+    
+    {
+      "functionCall": {
+        "name": "tool_name",
+        "args": {
+          "parameter_name": "parameter_value"
+        }
+      }
+    }
+
+    For example, to read a file:
+    {
+      "functionCall": {
+        "name": "read_file", 
+        "args": {
+          "path": "/path/to/file.txt"
+        }
+      }
+    }
+
+    Always use tools when appropriate to fulfill user requests that require file system access, code analysis, or other operations beyond text generation. The system will execute the tool and provide results back to you in a functionResponse.
+    """
+  end
+
+  defp build_tool_descriptions(tools) do
+    tools
+    |> Enum.map(&format_tool_description/1)
+    |> Enum.join("\n\n")
+  end
+
+  defp format_tool_description(%{"name" => name, "description" => description, "parameters" => parameters}) do
+    # Format parameters for display
+    params_desc = format_parameters(parameters)
+    
+    """
+    ## #{name}
+    #{description}
+    
+    Parameters:
+    #{params_desc}
+    """
+  end
+
+  defp format_parameters(%{"type" => "object", "properties" => properties, "required" => required}) do
+    properties
+    |> Enum.map(fn {param_name, param_info} ->
+      required_marker = if param_name in required, do: " (required)", else: ""
+      param_type = Map.get(param_info, "type", "string")
+      param_desc = Map.get(param_info, "description", "")
+      
+      "- **#{param_name}** (#{param_type})#{required_marker}: #{param_desc}"
     end)
+    |> Enum.join("\n")
+  end
+
+  defp format_parameters(parameters) do
+    inspect(parameters)
+  end
+
+  defp convert_tools_to_gemini(tools) do
+    # Code Assist API and Generative Language API use the same function_declarations format
+    # The original gemini-cli uses function_declarations for custom tools
+    function_declarations =
+      Enum.map(tools, fn tool ->
+        %{
+          name: tool["name"],
+          description: tool["description"], 
+          parameters: tool["parameters"]
+        }
+      end)
+
+    [%{function_declarations: function_declarations}]
   end
 
   defp extract_text_content(%{"response" => response}), do: extract_text_content(response)
