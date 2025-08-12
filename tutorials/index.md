@@ -201,9 +201,23 @@ More tutorials will be added as development progresses through the epics:
 ### Epic 1 Remaining Stories
 - Story 1.2: Core Application & Supervision Tree
 
+### [Story 3.3: Sandboxed Shell Command Tool](epic3/story3.3/)
+
+Learn how to implement secure shell command execution with Docker-based sandboxing for AI agents:
+
+- Build secure command execution tools with comprehensive validation
+- Implement Docker-based sandboxing for process isolation
+- Design configurable security policies with allowlists and blocklists
+- Create robust error handling and timeout management
+- Integrate shell tools into the agent's tool system safely
+- Balance functionality with security in AI agent tooling
+
+**Key Concepts**: Command execution security, Docker containerization, sandboxing patterns, security validation, tool integration, threat modeling
+
+**Difficulty**: Advanced
+
 ### Epic 3 Remaining Stories
 - Story 3.1: Multi-provider LLM adapters
-- Story 3.3: Advanced sandboxed tools
 - Story 3.4-3.6: Session checkpointing and restoration
 
 ### Epic 4: Terminal User Interface (TUI)

@@ -6,6 +6,7 @@ defmodule TheMaestro.Application do
   use Application
 
   alias TheMaestro.Tooling.Tools.FileSystem
+  alias TheMaestro.Tooling.Tools.Shell
 
   @impl true
   def start(_type, _args) do
@@ -37,6 +38,7 @@ defmodule TheMaestro.Application do
       {:ok, _pid} = result ->
         # Register built-in tools
         FileSystem.register_tools()
+        Shell.register_tool()
         result
 
       error ->
