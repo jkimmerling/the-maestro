@@ -49,6 +49,9 @@ defmodule TheMaestroWeb.AgentLive do
           |> assign(:authentication_enabled, authentication_enabled)
           |> assign(:input_message, "")
           |> assign(:loading, false)
+          |> assign(:streaming_content, "")
+          |> assign(:current_status, "")
+          |> stream(:message_stream, [])
 
         {:ok, socket}
 
@@ -64,6 +67,9 @@ defmodule TheMaestroWeb.AgentLive do
           |> assign(:authentication_enabled, authentication_enabled)
           |> assign(:input_message, "")
           |> assign(:loading, false)
+          |> assign(:streaming_content, "")
+          |> assign(:current_status, "")
+          |> stream(:message_stream, [])
           |> put_flash(:error, "Failed to initialize agent. Please refresh the page.")
 
         {:ok, socket}
@@ -149,6 +155,61 @@ defmodule TheMaestroWeb.AgentLive do
     end
   end
 
+  def handle_info({:status_update, status}, socket) do
+    status_message =
+      case status do
+        :thinking -> "Thinking..."
+        :idle -> ""
+        _ -> "Processing..."
+      end
+
+    socket = assign(socket, :current_status, status_message)
+    {:noreply, socket}
+  end
+
+  def handle_info({:stream_chunk, chunk}, socket) do
+    current_content = socket.assigns.streaming_content
+    updated_content = current_content <> chunk
+
+    socket = assign(socket, :streaming_content, updated_content)
+    {:noreply, socket}
+  end
+
+  def handle_info({:tool_call_start, %{name: tool_name}}, socket) do
+    status_message = "Using tool: #{tool_name}..."
+    socket = assign(socket, :current_status, status_message)
+    {:noreply, socket}
+  end
+
+  def handle_info({:tool_call_end, %{name: _tool_name, result: _result}}, socket) do
+    # Tool call completed, status will be updated by the next message or stream
+    {:noreply, socket}
+  end
+
+  def handle_info({:processing_complete, _final_response}, socket) do
+    # Clear streaming content and status, refresh messages
+    if socket.assigns.agent_id do
+      agent_state = Agents.get_agent_state(socket.assigns.agent_id)
+
+      socket =
+        socket
+        |> assign(:messages, agent_state.message_history)
+        |> assign(:streaming_content, "")
+        |> assign(:current_status, "")
+        |> assign(:loading, false)
+
+      {:noreply, socket}
+    else
+      socket =
+        socket
+        |> assign(:streaming_content, "")
+        |> assign(:current_status, "")
+        |> assign(:loading, false)
+
+      {:noreply, socket}
+    end
+  end
+
   def render(assigns) do
     ~H"""
     <div class="min-h-screen bg-gray-50">
@@ -215,8 +276,56 @@ defmodule TheMaestroWeb.AgentLive do
                 <% end %>
               <% end %>
               
+    <!-- Streaming content display -->
+              <%= if @streaming_content != "" do %>
+                <div class="message assistant justify-start">
+                  <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-gray-200 text-gray-900">
+                    <div class="whitespace-pre-wrap">{@streaming_content}</div>
+                    <div class="flex items-center space-x-2 mt-2">
+                      <div class="animate-pulse flex space-x-1">
+                        <div class="h-1 w-1 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div
+                          class="h-1 w-1 bg-gray-400 rounded-full animate-bounce"
+                          style="animation-delay: 0.1s"
+                        >
+                        </div>
+                        <div
+                          class="h-1 w-1 bg-gray-400 rounded-full animate-bounce"
+                          style="animation-delay: 0.2s"
+                        >
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+              
+    <!-- Status indicator -->
+              <%= if @current_status != "" && @streaming_content == "" do %>
+                <div class="message assistant justify-start">
+                  <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-blue-100 text-blue-900">
+                    <div class="flex items-center space-x-2">
+                      <div class="animate-pulse flex space-x-1">
+                        <div class="h-2 w-2 bg-blue-400 rounded-full animate-bounce"></div>
+                        <div
+                          class="h-2 w-2 bg-blue-400 rounded-full animate-bounce"
+                          style="animation-delay: 0.1s"
+                        >
+                        </div>
+                        <div
+                          class="h-2 w-2 bg-blue-400 rounded-full animate-bounce"
+                          style="animation-delay: 0.2s"
+                        >
+                        </div>
+                      </div>
+                      <span class="text-sm text-blue-600">{@current_status}</span>
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+              
     <!-- Loading indicator -->
-              <%= if @loading do %>
+              <%= if @loading && @current_status == "" && @streaming_content == "" do %>
                 <div class="message assistant justify-start">
                   <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-gray-200 text-gray-900">
                     <div class="flex items-center space-x-2">
@@ -233,7 +342,7 @@ defmodule TheMaestroWeb.AgentLive do
                         >
                         </div>
                       </div>
-                      <span class="text-sm text-gray-600">Thinking...</span>
+                      <span class="text-sm text-gray-600">Connecting...</span>
                     </div>
                   </div>
                 </div>

@@ -153,15 +153,18 @@ defmodule TheMaestro.Agents.Agent do
       timestamp: DateTime.utc_now()
     }
 
-    # Update state to thinking mode
+    # Update state to thinking mode and broadcast status
     thinking_state = %{
       state
       | message_history: state.message_history ++ [user_message],
         loop_state: :thinking
     }
 
+    # Broadcast that we're thinking
+    broadcast_status_update(state.agent_id, :thinking)
+
     # Attempt to get response from LLM provider
-    case get_llm_response(thinking_state, message) do
+    case get_llm_response_with_streaming(thinking_state, message) do
       {:ok, llm_response} ->
         assistant_message = %{
           type: :assistant,
@@ -176,6 +179,9 @@ defmodule TheMaestro.Agents.Agent do
           | message_history: thinking_state.message_history ++ [assistant_message],
             loop_state: :idle
         }
+
+        # Broadcast completion
+        broadcast_processing_complete(state.agent_id, assistant_message)
 
         {:reply, {:ok, assistant_message}, final_state}
 
@@ -197,6 +203,9 @@ defmodule TheMaestro.Agents.Agent do
             loop_state: :idle
         }
 
+        # Broadcast completion even for errors
+        broadcast_processing_complete(state.agent_id, error_message)
+
         {:reply, {:ok, error_message}, error_state}
     end
   end
@@ -208,35 +217,51 @@ defmodule TheMaestro.Agents.Agent do
 
   # Helper Functions
 
-  defp get_llm_response(state, _current_message) do
+  defp get_llm_response_with_streaming(state, _current_message) do
     case state.auth_context do
       nil -> {:error, :no_auth_context}
-      auth_context -> perform_llm_completion(state, auth_context)
+      auth_context -> perform_llm_completion_with_streaming(state, auth_context)
     end
   end
 
-  defp perform_llm_completion(state, auth_context) do
+  defp perform_llm_completion_with_streaming(state, auth_context) do
     messages = convert_message_history_to_llm_format(state.message_history)
     tool_definitions = TheMaestro.Tooling.get_tool_definitions()
-    completion_opts = build_completion_opts(tool_definitions)
+    completion_opts = build_completion_opts_with_streaming(state.agent_id, tool_definitions)
 
     if Enum.empty?(tool_definitions) do
-      execute_basic_completion(state.llm_provider, auth_context, messages, completion_opts)
+      execute_basic_completion_with_streaming(
+        state.llm_provider,
+        auth_context,
+        messages,
+        completion_opts
+      )
     else
-      execute_tool_enabled_completion(state, auth_context, messages, completion_opts)
+      execute_tool_enabled_completion_with_streaming(
+        state,
+        auth_context,
+        messages,
+        completion_opts
+      )
     end
   end
 
-  defp build_completion_opts(tool_definitions) do
+  defp build_completion_opts_with_streaming(agent_id, tool_definitions) do
+    stream_callback = fn
+      {:chunk, chunk} -> broadcast_stream_chunk(agent_id, chunk)
+      :complete -> :ok
+    end
+
     %{
       model: "gemini-2.5-flash",
       temperature: 0.0,
       max_tokens: 8192,
-      tools: tool_definitions
+      tools: tool_definitions,
+      stream_callback: stream_callback
     }
   end
 
-  defp execute_basic_completion(provider, auth_context, messages, completion_opts) do
+  defp execute_basic_completion_with_streaming(provider, auth_context, messages, completion_opts) do
     basic_opts = Map.delete(completion_opts, :tools)
 
     case provider.complete_text(auth_context, messages, basic_opts) do
@@ -245,49 +270,74 @@ defmodule TheMaestro.Agents.Agent do
     end
   end
 
-  defp execute_tool_enabled_completion(state, auth_context, messages, completion_opts) do
+  defp execute_tool_enabled_completion_with_streaming(
+         state,
+         auth_context,
+         messages,
+         completion_opts
+       ) do
     provider = state.llm_provider
 
     if function_exported?(provider, :complete_with_tools, 3) do
-      handle_tool_completion(state, auth_context, messages, completion_opts)
+      handle_tool_completion_with_streaming(state, auth_context, messages, completion_opts)
     else
-      execute_basic_completion(provider, auth_context, messages, completion_opts)
+      execute_basic_completion_with_streaming(provider, auth_context, messages, completion_opts)
     end
   end
 
-  defp handle_tool_completion(state, auth_context, messages, completion_opts) do
+  defp handle_tool_completion_with_streaming(state, auth_context, messages, completion_opts) do
     case state.llm_provider.complete_with_tools(auth_context, messages, completion_opts) do
       {:ok, %{content: content, tool_calls: []}} ->
         {:ok, content}
 
       {:ok, %{content: content, tool_calls: [_ | _] = tool_calls}} ->
-        handle_tool_calls(state, auth_context, messages, tool_calls, content)
+        handle_tool_calls_with_streaming(state, auth_context, messages, tool_calls, content)
 
       {:ok, %{tool_calls: [_ | _] = tool_calls}} ->
-        handle_tool_calls(state, auth_context, messages, tool_calls, nil)
+        handle_tool_calls_with_streaming(state, auth_context, messages, tool_calls, nil)
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp handle_tool_calls(state, auth_context, messages, tool_calls, initial_content) do
+  defp handle_tool_calls_with_streaming(
+         state,
+         auth_context,
+         messages,
+         tool_calls,
+         initial_content
+       ) do
     require Logger
 
-    # Execute each tool call
+    # Execute each tool call with status broadcasting
     tool_results =
       Enum.map(tool_calls, fn tool_call ->
-        execute_tool_call(tool_call)
+        # Broadcast tool call start
+        broadcast_tool_call_start(state.agent_id, tool_call)
+
+        result = execute_tool_call(tool_call)
+
+        # Broadcast tool call end
+        broadcast_tool_call_end(state.agent_id, tool_call, result)
+
+        result
       end)
 
     # Add tool call messages and results to conversation
     updated_messages = messages ++ build_tool_messages(tool_calls, tool_results, initial_content)
 
-    # Get follow-up response from LLM with tool results
+    # Get follow-up response from LLM with tool results (with streaming)
+    stream_callback = fn
+      {:chunk, chunk} -> broadcast_stream_chunk(state.agent_id, chunk)
+      :complete -> :ok
+    end
+
     completion_opts = %{
       model: "gemini-2.5-flash",
       temperature: 0.0,
-      max_tokens: 8192
+      max_tokens: 8192,
+      stream_callback: stream_callback
     }
 
     case state.llm_provider.complete_text(auth_context, updated_messages, completion_opts) do
@@ -433,5 +483,55 @@ defmodule TheMaestro.Agents.Agent do
 
   defp via_tuple(agent_id) do
     {:via, Registry, {TheMaestro.Agents.Registry, agent_id}}
+  end
+
+  # Streaming and status broadcasting functions
+
+  defp broadcast_status_update(agent_id, status) do
+    Phoenix.PubSub.broadcast(
+      TheMaestro.PubSub,
+      "agent:#{agent_id}",
+      {:status_update, status}
+    )
+  end
+
+  defp broadcast_stream_chunk(agent_id, chunk) do
+    Phoenix.PubSub.broadcast(
+      TheMaestro.PubSub,
+      "agent:#{agent_id}",
+      {:stream_chunk, chunk}
+    )
+  end
+
+  defp broadcast_tool_call_start(agent_id, tool_call) do
+    Phoenix.PubSub.broadcast(
+      TheMaestro.PubSub,
+      "agent:#{agent_id}",
+      {:tool_call_start,
+       %{
+         name: Map.get(tool_call, "name"),
+         arguments: Map.get(tool_call, "arguments", %{})
+       }}
+    )
+  end
+
+  defp broadcast_tool_call_end(agent_id, tool_call, result) do
+    Phoenix.PubSub.broadcast(
+      TheMaestro.PubSub,
+      "agent:#{agent_id}",
+      {:tool_call_end,
+       %{
+         name: Map.get(tool_call, "name"),
+         result: result
+       }}
+    )
+  end
+
+  defp broadcast_processing_complete(agent_id, final_response) do
+    Phoenix.PubSub.broadcast(
+      TheMaestro.PubSub,
+      "agent:#{agent_id}",
+      {:processing_complete, final_response}
+    )
   end
 end
