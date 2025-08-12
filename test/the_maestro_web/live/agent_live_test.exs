@@ -12,7 +12,7 @@ defmodule TheMaestroWeb.AgentLiveTest do
     test "displays user info when logged in", %{conn: conn} do
       user_info = %{"id" => "123", "email" => "test@example.com", "name" => "Test User"}
 
-      conn = 
+      conn =
         conn
         |> init_test_session(%{})
         |> put_session(:current_user, user_info)
@@ -28,8 +28,9 @@ defmodule TheMaestroWeb.AgentLiveTest do
 
       # When authentication is enabled and no user is logged in, 
       # the RequireAuth plug should redirect to home
-      assert {:error, {:redirect, %{to: "/", flash: %{"error" => "You must log in to access this page."}}}} = 
-        live(conn, ~p"/agent")
+      assert {:error,
+              {:redirect, %{to: "/", flash: %{"error" => "You must log in to access this page."}}}} =
+               live(conn, ~p"/agent")
     end
   end
 

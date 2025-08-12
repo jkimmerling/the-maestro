@@ -1,7 +1,7 @@
 defmodule TheMaestroWeb.AuthController do
   @moduledoc """
   Authentication controller for web-based user authentication using Google OAuth.
-  
+
   This controller handles the Phoenix/LiveView authentication flow using Ueberauth,
   which is separate from the CLI OAuth flow handled by OAuthController.
   """
@@ -12,14 +12,14 @@ defmodule TheMaestroWeb.AuthController do
 
   def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do
     Logger.info("Successful OAuth authentication for user: #{auth.info.email}")
-    
+
     user_info = %{
       "id" => auth.uid,
       "email" => auth.info.email,
       "name" => auth.info.name,
       "avatar" => auth.info.image
     }
-    
+
     conn
     |> put_session(:current_user, user_info)
     |> put_flash(:info, "Successfully authenticated!")
@@ -28,7 +28,7 @@ defmodule TheMaestroWeb.AuthController do
 
   def callback(%{assigns: %{ueberauth_failure: _failure}} = conn, _params) do
     Logger.error("OAuth authentication failed")
-    
+
     conn
     |> put_flash(:error, "Failed to authenticate. Please try again.")
     |> redirect(to: ~p"/")
@@ -39,7 +39,7 @@ defmodule TheMaestroWeb.AuthController do
   """
   def logout(conn, _params) do
     Logger.info("User logged out")
-    
+
     conn
     |> clear_session()
     |> put_flash(:info, "You have been logged out.")

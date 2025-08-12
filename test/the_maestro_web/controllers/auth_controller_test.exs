@@ -1,6 +1,6 @@
 defmodule TheMaestroWeb.AuthControllerTest do
   use TheMaestroWeb.ConnCase
-  
+
   describe "OAuth callback with success" do
     test "stores user info in session and redirects to agent", %{conn: conn} do
       auth = %Ueberauth.Auth{
@@ -12,7 +12,7 @@ defmodule TheMaestroWeb.AuthControllerTest do
         }
       }
 
-      conn = 
+      conn =
         conn
         |> init_test_session(%{})
         |> assign(:ueberauth_auth, auth)

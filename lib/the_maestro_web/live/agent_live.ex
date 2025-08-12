@@ -1,7 +1,7 @@
 defmodule TheMaestroWeb.AgentLive do
   @moduledoc """
   LiveView for the main agent chat interface.
-  
+
   This LiveView provides the main interface for users to interact with their AI agent.
   It handles both authenticated and anonymous sessions based on configuration.
   """
@@ -9,7 +9,7 @@ defmodule TheMaestroWeb.AgentLive do
 
   def mount(_params, session, socket) do
     current_user = Map.get(session, "current_user")
-    
+
     socket =
       socket
       |> assign(:current_user, current_user)
@@ -27,11 +27,11 @@ defmodule TheMaestroWeb.AgentLive do
           <h1 class="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
             AI Agent Interface
           </h1>
-          
+
           <%= if @authentication_enabled do %>
             <%= if @current_user do %>
               <p class="mt-6 text-lg leading-8 text-gray-600">
-                Welcome, <%= @current_user["name"] || @current_user["email"] %>!
+                Welcome, {@current_user["name"] || @current_user["email"]}!
               </p>
               <div class="mt-8">
                 <p class="text-gray-500">Agent chat interface will be implemented in Story 2.3</p>

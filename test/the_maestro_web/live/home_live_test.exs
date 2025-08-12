@@ -26,7 +26,7 @@ defmodule TheMaestroWeb.HomeLiveTest do
 
     test "shows login button when user is not logged in", %{conn: conn} do
       conn = init_test_session(conn, %{})
-      
+
       {:ok, _page_live, html} = live(conn, ~p"/")
 
       assert html =~ "Login with Google"
@@ -36,12 +36,12 @@ defmodule TheMaestroWeb.HomeLiveTest do
 
     test "shows logout button and agent link when user is logged in", %{conn: conn} do
       user_info = %{"id" => "123", "email" => "test@example.com", "name" => "Test User"}
-      
-      conn = 
+
+      conn =
         conn
         |> init_test_session(%{})
         |> put_session(:current_user, user_info)
-      
+
       {:ok, _page_live, html} = live(conn, ~p"/")
 
       assert html =~ "Open Agent Chat"
@@ -59,7 +59,7 @@ defmodule TheMaestroWeb.HomeLiveTest do
 
     test "shows direct agent access without authentication", %{conn: conn} do
       conn = init_test_session(conn, %{})
-      
+
       {:ok, _page_live, html} = live(conn, ~p"/")
 
       assert html =~ "Open Agent Chat"
