@@ -52,21 +52,20 @@ mix ecto.setup
 
 ### 4. **LLM Authentication** (Choose One)
 
-#### Option A: API Key (Simplest)
+#### Option A: Google Account OAuth (Web Login)
+```bash
+# No environment variables needed!
+# Users simply click "Login" in the web interface
+# OAuth credentials are built into the application (like gemini-cli)
+```
+
+#### Option B: API Key (Direct)
 ```bash
 export GEMINI_API_KEY="your-gemini-api-key-here"
 ```
 Get your API key from: https://makersuite.google.com/app/apikey
 
-#### Option B: OAuth2 (Interactive)
-```bash
-# OAuth will be initiated automatically during demo
-# Requires browser access for authorization flow
-export GOOGLE_CLIENT_ID="your-oauth-client-id"
-export GOOGLE_CLIENT_SECRET="your-oauth-client-secret"
-```
-
-#### Option C: Service Account (Enterprise)
+#### Option C: Service Account (Enterprise/Corporate)
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
 ```
@@ -86,9 +85,11 @@ This mode requires users to log in with Google OAuth before accessing the agent.
 
 #### Required Environment Variables
 ```bash
-export GOOGLE_CLIENT_ID="your-google-oauth-client-id"
-export GOOGLE_CLIENT_SECRET="your-google-oauth-client-secret"
-export GEMINI_API_KEY="your-gemini-api-key"  # Or other LLM auth
+# For LLM access, choose one:
+export GEMINI_API_KEY="your-gemini-api-key"  # Option 1: API Key
+# OR
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"  # Option 2: Service Account
+# Option 3: Google Account OAuth requires no environment variables
 ```
 
 #### Running the Server
@@ -168,8 +169,11 @@ export MAESTRO_REQUIRE_AUTH=false
 
 #### Required Environment Variables
 ```bash
-export GEMINI_API_KEY="your-gemini-api-key"  # Or other LLM auth
-# No OAuth credentials needed in anonymous mode
+# For LLM access, choose one:
+export GEMINI_API_KEY="your-gemini-api-key"  # Option 1: API Key
+# OR
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"  # Option 2: Service Account
+# Option 3: Google Account OAuth requires no environment variables (but needs authentication enabled)
 ```
 
 #### Running the Server
@@ -203,12 +207,13 @@ mix phx.server
 
 ### Environment Variables
 
-| Variable | Purpose | Authenticated Mode | Anonymous Mode |
-|----------|---------|-------------------|----------------|
-| `GEMINI_API_KEY` | LLM API authentication | Required | Required |
-| `GOOGLE_CLIENT_ID` | OAuth client ID | Required | Not needed |
-| `GOOGLE_CLIENT_SECRET` | OAuth client secret | Required | Not needed |
-| `MAESTRO_REQUIRE_AUTH` | Override auth requirement | Optional | Set to `false` |
+| Variable | Purpose | Required When |
+|----------|---------|---------------|
+| `GEMINI_API_KEY` | LLM API authentication | Using API Key option |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Service account credentials | Using Enterprise/Corporate option |
+| `MAESTRO_REQUIRE_AUTH` | Override auth requirement | Want to force anonymous mode |
+
+**Note**: Google Account OAuth (web login) requires no environment variables - OAuth credentials are built into the application like gemini-cli.
 
 ### Application Configuration
 
@@ -219,15 +224,14 @@ config :the_maestro,
   # Set to false to disable authentication requirement
   require_authentication: true  # or false for anonymous mode
 
-# OAuth configuration (only needed in authenticated mode)
+# OAuth configuration (built into application, no environment variables needed)
 config :ueberauth, Ueberauth,
   providers: [
     google: {Ueberauth.Strategy.Google, []}
   ]
 
-config :ueberauth, Ueberauth.Strategy.Google.OAuth,
-  client_id: {:system, "GOOGLE_CLIENT_ID"},
-  client_secret: {:system, "GOOGLE_CLIENT_SECRET"}
+# OAuth credentials are hardcoded in the Gemini provider
+# (like gemini-cli does) - no configuration needed
 ```
 
 #### File System Tool Configuration
@@ -331,10 +335,11 @@ Expected: Error handling with clear explanation
 ```
 Error: invalid_redirect_uri
 ```
-**Solution**: Check OAuth configuration
+**Solution**: OAuth configuration is built into the application
 ```bash
-# Ensure your OAuth app has the correct redirect URI:
-# http://localhost:4000/auth/google/callback
+# OAuth credentials are hardcoded (like gemini-cli)
+# Redirect URI is pre-configured: http://localhost:4000/auth/google/callback
+# No user configuration needed
 ```
 
 #### Problem: Authentication required but disabled
@@ -390,11 +395,11 @@ Error: Authentication configuration missing
 ```
 **Solution**: Check environment variable loading
 ```bash
-# Ensure variables are exported in current shell
-echo $GOOGLE_CLIENT_ID
-echo $GEMINI_API_KEY
+# Check LLM authentication variables
+echo $GEMINI_API_KEY  # If using API Key
+echo $GOOGLE_APPLICATION_CREDENTIALS  # If using Service Account
 
-# Or use .env file with proper loading
+# OAuth credentials are built-in, no need to check
 ```
 
 ## Understanding the Architecture
