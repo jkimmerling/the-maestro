@@ -44,7 +44,21 @@ if ! mix compile --warnings-as-errors; then
 fi
 
 echo ""
-echo "🧪 Running tests..."
+echo "🗄️  Setting up test database (matching CI/CD)..."
+if ! mix ecto.create --quiet; then
+    echo "❌ Database creation failed!"
+    echo "💡 Ensure PostgreSQL is running and properly configured"
+    exit 1
+fi
+
+if ! mix ecto.migrate --quiet; then
+    echo "❌ Database migration failed!"
+    echo "💡 Fix migration issues before pushing"
+    exit 1
+fi
+
+echo ""
+echo "🧪 Running tests (matching CI/CD)..."
 if ! mix test; then
     echo "❌ Tests failed!"
     echo "💡 Fix failing tests before pushing"
