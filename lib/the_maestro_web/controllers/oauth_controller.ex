@@ -5,13 +5,13 @@ defmodule TheMaestroWeb.OAuthController do
 
   @doc """
   Handles OAuth2 callback from Google OAuth service.
-  
+
   This endpoint receives the authorization code from Google after user consent
   and exchanges it for access tokens, then caches them for future use.
   """
   def callback(conn, params) do
     Logger.info("OAuth callback received with params: #{inspect(Map.keys(params))}")
-    
+
     cond do
       # Check for error in callback
       Map.has_key?(params, "error") ->
@@ -40,7 +40,7 @@ defmodule TheMaestroWeb.OAuthController do
   defp valid_state?(params) do
     # Get state from params
     received_state = Map.get(params, "state")
-    
+
     # For now, we'll accept any non-empty state
     # TODO: In production, we should store and validate the actual state value
     received_state && String.trim(received_state) != ""
@@ -48,20 +48,22 @@ defmodule TheMaestroWeb.OAuthController do
 
   defp handle_authorization_code(conn, code, _params) do
     Logger.info("Processing authorization code...")
-    
+
     # Build the redirect URI for token exchange
     redirect_uri = build_redirect_uri(conn)
-    
+
     case TheMaestro.Providers.Gemini.exchange_authorization_code(code, redirect_uri) do
       {:ok, tokens} ->
         case TheMaestro.Providers.Gemini.cache_oauth_credentials(tokens) do
           {:ok, _} ->
             Logger.info("OAuth flow completed successfully!")
             render_success_page(conn)
+
           {:error, reason} ->
             Logger.error("Failed to cache credentials: #{inspect(reason)}")
             render_error_page(conn, "Failed to save credentials")
         end
+
       {:error, reason} ->
         Logger.error("Failed to exchange authorization code: #{inspect(reason)}")
         render_error_page(conn, "Failed to exchange authorization code")
@@ -73,7 +75,7 @@ defmodule TheMaestroWeb.OAuthController do
     scheme = if conn.scheme == :https, do: "https", else: "http"
     host = conn.host
     port = if conn.port in [80, 443], do: "", else: ":#{conn.port}"
-    
+
     "#{scheme}://#{host}#{port}/oauth2callback"
   end
 
@@ -134,7 +136,7 @@ defmodule TheMaestroWeb.OAuthController do
     </body>
     </html>
     """
-    
+
     conn
     |> put_resp_content_type("text/html")
     |> send_resp(200, html)
@@ -204,7 +206,7 @@ defmodule TheMaestroWeb.OAuthController do
     </body>
     </html>
     """
-    
+
     conn
     |> put_resp_content_type("text/html")
     |> send_resp(400, html)
