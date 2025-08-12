@@ -22,7 +22,7 @@ defmodule TheMaestroWeb.Router do
   scope "/", TheMaestroWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", HomeLive, :index
   end
 
   # OAuth callback endpoint (separate pipeline to avoid CSRF protection)

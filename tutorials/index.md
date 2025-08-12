@@ -96,9 +96,9 @@ More tutorials will be added as development progresses through the epics:
 - Story 1.2: Core Application & Supervision Tree
 
 ### Epic 2: Phoenix LiveView UI & User Authentication
-- Phoenix project integration
+- [Story 2.1: Phoenix Project Integration & Basic Layout](epic2/story2.1/) - Phoenix LiveView setup and application structure
 - Configurable authentication systems
-- Real-time web interfaces
+- Real-time web interfaces  
 - CLI device authorization flows
 
 ### Epic 3: Advanced Agent Capabilities & Tooling
