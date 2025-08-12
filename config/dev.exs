@@ -93,4 +93,5 @@ config :the_maestro, :file_system_tool,
     Path.join([File.cwd!(), "test", "fixtures"]),
     Path.join([File.cwd!(), "priv"])
   ],
-  max_file_size: 10 * 1024 * 1024  # 10MB
+  # 10MB
+  max_file_size: 10 * 1024 * 1024
