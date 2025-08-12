@@ -19,10 +19,31 @@ defmodule TheMaestroWeb.Router do
     plug :fetch_query_params
   end
 
+  pipeline :auth_required do
+    plug :browser
+    plug TheMaestroWeb.Plugs.RequireAuth
+  end
+
   scope "/", TheMaestroWeb do
     pipe_through :browser
 
     live "/", HomeLive, :index
+  end
+
+  # Authentication routes
+  scope "/auth", TheMaestroWeb do
+    pipe_through :browser
+
+    get "/logout", AuthController, :logout
+    get "/:provider", AuthController, :request
+    get "/:provider/callback", AuthController, :callback
+  end
+
+  # Protected routes (require authentication if enabled)
+  scope "/", TheMaestroWeb do
+    pipe_through :auth_required
+
+    live "/agent", AgentLive, :index
   end
 
   # OAuth callback endpoint (separate pipeline to avoid CSRF protection)
