@@ -56,7 +56,7 @@ defmodule TheMaestro.Tooling.Tools.ShellTest do
 
   describe "Shell.sandbox_enabled?/0" do
     test "returns configuration value" do
-      # Test with default configuration  
+      # Test with default configuration
       assert Shell.sandbox_enabled?() == true
     end
   end

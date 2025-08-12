@@ -110,10 +110,7 @@ defmodule TheMaestro.Tooling.Tools.Shell do
       Logger.info("Shell tool: Executing command '#{command}'")
 
       # Check if shell tool is enabled
-      unless Shell.enabled?() do
-        Logger.warning("Shell tool: Tool is disabled")
-        {:error, "Shell command execution is disabled in the current configuration"}
-      else
+      if Shell.enabled?() do
         with :ok <- Shell.validate_command(command),
              {:ok, result} <- Shell.execute_sandboxed(params) do
           Logger.info("Shell tool: Command completed successfully")
@@ -123,6 +120,9 @@ defmodule TheMaestro.Tooling.Tools.Shell do
             Logger.warning("Shell tool: Command failed - #{reason}")
             {:error, reason}
         end
+      else
+        Logger.warning("Shell tool: Tool is disabled")
+        {:error, "Shell command execution is disabled in the current configuration"}
       end
     end
 
