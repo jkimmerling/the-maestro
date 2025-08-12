@@ -44,7 +44,8 @@ defmodule TheMaestroWeb.OAuthController do
     received_state = Map.get(params, "state")
 
     # For now, we'll accept any non-empty state
-    # TODO: In production, we should store and validate the actual state value
+    # NOTE: In production, consider storing and validating the actual state value
+    # using a secure session store or encrypted cookies for CSRF protection
     received_state && String.trim(received_state) != ""
   end
 

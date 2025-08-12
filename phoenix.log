@@ -35,3 +35,30 @@ Done in 240ms.
 [info] OAuth credentials cached successfully
 [info] OAuth flow completed successfully!
 [info] Sent 200 in 270ms
+
+Rebuilding...
+
+Done in 173ms.
+[debug] Live reload: lib/the_maestro_web/controllers/oauth_controller.ex
+Compiling 2 files (.ex)
+Generated the_maestro app
+[info] GET /oauth2callback
+[debug] Processing with TheMaestroWeb.OAuthController.callback/2
+  Parameters: %{"authuser" => "0", "code" => "4/0AVMBsJiJ7VomREgtQ9ZO7BcYFy19MKhPb_TEAOmPUUwLnzPA114dqbMlTBKQCDzcG8NqZg", "prompt" => "consent", "scope" => "email profile https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid", "state" => "JsZA6U0b80HMtedjdql8gzduh6TaKWSPRFA7aosmRnk"}
+  Pipelines: [:oauth]
+[info] OAuth callback received with params: ["authuser", "code", "prompt", "scope", "state"]
+[info] Processing authorization code...
+[error] Failed to exchange authorization code: {:token_exchange_failed, 400, "{\n  \"error\": \"invalid_grant\",\n  \"error_description\": \"Bad Request\"\n}"}
+[info] Sent 400 in 226ms
+
+Rebuilding...
+
+Done in 111ms.
+
+Rebuilding...
+
+Done in 20ms.
+
+Rebuilding...
+
+Done in 58ms.
