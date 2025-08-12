@@ -82,6 +82,26 @@ config :ueberauth, Ueberauth.Strategy.Google.OAuth,
 # Configure Gemini provider with consistent project ID for all OAuth users
 config :the_maestro, :gemini, project_id: "even-setup-7wxx5"
 
+# Configure LLM Provider Selection
+# Available providers: :gemini, :openai, :anthropic
+# Default provider for new conversations
+config :the_maestro, :llm_provider, default: :gemini
+
+# Provider-specific configurations
+config :the_maestro, :providers,
+  gemini: %{
+    module: TheMaestro.Providers.Gemini,
+    models: ["gemini-2.5-pro", "gemini-1.5-pro", "gemini-1.5-flash"]
+  },
+  openai: %{
+    module: TheMaestro.Providers.OpenAI,
+    models: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"]
+  },
+  anthropic: %{
+    module: TheMaestro.Providers.Anthropic,
+    models: ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
+  }
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

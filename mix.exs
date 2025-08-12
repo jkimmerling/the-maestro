@@ -64,6 +64,8 @@ defmodule TheMaestro.MixProject do
       {:gemini_ex, "~> 0.2"},
       {:goth, "~> 1.3"},
       {:httpoison, "~> 2.0"},
+      {:openai_ex, "~> 0.6"},
+      {:anthropix, "~> 0.3"},
       # Authentication Dependencies
       {:ueberauth, "~> 0.10"},
       {:ueberauth_google, "~> 0.12"}
