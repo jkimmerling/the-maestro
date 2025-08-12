@@ -12,6 +12,7 @@ defmodule TheMaestroWeb.AuthController do
 
   def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do
     Logger.info("Successful OAuth authentication for user: #{auth.info.email}")
+    Logger.debug("OAuth credentials: #{inspect(auth.credentials)}")
 
     user_info = %{
       "id" => auth.uid,
@@ -20,8 +21,19 @@ defmodule TheMaestroWeb.AuthController do
       "avatar" => auth.info.image
     }
 
+    # Store OAuth credentials for LLM authentication
+    oauth_credentials = %{
+      "access_token" => auth.credentials.token,
+      "refresh_token" => auth.credentials.refresh_token,
+      "expires_at" => auth.credentials.expires_at,
+      "token_type" => auth.credentials.token_type || "Bearer"
+    }
+
+    Logger.debug("Storing oauth_credentials in session: #{inspect(oauth_credentials)}")
+
     conn
     |> put_session(:current_user, user_info)
+    |> put_session(:oauth_credentials, oauth_credentials)
     |> put_flash(:info, "Successfully authenticated!")
     |> redirect(to: ~p"/agent")
   end

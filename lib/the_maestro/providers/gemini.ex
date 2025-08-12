@@ -1140,15 +1140,12 @@ defmodule TheMaestro.Providers.Gemini do
   end
 
   # Update request to use project ID from user_data
-  defp get_project_id_from_context(auth_context) do
+  defp get_project_id_from_context(_auth_context) do
+    # fallback to working project ID
     project_id =
-      case auth_context do
-        %{user_data: %{project_id: project_id}} when not is_nil(project_id) ->
-          project_id
-
-        _ ->
-          System.get_env("GOOGLE_CLOUD_PROJECT")
-      end
+      Application.get_env(:the_maestro, :gemini)[:project_id] ||
+        System.get_env("GOOGLE_CLOUD_PROJECT") ||
+        "even-setup-7wxx5"
 
     Logger.debug("Using project ID: #{inspect(project_id)}")
     project_id

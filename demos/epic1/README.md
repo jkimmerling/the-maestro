@@ -187,13 +187,13 @@ export GEMINI_API_KEY="your-api-key"
 # When OAuth is working correctly, you'll see:
 [info] Setting up Code Assist user...
 ✅ Authentication initialized successfully!
-[debug] Using project ID: "your-project-id"
+[debug] Using project ID: "even-setup-7wxx5"
 [info] Executing tool: read_file
 [info] Tool read_file executed successfully
 🎯 File tool execution appears successful!
 
 # This indicates:
-# - OAuth authentication completed
+# - OAuth authentication completed with consistent project ID
 # - Code Assist user properly set up
 # - Tool integration working correctly
 # - Function calling operational

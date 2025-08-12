@@ -10,30 +10,21 @@ defmodule TheMaestroWeb.AgentLive do
   alias TheMaestro.Agents
 
   def mount(_params, session, socket) do
+    require Logger
+    Logger.debug("AgentLive mount session: #{inspect(Map.keys(session))}")
+
     current_user = Map.get(session, "current_user")
+    oauth_credentials = Map.get(session, "oauth_credentials")
+    Logger.debug("oauth_credentials from session: #{inspect(oauth_credentials)}")
+
     authentication_enabled = authentication_enabled?()
 
-    # Determine agent_id based on authentication mode
-    agent_id =
-      if authentication_enabled && current_user do
-        "user_#{current_user["id"]}"
-      else
-        # For anonymous sessions, create session-based agent ID
-        csrf_token =
-          session["_csrf_token"] ||
-            get_connect_params(socket)["_csrf_token"] ||
-            :crypto.strong_rand_bytes(8) |> Base.encode16() |> String.downcase()
-
-        # Use a truncated version for cleaner agent IDs
-        truncated_token = csrf_token |> String.slice(0, 8)
-        "session_#{truncated_token}"
-      end
-
-    # Get LLM provider from configuration
+    agent_id = determine_agent_id(authentication_enabled, current_user, session, socket)
     llm_provider = Application.get_env(:the_maestro, :llm_provider, TheMaestro.Providers.Gemini)
+    auth_context = create_auth_context(oauth_credentials)
+    agent_opts = build_agent_opts(llm_provider, auth_context)
 
-    # Find or start the agent process
-    case Agents.find_or_start_agent(agent_id, llm_provider: llm_provider) do
+    case Agents.find_or_start_agent(agent_id, agent_opts) do
       {:ok, _pid} ->
         # Subscribe to PubSub updates for this agent
         Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent:#{agent_id}")
@@ -232,6 +223,14 @@ defmodule TheMaestroWeb.AgentLive do
             <p class="mt-2 text-gray-600">
               Welcome, {@current_user["name"] || @current_user["email"]}!
             </p>
+            <div class="mt-3">
+              <.link
+                href={~p"/auth/logout"}
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                Logout
+              </.link>
+            </div>
           <% end %>
 
           <%= if @agent_id do %>
@@ -396,5 +395,42 @@ defmodule TheMaestroWeb.AgentLive do
     |> DateTime.to_time()
     |> Time.to_string()
     |> String.slice(0, 5)
+  end
+
+  defp determine_agent_id(authentication_enabled, current_user, session, socket) do
+    if authentication_enabled && current_user do
+      "user_#{current_user["id"]}"
+    else
+      # For anonymous sessions, create session-based agent ID
+      csrf_token =
+        session["_csrf_token"] ||
+          get_connect_params(socket)["_csrf_token"] ||
+          :crypto.strong_rand_bytes(8) |> Base.encode16() |> String.downcase()
+
+      # Use a truncated version for cleaner agent IDs
+      truncated_token = csrf_token |> String.slice(0, 8)
+      "session_#{truncated_token}"
+    end
+  end
+
+  defp create_auth_context(oauth_credentials) do
+    if oauth_credentials && oauth_credentials["access_token"] do
+      %{
+        type: :oauth,
+        credentials: %{
+          access_token: oauth_credentials["access_token"],
+          refresh_token: oauth_credentials["refresh_token"],
+          expires_at: oauth_credentials["expires_at"],
+          token_type: oauth_credentials["token_type"] || "Bearer"
+        }
+      }
+    else
+      nil
+    end
+  end
+
+  defp build_agent_opts(llm_provider, auth_context) do
+    agent_opts = [llm_provider: llm_provider]
+    if auth_context, do: Keyword.put(agent_opts, :auth_context, auth_context), else: agent_opts
   end
 end
