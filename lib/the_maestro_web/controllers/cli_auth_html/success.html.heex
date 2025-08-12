@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Maestro - Device Authorized</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        text-align: center;
+        padding: 50px 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 40px;
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #4ade80;
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+      }
+      p {
+        font-size: 1.1rem;
+        line-height: 1.6;
+        margin-bottom: 1rem;
+      }
+      .success-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+      }
+      .highlight {
+        background: rgba(74, 222, 128, 0.2);
+        padding: 15px;
+        border-radius: 10px;
+        margin: 20px 0;
+        border-left: 4px solid #4ade80;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="success-icon">✅</div>
+      <h1>Device Authorized!</h1>
+      <p>You have successfully authorized your device to access The Maestro.</p>
+
+      <div class="highlight">
+        <strong>Your terminal session is now authenticated!</strong>
+      </div>
+
+      <p>You can now close this browser tab and return to your terminal.</p>
+      <p>The CLI will automatically continue with your authenticated session.</p>
+    </div>
+  </body>
+</html>

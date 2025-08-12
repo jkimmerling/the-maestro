@@ -53,10 +53,21 @@ defmodule TheMaestroWeb.Router do
     get "/oauth2callback", OAuthController, :callback
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", TheMaestroWeb do
-  #   pipe_through :api
-  # end
+  # CLI Authentication API Routes
+  scope "/api/cli/auth", TheMaestroWeb do
+    pipe_through :api
+
+    post "/device", CliAuthController, :device
+    get "/poll", CliAuthController, :poll
+  end
+
+  # CLI Authentication Browser Routes (need sessions and HTML)
+  scope "/api/cli/auth", TheMaestroWeb do
+    pipe_through :browser
+
+    get "/authorize", CliAuthController, :authorize
+    post "/authorize", CliAuthController, :authorize_post
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:the_maestro, :dev_routes) do
