@@ -331,8 +331,18 @@ defmodule TheMaestro.Tooling.Tools.OpenAPI do
         String.replace(acc, "{#{key}}", to_string(value))
       end)
 
-    # TODO: Add query parameters handling
-    full_url = server_url <> final_path
+    # Build query parameters
+    query_params =
+      arguments
+      |> Enum.filter(fn {key, _value} -> not String.contains?(path, "{#{key}}") end)
+      |> Enum.map(fn {key, value} -> "#{URI.encode(key)}=#{URI.encode(to_string(value))}" end)
+      |> Enum.join("&")
+
+    full_url = case query_params do
+      "" -> server_url <> final_path
+      params -> server_url <> final_path <> "?" <> params
+    end
+
     {:ok, full_url}
   end
 
