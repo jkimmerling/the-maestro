@@ -231,9 +231,24 @@ More tutorials will be added as development progresses through the epics:
 ### Epic 1 Remaining Stories
 - Story 1.2: Core Application & Supervision Tree
 
+### [Story 3.5: Conversation Checkpointing (Save/Restore)](epic3/story3.5/)
+
+Learn how to implement conversation session persistence with safe state serialization and database storage:
+
+- Design database schemas for conversation session storage
+- Implement safe GenServer state serialization/deserialization
+- Build Phoenix Context APIs for session management operations
+- Create Phoenix LiveView interfaces with modal-based session controls
+- Handle security considerations for sensitive data in session storage
+- Integrate real-time updates and broadcasting for session restoration
+
+**Key Concepts**: State persistence, serialization strategies, database design, modal interfaces, security patterns, real-time systems
+
+**Difficulty**: Advanced
+
 ### Epic 3 Remaining Stories
 - Story 3.1: Multi-provider LLM adapters
-- Story 3.5-3.6: Session checkpointing and restoration
+- Story 3.6: Epic 3 Demo Creation
 
 ### Epic 4: Terminal User Interface (TUI)
 - TUI framework integration
