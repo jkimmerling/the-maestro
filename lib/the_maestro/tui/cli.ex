@@ -263,7 +263,7 @@ defmodule TheMaestro.TUI.CLI do
   defp format_message_type(type), do: String.upcase(to_string(type))
 
   defp parse_args(args) do
-    # TODO: Implement proper argument parsing for future enhancements
+    # Future enhancement: Implement proper argument parsing for CLI options
     # For now, just return empty options
     _args = args
     %{}
