@@ -13,6 +13,8 @@ defmodule TheMaestro.TUI.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      # Start HTTPoison (needed for device authorization flow)
+      {Finch, name: TheMaestro.Finch},
       # Start the Registry for agent processes (needed for core functionality)
       {Registry, keys: :unique, name: TheMaestro.Agents.Registry},
       # Start the DynamicSupervisor for agent processes
