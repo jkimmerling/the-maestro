@@ -67,3 +67,106 @@ The demo verifies:
 - ✅ Complex file operations work (nested directories, multiple operations)
 
 This demonstrates that the new file system tools are ready for production use with Gemini and other LLM providers.
+
+## Story 3.5: Conversation Checkpointing (Save/Restore)
+
+**Demo**: `story3.5_demo.exs`
+
+Demonstrates the conversation session persistence functionality that allows users to save and restore their conversation history:
+
+### Features Demonstrated
+
+- **Session Save**: Save complete agent state including message history and metadata
+- **Session Restore**: Restore previous conversation state with full message history
+- **Session Listing**: View available saved sessions for an agent
+- **State Serialization**: Safe serialization/deserialization of complex GenServer state
+- **Database Integration**: PostgreSQL storage with proper indexing and constraints
+
+### Running the Demo
+
+```bash
+# Run the session checkpointing demo
+mix run demos/epic3/story3.5_demo.exs
+```
+
+### What You'll See
+
+1. **Agent Creation**: Creates a test agent with unique ID
+2. **Conversation Simulation**: Exchanges several messages to build conversation history
+3. **Session Save**: Saves the current conversation state to the database
+4. **Session Listing**: Shows all saved sessions for the agent
+5. **State Modification**: Adds new messages to change current state
+6. **Session Restore**: Restores the original saved conversation
+7. **Verification**: Confirms message history integrity after restore
+
+### Sample Output
+
+```
+🎯 Epic 3 Story 3.5 Demo: Conversation Checkpointing
+======================================================
+
+🤖 Creating agent with ID: demo_agent_1755082132017
+✅ Agent created successfully
+
+💬 Starting demonstration conversation...
+👤 User: Hello, this is my first message
+🤖 Agent: I received your message: "Hello, this is my first message". This is a test response.
+[... more messages ...]
+
+📊 Current conversation has 6 messages
+
+💾 Testing session save functionality...
+✅ Session 'demo_session_1755082134316' saved successfully!
+   - Session ID: 76048c83-dbe2-4cd6-bbe2-8678aadeb5c3
+   - Message count: 6
+   - Created at: 2025-08-13 10:48:54Z
+
+📋 Testing session listing...
+✅ Found 1 saved sessions for agent
+   - demo_session_1755082134316 (6 messages)
+
+🔄 Testing session restore functionality...
+📊 Current state has 8 messages
+✅ Session restored successfully!
+   - Original messages: 6
+   - Before restore: 8
+   - After restore: 6
+✅ Message history correctly restored!
+
+🔍 Verifying restored conversation content...
+📝 Restored message history:
+   1. 👤 Hello, this is my first message...
+   2. 🤖 I received your message: "Hello, this is my first message"...
+   [... all original messages preserved ...]
+
+✅ Demo completed successfully!
+🎉 Conversation checkpointing is working correctly!
+```
+
+### Technical Verification
+
+The demo verifies:
+- ✅ Safe serialization/deserialization of GenServer state
+- ✅ Database storage with proper schema and constraints
+- ✅ Complete message history preservation including timestamps
+- ✅ Session metadata accuracy (message counts, timestamps)
+- ✅ State restoration without data loss
+- ✅ Error handling for edge cases
+
+### Web Interface Demo
+
+After running the script demo, you can also test the web interface:
+
+```bash
+# Start the Phoenix server
+mix phx.server
+
+# Visit http://localhost:4000/agent
+# 1. Send some messages to create conversation history
+# 2. Click "💾 Save Session" and enter a session name
+# 3. Send more messages to change the current state
+# 4. Click "📂 Restore Session" and select your saved session
+# 5. Observe the conversation history return to the saved state
+```
+
+This demonstrates that conversation checkpointing provides a complete user experience from programmatic API to web interface.

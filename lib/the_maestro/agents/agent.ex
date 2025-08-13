@@ -106,6 +106,54 @@ defmodule TheMaestro.Agents.Agent do
   end
 
   @doc """
+  Saves the current agent session to the database.
+
+  ## Parameters
+    - `agent_id`: The unique identifier for the agent
+    - `session_name`: Optional name for the session
+    - `user_id`: Optional user ID for authenticated sessions
+    
+  ## Returns
+    - `{:ok, conversation_session}`: Session saved successfully
+    - `{:error, reason}`: If an error occurred
+  """
+  @spec save_session(String.t(), String.t() | nil, String.t() | nil) ::
+          {:ok, TheMaestro.Sessions.ConversationSession.t()} | {:error, term()}
+  def save_session(agent_id, session_name \\ nil, user_id \\ nil) do
+    GenServer.call(via_tuple(agent_id), {:save_session, session_name, user_id})
+  end
+
+  @doc """
+  Restores an agent session from the database.
+
+  ## Parameters
+    - `agent_id`: The unique identifier for the agent
+    - `session_name`: The name of the session to restore
+    
+  ## Returns
+    - `:ok`: Session restored successfully
+    - `{:error, reason}`: If an error occurred
+  """
+  @spec restore_session(String.t(), String.t()) :: :ok | {:error, term()}
+  def restore_session(agent_id, session_name) do
+    GenServer.call(via_tuple(agent_id), {:restore_session, session_name})
+  end
+
+  @doc """
+  Lists all saved sessions for an agent.
+
+  ## Parameters
+    - `agent_id`: The unique identifier for the agent
+    
+  ## Returns
+    List of conversation session structs
+  """
+  @spec list_sessions(String.t()) :: [TheMaestro.Sessions.ConversationSession.t()]
+  def list_sessions(agent_id) do
+    TheMaestro.Sessions.list_sessions_for_agent(agent_id)
+  end
+
+  @doc """
   Lists all available LLM providers and their supported models.
   """
   @spec list_providers() :: %{atom() => %{module: module(), models: [String.t()]}}
@@ -237,6 +285,53 @@ defmodule TheMaestro.Agents.Agent do
   @impl true
   def handle_call(:get_state, _from, state) do
     {:reply, state, state}
+  end
+
+  @impl true
+  def handle_call({:save_session, session_name, user_id}, _from, state) do
+    require Logger
+
+    case TheMaestro.Sessions.save_session(state, session_name, user_id) do
+      {:ok, conversation_session} ->
+        Logger.info(
+          "Session '#{conversation_session.session_name}' saved for agent #{state.agent_id}"
+        )
+
+        {:reply, {:ok, conversation_session}, state}
+
+      {:error, reason} ->
+        Logger.error("Failed to save session for agent #{state.agent_id}: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:restore_session, session_name}, _from, current_state) do
+    require Logger
+
+    case TheMaestro.Sessions.restore_session(current_state.agent_id, session_name) do
+      {:ok, restored_state} ->
+        Logger.info("Session '#{session_name}' restored for agent #{current_state.agent_id}")
+
+        # Preserve the current LLM provider and auth context, but update everything else
+        updated_state = %{
+          restored_state
+          | llm_provider: current_state.llm_provider,
+            auth_context: current_state.auth_context
+        }
+
+        # Broadcast that session was restored
+        broadcast_session_restored(current_state.agent_id, session_name)
+
+        {:reply, :ok, updated_state}
+
+      {:error, reason} ->
+        Logger.error(
+          "Failed to restore session '#{session_name}' for agent #{current_state.agent_id}: #{inspect(reason)}"
+        )
+
+        {:reply, {:error, reason}, current_state}
+    end
   end
 
   # Helper Functions
@@ -615,6 +710,14 @@ defmodule TheMaestro.Agents.Agent do
       TheMaestro.PubSub,
       "agent:#{agent_id}",
       {:processing_complete, final_response}
+    )
+  end
+
+  defp broadcast_session_restored(agent_id, session_name) do
+    Phoenix.PubSub.broadcast(
+      TheMaestro.PubSub,
+      "agent:#{agent_id}",
+      {:session_restored, session_name}
     )
   end
 end
