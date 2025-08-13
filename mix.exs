@@ -28,10 +28,11 @@ defmodule TheMaestro.MixProject do
   defp application_mod do
     # Check if we're building for escript by examining the environment
     case Mix.env() do
-      :prod -> 
+      :prod ->
         # In production, assume minimal startup for escript
         {TheMaestro.TUI.Application, []}
-      _ -> 
+
+      _ ->
         # In dev/test, use full Phoenix application
         {TheMaestro.Application, []}
     end

@@ -1,11 +1,11 @@
 defmodule TheMaestro.TUI.Application do
   @moduledoc """
   Minimal OTP Application for TUI mode.
-  
+
   This application module starts only the essential services needed for the TUI,
   avoiding Phoenix web server, file watchers, and other web-related services.
   """
-  
+
   use Application
 
   alias TheMaestro.Tooling.Tools.Shell

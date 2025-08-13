@@ -22,22 +22,24 @@ end
 
 if config_env() == :prod do
   # Check if we're running as escript by examining the script name
-  is_escript = try do
-    script_name = :escript.script_name()
-    
-    # script_name returns a charlist when running as escript
-    case script_name do
-      name when is_list(name) -> 
-        String.contains?(to_string(name), "maestro_tui")
-      _ -> 
+  is_escript =
+    try do
+      script_name = :escript.script_name()
+
+      # script_name returns a charlist when running as escript
+      case script_name do
+        name when is_list(name) ->
+          String.contains?(to_string(name), "maestro_tui")
+
+        _ ->
+          false
+      end
+    rescue
+      _ ->
+        # Not running as escript
         false
     end
-  rescue
-    _ -> 
-      # Not running as escript
-      false
-  end
-  
+
   # Skip database configuration for TUI mode (escript)
   unless is_escript do
     database_url =

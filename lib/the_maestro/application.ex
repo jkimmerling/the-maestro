@@ -13,38 +13,39 @@ defmodule TheMaestro.Application do
   def start(_type, _args) do
     # Check if we're running in escript mode by examining the process name
     is_escript = is_running_as_escript()
-    
-    children = if is_escript do
-      # Minimal startup for TUI mode
-      [
-        # Start the Registry for agent processes
-        {Registry, keys: :unique, name: TheMaestro.Agents.Registry},
-        # Start the DynamicSupervisor for agent processes
-        {TheMaestro.Agents.DynamicSupervisor, []},
-        # Start the Tooling registry GenServer
-        TheMaestro.Tooling
-      ]
-    else
-      # Full Phoenix application startup
-      [
-        TheMaestroWeb.Telemetry,
-        TheMaestro.Repo,
-        {DNSCluster, query: Application.get_env(:the_maestro, :dns_cluster_query) || :ignore},
-        {Phoenix.PubSub, name: TheMaestro.PubSub},
-        # Start the Finch HTTP client for sending emails
-        {Finch, name: TheMaestro.Finch},
-        # Start the Registry for agent processes
-        {Registry, keys: :unique, name: TheMaestro.Agents.Registry},
-        # Start the DynamicSupervisor for agent processes
-        {TheMaestro.Agents.DynamicSupervisor, []},
-        # Start the Tooling registry GenServer
-        TheMaestro.Tooling,
-        # Start a worker by calling: TheMaestro.Worker.start_link(arg)
-        # {TheMaestro.Worker, arg},
-        # Start to serve requests, typically the last entry
-        TheMaestroWeb.Endpoint
-      ]
-    end
+
+    children =
+      if is_escript do
+        # Minimal startup for TUI mode
+        [
+          # Start the Registry for agent processes
+          {Registry, keys: :unique, name: TheMaestro.Agents.Registry},
+          # Start the DynamicSupervisor for agent processes
+          {TheMaestro.Agents.DynamicSupervisor, []},
+          # Start the Tooling registry GenServer
+          TheMaestro.Tooling
+        ]
+      else
+        # Full Phoenix application startup
+        [
+          TheMaestroWeb.Telemetry,
+          TheMaestro.Repo,
+          {DNSCluster, query: Application.get_env(:the_maestro, :dns_cluster_query) || :ignore},
+          {Phoenix.PubSub, name: TheMaestro.PubSub},
+          # Start the Finch HTTP client for sending emails
+          {Finch, name: TheMaestro.Finch},
+          # Start the Registry for agent processes
+          {Registry, keys: :unique, name: TheMaestro.Agents.Registry},
+          # Start the DynamicSupervisor for agent processes
+          {TheMaestro.Agents.DynamicSupervisor, []},
+          # Start the Tooling registry GenServer
+          TheMaestro.Tooling,
+          # Start a worker by calling: TheMaestro.Worker.start_link(arg)
+          # {TheMaestro.Worker, arg},
+          # Start to serve requests, typically the last entry
+          TheMaestroWeb.Endpoint
+        ]
+      end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
@@ -63,6 +64,7 @@ defmodule TheMaestro.Application do
           Shell.register_tool()
           OpenAPI.register_tool()
         end
+
         result
 
       error ->
@@ -83,18 +85,22 @@ defmodule TheMaestro.Application do
     # Check multiple ways to detect escript mode
     cond do
       # Check if RUNNING_AS_ESCRIPT env var is set
-      System.get_env("RUNNING_AS_ESCRIPT") == "true" -> true
-      
+      System.get_env("RUNNING_AS_ESCRIPT") == "true" ->
+        true
+
       # Check if we have escript in the process arguments
-      String.contains?(to_string(System.argv()), "maestro_tui") -> true
-      
-      # Check if the current process is an escript
-      case :init.get_arguments() do
-        [] -> false
-        args -> 
-          args
-          |> Enum.any?(fn arg -> String.contains?(to_string(arg), "maestro_tui") end)
-      end
+      String.contains?(to_string(System.argv()), "maestro_tui") ->
+        true
+
+        # Check if the current process is an escript
+        case :init.get_arguments() do
+          [] ->
+            false
+
+          args ->
+            args
+            |> Enum.any?(fn arg -> String.contains?(to_string(arg), "maestro_tui") end)
+        end
     end
   rescue
     _ -> false
