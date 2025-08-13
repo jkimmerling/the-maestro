@@ -56,9 +56,8 @@ config :the_maestro, TheMaestroWeb.Endpoint,
 config :the_maestro, TheMaestroWeb.Endpoint,
   live_reload: [
     patterns: [
-      ~r"priv/static/(?!uploads/).*(js|css|png|jpeg|jpg|gif|svg)$",
-      ~r"priv/gettext/.*(po)$",
-      ~r"lib/the_maestro_web/(controllers|live|components)/.*(ex|heex)$"
+      "priv/gettext/**/*.po",
+      "lib/the_maestro_web/{controllers,live,components}/**/*.{ex,heex}"
     ]
   ]
 
