@@ -174,6 +174,15 @@ defmodule TheMaestro.Agents.Agent do
     end
   end
 
+  @doc """
+  Returns the via tuple for an agent with the given ID.
+  This is used for process registration and lookup.
+  """
+  @spec via_tuple(String.t()) :: {:via, Registry, {module(), String.t()}}
+  def via_tuple(agent_id) do
+    {:via, Registry, {TheMaestro.Agents.Registry, agent_id}}
+  end
+
   # Server Callbacks
 
   @impl true
@@ -602,10 +611,6 @@ defmodule TheMaestro.Agents.Agent do
         content: message.content
       }
     end)
-  end
-
-  defp via_tuple(agent_id) do
-    {:via, Registry, {TheMaestro.Agents.Registry, agent_id}}
   end
 
   # Provider Resolution
