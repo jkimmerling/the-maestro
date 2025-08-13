@@ -68,7 +68,11 @@ defmodule TheMaestro.MixProject do
       {:anthropix, "~> 0.3"},
       # Authentication Dependencies
       {:ueberauth, "~> 0.10"},
-      {:ueberauth_google, "~> 0.12"}
+      {:ueberauth_google, "~> 0.12"},
+      # YAML parsing for OpenAPI specs
+      {:yaml_elixir, "~> 2.9"},
+      # Testing Dependencies
+      {:mock, "~> 0.3", only: :test}
     ]
   end
 
