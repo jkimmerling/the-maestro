@@ -9,7 +9,8 @@ defmodule TheMaestro.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      escript: escript()
     ]
   end
 
@@ -18,14 +19,37 @@ defmodule TheMaestro.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {TheMaestro.Application, []},
+      mod: application_mod(),
       extra_applications: [:logger, :runtime_tools]
     ]
+  end
+
+  # Don't start the full Phoenix application when running as escript
+  defp application_mod do
+    # Check if we're building for escript by examining the environment
+    case Mix.env() do
+      :prod -> 
+        # In production, assume minimal startup for escript
+        {TheMaestro.TUI.Application, []}
+      _ -> 
+        # In dev/test, use full Phoenix application
+        {TheMaestro.Application, []}
+    end
   end
 
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  # Configures the escript for building the TUI executable
+  defp escript do
+    [
+      main_module: TheMaestro.TUI.CLI,
+      name: "maestro_tui",
+      # Embed compile-time flag that can be checked at runtime
+      embed_elixir: true
+    ]
+  end
 
   # Specifies your project dependencies.
   #
@@ -72,7 +96,9 @@ defmodule TheMaestro.MixProject do
       # YAML parsing for OpenAPI specs
       {:yaml_elixir, "~> 2.9"},
       # Testing Dependencies
-      {:mock, "~> 0.3", only: :test}
+      {:mock, "~> 0.3", only: :test},
+      # TUI Dependencies - simple terminal interface without native deps
+      {:io_ansi_table, "~> 1.0"}
     ]
   end
 

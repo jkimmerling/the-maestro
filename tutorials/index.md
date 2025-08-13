@@ -264,10 +264,31 @@ Learn how to create comprehensive demonstrations that showcase all advanced capa
 ### Epic 3 Remaining Stories
 - Story 3.1: Multi-provider LLM adapters
 
-### Epic 4: Terminal User Interface (TUI)
-- TUI framework integration
-- Terminal-based agent interaction
-- Cross-platform compatibility
+---
+
+## Epic 4: Terminal User Interface (TUI)
+
+Learn how to build professional terminal user interfaces for AI agents using pure Elixir and ANSI escape codes.
+
+### [Story 4.1: TUI Framework Integration & Basic Display](epic4/story4.1/)
+
+Learn how to create a production-ready Terminal User Interface (TUI) for The Maestro AI agent:
+
+- Build terminal interfaces using pure Elixir and ANSI escape codes
+- Implement application separation for web vs terminal contexts
+- Create production-ready escript executables with minimal dependencies
+- Design cross-platform compatible interfaces (Mac/Linux)
+- Handle terminal signals properly (Ctrl-C, SIGTERM) for clean exits
+- Configure runtime detection to avoid Phoenix startup in TUI mode
+
+**Key Concepts**: Terminal interfaces, ANSI control, escript deployment, application separation, signal handling, cross-platform compatibility
+
+**Difficulty**: Intermediate to Advanced
+
+### Coming in Epic 4
+- Story 4.2: Real-time agent communication in TUI
+- Story 4.3: Advanced TUI features and tool integration
+- Story 4.4: Epic 4 comprehensive demonstration
 
 ## Contributing
 
