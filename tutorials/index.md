@@ -285,10 +285,25 @@ Learn how to create a production-ready Terminal User Interface (TUI) for The Mae
 
 **Difficulty**: Intermediate to Advanced
 
+### [Story 4.2: Configurable TUI Authentication](epic4/story4.2/)
+
+Learn how to implement configurable authentication for Terminal User Interface applications using OAuth 2.0 Device Authorization Grant:
+
+- Build configurable authentication flows that support both authenticated and anonymous modes
+- Implement OAuth 2.0 Device Authorization Grant (RFC 8628) for CLI applications
+- Create secure local token storage with proper file permissions
+- Integrate HTTP client functionality in escript applications
+- Design clear user instructions and feedback for device authorization
+- Handle authentication errors gracefully with meaningful error messages
+
+**Key Concepts**: Device authorization flow, OAuth 2.0, CLI authentication, secure token storage, configuration-driven behavior, escript HTTP integration
+
+**Difficulty**: Advanced
+
 ### Coming in Epic 4
-- Story 4.2: Real-time agent communication in TUI
-- Story 4.3: Advanced TUI features and tool integration
-- Story 4.4: Epic 4 comprehensive demonstration
+- Story 4.3: Real-time agent communication in TUI  
+- Story 4.4: Advanced TUI features and tool integration
+- Story 4.5: Epic 4 comprehensive demonstration
 
 ## Contributing
 

@@ -18,14 +18,22 @@ defmodule TheMaestro.TUI.CLI do
     # Parse command line arguments (future enhancement)
     _parsed_args = parse_args(args)
 
-    # Initialize the TUI
-    initialize_tui()
+    # Check authentication requirements and handle login
+    case handle_authentication() do
+      {:ok, auth_info} ->
+        # Initialize the TUI with authentication info
+        initialize_tui(auth_info)
 
-    # Start the main loop
-    run_tui()
+        # Start the main loop
+        run_tui()
+
+      {:error, reason} ->
+        IO.puts([IO.ANSI.red(), "Authentication failed: #{reason}", IO.ANSI.reset()])
+        System.halt(1)
+    end
   end
 
-  defp initialize_tui do
+  defp initialize_tui(auth_info) do
     # Clear screen and hide cursor
     IO.write([
       IO.ANSI.clear(),
@@ -46,14 +54,37 @@ defmodule TheMaestro.TUI.CLI do
       signal_handler(parent)
     end)
 
+    # Build welcome message based on authentication status
+    welcome_messages =
+      case auth_info do
+        %{authenticated: true, user_email: email} ->
+          [
+            %{type: :system, content: "Welcome to The Maestro TUI!"},
+            %{type: :system, content: "Authenticated as: #{email}"},
+            %{
+              type: :system,
+              content: "Type your message and press Enter to chat with the agent."
+            },
+            %{type: :system, content: "Press Ctrl-C or 'q' to exit."}
+          ]
+
+        %{authenticated: false} ->
+          [
+            %{type: :system, content: "Welcome to The Maestro TUI!"},
+            %{type: :system, content: "Running in anonymous mode"},
+            %{
+              type: :system,
+              content: "Type your message and press Enter to chat with the agent."
+            },
+            %{type: :system, content: "Press Ctrl-C or 'q' to exit."}
+          ]
+      end
+
     # Initial state
     initial_state = %{
-      conversation_history: [
-        %{type: :system, content: "Welcome to The Maestro TUI!"},
-        %{type: :system, content: "Type your message and press Enter to chat with the agent."},
-        %{type: :system, content: "Press Ctrl-C or 'q' to exit."}
-      ],
-      current_input: ""
+      conversation_history: welcome_messages,
+      current_input: "",
+      auth_info: auth_info
     }
 
     # Store state in process dictionary for simple state management
@@ -267,5 +298,315 @@ defmodule TheMaestro.TUI.CLI do
     # For now, just return empty options
     _args = args
     %{}
+  end
+
+  # Authentication handling functions
+
+  # Handles authentication based on application configuration.
+  # Returns {:ok, auth_info} or {:error, reason}.
+  defp handle_authentication do
+    # Read configuration to determine if authentication is required
+    case read_authentication_config() do
+      {:ok, true} ->
+        # Authentication is required - start device authorization flow
+        initiate_device_authorization_flow()
+
+      {:ok, false} ->
+        # Authentication is disabled - proceed in anonymous mode
+        {:ok, %{authenticated: false}}
+
+      {:error, reason} ->
+        {:error, "Failed to read configuration: #{reason}"}
+    end
+  end
+
+  defp read_authentication_config do
+    # Read the configuration from the application environment
+    # This will work whether we're in an escript or regular application
+    case Application.get_env(:the_maestro, :require_authentication) do
+      true -> {:ok, true}
+      false -> {:ok, false}
+      # Default to requiring authentication for security
+      nil -> {:ok, true}
+      _ -> {:error, "Invalid authentication configuration"}
+    end
+  end
+
+  defp initiate_device_authorization_flow do
+    IO.puts([IO.ANSI.bright(), "Checking for existing authentication...", IO.ANSI.reset()])
+
+    # First, check if we have a valid stored token
+    case load_stored_token() do
+      {:ok, token_info} ->
+        IO.puts([IO.ANSI.green(), "Found valid authentication token", IO.ANSI.reset()])
+        {:ok, token_info}
+
+      {:error, _reason} ->
+        IO.puts([
+          IO.ANSI.yellow(),
+          "No valid token found, starting authentication...",
+          IO.ANSI.reset()
+        ])
+
+        start_device_authorization()
+    end
+  end
+
+  defp start_device_authorization do
+    # Get device authorization parameters
+    base_url = get_base_url()
+
+    IO.puts([
+      IO.ANSI.bright(),
+      "Starting device authorization flow...",
+      IO.ANSI.reset()
+    ])
+
+    # Step 1: Request device code
+    case request_device_code(base_url) do
+      {:ok, device_response} ->
+        display_authorization_instructions(device_response)
+        poll_for_authorization(base_url, device_response)
+
+      {:error, reason} ->
+        {:error, "Failed to request device code: #{reason}"}
+    end
+  end
+
+  defp get_base_url do
+    # For TUI, we assume the web server is running on localhost:4000
+    # In a production deployment, this could be configurable
+    "http://localhost:4000"
+  end
+
+  defp request_device_code(base_url) do
+    url = "#{base_url}/api/cli/auth/device"
+
+    case HTTPoison.post(url, "", [{"Content-Type", "application/json"}]) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+        case Jason.decode(body) do
+          {:ok, response} -> {:ok, response}
+          {:error, _} -> {:error, "Invalid JSON response"}
+        end
+
+      {:ok, %HTTPoison.Response{status_code: status_code}} ->
+        {:error, "HTTP error: #{status_code}"}
+
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, "Network error: #{reason}"}
+    end
+  end
+
+  defp display_authorization_instructions(device_response) do
+    IO.write([IO.ANSI.clear(), IO.ANSI.home()])
+
+    IO.puts([
+      IO.ANSI.bright(),
+      IO.ANSI.blue(),
+      "┌────────────────────────────────────────────────────────────────────────────┐",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts([
+      IO.ANSI.bright(),
+      IO.ANSI.blue(),
+      "│                        DEVICE AUTHORIZATION REQUIRED                       │",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts([
+      IO.ANSI.bright(),
+      IO.ANSI.blue(),
+      "└────────────────────────────────────────────────────────────────────────────┘",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts("")
+
+    IO.puts([
+      IO.ANSI.bright(),
+      "To authorize this device, please:",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts("")
+
+    IO.puts([
+      IO.ANSI.bright(),
+      "1. Open your browser and visit:",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts([
+      "   ",
+      IO.ANSI.bright(),
+      IO.ANSI.cyan(),
+      device_response["verification_uri_complete"],
+      IO.ANSI.reset()
+    ])
+
+    IO.puts("")
+
+    IO.puts([
+      IO.ANSI.bright(),
+      "2. Enter this user code if prompted:",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts([
+      "   ",
+      IO.ANSI.bright(),
+      IO.ANSI.yellow(),
+      device_response["user_code"],
+      IO.ANSI.reset()
+    ])
+
+    IO.puts("")
+
+    IO.puts([
+      IO.ANSI.faint(),
+      "Waiting for authorization... (this will timeout in #{div(device_response["expires_in"], 60)} minutes)",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts("")
+  end
+
+  defp poll_for_authorization(base_url, device_response) do
+    device_code = device_response["device_code"]
+    # Convert to milliseconds
+    interval = device_response["interval"] * 1000
+    url = "#{base_url}/api/cli/auth/poll?device_code=#{device_code}"
+
+    poll_loop(url, interval, device_response["expires_in"])
+  end
+
+  defp poll_loop(url, interval, remaining_time) when remaining_time > 0 do
+    :timer.sleep(interval)
+
+    case HTTPoison.get(url) do
+      {:ok, response} ->
+        handle_poll_response(response, url, interval, remaining_time)
+
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, "Network error during polling: #{reason}"}
+    end
+  end
+
+  defp poll_loop(_url, _interval, _remaining_time) do
+    {:error, "Authorization timeout"}
+  end
+
+  defp handle_poll_response(
+         %HTTPoison.Response{status_code: 200, body: body},
+         _url,
+         _interval,
+         _remaining_time
+       ) do
+    case Jason.decode(body) do
+      {:ok, %{"access_token" => access_token}} ->
+        handle_successful_authorization(access_token)
+
+      {:error, _} ->
+        {:error, "Invalid response from server"}
+    end
+  end
+
+  defp handle_poll_response(%HTTPoison.Response{status_code: 428}, url, interval, remaining_time) do
+    # Still waiting for authorization
+    remaining = remaining_time - div(interval, 1000)
+    poll_loop(url, interval, remaining)
+  end
+
+  defp handle_poll_response(
+         %HTTPoison.Response{status_code: 400, body: body},
+         _url,
+         _interval,
+         _remaining_time
+       ) do
+    case Jason.decode(body) do
+      {:ok, %{"error" => "expired_token"}} ->
+        {:error, "Authorization timeout - please try again"}
+
+      {:ok, %{"error" => error}} ->
+        {:error, "Authorization failed: #{error}"}
+
+      _ ->
+        {:error, "Authorization failed"}
+    end
+  end
+
+  defp handle_successful_authorization(access_token) do
+    # Success! We got the access token
+    auth_info = %{
+      authenticated: true,
+      access_token: access_token,
+      # We'd get this from the token in a real implementation
+      user_email: "authenticated_user"
+    }
+
+    # Store the token for future use
+    store_token(auth_info)
+
+    IO.puts([IO.ANSI.green(), "✓ Authorization successful!", IO.ANSI.reset()])
+    # Brief pause to show success message
+    :timer.sleep(1000)
+
+    {:ok, auth_info}
+  end
+
+  defp store_token(auth_info) do
+    # Store token in user's home directory
+    home_dir = System.user_home!()
+    maestro_dir = Path.join(home_dir, ".maestro")
+    token_file = Path.join(maestro_dir, "tui_credentials.json")
+
+    # Ensure directory exists
+    File.mkdir_p!(maestro_dir)
+
+    # Create token data
+    token_data = %{
+      access_token: auth_info.access_token,
+      user_email: auth_info.user_email,
+      stored_at: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    # Write to file
+    case Jason.encode(token_data) do
+      {:ok, json} ->
+        File.write!(token_file, json)
+        # Set file permissions to be readable only by owner (600)
+        File.chmod!(token_file, 0o600)
+
+      {:error, _} ->
+        :error
+    end
+  end
+
+  defp load_stored_token do
+    home_dir = System.user_home!()
+    token_file = Path.join([home_dir, ".maestro", "tui_credentials.json"])
+
+    case File.read(token_file) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, token_data} ->
+            # In a real implementation, we'd validate the token here
+            # For now, assume it's valid if it exists
+            auth_info = %{
+              authenticated: true,
+              access_token: token_data["access_token"],
+              user_email: token_data["user_email"] || "authenticated_user"
+            }
+
+            {:ok, auth_info}
+
+          {:error, _} ->
+            {:error, "Invalid token file format"}
+        end
+
+      {:error, _} ->
+        {:error, "No stored token found"}
+    end
   end
 end
