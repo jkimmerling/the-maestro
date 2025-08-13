@@ -28,15 +28,20 @@ defmodule TheMaestro.TUI.CLITest do
     end
 
     test "handles :status_update messages for thinking state" do
+      test_pid = self()
+
       # Simulate TUI process receiving PubSub messages
       _pid =
         spawn_link(fn ->
           Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent_status")
 
           receive do
-            {:status_update, :thinking} -> send(self(), :thinking_received)
+            {:status_update, :thinking} -> send(test_pid, :thinking_received)
           end
         end)
+
+      # Give the spawned process time to subscribe
+      Process.sleep(10)
 
       # Broadcast thinking status
       Phoenix.PubSub.broadcast(TheMaestro.PubSub, "agent_status", {:status_update, :thinking})
@@ -46,15 +51,20 @@ defmodule TheMaestro.TUI.CLITest do
     end
 
     test "handles :tool_call_start messages with tool name and arguments" do
+      test_pid = self()
+
       _pid =
         spawn_link(fn ->
           Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent_status")
 
           receive do
             {:tool_call_start, %{name: "read_file", arguments: %{path: "/test/path"}}} ->
-              send(self(), :tool_start_received)
+              send(test_pid, :tool_start_received)
           end
         end)
+
+      # Give the spawned process time to subscribe
+      Process.sleep(10)
 
       # Broadcast tool call start
       broadcast(TheMaestro.PubSub, "agent_status", {
@@ -66,15 +76,20 @@ defmodule TheMaestro.TUI.CLITest do
     end
 
     test "handles :tool_call_end messages with tool results" do
+      test_pid = self()
+
       _pid =
         spawn_link(fn ->
           Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent_status")
 
           receive do
             {:tool_call_end, %{name: "read_file", result: "file contents"}} ->
-              send(self(), :tool_end_received)
+              send(test_pid, :tool_end_received)
           end
         end)
+
+      # Give the spawned process time to subscribe
+      Process.sleep(10)
 
       # Broadcast tool call end
       broadcast(TheMaestro.PubSub, "agent_status", {
@@ -86,15 +101,20 @@ defmodule TheMaestro.TUI.CLITest do
     end
 
     test "handles :stream_chunk messages for real-time output" do
+      test_pid = self()
+
       _pid =
         spawn_link(fn ->
           Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent_status")
 
           receive do
             {:stream_chunk, "partial response"} ->
-              send(self(), :chunk_received)
+              send(test_pid, :chunk_received)
           end
         end)
+
+      # Give the spawned process time to subscribe
+      Process.sleep(10)
 
       broadcast(TheMaestro.PubSub, "agent_status", {:stream_chunk, "partial response"})
 
@@ -102,15 +122,20 @@ defmodule TheMaestro.TUI.CLITest do
     end
 
     test "handles :processing_complete messages" do
+      test_pid = self()
+
       _pid =
         spawn_link(fn ->
           Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent_status")
 
           receive do
             {:processing_complete, "final response"} ->
-              send(self(), :complete_received)
+              send(test_pid, :complete_received)
           end
         end)
+
+      # Give the spawned process time to subscribe
+      Process.sleep(10)
 
       broadcast(TheMaestro.PubSub, "agent_status", {:processing_complete, "final response"})
 
