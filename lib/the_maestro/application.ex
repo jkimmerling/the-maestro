@@ -12,7 +12,7 @@ defmodule TheMaestro.Application do
   @impl true
   def start(_type, _args) do
     # Check if we're running in escript mode by examining the process name
-    is_escript = is_running_as_escript()
+    is_escript = running_as_escript?()
 
     children =
       if is_escript do
@@ -81,28 +81,21 @@ defmodule TheMaestro.Application do
   end
 
   # Helper function to detect if running as escript
-  defp is_running_as_escript do
-    # Check multiple ways to detect escript mode
-    cond do
-      # Check if RUNNING_AS_ESCRIPT env var is set
-      System.get_env("RUNNING_AS_ESCRIPT") == "true" ->
-        true
-
-      # Check if we have escript in the process arguments
-      String.contains?(to_string(System.argv()), "maestro_tui") ->
-        true
-
-        # Check if the current process is an escript
-        case :init.get_arguments() do
-          [] ->
-            false
-
-          args ->
-            args
-            |> Enum.any?(fn arg -> String.contains?(to_string(arg), "maestro_tui") end)
-        end
-    end
+  defp running_as_escript? do
+    System.get_env("RUNNING_AS_ESCRIPT") == "true" or
+      String.contains?(to_string(System.argv()), "maestro_tui") or
+      escript_in_arguments?()
   rescue
     _ -> false
+  end
+
+  defp escript_in_arguments? do
+    case :init.get_arguments() do
+      [] ->
+        false
+
+      args ->
+        Enum.any?(args, fn arg -> String.contains?(to_string(arg), "maestro_tui") end)
+    end
   end
 end

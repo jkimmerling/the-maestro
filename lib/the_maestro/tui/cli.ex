@@ -151,29 +151,27 @@ defmodule TheMaestro.TUI.CLI do
   end
 
   defp get_input do
-    try do
-      # Read line from stdin
-      case IO.gets("") do
-        :eof ->
-          {:quit}
+    # Read line from stdin
+    case IO.gets("") do
+      :eof ->
+        {:quit}
 
-        {:error, reason} ->
-          {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
 
-        line when is_binary(line) ->
-          trimmed = String.trim(line)
+      line when is_binary(line) ->
+        trimmed = String.trim(line)
 
-          case trimmed do
-            "q" -> {:quit}
-            "" -> {:input, ""}
-            text -> {:input, text}
-          end
-      end
-    rescue
-      _ -> {:quit}
-    catch
-      :exit, _ -> {:quit}
+        case trimmed do
+          "q" -> {:quit}
+          "" -> {:input, ""}
+          text -> {:input, text}
+        end
     end
+  rescue
+    _ -> {:quit}
+  catch
+    :exit, _ -> {:quit}
   end
 
   defp handle_user_input(state, "") do
