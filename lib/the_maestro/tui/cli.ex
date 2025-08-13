@@ -8,6 +8,8 @@ defmodule TheMaestro.TUI.CLI do
   Uses pure Elixir with ANSI escape codes for cross-platform Mac/Linux support.
   """
 
+  alias TheMaestro.Agents.{Agent, DynamicSupervisor}
+
   @doc """
   Main entry point for the escript executable.
   """
@@ -210,14 +212,89 @@ defmodule TheMaestro.TUI.CLI do
   end
 
   defp handle_user_input(state, input) do
-    new_history =
-      state.conversation_history ++
-        [
-          %{type: :user, content: input},
-          %{type: :system, content: "Agent response would appear here..."}
-        ]
+    # Add user message to history immediately
+    user_message = %{type: :user, content: input}
+    temp_history = state.conversation_history ++ [user_message]
 
-    %{state | conversation_history: new_history, current_input: ""}
+    # Add "thinking" indicator
+    thinking_message = %{type: :system, content: "Agent is thinking..."}
+    temp_history_with_thinking = temp_history ++ [thinking_message]
+    temp_state = %{state | conversation_history: temp_history_with_thinking, current_input: ""}
+
+    # Store temporary state and render it
+    Process.put(:tui_state, temp_state)
+
+    # Get agent response
+    case get_agent_response(input, state.auth_info) do
+      {:ok, response} ->
+        agent_message = %{type: :agent, content: response}
+        # Remove the thinking message and add the actual response
+        final_history = temp_history ++ [agent_message]
+        %{temp_state | conversation_history: final_history}
+
+      {:error, reason} ->
+        error_message = %{type: :system, content: "Error: #{reason}"}
+        # Remove the thinking message and add the error
+        final_history = temp_history ++ [error_message]
+        %{temp_state | conversation_history: final_history}
+    end
+  end
+
+  defp get_agent_response(input, auth_info) do
+    # Get or create an agent for this TUI session
+    agent_id = get_session_agent_id(auth_info)
+
+    case ensure_agent_exists(agent_id) do
+      {:ok, _pid} ->
+        # Send message to agent and get response
+        case Agent.send_message(agent_id, input) do
+          {:ok, message} ->
+            {:ok, message.content}
+
+          {:error, reason} ->
+            {:error, "Failed to get agent response: #{inspect(reason)}"}
+        end
+
+      {:error, reason} ->
+        {:error, "Failed to start agent: #{inspect(reason)}"}
+    end
+  end
+
+  defp get_session_agent_id(auth_info) do
+    # Create a unique agent ID for this TUI session
+    case auth_info do
+      %{authenticated: true, user_email: email} ->
+        # Use a hash of the email for authenticated sessions
+        :crypto.hash(:sha256, email) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+
+      %{authenticated: false} ->
+        # For anonymous sessions, use a session-specific ID
+        # We'll store this in the process dictionary to maintain consistency
+        case Process.get(:tui_agent_id) do
+          nil ->
+            agent_id = "anon_#{:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)}"
+            Process.put(:tui_agent_id, agent_id)
+            agent_id
+
+          existing_id ->
+            existing_id
+        end
+    end
+  end
+
+  defp ensure_agent_exists(agent_id) do
+    case GenServer.whereis(Agent.via_tuple(agent_id)) do
+      nil ->
+        # Agent doesn't exist, start it
+        DynamicSupervisor.start_agent(
+          agent_id,
+          llm_provider: Agent.get_default_provider()
+        )
+
+      pid when is_pid(pid) ->
+        # Agent already exists
+        {:ok, pid}
+    end
   end
 
   defp signal_handler(parent) do
