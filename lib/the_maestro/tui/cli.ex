@@ -86,7 +86,9 @@ defmodule TheMaestro.TUI.CLI do
     initial_state = %{
       conversation_history: welcome_messages,
       current_input: "",
-      auth_info: auth_info
+      auth_info: auth_info,
+      status_message: "",
+      streaming_buffer: ""
     }
 
     # Store state in process dictionary for simple state management
@@ -96,12 +98,39 @@ defmodule TheMaestro.TUI.CLI do
   defp run_tui do
     state = Process.get(:tui_state)
 
-    # Check for shutdown message
+    # Check for messages (including PubSub messages and shutdown)
     receive do
       :shutdown ->
         cleanup_and_exit()
+
+      # Handle agent status messages
+      {:status_update, status} ->
+        new_state = handle_status_update(state, status)
+        Process.put(:tui_state, new_state)
+        run_tui()
+
+      {:tool_call_start, tool_info} ->
+        new_state = handle_tool_call_start(state, tool_info)
+        Process.put(:tui_state, new_state)
+        run_tui()
+
+      {:tool_call_end, tool_result} ->
+        new_state = handle_tool_call_end(state, tool_result)
+        Process.put(:tui_state, new_state)
+        run_tui()
+
+      {:stream_chunk, chunk} ->
+        new_state = handle_stream_chunk(state, chunk)
+        Process.put(:tui_state, new_state)
+        run_tui()
+
+      {:processing_complete, final_response} ->
+        new_state = handle_processing_complete(state, final_response)
+        Process.put(:tui_state, new_state)
+        run_tui()
     after
-      0 -> :ok
+      # Small timeout to allow for input processing
+      100 -> :ok
     end
 
     # Render the interface
@@ -140,12 +169,17 @@ defmodule TheMaestro.TUI.CLI do
     IO.puts([IO.ANSI.bright(), IO.ANSI.blue(), separator, IO.ANSI.reset()])
 
     # Calculate areas
-    # Leave space for header, input, and borders
-    conversation_height = height - 8
+    # Leave space for header, status line, input, and borders
+    conversation_height = height - 10
 
     # Render conversation history
     IO.puts([IO.ANSI.bright(), "Conversation History:", IO.ANSI.reset()])
     render_conversation_history(state.conversation_history, conversation_height, width)
+
+    # Render status line
+    status_separator = "╠" <> String.duplicate("═", width - 2) <> "╣"
+    IO.puts([IO.ANSI.bright(), IO.ANSI.blue(), status_separator, IO.ANSI.reset()])
+    render_status_line(state, width)
 
     # Render input area
     input_separator = "╠" <> String.duplicate("═", width - 2) <> "╣"
@@ -215,28 +249,34 @@ defmodule TheMaestro.TUI.CLI do
     # Add user message to history immediately
     user_message = %{type: :user, content: input}
     temp_history = state.conversation_history ++ [user_message]
-
-    # Add "thinking" indicator
-    thinking_message = %{type: :system, content: "Agent is thinking..."}
-    temp_history_with_thinking = temp_history ++ [thinking_message]
-    temp_state = %{state | conversation_history: temp_history_with_thinking, current_input: ""}
+    temp_state = %{state | conversation_history: temp_history, current_input: ""}
 
     # Store temporary state and render it
     Process.put(:tui_state, temp_state)
 
-    # Get agent response
+    # Get agent response (this will trigger PubSub messages)
     case get_agent_response(input, state.auth_info) do
       {:ok, response} ->
         agent_message = %{type: :agent, content: response}
-        # Remove the thinking message and add the actual response
-        final_history = temp_history ++ [agent_message]
-        %{temp_state | conversation_history: final_history}
+        final_history = limit_conversation_history(temp_history ++ [agent_message])
+
+        %{
+          temp_state
+          | conversation_history: final_history,
+            status_message: "",
+            streaming_buffer: ""
+        }
 
       {:error, reason} ->
         error_message = %{type: :system, content: "Error: #{reason}"}
-        # Remove the thinking message and add the error
-        final_history = temp_history ++ [error_message]
-        %{temp_state | conversation_history: final_history}
+        final_history = limit_conversation_history(temp_history ++ [error_message])
+
+        %{
+          temp_state
+          | conversation_history: final_history,
+            status_message: "",
+            streaming_buffer: ""
+        }
     end
   end
 
@@ -246,6 +286,9 @@ defmodule TheMaestro.TUI.CLI do
 
     case ensure_agent_exists(agent_id) do
       {:ok, _pid} ->
+        # Subscribe to the agent's PubSub messages for real-time updates
+        subscribe_to_agent_messages(agent_id)
+
         # Send message to agent and get response
         case Agent.send_message(agent_id, input) do
           {:ok, message} ->
@@ -323,6 +366,124 @@ defmodule TheMaestro.TUI.CLI do
     System.halt(0)
   end
 
+  # PubSub subscription and message handling functions
+
+  defp subscribe_to_agent_messages(agent_id) do
+    Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent:#{agent_id}")
+  end
+
+  defp handle_status_update(state, :thinking) do
+    %{state | status_message: "🤔 Thinking..."}
+  end
+
+  defp handle_status_update(state, status) do
+    %{state | status_message: "Status: #{status}"}
+  end
+
+  defp handle_tool_call_start(state, %{name: tool_name, arguments: _args}) do
+    emoji = get_tool_emoji(tool_name)
+    status = "#{emoji} Using tool: #{tool_name}..."
+    %{state | status_message: status}
+  rescue
+    e ->
+      require Logger
+      Logger.error("Tool status format error: #{inspect(e)}")
+      %{state | status_message: "🔧 Using tool..."}
+  end
+
+  defp handle_tool_call_end(state, %{name: tool_name, result: result}) do
+    # Add formatted tool result to conversation history
+    tool_result_message = %{
+      type: :tool_result,
+      content: format_tool_result_for_display(tool_name, result),
+      timestamp: DateTime.utc_now()
+    }
+
+    new_history =
+      limit_conversation_history(state.conversation_history ++ [tool_result_message])
+
+    %{state | conversation_history: new_history, status_message: ""}
+  rescue
+    e ->
+      require Logger
+      Logger.error("Tool result format error: #{inspect(e)}")
+      # Still clear status but don't add malformed result
+      %{state | status_message: ""}
+  end
+
+  defp handle_stream_chunk(state, chunk) do
+    %{
+      state
+      | status_message: "✍️ Generating response...",
+        streaming_buffer: state.streaming_buffer <> chunk
+    }
+  end
+
+  defp handle_processing_complete(state, _final_response) do
+    %{state | status_message: "", streaming_buffer: ""}
+  end
+
+  defp render_status_line(state, width) do
+    status = String.slice(state.status_message, 0, width - 4)
+    padded_status = String.pad_trailing(status, width - 2)
+    IO.puts([IO.ANSI.bright(), IO.ANSI.yellow(), padded_status, IO.ANSI.reset()])
+  end
+
+  defp get_tool_emoji("read_file"), do: "📖"
+  defp get_tool_emoji("write_file"), do: "✏️"
+  defp get_tool_emoji("list_directory"), do: "📁"
+  defp get_tool_emoji("bash"), do: "⚡"
+  defp get_tool_emoji("shell"), do: "⚡"
+  defp get_tool_emoji("execute_command"), do: "⚡"
+  defp get_tool_emoji("grep"), do: "🔍"
+  defp get_tool_emoji("openapi"), do: "🌐"
+  defp get_tool_emoji("api_call"), do: "🌐"
+  defp get_tool_emoji(_), do: "🔧"
+
+  defp limit_conversation_history(history, max_messages \\ 100) do
+    # Keep only the last max_messages, but always preserve system/welcome messages
+    if length(history) <= max_messages do
+      history
+    else
+      {system_messages, other_messages} =
+        Enum.split_with(history, fn msg ->
+          msg.type == :system and String.contains?(msg.content, "Welcome")
+        end)
+
+      recent_messages = Enum.take(other_messages, -max_messages + length(system_messages))
+      system_messages ++ recent_messages
+    end
+  end
+
+  defp format_tool_result_for_display(tool_name, result) do
+    separator = String.duplicate("─", String.length("🔧 Tool: #{tool_name}"))
+
+    case result do
+      {:ok, data} when is_binary(data) ->
+        content =
+          if String.length(data) > 500, do: String.slice(data, 0, 500) <> "...", else: data
+
+        "🔧 Tool: #{tool_name}\n#{separator}\n#{content}"
+
+      {:ok, data} ->
+        formatted_data = inspect(data, limit: 100, pretty: true)
+        "🔧 Tool: #{tool_name}\n#{separator}\n#{formatted_data}"
+
+      {:error, reason} ->
+        "🔧 Tool: #{tool_name}\n#{separator}\n❌ Error: #{reason}"
+
+      data when is_binary(data) ->
+        content =
+          if String.length(data) > 500, do: String.slice(data, 0, 500) <> "...", else: data
+
+        "🔧 Tool: #{tool_name}\n#{separator}\n#{content}"
+
+      data ->
+        formatted_data = inspect(data, limit: 100, pretty: true)
+        "🔧 Tool: #{tool_name}\n#{separator}\n#{formatted_data}"
+    end
+  end
+
   # Helper functions
   defp get_terminal_size do
     # Try to get terminal size, fallback to defaults
@@ -363,11 +524,13 @@ defmodule TheMaestro.TUI.CLI do
   defp message_color(:user), do: IO.ANSI.cyan()
   defp message_color(:agent), do: IO.ANSI.green()
   defp message_color(:system), do: IO.ANSI.yellow()
+  defp message_color(:tool_result), do: IO.ANSI.magenta()
   defp message_color(_), do: IO.ANSI.white()
 
   defp format_message_type(:user), do: "USER"
   defp format_message_type(:agent), do: "AGENT"
   defp format_message_type(:system), do: "SYSTEM"
+  defp format_message_type(:tool_result), do: "TOOL"
   defp format_message_type(type), do: String.upcase(to_string(type))
 
   defp parse_args(args) do
