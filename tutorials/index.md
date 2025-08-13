@@ -300,9 +300,36 @@ Learn how to implement configurable authentication for Terminal User Interface a
 
 **Difficulty**: Advanced
 
+### [Story 4.3: TUI Agent Interaction Loop](epic4/story4.3/)
+
+Learn how to implement real-time agent interaction in Terminal User Interface applications:
+
+- Build TUI message loops that integrate with GenServer-based agents
+- Handle asynchronous agent responses in terminal applications
+- Update conversation history with real-time responses
+- Manage terminal interface state while processing agent requests
+- Implement clean error handling and user feedback patterns
+
+**Key Concepts**: TUI-agent integration, asynchronous messaging, state management, terminal applications, error handling
+
+**Difficulty**: Intermediate to Advanced
+
+### [Story 4.4: TUI Tool Status Display](epic4/story4.4/)
+
+Learn how to implement real-time tool status display in Terminal User Interface applications using Phoenix PubSub:
+
+- Subscribe to agent PubSub messages for real-time tool status updates
+- Display dynamic status indicators for active tool execution
+- Format and render structured tool results in conversation history
+- Implement error boundaries and graceful degradation for status handling
+- Build memory-efficient conversation history management
+- Create visual feedback systems with tool-specific emojis and formatting
+
+**Key Concepts**: PubSub messaging, real-time UI updates, tool status display, error resilience, memory management, visual feedback systems
+
+**Difficulty**: Advanced
+
 ### Coming in Epic 4
-- Story 4.3: Real-time agent communication in TUI  
-- Story 4.4: Advanced TUI features and tool integration
 - Story 4.5: Epic 4 comprehensive demonstration
 
 ## Contributing
