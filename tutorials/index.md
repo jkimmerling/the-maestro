@@ -246,9 +246,23 @@ Learn how to implement conversation session persistence with safe state serializ
 
 **Difficulty**: Advanced
 
+### [Story 3.6: Epic 3 Comprehensive Demo](epic3/story3.6/)
+
+Learn how to create comprehensive demonstrations that showcase all advanced capabilities working together in a production-ready system:
+
+- Build comprehensive demos that integrate multiple complex systems
+- Implement robust error handling and graceful degradation patterns
+- Design user-friendly configuration management for multiple deployment scenarios  
+- Create production-ready documentation with troubleshooting guides
+- Verify system-wide integration and functionality across all Epic 3 capabilities
+- Demonstrate multi-provider LLM support, advanced tooling, and session persistence
+
+**Key Concepts**: System integration, comprehensive testing, production readiness, error handling patterns, user experience design, documentation strategies
+
+**Difficulty**: Advanced
+
 ### Epic 3 Remaining Stories
 - Story 3.1: Multi-provider LLM adapters
-- Story 3.6: Epic 3 Demo Creation
 
 ### Epic 4: Terminal User Interface (TUI)
 - TUI framework integration
