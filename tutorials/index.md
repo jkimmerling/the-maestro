@@ -192,15 +192,6 @@ Learn how to extend tool systems with multiple related capabilities while mainta
 
 **Difficulty**: Intermediate to Advanced
 
----
-
-## Coming Soon
-
-More tutorials will be added as development progresses through the epics:
-
-### Epic 1 Remaining Stories
-- Story 1.2: Core Application & Supervision Tree
-
 ### [Story 3.3: Sandboxed Shell Command Tool](epic3/story3.3/)
 
 Learn how to implement secure shell command execution with Docker-based sandboxing for AI agents:
@@ -216,9 +207,33 @@ Learn how to implement secure shell command execution with Docker-based sandboxi
 
 **Difficulty**: Advanced
 
+### [Story 3.4: OpenAPI Specification Tool](epic3/story3.4/)
+
+Learn how to build a comprehensive OpenAPI tool that allows AI agents to interact with external web services:
+
+- Parse and validate OpenAPI specifications from URLs and files
+- Implement operation discovery and parameter validation
+- Build secure HTTP request construction with path and query parameters
+- Create comprehensive error handling for API interactions
+- Integrate with the agent tooling system for seamless LLM usage
+- Test complex API interactions with real-world examples
+
+**Key Concepts**: OpenAPI specification parsing, HTTP request construction, API integration, parameter validation, security considerations, external service integration
+
+**Difficulty**: Advanced
+
+---
+
+## Coming Soon
+
+More tutorials will be added as development progresses through the epics:
+
+### Epic 1 Remaining Stories
+- Story 1.2: Core Application & Supervision Tree
+
 ### Epic 3 Remaining Stories
 - Story 3.1: Multi-provider LLM adapters
-- Story 3.4-3.6: Session checkpointing and restoration
+- Story 3.5-3.6: Session checkpointing and restoration
 
 ### Epic 4: Terminal User Interface (TUI)
 - TUI framework integration

@@ -6,6 +6,7 @@ defmodule TheMaestro.Application do
   use Application
 
   alias TheMaestro.Tooling.Tools.FileSystem
+  alias TheMaestro.Tooling.Tools.OpenAPI
   alias TheMaestro.Tooling.Tools.Shell
 
   @impl true
@@ -39,6 +40,7 @@ defmodule TheMaestro.Application do
         # Register built-in tools
         FileSystem.register_tools()
         Shell.register_tool()
+        OpenAPI.register_tool()
         result
 
       error ->
