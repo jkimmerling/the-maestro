@@ -611,7 +611,7 @@ This epic transforms our agent from a simple conversationalist into a powerful, 
 
 1. The `Agent` GenServer state is made fully serializable.
     
-2. A persistence mechanism is implemented (e.g., using ETS or a database).
+2. A persistence mechanism is implemented (e.g., postgres database).
     
 3. The `Agent` GenServer exposes public API functions for `:save_session` and `:restore_session`.
     
