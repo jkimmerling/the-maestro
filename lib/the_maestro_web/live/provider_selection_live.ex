@@ -12,7 +12,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   use TheMaestroWeb, :live_view
 
   alias TheMaestro.Providers.Auth
-  alias TheMaestro.Providers.Auth.ProviderRegistry
+  alias TheMaestro.Providers.Auth.{AnthropicAuth, GoogleAuth, OpenaiAuth, ProviderRegistry}
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
 
   require Logger
@@ -302,19 +302,19 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   def handle_info({:oauth_callback, code}, socket) do
     provider = socket.assigns.selected_provider
 
-    # Use provider-specific exchange function
+    # Use provider-specific auth exchange function
     result =
       case provider do
         :anthropic ->
-          Anthropic.exchange_oauth_code(:anthropic, code, %{
+          AnthropicAuth.exchange_oauth_code(:anthropic, code, %{
             redirect_uri: get_oauth_redirect_uri()
           })
 
         :google ->
-          Gemini.exchange_oauth_code(:google, code, %{redirect_uri: get_oauth_redirect_uri()})
+          GoogleAuth.exchange_oauth_code(:google, code, %{redirect_uri: get_oauth_redirect_uri()})
 
         :openai ->
-          OpenAI.exchange_oauth_code(:openai, code, %{redirect_uri: get_oauth_redirect_uri()})
+          OpenaiAuth.exchange_oauth_code(:openai, code, %{redirect_uri: get_oauth_redirect_uri()})
 
         _ ->
           {:error, :unsupported_provider}

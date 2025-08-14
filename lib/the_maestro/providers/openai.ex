@@ -672,17 +672,21 @@ defmodule TheMaestro.Providers.OpenAI do
 
   # Helper function to fetch OpenAI models from API
   defp fetch_openai_models(auth_context) do
-    client = create_openai_client(auth_context)
+    case create_openai_client(auth_context) do
+      {:ok, client} ->
+        case OpenaiEx.Models.list(client) do
+          {:ok, %{"data" => models}} ->
+            formatted_models =
+              models
+              |> Enum.filter(&chat_model?/1)
+              |> Enum.map(&format_openai_model/1)
+              |> Enum.sort_by(& &1.name)
 
-    case OpenaiEx.Models.list(client) do
-      {:ok, %{"data" => models}} ->
-        formatted_models =
-          models
-          |> Enum.filter(&chat_model?/1)
-          |> Enum.map(&format_openai_model/1)
-          |> Enum.sort_by(& &1.name)
+            {:ok, formatted_models}
 
-        {:ok, formatted_models}
+          {:error, reason} ->
+            {:error, reason}
+        end
 
       {:error, reason} ->
         {:error, reason}
