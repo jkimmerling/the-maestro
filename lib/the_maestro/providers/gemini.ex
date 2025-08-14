@@ -1210,7 +1210,7 @@ defmodule TheMaestro.Providers.Gemini do
       String.contains?(name, ["generateContent"])
   end
 
-  defp format_gemini_model(%{"name" => name, "displayName" => display_name} = model) do
+  defp format_gemini_model(%{"name" => name, "displayName" => display_name} = _model) do
     model_id = name |> String.split("/") |> List.last()
 
     %{

@@ -698,7 +698,7 @@ defmodule TheMaestro.Providers.OpenAI do
       not String.contains?(id, ["instruct", "edit", "search", "similarity"])
   end
 
-  defp format_openai_model(%{"id" => id} = model) do
+  defp format_openai_model(%{"id" => id} = _model) do
     %{
       id: id,
       name: format_model_name(id),

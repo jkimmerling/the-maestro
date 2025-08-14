@@ -195,7 +195,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
 
     socket =
       socket
-      |> put_session(:provider_selection, session_data)
+      |> assign(:session_data, session_data)
       |> put_flash(
         :info,
         "Successfully configured #{provider_display_name(provider)} with #{model}"
@@ -893,7 +893,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
     assign(socket, :provider_status, status)
   end
 
-  defp get_provider_connection_status(provider) do
+  defp get_provider_connection_status(_provider) do
     # This would typically ping the provider's API to check availability
     # For now, we'll assume all providers are available
     :available

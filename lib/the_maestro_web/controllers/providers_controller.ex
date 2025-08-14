@@ -11,7 +11,6 @@ defmodule TheMaestroWeb.ProvidersController do
   use TheMaestroWeb, :controller
 
   alias TheMaestro.Providers.Auth
-  alias TheMaestro.Providers.Auth.ProviderRegistry
   alias TheMaestro.Providers.{Anthropic, Gemini, Openai}
 
   require Logger
@@ -49,7 +48,7 @@ defmodule TheMaestroWeb.ProvidersController do
   - method: "oauth" or "api_key"
   - params: method-specific parameters
   """
-  def auth(conn, %{"provider" => provider_string} = params) do
+  def auth(conn, %{"provider" => provider_string} = _params) do
     provider = String.to_existing_atom(provider_string)
 
     case get_request_body(conn) do
