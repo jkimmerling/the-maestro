@@ -1175,19 +1175,7 @@ defmodule TheMaestro.Providers.Gemini do
 
         case HTTPoison.get(url, headers) do
           {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-            case Jason.decode(body) do
-              {:ok, %{"models" => models}} ->
-                formatted_models =
-                  models
-                  |> Enum.filter(&is_gemini_generation_model?/1)
-                  |> Enum.map(&format_gemini_model/1)
-                  |> Enum.sort_by(& &1.name)
-
-                {:ok, formatted_models}
-
-              {:error, reason} ->
-                {:error, {:decode_failed, reason}}
-            end
+            decode_and_format_models(body)
 
           {:ok, %HTTPoison.Response{status_code: status}} ->
             {:error, {:api_error, status}}
@@ -1201,7 +1189,23 @@ defmodule TheMaestro.Providers.Gemini do
     end
   end
 
-  defp is_gemini_generation_model?(%{"name" => name}) do
+  defp decode_and_format_models(body) do
+    case Jason.decode(body) do
+      {:ok, %{"models" => models}} ->
+        formatted_models =
+          models
+          |> Enum.filter(&gemini_generation_model?/1)
+          |> Enum.map(&format_gemini_model/1)
+          |> Enum.sort_by(& &1.name)
+
+        {:ok, formatted_models}
+
+      {:error, reason} ->
+        {:error, {:decode_failed, reason}}
+    end
+  end
+
+  defp gemini_generation_model?(%{"name" => name}) do
     String.contains?(name, ["gemini"]) and
       String.contains?(name, ["generateContent"])
   end
@@ -1214,7 +1218,7 @@ defmodule TheMaestro.Providers.Gemini do
       name: display_name || format_model_name(model_id),
       description: get_gemini_model_description(model_id),
       context_length: get_gemini_context_length(model_id),
-      multimodal: is_gemini_multimodal?(model_id),
+      multimodal: gemini_multimodal?(model_id),
       function_calling: supports_gemini_function_calling?(model_id),
       cost_tier: get_gemini_cost_tier(model_id)
     }
@@ -1256,7 +1260,7 @@ defmodule TheMaestro.Providers.Gemini do
   defp get_gemini_context_length("gemini-pro-vision"), do: 16_384
   defp get_gemini_context_length(_), do: nil
 
-  defp is_gemini_multimodal?(id) do
+  defp gemini_multimodal?(id) do
     String.contains?(id, ["1.5", "vision"]) or id in ["gemini-pro-vision"]
   end
 

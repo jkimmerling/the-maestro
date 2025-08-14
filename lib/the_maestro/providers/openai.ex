@@ -672,27 +672,28 @@ defmodule TheMaestro.Providers.OpenAI do
 
   # Helper function to fetch OpenAI models from API
   defp fetch_openai_models(auth_context) do
-    with {:ok, client} <- create_openai_client(auth_context) do
-      case OpenaiEx.Models.list(client) do
-        {:ok, %{"data" => models}} ->
-          formatted_models =
-            models
-            |> Enum.filter(&is_chat_model?/1)
-            |> Enum.map(&format_openai_model/1)
-            |> Enum.sort_by(& &1.name)
+    case create_openai_client(auth_context) do
+      {:ok, client} ->
+        case OpenaiEx.Models.list(client) do
+          {:ok, %{"data" => models}} ->
+            formatted_models =
+              models
+              |> Enum.filter(&chat_model?/1)
+              |> Enum.map(&format_openai_model/1)
+              |> Enum.sort_by(& &1.name)
 
-          {:ok, formatted_models}
+            {:ok, formatted_models}
 
-        {:error, reason} ->
-          {:error, reason}
-      end
-    else
+          {:error, reason} ->
+            {:error, reason}
+        end
+
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp is_chat_model?(%{"id" => id}) do
+  defp chat_model?(%{"id" => id}) do
     String.contains?(id, ["gpt-3.5", "gpt-4", "gpt-4o"]) and
       not String.contains?(id, ["instruct", "edit", "search", "similarity"])
   end
@@ -703,7 +704,7 @@ defmodule TheMaestro.Providers.OpenAI do
       name: format_model_name(id),
       description: get_model_description(id),
       context_length: get_model_context_length(id),
-      multimodal: is_multimodal_model?(id),
+      multimodal: multimodal_model?(id),
       function_calling: supports_function_calling?(id),
       cost_tier: get_cost_tier(id)
     }
@@ -742,7 +743,7 @@ defmodule TheMaestro.Providers.OpenAI do
   defp get_model_context_length("gpt-4o-mini"), do: 128_000
   defp get_model_context_length(_), do: nil
 
-  defp is_multimodal_model?(id) do
+  defp multimodal_model?(id) do
     String.contains?(id, ["gpt-4", "gpt-4o"]) and not String.contains?(id, ["gpt-4-32k"])
   end
 

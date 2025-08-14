@@ -11,8 +11,8 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   """
   use TheMaestroWeb, :live_view
 
-  alias TheMaestro.Providers.Auth.ProviderRegistry
   alias TheMaestro.Providers.Auth
+  alias TheMaestro.Providers.Auth.ProviderRegistry
   alias TheMaestro.Providers.{Anthropic, Gemini, Openai}
 
   require Logger

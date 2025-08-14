@@ -77,19 +77,19 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
   def model_badges(assigns) do
     ~H"""
     <div class="flex items-center space-x-1">
-      <%= if is_recommended_model?(@model) do %>
+      <%= if recommended_model?(@model) do %>
         <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
           Recommended
         </span>
       <% end %>
 
-      <%= if is_latest_model?(@model) do %>
+      <%= if latest_model?(@model) do %>
         <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
           Latest
         </span>
       <% end %>
 
-      <%= if is_fast_model?(@model) do %>
+      <%= if fast_model?(@model) do %>
         <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
           Fast
         </span>
@@ -133,7 +133,7 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
   defp provider_display_name(:openai), do: "ChatGPT (OpenAI)"
   defp provider_display_name(provider), do: to_string(provider)
 
-  defp is_recommended_model?(model) do
+  defp recommended_model?(model) do
     model.id in [
       "claude-3-5-sonnet-20241022",
       "gemini-1.5-pro",
@@ -141,7 +141,7 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
     ]
   end
 
-  defp is_latest_model?(model) do
+  defp latest_model?(model) do
     model.id in [
       "claude-3-5-sonnet-20241022",
       "gemini-1.5-pro",
@@ -149,7 +149,7 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
     ]
   end
 
-  defp is_fast_model?(model) do
+  defp fast_model?(model) do
     model.id in [
       "claude-3-haiku-20240307",
       "gemini-1.5-flash",
