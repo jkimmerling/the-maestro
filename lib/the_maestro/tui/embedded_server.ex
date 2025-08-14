@@ -233,54 +233,54 @@ defmodule TheMaestro.TUI.EmbeddedServer do
   end
 
   defp handle_http_request(data, state) do
-      case parse_http_request(data) do
-        {:get, "/api/cli/auth/device", _query_params} ->
-          # Device authorization endpoint
-          case generate_device_code() do
-            {:ok, response} ->
-              json_response(200, response)
+    case parse_http_request(data) do
+      {:get, "/api/cli/auth/device", _query_params} ->
+        # Device authorization endpoint
+        case generate_device_code() do
+          {:ok, response} ->
+            json_response(200, response)
 
-            {:error, reason} ->
-              json_response(400, %{"error" => reason})
-          end
+          {:error, reason} ->
+            json_response(400, %{"error" => reason})
+        end
 
-        {:get, "/api/cli/auth/poll", query_params} ->
-          # Polling endpoint
-          device_code = Map.get(query_params, "device_code")
+      {:get, "/api/cli/auth/poll", query_params} ->
+        # Polling endpoint
+        device_code = Map.get(query_params, "device_code")
 
-          case poll_authorization(device_code) do
-            {:ok, response} ->
-              json_response(200, response)
+        case poll_authorization(device_code) do
+          {:ok, response} ->
+            json_response(200, response)
 
-            {:error, reason} ->
-              json_response(400, %{"error" => reason})
-          end
+          {:error, reason} ->
+            json_response(400, %{"error" => reason})
+        end
 
-        {:get, "/auth/device", query_params} ->
-          # Device authorization page
-          user_code = Map.get(query_params, "user_code", "")
-          html_response(200, device_auth_page(user_code))
+      {:get, "/auth/device", query_params} ->
+        # Device authorization page
+        user_code = Map.get(query_params, "user_code", "")
+        html_response(200, device_auth_page(user_code))
 
-        {:post, "/auth/device", _query_params} ->
-          # Handle device authorization form submission
-          # For simplicity, we'll parse from the original data
-          case extract_form_data_from_request(data) do
-            %{"user_code" => user_code} ->
-              case authorize_device_by_user_code(user_code, state) do
-                :ok ->
-                  html_response(200, success_page())
+      {:post, "/auth/device", _query_params} ->
+        # Handle device authorization form submission
+        # For simplicity, we'll parse from the original data
+        case extract_form_data_from_request(data) do
+          %{"user_code" => user_code} ->
+            case authorize_device_by_user_code(user_code, state) do
+              :ok ->
+                html_response(200, success_page())
 
-                {:error, _reason} ->
-                  html_response(400, error_page())
-              end
+              {:error, _reason} ->
+                html_response(400, error_page())
+            end
 
-            _ ->
-              html_response(400, error_page())
-          end
+          _ ->
+            html_response(400, error_page())
+        end
 
-        _ ->
-          html_response(404, not_found_page())
-      end
+      _ ->
+        html_response(404, not_found_page())
+    end
   rescue
     error ->
       Logger.error("Error handling HTTP request: #{inspect(error)}")
