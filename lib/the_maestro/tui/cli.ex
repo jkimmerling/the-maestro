@@ -9,6 +9,7 @@ defmodule TheMaestro.TUI.CLI do
   """
 
   alias TheMaestro.Agents.{Agent, DynamicSupervisor}
+  alias TheMaestro.Providers.Gemini
 
   @doc """
   Main entry point for the escript executable.
@@ -823,7 +824,7 @@ defmodule TheMaestro.TUI.CLI do
     ])
 
     # Use the Gemini provider's device authorization flow
-    case TheMaestro.Providers.Gemini.device_authorization_flow() do
+    case Gemini.device_authorization_flow() do
       {:ok,
        %{auth_url: auth_url, state: state, code_verifier: code_verifier, polling_fn: polling_fn}} ->
         display_google_oauth_instructions(auth_url, state)
@@ -915,7 +916,7 @@ defmodule TheMaestro.TUI.CLI do
 
       auth_code ->
         # Complete the device authorization with the code
-        case TheMaestro.Providers.Gemini.complete_device_authorization(auth_code, code_verifier) do
+        case Gemini.complete_device_authorization(auth_code, code_verifier) do
           {:ok, auth_info} ->
             handle_successful_google_authorization(auth_info)
 
@@ -974,7 +975,7 @@ defmodule TheMaestro.TUI.CLI do
 
   defp load_stored_token do
     # Try to load OAuth credentials from the Gemini provider's cache first
-    case TheMaestro.Providers.Gemini.initialize_auth() do
+    case Gemini.initialize_auth() do
       {:ok, %{type: :oauth, credentials: credentials}} ->
         # Convert to TUI format
         auth_info = %{

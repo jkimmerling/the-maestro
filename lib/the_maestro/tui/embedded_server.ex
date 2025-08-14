@@ -233,7 +233,6 @@ defmodule TheMaestro.TUI.EmbeddedServer do
   end
 
   defp handle_http_request(data, state) do
-    try do
       case parse_http_request(data) do
         {:get, "/api/cli/auth/device", _query_params} ->
           # Device authorization endpoint
@@ -282,11 +281,10 @@ defmodule TheMaestro.TUI.EmbeddedServer do
         _ ->
           html_response(404, not_found_page())
       end
-    rescue
-      error ->
-        Logger.error("Error handling HTTP request: #{inspect(error)}")
-        html_response(500, error_page())
-    end
+  rescue
+    error ->
+      Logger.error("Error handling HTTP request: #{inspect(error)}")
+      html_response(500, error_page())
   end
 
   defp parse_http_request(data) when is_binary(data) do
