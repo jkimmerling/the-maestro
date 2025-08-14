@@ -12,18 +12,7 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
 
   require Logger
 
-  # OAuth Configuration for Anthropic
-  @oauth_client_id Application.compile_env(:the_maestro, [
-                     :providers,
-                     :anthropic,
-                     :oauth_client_id
-                   ])
-  @oauth_client_secret Application.compile_env(:the_maestro, [
-                         :providers,
-                         :anthropic,
-                         :oauth_client_secret
-                       ])
-  # Anthropic OAuth scopes
+  # Anthropic OAuth scopes and URLs
   @oauth_scopes ["read", "write"]
   @oauth_base_url "https://api.anthropic.com/oauth"
   @api_base_url "https://api.anthropic.com/v1"
@@ -33,7 +22,7 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
     methods = [:api_key]
 
     # Add OAuth if configured
-    if @oauth_client_id && @oauth_client_secret do
+    if get_oauth_client_id() && get_oauth_client_secret() do
       [:oauth | methods]
     else
       methods
@@ -152,12 +141,12 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
 
   @impl ProviderAuth
   def initiate_oauth_flow(:anthropic, options \\ %{}) do
-    if @oauth_client_id && @oauth_client_secret do
+    if get_oauth_client_id() && get_oauth_client_secret() do
       state = generate_state()
       redirect_uri = Map.get(options, :redirect_uri, get_default_redirect_uri())
 
       auth_params = %{
-        client_id: @oauth_client_id,
+        client_id: get_oauth_client_id(),
         redirect_uri: redirect_uri,
         response_type: "code",
         scope: Enum.join(@oauth_scopes, " "),
@@ -244,8 +233,8 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
 
   defp exchange_code_for_tokens(code, redirect_uri, _state) do
     token_params = %{
-      client_id: @oauth_client_id,
-      client_secret: @oauth_client_secret,
+      client_id: get_oauth_client_id(),
+      client_secret: get_oauth_client_secret(),
       code: code,
       grant_type: "authorization_code",
       redirect_uri: redirect_uri
@@ -274,8 +263,8 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
 
   defp refresh_access_token(refresh_token) do
     token_params = %{
-      client_id: @oauth_client_id,
-      client_secret: @oauth_client_secret,
+      client_id: get_oauth_client_id(),
+      client_secret: get_oauth_client_secret(),
       refresh_token: refresh_token,
       grant_type: "refresh_token"
     }
@@ -323,5 +312,13 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
       atom_key = if is_binary(key), do: String.to_atom(key), else: key
       {atom_key, value}
     end
+  end
+
+  defp get_oauth_client_id do
+    Application.get_env(:the_maestro, [:providers, :anthropic, :oauth_client_id])
+  end
+
+  defp get_oauth_client_secret do
+    Application.get_env(:the_maestro, [:providers, :anthropic, :oauth_client_secret])
   end
 end
