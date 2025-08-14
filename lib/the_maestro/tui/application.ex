@@ -22,7 +22,9 @@ defmodule TheMaestro.TUI.Application do
       # Start the DynamicSupervisor for agent processes
       {TheMaestro.Agents.DynamicSupervisor, []},
       # Start the Tooling registry GenServer (needed for agent tools)
-      TheMaestro.Tooling
+      TheMaestro.Tooling,
+      # Start embedded web server for OAuth device authorization
+      {TheMaestro.TUI.EmbeddedServer, [port: 4001]}
     ]
 
     # Start with minimal supervision tree

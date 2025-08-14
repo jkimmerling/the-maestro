@@ -5,6 +5,8 @@ This demo showcases The Maestro's Terminal User Interface (TUI), providing a com
 ## Overview
 
 Epic 4 delivers a feature-complete terminal interface that:
+- **Runs completely standalone** - no external Phoenix server required!
+- **Built-in OAuth server** - includes embedded web server for device authorization
 - Supports both authenticated and anonymous modes based on configuration
 - Provides real-time streaming responses from the AI agent
 - Displays visual tool usage indicators and results
@@ -18,17 +20,41 @@ Epic 4 delivers a feature-complete terminal interface that:
 3. **Database**: Ensure the database is set up with `mix ecto.setup`
 4. **API Keys**: Configure at least one LLM provider (see Configuration section)
 
+**Note**: The TUI is completely self-contained and does not require the Phoenix web server to be running!
+
 ## Quick Start
 
-### Option 1: Build and Run the Escript (Recommended)
+The TUI runs completely standalone with its own embedded OAuth server!
 
-The TUI can be run as a standalone executable:
+### Option 1: Build and Run the Escript (Recommended)
 
 ```bash
 # Build the escript executable
 MIX_ENV=prod mix escript.build
 
-# Run the TUI
+# Run the TUI (completely standalone!)
+./maestro_tui
+```
+
+### Authentication Modes
+
+#### Authenticated Mode (Default)
+The TUI includes its own embedded web server for OAuth device authorization:
+
+1. **Run the TUI**: `./maestro_tui`
+2. **Follow the prompts**: The TUI will display a URL to visit in your browser
+3. **Authorize**: Visit the URL (e.g., `http://localhost:4001/auth/device?user_code=ABCD-1234`)
+4. **Complete**: Return to the terminal to continue
+
+#### Anonymous Mode (No Authentication)
+For development or single-user setups:
+
+```bash
+# 1. Edit config/config.exs to disable authentication:
+# config :the_maestro, require_authentication: false
+
+# 2. Build and run the TUI
+MIX_ENV=prod mix escript.build
 ./maestro_tui
 ```
 
@@ -195,13 +221,26 @@ The TUI maintains conversation history and can handle:
 
 #### Authentication Problems
 ```
-Error: Authentication failed: Network error
+Error: TUI embedded server startup failed
+# or  
+Error: Port 4001 already in use
 ```
-**Solution**: Ensure the Phoenix web server is running on localhost:4000 for device authorization:
+**Solution**: The TUI's embedded OAuth server failed to start. This is usually a port conflict:
+
+**Check for port conflicts:**
 ```bash
-# In another terminal
-mix phx.server
+lsof -i :4001
+# Kill any processes using port 4001 if needed
 ```
+
+**Alternative ports**: The TUI will try different ports automatically, or you can switch to anonymous mode:
+```bash
+# Edit config/config.exs to bypass authentication:
+config :the_maestro, require_authentication: false
+# Then rebuild: MIX_ENV=prod mix escript.build
+```
+
+**Network Issues**: If you see connection timeouts, check that your browser can access `http://localhost:4001`. The TUI includes its own web server for OAuth.
 
 #### Missing API Keys
 ```

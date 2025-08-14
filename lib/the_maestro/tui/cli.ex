@@ -9,6 +9,7 @@ defmodule TheMaestro.TUI.CLI do
   """
 
   alias TheMaestro.Agents.{Agent, DynamicSupervisor}
+  alias TheMaestro.TUI.EmbeddedServer
 
   @doc """
   Main entry point for the escript executable.
@@ -614,26 +615,16 @@ defmodule TheMaestro.TUI.CLI do
   end
 
   defp get_base_url do
-    # For TUI, we assume the web server is running on localhost:4000
-    # In a production deployment, this could be configurable
-    "http://localhost:4000"
+    # Use the embedded server running on port 4001
+    port = EmbeddedServer.get_port()
+    "http://localhost:#{port}"
   end
 
-  defp request_device_code(base_url) do
-    url = "#{base_url}/api/cli/auth/device"
-
-    case HTTPoison.post(url, "", [{"Content-Type", "application/json"}]) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-        case Jason.decode(body) do
-          {:ok, response} -> {:ok, response}
-          {:error, _} -> {:error, "Invalid JSON response"}
-        end
-
-      {:ok, %HTTPoison.Response{status_code: status_code}} ->
-        {:error, "HTTP error: #{status_code}"}
-
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        {:error, "Network error: #{reason}"}
+  defp request_device_code(_base_url) do
+    # Use the embedded server directly instead of HTTP requests
+    case EmbeddedServer.generate_device_code() do
+      {:ok, response} -> {:ok, response}
+      {:error, reason} -> {:error, "Failed to generate device code: #{reason}"}
     end
   end
 
@@ -712,68 +703,37 @@ defmodule TheMaestro.TUI.CLI do
     IO.puts("")
   end
 
-  defp poll_for_authorization(base_url, device_response) do
+  defp poll_for_authorization(_base_url, device_response) do
     device_code = device_response["device_code"]
     # Convert to milliseconds
     interval = device_response["interval"] * 1000
-    url = "#{base_url}/api/cli/auth/poll?device_code=#{device_code}"
+    expires_in = device_response["expires_in"]
 
-    poll_loop(url, interval, device_response["expires_in"])
+    poll_loop(device_code, interval, expires_in)
   end
 
-  defp poll_loop(url, interval, remaining_time) when remaining_time > 0 do
+  defp poll_loop(device_code, interval, remaining_time) when remaining_time > 0 do
     :timer.sleep(interval)
 
-    case HTTPoison.get(url) do
-      {:ok, response} ->
-        handle_poll_response(response, url, interval, remaining_time)
-
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        {:error, "Network error during polling: #{reason}"}
-    end
-  end
-
-  defp poll_loop(_url, _interval, _remaining_time) do
-    {:error, "Authorization timeout"}
-  end
-
-  defp handle_poll_response(
-         %HTTPoison.Response{status_code: 200, body: body},
-         _url,
-         _interval,
-         _remaining_time
-       ) do
-    case Jason.decode(body) do
+    case EmbeddedServer.poll_authorization(device_code) do
       {:ok, %{"access_token" => access_token}} ->
         handle_successful_authorization(access_token)
 
-      {:error, _} ->
-        {:error, "Invalid response from server"}
-    end
-  end
+      {:error, "authorization_pending"} ->
+        # Still waiting for authorization
+        remaining = remaining_time - div(interval, 1000)
+        poll_loop(device_code, interval, remaining)
 
-  defp handle_poll_response(%HTTPoison.Response{status_code: 428}, url, interval, remaining_time) do
-    # Still waiting for authorization
-    remaining = remaining_time - div(interval, 1000)
-    poll_loop(url, interval, remaining)
-  end
-
-  defp handle_poll_response(
-         %HTTPoison.Response{status_code: 400, body: body},
-         _url,
-         _interval,
-         _remaining_time
-       ) do
-    case Jason.decode(body) do
-      {:ok, %{"error" => "expired_token"}} ->
+      {:error, "expired_token"} ->
         {:error, "Authorization timeout - please try again"}
 
-      {:ok, %{"error" => error}} ->
-        {:error, "Authorization failed: #{error}"}
-
-      _ ->
-        {:error, "Authorization failed"}
+      {:error, reason} ->
+        {:error, "Authorization failed: #{reason}"}
     end
+  end
+
+  defp poll_loop(_device_code, _interval, _remaining_time) do
+    {:error, "Authorization timeout"}
   end
 
   defp handle_successful_authorization(access_token) do
