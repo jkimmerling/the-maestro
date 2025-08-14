@@ -1,7 +1,7 @@
 defmodule TheMaestroWeb.ProviderSelectionLive do
   @moduledoc """
   LiveView for provider and model selection with integrated authentication.
-  
+
   This LiveView implements the multi-step flow for users to:
   1. Select their preferred LLM provider (Claude, Gemini, ChatGPT)
   2. Choose authentication method (OAuth or API Key)
@@ -51,21 +51,26 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
     socket = check_provider_status(socket)
 
     # Show previous selection if available
-    socket = if previous_selection do
-      assign(socket, :success_message, "Previous configuration: #{provider_display_name(previous_selection.provider)} with #{previous_selection.model}")
-    else
-      socket
-    end
+    socket =
+      if previous_selection do
+        assign(
+          socket,
+          :success_message,
+          "Previous configuration: #{provider_display_name(previous_selection.provider)} with #{previous_selection.model}"
+        )
+      else
+        socket
+      end
 
     {:ok, socket}
   end
 
   def handle_event("select_provider", %{"provider" => provider_string}, socket) do
     provider = String.to_existing_atom(provider_string)
-    
+
     # Get available auth methods for this provider
     auth_methods = ProviderRegistry.get_provider_methods(provider)
-    
+
     socket =
       socket
       |> assign(:selected_provider, provider)
@@ -74,39 +79,39 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       |> assign(:error_message, nil)
       |> assign(:selected_auth_method, nil)
       |> assign(:auth_credentials, nil)
-    
+
     {:noreply, socket}
   end
 
   def handle_event("select_auth_method", %{"method" => method_string}, socket) do
     method = String.to_existing_atom(method_string)
-    
+
     socket =
       socket
       |> assign(:selected_auth_method, method)
       |> assign(:current_step, :authenticate)
       |> assign(:error_message, nil)
-    
+
     {:noreply, socket}
   end
 
   def handle_event("initiate_oauth", _params, socket) do
     provider = socket.assigns.selected_provider
-    
+
     case Auth.initiate_oauth_flow(provider, %{redirect_uri: get_oauth_redirect_uri()}) do
       {:ok, auth_url} ->
         socket =
           socket
           |> assign(:oauth_url, auth_url)
           |> assign(:error_message, nil)
-        
+
         {:noreply, socket}
-      
+
       {:error, reason} ->
         socket =
           socket
           |> assign(:error_message, "Failed to initiate OAuth: #{inspect(reason)}")
-        
+
         {:noreply, socket}
     end
   end
@@ -123,19 +128,19 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
 
       # Validate the API key asynchronously
       send(self(), {:validate_api_key, api_key})
-      
+
       {:noreply, socket}
     end
   end
 
   def handle_event("submit_api_key", %{"api_key" => api_key}, socket) do
     provider = socket.assigns.selected_provider
-    
+
     socket =
       socket
       |> assign(:validating_api_key, true)
       |> assign(:error_message, nil)
-    
+
     case Auth.authenticate(provider, :api_key, %{api_key: api_key}) do
       {:ok, credentials} ->
         socket =
@@ -144,18 +149,18 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
           |> assign(:validating_api_key, false)
           |> assign(:current_step, :model)
           |> assign(:loading_models, true)
-        
+
         # Load models for this provider
         send(self(), {:load_models, provider, credentials})
-        
+
         {:noreply, socket}
-      
+
       {:error, reason} ->
         socket =
           socket
           |> assign(:validating_api_key, false)
           |> assign(:error_message, "Invalid API key: #{inspect(reason)}")
-        
+
         {:noreply, socket}
     end
   end
@@ -166,7 +171,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       |> assign(:selected_model, model)
       |> assign(:current_step, :ready)
       |> assign(:success_message, "Setup complete! You can now start chatting.")
-    
+
     {:noreply, socket}
   end
 
@@ -176,7 +181,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
     model = socket.assigns.selected_model
     credentials = socket.assigns.auth_credentials
     auth_method = socket.assigns.selected_auth_method
-    
+
     # Store provider/model selection in session
     session_data = %{
       provider: provider,
@@ -185,34 +190,38 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       credentials: credentials,
       selected_at: DateTime.utc_now()
     }
-    
+
     Logger.info("Starting chat with provider: #{provider}, model: #{model}")
-    
-    socket = 
+
+    socket =
       socket
       |> put_session(:provider_selection, session_data)
-      |> put_flash(:info, "Successfully configured #{provider_display_name(provider)} with #{model}")
-    
+      |> put_flash(
+        :info,
+        "Successfully configured #{provider_display_name(provider)} with #{model}"
+      )
+
     {:noreply, redirect(socket, to: ~p"/agent")}
   end
 
   def handle_event("go_back", _params, socket) do
     current_step = socket.assigns.current_step
-    
-    previous_step = case current_step do
-      :auth_method -> :provider
-      :authenticate -> :auth_method
-      :model -> :authenticate
-      :ready -> :model
-      _ -> :provider
-    end
-    
+
+    previous_step =
+      case current_step do
+        :auth_method -> :provider
+        :authenticate -> :auth_method
+        :model -> :authenticate
+        :ready -> :model
+        _ -> :provider
+      end
+
     socket =
       socket
       |> assign(:current_step, previous_step)
       |> assign(:error_message, nil)
       |> assign(:success_message, nil)
-    
+
     {:noreply, socket}
   end
 
@@ -221,7 +230,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       nil ->
         socket = assign(socket, :error_message, "No previous selection found")
         {:noreply, socket}
-      
+
       previous ->
         socket =
           socket
@@ -232,7 +241,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
           |> assign(:current_step, :ready)
           |> assign(:error_message, nil)
           |> assign(:success_message, "Restored previous configuration")
-        
+
         {:noreply, socket}
     end
   end
@@ -250,24 +259,24 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       |> assign(:success_message, nil)
       |> assign(:oauth_url, nil)
       |> assign(:api_key_input, "")
-    
+
     {:noreply, socket}
   end
 
   def handle_info({:validate_api_key, api_key}, socket) do
     provider = socket.assigns.selected_provider
-    
+
     case Auth.validate_api_key(provider, api_key) do
       {:ok, _} ->
         socket = assign(socket, :validating_api_key, false)
         {:noreply, socket}
-      
+
       {:error, _reason} ->
         socket =
           socket
           |> assign(:validating_api_key, false)
           |> assign(:error_message, "Invalid API key format")
-        
+
         {:noreply, socket}
     end
   end
@@ -279,15 +288,15 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
           socket
           |> assign(:available_models, models)
           |> assign(:loading_models, false)
-        
+
         {:noreply, socket}
-      
+
       {:error, reason} ->
         socket =
           socket
           |> assign(:loading_models, false)
           |> assign(:error_message, "Failed to load models: #{inspect(reason)}")
-        
+
         {:noreply, socket}
     end
   end
@@ -295,7 +304,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   # OAuth callback handling (from external window)
   def handle_info({:oauth_callback, code}, socket) do
     provider = socket.assigns.selected_provider
-    
+
     case Auth.exchange_oauth_code(provider, code, %{redirect_uri: get_oauth_redirect_uri()}) do
       {:ok, credentials} ->
         socket =
@@ -304,18 +313,18 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
           |> assign(:current_step, :model)
           |> assign(:loading_models, true)
           |> assign(:oauth_url, nil)
-        
+
         # Load models for this provider
         send(self(), {:load_models, provider, credentials})
-        
+
         {:noreply, socket}
-      
+
       {:error, reason} ->
         socket =
           socket
           |> assign(:error_message, "OAuth authentication failed: #{inspect(reason)}")
           |> assign(:oauth_url, nil)
-        
+
         {:noreply, socket}
     end
   end
@@ -331,13 +340,13 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
             Choose your preferred LLM provider and authenticate to get started
           </p>
         </div>
-
-        <!-- Progress indicator -->
+        
+    <!-- Progress indicator -->
         <div class="mb-8">
           <.progress_indicator current_step={@current_step} />
         </div>
-
-        <!-- Flash messages -->
+        
+    <!-- Flash messages -->
         <%= if @error_message do %>
           <div class="mb-4 rounded-md bg-red-50 p-4">
             <div class="flex">
@@ -363,54 +372,46 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
             </div>
           </div>
         <% end %>
-
-        <!-- Main content card -->
+        
+    <!-- Main content card -->
         <div class="bg-white rounded-lg shadow-sm border p-6">
           <%= case @current_step do %>
             <% :provider -> %>
-              <.provider_selection_step 
+              <.provider_selection_step
                 available_providers={@available_providers}
                 provider_status={@provider_status}
               />
-            
             <% :auth_method -> %>
-              <.auth_method_selection_step 
+              <.auth_method_selection_step
                 selected_provider={@selected_provider}
                 available_auth_methods={@available_auth_methods}
               />
-            
             <% :authenticate -> %>
-              <.authentication_step 
+              <.authentication_step
                 selected_provider={@selected_provider}
                 selected_auth_method={@selected_auth_method}
                 oauth_url={@oauth_url}
                 api_key_input={@api_key_input}
                 validating_api_key={@validating_api_key}
               />
-            
             <% :model -> %>
-              <.model_selection_step 
+              <.model_selection_step
                 selected_provider={@selected_provider}
                 available_models={@available_models}
                 loading_models={@loading_models}
               />
-            
             <% :ready -> %>
-              <.ready_step 
-                selected_provider={@selected_provider}
-                selected_model={@selected_model}
-              />
+              <.ready_step selected_provider={@selected_provider} selected_model={@selected_model} />
           <% end %>
-
-          <!-- Navigation buttons -->
+          
+    <!-- Navigation buttons -->
           <div class="mt-6 flex justify-between">
             <%= if @current_step != :provider do %>
               <button
                 phx-click="go_back"
                 class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                <.icon name="hero-arrow-left" class="h-4 w-4 mr-2" />
-                Back
+                <.icon name="hero-arrow-left" class="h-4 w-4 mr-2" /> Back
               </button>
             <% else %>
               <div></div>
@@ -420,8 +421,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
               phx-click="reset_flow"
               class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
             >
-              <.icon name="hero-arrow-path" class="h-4 w-4 mr-2" />
-              Start Over
+              <.icon name="hero-arrow-path" class="h-4 w-4 mr-2" /> Start Over
             </button>
           </div>
         </div>
@@ -451,7 +451,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
             ]}>
               {index + 1}
             </div>
-            
+
             <%= if index < length(@steps) - 1 do %>
               <div class={[
                 "flex-1 h-0.5 mx-2",
@@ -459,12 +459,13 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
                   :completed -> "bg-blue-600"
                   _ -> "bg-gray-200"
                 end
-              ]}></div>
+              ]}>
+              </div>
             <% end %>
           </li>
         <% end %>
       </ol>
-      
+
       <div class="text-center mt-2">
         <span class="text-sm text-gray-600">{step_name(@current_step)}</span>
       </div>
@@ -479,16 +480,22 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       <p class="text-gray-600 mb-6">
         Select the AI provider you'd like to use for your conversations.
       </p>
-
-      <!-- Previous Configuration Option -->
+      
+    <!-- Previous Configuration Option -->
       <%= if @previous_selection do %>
         <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <div class="flex items-center justify-between">
             <div>
               <h3 class="text-sm font-medium text-blue-900">Previous Configuration</h3>
               <p class="text-sm text-blue-700">
-                {provider_display_name(@previous_selection.provider)} • {String.slice(@previous_selection.model, 0, 30)}
-                <%= if String.length(@previous_selection.model) > 30 do %>...<% end %>
+                {provider_display_name(@previous_selection.provider)} • {String.slice(
+                  @previous_selection.model,
+                  0,
+                  30
+                )}
+                <%= if String.length(@previous_selection.model) > 30 do %>
+                  ...
+                <% end %>
               </p>
             </div>
             <button
@@ -503,7 +510,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
 
       <div class="space-y-4">
         <%= for provider <- @available_providers do %>
-          <div 
+          <div
             class={[
               "relative rounded-lg border-2 p-4 cursor-pointer transition-all duration-200",
               "hover:border-#{provider.color}-300 hover:bg-#{provider.color}-50",
@@ -524,8 +531,8 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
                 ]}>
                   {provider.icon}
                 </div>
-
-                <!-- Provider Info -->
+                
+    <!-- Provider Info -->
                 <div class="flex-1">
                   <div class="flex items-center space-x-2">
                     <h3 class="text-lg font-medium text-gray-900">{provider.name}</h3>
@@ -534,8 +541,8 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
                   <p class="text-sm text-gray-600 mt-1">{provider.description}</p>
                 </div>
               </div>
-
-              <!-- Selection Indicator -->
+              
+    <!-- Selection Indicator -->
               <div class="flex-shrink-0">
                 <.icon name="hero-chevron-right" class="h-5 w-5 text-gray-400" />
               </div>
@@ -557,7 +564,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
 
       <div class="space-y-4">
         <%= if :oauth in @available_auth_methods do %>
-          <div 
+          <div
             class="relative rounded-lg border-2 border-gray-200 p-4 cursor-pointer hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
             phx-click="select_auth_method"
             phx-value-method="oauth"
@@ -571,8 +578,8 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
                 <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
                   <.icon name="hero-shield-check" class="h-6 w-6 text-blue-600" />
                 </div>
-
-                <!-- OAuth Info -->
+                
+    <!-- OAuth Info -->
                 <div class="flex-1">
                   <div class="flex items-center space-x-2">
                     <h3 class="text-lg font-medium text-gray-900">OAuth Authentication</h3>
@@ -581,7 +588,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
                     </span>
                   </div>
                   <p class="text-sm text-gray-600 mt-1">
-                    Secure authentication through {@selected_provider |> provider_display_name()}'s official login flow. 
+                    Secure authentication through {@selected_provider |> provider_display_name()}'s official login flow.
                     No need to manage API keys.
                   </p>
                 </div>
@@ -594,7 +601,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
         <% end %>
 
         <%= if :api_key in @available_auth_methods do %>
-          <div 
+          <div
             class="relative rounded-lg border-2 border-gray-200 p-4 cursor-pointer hover:border-orange-300 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-200"
             phx-click="select_auth_method"
             phx-value-method="api_key"
@@ -634,15 +641,16 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
     ~H"""
     <div>
       <h2 class="text-xl font-semibold text-gray-900 mb-4">Authenticate</h2>
-      
+
       <%= case @selected_auth_method do %>
         <% :oauth -> %>
           <div class="text-center">
             <p class="text-gray-600 mb-6">
-              Click the button below to authenticate with {@selected_provider |> provider_display_name()}.
+              Click the button below to authenticate with {@selected_provider
+              |> provider_display_name()}.
               This will open a new window for secure authentication.
             </p>
-            
+
             <%= if @oauth_url do %>
               <div class="space-y-4">
                 <a
@@ -662,12 +670,10 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
                 phx-click="initiate_oauth"
                 class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                <.icon name="hero-shield-check" class="h-5 w-5 mr-2" />
-                Start OAuth Authentication
+                <.icon name="hero-shield-check" class="h-5 w-5 mr-2" /> Start OAuth Authentication
               </button>
             <% end %>
           </div>
-
         <% :api_key -> %>
           <form phx-submit="submit_api_key" class="space-y-4">
             <div>
@@ -696,7 +702,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
                 It will be stored securely in your session.
               </p>
             </div>
-            
+
             <button
               type="submit"
               disabled={@validating_api_key || String.trim(@api_key_input) == ""}
@@ -720,7 +726,8 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
     <div>
       <h2 class="text-xl font-semibold text-gray-900 mb-4">Choose Your Model</h2>
       <p class="text-gray-600 mb-6">
-        Select the specific AI model you'd like to use with {@selected_provider |> provider_display_name()}.
+        Select the specific AI model you'd like to use with {@selected_provider
+        |> provider_display_name()}.
       </p>
 
       <%= if @loading_models do %>
@@ -733,7 +740,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       <% else %>
         <div class="space-y-4">
           <%= for model <- @available_models do %>
-            <div 
+            <div
               class="relative rounded-lg border-2 border-gray-200 p-4 cursor-pointer hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
               phx-click="select_model"
               phx-value-model={model.id}
@@ -769,18 +776,18 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
         <.icon name="hero-check" class="h-8 w-8 text-green-600" />
       </div>
-      
+
       <h2 class="text-xl font-semibold text-gray-900 mb-4">Setup Complete!</h2>
       <p class="text-gray-600 mb-6">
-        You're all set to start chatting with {@selected_model} from {@selected_provider |> provider_display_name()}.
+        You're all set to start chatting with {@selected_model} from {@selected_provider
+        |> provider_display_name()}.
       </p>
-      
+
       <button
         phx-click="start_chat"
         class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
       >
-        <.icon name="hero-chat-bubble-left-ellipsis" class="h-5 w-5 mr-2" />
-        Start Chatting
+        <.icon name="hero-chat-bubble-left-ellipsis" class="h-5 w-5 mr-2" /> Start Chatting
       </button>
     </div>
     """
@@ -805,7 +812,8 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
           :degraded -> "bg-yellow-400"
           _ -> "bg-gray-400"
         end
-      ]}></span>
+      ]}>
+      </span>
       {status_text(@status)}
     </span>
     """
@@ -818,7 +826,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   defp step_status(step, current_step) do
     current_index = Enum.find_index(@steps, &(&1 == current_step))
     step_index = Enum.find_index(@steps, &(&1 == step))
-    
+
     cond do
       step_index < current_index -> :completed
       step_index == current_index -> :current
@@ -881,7 +889,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
         status = get_provider_connection_status(provider_info.id)
         Map.put(acc, provider_info.id, status)
       end)
-    
+
     assign(socket, :provider_status, status)
   end
 
@@ -902,18 +910,18 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       credentials: credentials.credentials,
       config: %{provider: provider}
     }
-    
+
     # Call the provider's list_models function
     case provider do
       :anthropic ->
         Anthropic.list_models(auth_context)
-      
+
       :google ->
         Gemini.list_models(auth_context)
-      
+
       :openai ->
         Openai.list_models(auth_context)
-      
+
       _ ->
         {:error, :unsupported_provider}
     end

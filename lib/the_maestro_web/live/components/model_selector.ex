@@ -9,7 +9,8 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
     <div>
       <h2 class="text-xl font-semibold text-gray-900 mb-4">Choose Your Model</h2>
       <p class="text-gray-600 mb-6">
-        Select the specific AI model you'd like to use with {@selected_provider |> provider_display_name()}.
+        Select the specific AI model you'd like to use with {@selected_provider
+        |> provider_display_name()}.
       </p>
 
       <%= if @loading_models do %>
@@ -33,7 +34,7 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
         <% else %>
           <div class="space-y-4">
             <%= for model <- @available_models do %>
-              <div 
+              <div
                 class="relative rounded-lg border-2 border-gray-200 p-4 cursor-pointer hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
                 phx-click="select_model"
                 phx-value-model={model.id}
@@ -47,8 +48,8 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
                     <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
                       <.icon name="hero-cpu-chip" class="h-6 w-6 text-blue-600" />
                     </div>
-
-                    <!-- Model Info -->
+                    
+    <!-- Model Info -->
                     <div class="flex-1">
                       <div class="flex items-center space-x-2">
                         <h3 class="text-lg font-medium text-gray-900">{model.name}</h3>
@@ -58,8 +59,8 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
                       <.model_capabilities model={model} />
                     </div>
                   </div>
-
-                  <!-- Selection Indicator -->
+                  
+    <!-- Selection Indicator -->
                   <div class="flex-shrink-0">
                     <.icon name="hero-chevron-right" class="h-5 w-5 text-gray-400" />
                   </div>
@@ -81,7 +82,7 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
           Recommended
         </span>
       <% end %>
-      
+
       <%= if is_latest_model?(@model) do %>
         <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
           Latest
@@ -104,7 +105,7 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
         <.icon name="hero-chat-bubble-left-ellipsis" class="h-3 w-3" />
         <span>{get_context_length(@model)} context</span>
       </div>
-      
+
       <%= if supports_multimodal?(@model) do %>
         <div class="flex items-center space-x-1">
           <.icon name="hero-photo" class="h-3 w-3" />
@@ -128,14 +129,14 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
   end
 
   defp provider_display_name(:anthropic), do: "Claude (Anthropic)"
-  defp provider_display_name(:google), do: "Gemini (Google)"  
+  defp provider_display_name(:google), do: "Gemini (Google)"
   defp provider_display_name(:openai), do: "ChatGPT (OpenAI)"
   defp provider_display_name(provider), do: to_string(provider)
 
   defp is_recommended_model?(model) do
     model.id in [
       "claude-3-5-sonnet-20241022",
-      "gemini-1.5-pro", 
+      "gemini-1.5-pro",
       "gpt-4"
     ]
   end

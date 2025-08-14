@@ -14,7 +14,7 @@ defmodule TheMaestroWeb.Live.Components.AuthMethodSelector do
 
       <div class="space-y-4">
         <%= if :oauth in @available_auth_methods do %>
-          <div 
+          <div
             class="relative rounded-lg border-2 border-gray-200 p-4 cursor-pointer hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
             phx-click="select_auth_method"
             phx-value-method="oauth"
@@ -28,8 +28,8 @@ defmodule TheMaestroWeb.Live.Components.AuthMethodSelector do
                 <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
                   <.icon name="hero-shield-check" class="h-6 w-6 text-blue-600" />
                 </div>
-
-                <!-- OAuth Info -->
+                
+    <!-- OAuth Info -->
                 <div class="flex-1">
                   <div class="flex items-center space-x-2">
                     <h3 class="text-lg font-medium text-gray-900">OAuth Authentication</h3>
@@ -38,7 +38,7 @@ defmodule TheMaestroWeb.Live.Components.AuthMethodSelector do
                     </span>
                   </div>
                   <p class="text-sm text-gray-600 mt-1">
-                    Secure authentication through {@selected_provider |> provider_display_name()}'s official login flow. 
+                    Secure authentication through {@selected_provider |> provider_display_name()}'s official login flow.
                     No need to manage API keys.
                   </p>
                   <ul class="text-xs text-gray-500 mt-2 space-y-1">
@@ -48,8 +48,8 @@ defmodule TheMaestroWeb.Live.Components.AuthMethodSelector do
                   </ul>
                 </div>
               </div>
-
-              <!-- Selection Indicator -->
+              
+    <!-- Selection Indicator -->
               <div class="flex-shrink-0">
                 <.icon name="hero-chevron-right" class="h-5 w-5 text-gray-400" />
               </div>
@@ -58,7 +58,7 @@ defmodule TheMaestroWeb.Live.Components.AuthMethodSelector do
         <% end %>
 
         <%= if :api_key in @available_auth_methods do %>
-          <div 
+          <div
             class="relative rounded-lg border-2 border-gray-200 p-4 cursor-pointer hover:border-orange-300 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-200"
             phx-click="select_auth_method"
             phx-value-method="api_key"
@@ -72,8 +72,8 @@ defmodule TheMaestroWeb.Live.Components.AuthMethodSelector do
                 <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center">
                   <.icon name="hero-key" class="h-6 w-6 text-orange-600" />
                 </div>
-
-                <!-- API Key Info -->
+                
+    <!-- API Key Info -->
                 <div class="flex-1">
                   <div class="flex items-center space-x-2">
                     <h3 class="text-lg font-medium text-gray-900">API Key Authentication</h3>
@@ -82,7 +82,7 @@ defmodule TheMaestroWeb.Live.Components.AuthMethodSelector do
                     </span>
                   </div>
                   <p class="text-sm text-gray-600 mt-1">
-                    Use your {@selected_provider |> provider_display_name()} API key. 
+                    Use your {@selected_provider |> provider_display_name()} API key.
                     You'll need to get this from your provider dashboard.
                   </p>
                   <ul class="text-xs text-gray-500 mt-2 space-y-1">
@@ -92,8 +92,8 @@ defmodule TheMaestroWeb.Live.Components.AuthMethodSelector do
                   </ul>
                 </div>
               </div>
-
-              <!-- Selection Indicator -->
+              
+    <!-- Selection Indicator -->
               <div class="flex-shrink-0">
                 <.icon name="hero-chevron-right" class="h-5 w-5 text-gray-400" />
               </div>

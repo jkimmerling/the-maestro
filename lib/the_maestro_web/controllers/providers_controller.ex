@@ -1,7 +1,7 @@
 defmodule TheMaestroWeb.ProvidersController do
   @moduledoc """
   API controller for provider management operations.
-  
+
   Provides REST endpoints for:
   - Listing available providers
   - Initiating authentication flows
@@ -18,14 +18,14 @@ defmodule TheMaestroWeb.ProvidersController do
 
   @doc """
   GET /api/providers
-  
+
   Lists all available providers with their supported authentication methods
   and current status.
   """
   def index(conn, _params) do
     providers = Auth.get_available_providers()
-    
-    provider_list = 
+
+    provider_list =
       Enum.map(providers, fn {provider, methods} ->
         %{
           id: provider,
@@ -43,7 +43,7 @@ defmodule TheMaestroWeb.ProvidersController do
 
   @doc """
   POST /api/providers/:provider/auth
-  
+
   Initiates authentication flow for the specified provider.
   Expects JSON body with:
   - method: "oauth" or "api_key"
@@ -51,14 +51,14 @@ defmodule TheMaestroWeb.ProvidersController do
   """
   def auth(conn, %{"provider" => provider_string} = params) do
     provider = String.to_existing_atom(provider_string)
-    
+
     case get_request_body(conn) do
       {:ok, %{"method" => "oauth"} = auth_params} ->
         initiate_oauth_auth(conn, provider, auth_params)
-      
+
       {:ok, %{"method" => "api_key"} = auth_params} ->
         initiate_api_key_auth(conn, provider, auth_params)
-      
+
       {:error, reason} ->
         conn
         |> put_status(:bad_request)
@@ -73,23 +73,23 @@ defmodule TheMaestroWeb.ProvidersController do
 
   @doc """
   GET /api/providers/:provider/models
-  
+
   Fetches available models for the specified provider.
   Requires valid authentication credentials in session or headers.
   """
   def models(conn, %{"provider" => provider_string}) do
     provider = String.to_existing_atom(provider_string)
     user_id = get_user_id(conn)
-    
+
     case get_provider_models(provider, user_id) do
       {:ok, models} ->
         json(conn, %{models: models})
-      
+
       {:error, :not_authenticated} ->
         conn
         |> put_status(:unauthorized)
         |> json(%{error: "Authentication required to fetch models"})
-      
+
       {:error, reason} ->
         conn
         |> put_status(:bad_request)
@@ -104,18 +104,18 @@ defmodule TheMaestroWeb.ProvidersController do
 
   @doc """
   POST /api/providers/:provider/test
-  
+
   Tests connection to the specified provider.
   Expects JSON body with credentials or uses stored credentials.
   """
   def test(conn, %{"provider" => provider_string}) do
     provider = String.to_existing_atom(provider_string)
     user_id = get_user_id(conn)
-    
+
     case test_provider_connection(provider, user_id, conn) do
       {:ok, test_result} ->
         json(conn, %{status: "success", result: test_result})
-      
+
       {:error, reason} ->
         conn
         |> put_status(:bad_request)
@@ -132,8 +132,10 @@ defmodule TheMaestroWeb.ProvidersController do
 
   defp get_request_body(conn) do
     case Jason.decode(conn.assigns[:raw_body] || "") do
-      {:ok, body} -> {:ok, body}
-      {:error, _} -> 
+      {:ok, body} ->
+        {:ok, body}
+
+      {:error, _} ->
         # Try to read from params if not in assigns
         case conn.body_params do
           %{} = params when map_size(params) > 0 -> {:ok, params}
@@ -145,7 +147,7 @@ defmodule TheMaestroWeb.ProvidersController do
   defp initiate_oauth_auth(conn, provider, auth_params) do
     redirect_uri = Map.get(auth_params, "redirect_uri", get_default_oauth_redirect())
     options = %{redirect_uri: redirect_uri}
-    
+
     case Auth.initiate_oauth_flow(provider, options) do
       {:ok, auth_url} ->
         json(conn, %{
@@ -153,7 +155,7 @@ defmodule TheMaestroWeb.ProvidersController do
           auth_url: auth_url,
           method: "oauth"
         })
-      
+
       {:error, reason} ->
         conn
         |> put_status(:bad_request)
@@ -168,7 +170,7 @@ defmodule TheMaestroWeb.ProvidersController do
   defp initiate_api_key_auth(conn, provider, auth_params) do
     api_key = Map.get(auth_params, "api_key")
     user_id = get_user_id(conn)
-    
+
     if api_key && user_id do
       case Auth.authenticate(provider, :api_key, %{api_key: api_key}, user_id) do
         {:ok, result} ->
@@ -177,7 +179,7 @@ defmodule TheMaestroWeb.ProvidersController do
             method: "api_key",
             provider: result.provider
           })
-        
+
         {:error, reason} ->
           conn
           |> put_status(:bad_request)
@@ -201,7 +203,7 @@ defmodule TheMaestroWeb.ProvidersController do
     case Auth.get_credentials(user_id, provider) do
       {:ok, auth_result} ->
         fetch_models_from_provider(provider, auth_result.credentials)
-      
+
       {:error, _} ->
         {:error, :not_authenticated}
     end
@@ -209,30 +211,31 @@ defmodule TheMaestroWeb.ProvidersController do
 
   defp fetch_models_from_provider(provider, credentials) do
     # Determine auth type from credentials structure
-    auth_type = case credentials do
-      %{auth_method: method} -> method
-      %{api_key: _} -> :api_key
-      %{access_token: _} -> :oauth
-      _ -> :api_key
-    end
-    
+    auth_type =
+      case credentials do
+        %{auth_method: method} -> method
+        %{api_key: _} -> :api_key
+        %{access_token: _} -> :oauth
+        _ -> :api_key
+      end
+
     # Create proper auth context
     auth_context = %{
       type: auth_type,
       credentials: credentials,
       config: %{provider: provider}
     }
-    
+
     case provider do
       :anthropic ->
         Anthropic.list_models(auth_context)
-      
+
       :google ->
         Gemini.list_models(auth_context)
-      
+
       :openai ->
         Openai.list_models(auth_context)
-      
+
       _ ->
         {:error, :unsupported_provider}
     end
@@ -243,13 +246,13 @@ defmodule TheMaestroWeb.ProvidersController do
       {:ok, %{"credentials" => test_credentials}} ->
         # Test with provided credentials
         test_with_credentials(provider, test_credentials)
-      
+
       _ ->
         # Test with stored credentials
         case Auth.get_credentials(user_id, provider) do
           {:ok, auth_result} ->
             test_with_auth_result(provider, auth_result)
-          
+
           {:error, reason} ->
             {:error, reason}
         end
@@ -260,12 +263,13 @@ defmodule TheMaestroWeb.ProvidersController do
     # Simple health check - try to list models
     case fetch_models_from_provider(provider, credentials) do
       {:ok, models} when is_list(models) ->
-        {:ok, %{
-          connection: :healthy,
-          models_available: length(models),
-          tested_at: DateTime.utc_now()
-        }}
-      
+        {:ok,
+         %{
+           connection: :healthy,
+           models_available: length(models),
+           tested_at: DateTime.utc_now()
+         }}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -288,9 +292,13 @@ defmodule TheMaestroWeb.ProvidersController do
   defp get_user_id(conn) do
     # Try to get user_id from session or authentication
     case get_session(conn, "current_user") do
-      %{"id" => user_id} -> user_id
-      user_id when is_binary(user_id) -> user_id
-      _ -> 
+      %{"id" => user_id} ->
+        user_id
+
+      user_id when is_binary(user_id) ->
+        user_id
+
+      _ ->
         # For development, we could use a default user
         case Application.get_env(:the_maestro, :require_authentication, true) do
           false -> "anonymous_user"

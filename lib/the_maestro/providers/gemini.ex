@@ -272,7 +272,7 @@ defmodule TheMaestro.Providers.Gemini do
     case validate_auth_context(auth_context) do
       :ok ->
         fetch_gemini_models(auth_context)
-      
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -1170,45 +1170,45 @@ defmodule TheMaestro.Providers.Gemini do
           {"Authorization", "Bearer #{access_token}"},
           {"Content-Type", "application/json"}
         ]
-        
+
         url = "https://generativelanguage.googleapis.com/v1beta/models"
-        
+
         case HTTPoison.get(url, headers) do
           {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
             case Jason.decode(body) do
               {:ok, %{"models" => models}} ->
-                formatted_models = 
+                formatted_models =
                   models
                   |> Enum.filter(&is_gemini_generation_model?/1)
                   |> Enum.map(&format_gemini_model/1)
                   |> Enum.sort_by(& &1.name)
-                
+
                 {:ok, formatted_models}
-              
+
               {:error, reason} ->
                 {:error, {:decode_failed, reason}}
             end
-          
+
           {:ok, %HTTPoison.Response{status_code: status}} ->
             {:error, {:api_error, status}}
-          
+
           {:error, reason} ->
             {:error, {:request_failed, reason}}
         end
-      
+
       {:error, reason} ->
         {:error, reason}
     end
   end
 
   defp is_gemini_generation_model?(%{"name" => name}) do
-    String.contains?(name, ["gemini"]) and 
-    String.contains?(name, ["generateContent"])
+    String.contains?(name, ["gemini"]) and
+      String.contains?(name, ["generateContent"])
   end
 
   defp format_gemini_model(%{"name" => name, "displayName" => display_name} = model) do
     model_id = name |> String.split("/") |> List.last()
-    
+
     %{
       id: model_id,
       name: display_name || format_model_name(model_id),
@@ -1225,13 +1225,28 @@ defmodule TheMaestro.Providers.Gemini do
   defp format_model_name("gemini-1.0-pro"), do: "Gemini 1.0 Pro"
   defp format_model_name("gemini-pro"), do: "Gemini Pro"
   defp format_model_name("gemini-pro-vision"), do: "Gemini Pro Vision"
-  defp format_model_name(id), do: String.replace(id, "-", " ") |> String.split() |> Enum.map(&String.capitalize/1) |> Enum.join(" ")
 
-  defp get_gemini_model_description("gemini-1.5-pro"), do: "Most capable multimodal model with extended context"
+  defp format_model_name(id),
+    do:
+      String.replace(id, "-", " ")
+      |> String.split()
+      |> Enum.map(&String.capitalize/1)
+      |> Enum.join(" ")
+
+  defp get_gemini_model_description("gemini-1.5-pro"),
+    do: "Most capable multimodal model with extended context"
+
   defp get_gemini_model_description("gemini-1.5-flash"), do: "Fast and efficient multimodal model"
-  defp get_gemini_model_description("gemini-1.0-pro"), do: "High-performance text generation model"
-  defp get_gemini_model_description("gemini-pro"), do: "Versatile model for text and code generation"
-  defp get_gemini_model_description("gemini-pro-vision"), do: "Multimodal model for text and image understanding"
+
+  defp get_gemini_model_description("gemini-1.0-pro"),
+    do: "High-performance text generation model"
+
+  defp get_gemini_model_description("gemini-pro"),
+    do: "Versatile model for text and code generation"
+
+  defp get_gemini_model_description("gemini-pro-vision"),
+    do: "Multimodal model for text and image understanding"
+
   defp get_gemini_model_description(_), do: "Google Gemini language model"
 
   defp get_gemini_context_length("gemini-1.5-pro"), do: 2_000_000

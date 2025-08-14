@@ -20,7 +20,7 @@ defmodule TheMaestroWeb.Live.Components.ConnectionStatus do
       ]}>
         {status_text(@status)}
       </span>
-      
+
       <%= if @show_details and @last_check do %>
         <span class="text-xs text-gray-500">
           (Last checked: {format_time(@last_check)})
@@ -41,7 +41,8 @@ defmodule TheMaestroWeb.Live.Components.ConnectionStatus do
         :error -> "bg-red-500"
         _ -> "bg-gray-400"
       end
-    ]}></div>
+    ]}>
+    </div>
     """
   end
 

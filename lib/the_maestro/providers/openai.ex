@@ -143,7 +143,7 @@ defmodule TheMaestro.Providers.OpenAI do
     case validate_auth_context(auth_context) do
       :ok ->
         fetch_openai_models(auth_context)
-      
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -675,14 +675,14 @@ defmodule TheMaestro.Providers.OpenAI do
     with {:ok, client} <- create_openai_client(auth_context) do
       case OpenaiEx.Models.list(client) do
         {:ok, %{"data" => models}} ->
-          formatted_models = 
+          formatted_models =
             models
             |> Enum.filter(&is_chat_model?/1)
             |> Enum.map(&format_openai_model/1)
             |> Enum.sort_by(& &1.name)
-          
+
           {:ok, formatted_models}
-        
+
         {:error, reason} ->
           {:error, reason}
       end
@@ -693,8 +693,8 @@ defmodule TheMaestro.Providers.OpenAI do
   end
 
   defp is_chat_model?(%{"id" => id}) do
-    String.contains?(id, ["gpt-3.5", "gpt-4", "gpt-4o"]) and 
-    not String.contains?(id, ["instruct", "edit", "search", "similarity"])
+    String.contains?(id, ["gpt-3.5", "gpt-4", "gpt-4o"]) and
+      not String.contains?(id, ["instruct", "edit", "search", "similarity"])
   end
 
   defp format_openai_model(%{"id" => id} = model) do
@@ -718,10 +718,18 @@ defmodule TheMaestro.Providers.OpenAI do
   defp format_model_name("gpt-4o-mini"), do: "GPT-4o mini"
   defp format_model_name(id), do: String.replace(id, "-", " ") |> String.upcase()
 
-  defp get_model_description("gpt-3.5-turbo"), do: "Most capable GPT-3.5 model, optimized for chat"
-  defp get_model_description("gpt-4"), do: "More capable than any GPT-3.5 model, able to do more complex tasks"
-  defp get_model_description("gpt-4-turbo"), do: "Latest GPT-4 model with improved instruction following"
-  defp get_model_description("gpt-4o"), do: "Most advanced multimodal model, faster and cheaper than GPT-4"
+  defp get_model_description("gpt-3.5-turbo"),
+    do: "Most capable GPT-3.5 model, optimized for chat"
+
+  defp get_model_description("gpt-4"),
+    do: "More capable than any GPT-3.5 model, able to do more complex tasks"
+
+  defp get_model_description("gpt-4-turbo"),
+    do: "Latest GPT-4 model with improved instruction following"
+
+  defp get_model_description("gpt-4o"),
+    do: "Most advanced multimodal model, faster and cheaper than GPT-4"
+
   defp get_model_description("gpt-4o-mini"), do: "Fast and affordable model for simple tasks"
   defp get_model_description(_), do: "OpenAI language model"
 

@@ -14,7 +14,7 @@ defmodule TheMaestroWeb.Live.Components.ProviderSelector do
 
       <div class="space-y-4">
         <%= for provider <- @available_providers do %>
-          <div 
+          <div
             class={[
               "relative rounded-lg border-2 p-4 cursor-pointer transition-all duration-200",
               "hover:border-#{provider.color}-300 hover:bg-#{provider.color}-50",
@@ -35,8 +35,8 @@ defmodule TheMaestroWeb.Live.Components.ProviderSelector do
                 ]}>
                   {provider.icon}
                 </div>
-
-                <!-- Provider Info -->
+                
+    <!-- Provider Info -->
                 <div class="flex-1">
                   <div class="flex items-center space-x-2">
                     <h3 class="text-lg font-medium text-gray-900">{provider.name}</h3>
@@ -45,8 +45,8 @@ defmodule TheMaestroWeb.Live.Components.ProviderSelector do
                   <p class="text-sm text-gray-600 mt-1">{provider.description}</p>
                 </div>
               </div>
-
-              <!-- Selection Indicator -->
+              
+    <!-- Selection Indicator -->
               <div class="flex-shrink-0">
                 <.icon name="hero-chevron-right" class="h-5 w-5 text-gray-400" />
               </div>
@@ -77,7 +77,8 @@ defmodule TheMaestroWeb.Live.Components.ProviderSelector do
           :degraded -> "bg-yellow-400"
           _ -> "bg-gray-400"
         end
-      ]}></span>
+      ]}>
+      </span>
       {status_text(@status)}
     </span>
     """

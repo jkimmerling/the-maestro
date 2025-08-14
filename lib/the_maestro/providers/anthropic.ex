@@ -143,7 +143,7 @@ defmodule TheMaestro.Providers.Anthropic do
       :ok ->
         # Anthropic doesn't have a public models API endpoint, so we return the known models
         {:ok, get_anthropic_models()}
-      
+
       {:error, reason} ->
         {:error, reason}
     end
