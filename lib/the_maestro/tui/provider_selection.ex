@@ -115,10 +115,11 @@ defmodule TheMaestro.TUI.ProviderSelection do
   # Private helper functions
 
   defp display_provider_menu(providers) do
-    options = Enum.map(providers, fn provider ->
-      info = get_provider_info(provider)
-      info.name
-    end)
+    options =
+      Enum.map(providers, fn provider ->
+        info = get_provider_info(provider)
+        info.name
+      end)
 
     additional_info =
       providers
@@ -147,7 +148,10 @@ defmodule TheMaestro.TUI.ProviderSelection do
         {:error, :cancelled}
 
       {:error, :invalid_choice} ->
-        MenuHelpers.display_error("Invalid choice. Please select a number between 1 and #{max_choice}.")
+        MenuHelpers.display_error(
+          "Invalid choice. Please select a number between 1 and #{max_choice}."
+        )
+
         :timer.sleep(2000)
         select_provider()
 

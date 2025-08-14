@@ -295,13 +295,15 @@ defmodule TheMaestro.TUI.MenuHelpers do
 
   defp parse_choice(input, valid_range) do
     case Integer.parse(input) do
-      {choice, ""} -> 
+      {choice, ""} ->
         if choice in valid_range do
           {:ok, choice}
         else
           :error
         end
-      _ -> :error
+
+      _ ->
+        :error
     end
   end
 
@@ -331,7 +333,8 @@ defmodule TheMaestro.TUI.MenuHelpers do
         # Backspace - remove last character
         if String.length(acc) > 0 do
           new_acc = String.slice(acc, 0, String.length(acc) - 1)
-          IO.write(["\b \b"])  # Move back, write space, move back
+          # Move back, write space, move back
+          IO.write(["\b \b"])
           read_password_chars(new_acc, mask_char)
         else
           read_password_chars(acc, mask_char)

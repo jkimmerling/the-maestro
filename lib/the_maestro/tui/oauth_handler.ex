@@ -119,8 +119,18 @@ defmodule TheMaestro.TUI.OAuthHandler do
     IO.puts([IO.ANSI.bright(), "OAuth Authentication for #{provider_name}", IO.ANSI.reset()])
     IO.puts("")
 
-    IO.puts([IO.ANSI.faint(), "OAuth provides secure authentication without storing API keys.", IO.ANSI.reset()])
-    IO.puts([IO.ANSI.faint(), "You'll be redirected to your browser to sign in.", IO.ANSI.reset()])
+    IO.puts([
+      IO.ANSI.faint(),
+      "OAuth provides secure authentication without storing API keys.",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts([
+      IO.ANSI.faint(),
+      "You'll be redirected to your browser to sign in.",
+      IO.ANSI.reset()
+    ])
+
     IO.puts("")
 
     display_oauth_benefits()
@@ -159,7 +169,8 @@ defmodule TheMaestro.TUI.OAuthHandler do
     MenuHelpers.display_info("Starting Google OAuth flow...")
 
     case Gemini.device_authorization_flow() do
-      {:ok, %{auth_url: auth_url, state: state, code_verifier: code_verifier, polling_fn: polling_fn}} ->
+      {:ok,
+       %{auth_url: auth_url, state: state, code_verifier: code_verifier, polling_fn: polling_fn}} ->
         flow_data = %{
           provider: :google,
           auth_url: auth_url,
@@ -203,6 +214,7 @@ defmodule TheMaestro.TUI.OAuthHandler do
     IO.puts("")
 
     IO.puts([IO.ANSI.bright(), "1. Open this URL in your browser:", IO.ANSI.reset()])
+
     IO.puts([
       "   ",
       IO.ANSI.bright(),
@@ -210,6 +222,7 @@ defmodule TheMaestro.TUI.OAuthHandler do
       flow_data.auth_url,
       IO.ANSI.reset()
     ])
+
     IO.puts("")
 
     IO.puts([IO.ANSI.bright(), "2. Sign in with your #{provider_name} account", IO.ANSI.reset()])
@@ -229,6 +242,7 @@ defmodule TheMaestro.TUI.OAuthHandler do
     case flow_data do
       %{device_code: device_code} ->
         IO.puts([IO.ANSI.bright(), "4. Enter this device code when prompted:", IO.ANSI.reset()])
+
         IO.puts([
           "   ",
           IO.ANSI.bright(),
@@ -236,6 +250,7 @@ defmodule TheMaestro.TUI.OAuthHandler do
           device_code,
           IO.ANSI.reset()
         ])
+
         IO.puts("")
 
       _ ->
@@ -249,7 +264,12 @@ defmodule TheMaestro.TUI.OAuthHandler do
   end
 
   defp display_callback_instructions do
-    IO.puts([IO.ANSI.bright(), "4. You'll be redirected back to this application", IO.ANSI.reset()])
+    IO.puts([
+      IO.ANSI.bright(),
+      "4. You'll be redirected back to this application",
+      IO.ANSI.reset()
+    ])
+
     IO.puts("")
     IO.puts([IO.ANSI.faint(), "Waiting for authorization...", IO.ANSI.reset()])
     IO.puts([IO.ANSI.faint(), "Press Ctrl+C to cancel", IO.ANSI.reset()])
@@ -266,7 +286,9 @@ defmodule TheMaestro.TUI.OAuthHandler do
     end
   end
 
-  defp handle_google_oauth_completion(%{polling_fn: polling_fn, code_verifier: code_verifier} = _flow_data) do
+  defp handle_google_oauth_completion(
+         %{polling_fn: polling_fn, code_verifier: code_verifier} = _flow_data
+       ) do
     display_authorization_spinner()
 
     case polling_fn.() do

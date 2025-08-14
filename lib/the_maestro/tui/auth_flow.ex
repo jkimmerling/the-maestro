@@ -72,7 +72,7 @@ defmodule TheMaestro.TUI.AuthFlow do
   @spec validate_auth_context(map()) :: :ok | {:error, String.t()}
   def validate_auth_context(auth_context) do
     case auth_context do
-      %{type: type, provider: provider, credentials: credentials} 
+      %{type: type, provider: provider, credentials: credentials}
       when is_atom(type) and is_atom(provider) and is_map(credentials) ->
         validate_auth_credentials(type, provider, credentials)
 
@@ -87,7 +87,7 @@ defmodule TheMaestro.TUI.AuthFlow do
     provider_name = get_provider_name(provider)
 
     options = Enum.map(methods, &format_auth_method/1)
-    
+
     additional_info =
       methods
       |> Enum.with_index(1)
@@ -98,7 +98,11 @@ defmodule TheMaestro.TUI.AuthFlow do
 
     all_options = options ++ ["Back to provider selection"]
 
-    MenuHelpers.display_menu("AUTHENTICATION FOR #{String.upcase(provider_name)}", all_options, additional_info)
+    MenuHelpers.display_menu(
+      "AUTHENTICATION FOR #{String.upcase(provider_name)}",
+      all_options,
+      additional_info
+    )
   end
 
   defp handle_auth_method_selection(provider, methods) do
@@ -114,7 +118,10 @@ defmodule TheMaestro.TUI.AuthFlow do
         {:error, :back_to_provider}
 
       {:error, :invalid_choice} ->
-        MenuHelpers.display_error("Invalid choice. Please select a number between 1 and #{max_choice}.")
+        MenuHelpers.display_error(
+          "Invalid choice. Please select a number between 1 and #{max_choice}."
+        )
+
         :timer.sleep(2000)
         authenticate_provider(provider)
 
@@ -188,7 +195,10 @@ defmodule TheMaestro.TUI.AuthFlow do
         execute_google_service_account_auth()
 
       _ ->
-        MenuHelpers.display_error("Service account authentication not supported for this provider")
+        MenuHelpers.display_error(
+          "Service account authentication not supported for this provider"
+        )
+
         :timer.sleep(2000)
         authenticate_provider(provider)
     end
@@ -200,8 +210,19 @@ defmodule TheMaestro.TUI.AuthFlow do
 
     IO.puts([IO.ANSI.bright(), "Google Service Account Authentication", IO.ANSI.reset()])
     IO.puts("")
-    IO.puts([IO.ANSI.faint(), "Service account authentication uses GOOGLE_APPLICATION_CREDENTIALS", IO.ANSI.reset()])
-    IO.puts([IO.ANSI.faint(), "environment variable pointing to your service account JSON file.", IO.ANSI.reset()])
+
+    IO.puts([
+      IO.ANSI.faint(),
+      "Service account authentication uses GOOGLE_APPLICATION_CREDENTIALS",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts([
+      IO.ANSI.faint(),
+      "environment variable pointing to your service account JSON file.",
+      IO.ANSI.reset()
+    ])
+
     IO.puts("")
 
     case System.get_env("GOOGLE_APPLICATION_CREDENTIALS") do
@@ -310,9 +331,13 @@ defmodule TheMaestro.TUI.AuthFlow do
 
   defp validate_auth_credentials(:api_key, _provider, credentials) do
     case Map.get(credentials, :api_key) do
-      nil -> {:error, "Missing API key in credentials"}
-      "" -> {:error, "Empty API key in credentials"}
-      _api_key -> 
+      nil ->
+        {:error, "Missing API key in credentials"}
+
+      "" ->
+        {:error, "Empty API key in credentials"}
+
+      _api_key ->
         # Could add provider-specific validation here
         :ok
     end
@@ -328,8 +353,10 @@ defmodule TheMaestro.TUI.AuthFlow do
 
   defp validate_auth_credentials(:service_account, :google, credentials) do
     case Map.get(credentials, :credentials_path) do
-      nil -> {:error, "Missing credentials path for service account"}
-      path -> 
+      nil ->
+        {:error, "Missing credentials path for service account"}
+
+      path ->
         if File.exists?(path), do: :ok, else: {:error, "Service account file not found"}
     end
   end
@@ -348,14 +375,17 @@ defmodule TheMaestro.TUI.AuthFlow do
     File.mkdir_p!(maestro_dir)
 
     # Load existing preferences
-    preferences = case File.read(pref_file) do
-      {:ok, content} ->
-        case Jason.decode(content) do
-          {:ok, prefs} -> prefs
-          {:error, _} -> %{}
-        end
-      {:error, _} -> %{}
-    end
+    preferences =
+      case File.read(pref_file) do
+        {:ok, content} ->
+          case Jason.decode(content) do
+            {:ok, prefs} -> prefs
+            {:error, _} -> %{}
+          end
+
+        {:error, _} ->
+          %{}
+      end
 
     # Update preference for this provider
     updated_preferences = Map.put(preferences, to_string(provider), to_string(method))
@@ -364,19 +394,24 @@ defmodule TheMaestro.TUI.AuthFlow do
     case Jason.encode(updated_preferences) do
       {:ok, json} ->
         File.write!(pref_file, json)
-        File.chmod!(pref_file, 0o600)  # Owner read/write only
+        # Owner read/write only
+        File.chmod!(pref_file, 0o600)
 
       {:error, _} ->
         # Continue silently if we can't save preferences
         :ok
     end
   rescue
-    _ -> :ok  # Continue silently if we can't save preferences
+    # Continue silently if we can't save preferences
+    _ -> :ok
   end
 
   defp get_auth_method_description(:api_key), do: "Fast and simple - uses your API key"
-  defp get_auth_method_description(:oauth), do: "Secure browser-based authentication"  
-  defp get_auth_method_description(:service_account), do: "Enterprise authentication for Google services"
+  defp get_auth_method_description(:oauth), do: "Secure browser-based authentication"
+
+  defp get_auth_method_description(:service_account),
+    do: "Enterprise authentication for Google services"
+
   defp get_auth_method_description(_method), do: "Authentication method"
 
   defp format_auth_method(:api_key), do: "API Key"

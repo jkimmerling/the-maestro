@@ -20,7 +20,7 @@ defmodule TheMaestro.TUI.ModelSelection do
       recommended: true
     },
     "claude-3-opus-20240229" => %{
-      name: "Claude 3 Opus", 
+      name: "Claude 3 Opus",
       description: "Highest intelligence and capability",
       capabilities: "Text, Code, Analysis, Vision",
       context_length: "200K tokens"
@@ -28,10 +28,10 @@ defmodule TheMaestro.TUI.ModelSelection do
     "claude-3-haiku-20240307" => %{
       name: "Claude 3 Haiku",
       description: "Fastest and most efficient",
-      capabilities: "Text, Code, Analysis, Vision", 
+      capabilities: "Text, Code, Analysis, Vision",
       context_length: "200K tokens"
     },
-    
+
     # Gemini models
     "gemini-1.5-pro" => %{
       name: "Gemini 1.5 Pro",
@@ -55,7 +55,7 @@ defmodule TheMaestro.TUI.ModelSelection do
 
     # OpenAI models
     "gpt-4o" => %{
-      name: "GPT-4o", 
+      name: "GPT-4o",
       description: "Most capable GPT-4 model with vision",
       capabilities: "Text, Code, Images, Audio",
       context_length: "128K tokens",
@@ -64,7 +64,7 @@ defmodule TheMaestro.TUI.ModelSelection do
     "gpt-4o-mini" => %{
       name: "GPT-4o Mini",
       description: "Faster and more affordable GPT-4",
-      capabilities: "Text, Code, Images", 
+      capabilities: "Text, Code, Images",
       context_length: "128K tokens"
     },
     "gpt-4-turbo" => %{
@@ -86,7 +86,8 @@ defmodule TheMaestro.TUI.ModelSelection do
     - `{:ok, {provider, model, auth_context}}`: Model selected successfully
     - `{:error, reason}`: Selection failed or user cancelled
   """
-  @spec select_model(atom(), map()) :: {:ok, {atom(), String.t(), map()}} | {:error, atom() | String.t()}
+  @spec select_model(atom(), map()) ::
+          {:ok, {atom(), String.t(), map()}} | {:error, atom() | String.t()}
   def select_model(provider, auth_context) do
     MenuHelpers.display_loading("Loading available models...")
 
@@ -141,11 +142,13 @@ defmodule TheMaestro.TUI.ModelSelection do
         MenuHelpers.display_title("MODEL DETAILS")
 
         IO.puts([IO.ANSI.bright(), IO.ANSI.cyan(), info.name, IO.ANSI.reset()])
+
         if info[:recommended] do
           IO.puts([IO.ANSI.bright(), IO.ANSI.green(), "(Recommended)", IO.ANSI.reset()])
         end
+
         IO.puts("")
-        
+
         IO.puts([IO.ANSI.faint(), info.description, IO.ANSI.reset()])
         IO.puts("")
 
@@ -190,9 +193,10 @@ defmodule TheMaestro.TUI.ModelSelection do
         # Fallback to known models if API call fails
         fallback_models = [
           "claude-3-5-sonnet-20241022",
-          "claude-3-opus-20240229", 
+          "claude-3-opus-20240229",
           "claude-3-haiku-20240307"
         ]
+
         {:ok, fallback_models}
     end
   rescue
@@ -203,6 +207,7 @@ defmodule TheMaestro.TUI.ModelSelection do
         "claude-3-opus-20240229",
         "claude-3-haiku-20240307"
       ]
+
       {:ok, fallback_models}
   end
 
@@ -218,16 +223,18 @@ defmodule TheMaestro.TUI.ModelSelection do
           "gemini-1.5-flash",
           "gemini-pro"
         ]
+
         {:ok, fallback_models}
     end
   rescue
     _ ->
       # Fallback to known models on any error
       fallback_models = [
-        "gemini-1.5-pro", 
+        "gemini-1.5-pro",
         "gemini-1.5-flash",
         "gemini-pro"
       ]
+
       {:ok, fallback_models}
   end
 
@@ -240,9 +247,10 @@ defmodule TheMaestro.TUI.ModelSelection do
         # Fallback to known models if API call fails
         fallback_models = [
           "gpt-4o",
-          "gpt-4o-mini", 
+          "gpt-4o-mini",
           "gpt-4-turbo"
         ]
+
         {:ok, fallback_models}
     end
   rescue
@@ -253,20 +261,24 @@ defmodule TheMaestro.TUI.ModelSelection do
         "gpt-4o-mini",
         "gpt-4-turbo"
       ]
+
       {:ok, fallback_models}
   end
 
   defp display_model_menu(provider, models) do
     provider_name = get_provider_name(provider)
-    
-    options = Enum.map(models, fn model ->
-      case get_model_info(model) do
-        nil -> model
-        info -> 
-          name = if info[:recommended], do: "#{info.name} (Recommended)", else: info.name
-          name
-      end
-    end)
+
+    options =
+      Enum.map(models, fn model ->
+        case get_model_info(model) do
+          nil ->
+            model
+
+          info ->
+            name = if info[:recommended], do: "#{info.name} (Recommended)", else: info.name
+            name
+        end
+      end)
 
     additional_info =
       models
@@ -282,7 +294,11 @@ defmodule TheMaestro.TUI.ModelSelection do
 
     all_options = options ++ ["Back to authentication", "Back to provider selection"]
 
-    MenuHelpers.display_menu("AVAILABLE #{String.upcase(provider_name)} MODELS", all_options, additional_info)
+    MenuHelpers.display_menu(
+      "AVAILABLE #{String.upcase(provider_name)} MODELS",
+      all_options,
+      additional_info
+    )
   end
 
   defp handle_model_selection(provider, models, auth_context) do
@@ -301,7 +317,10 @@ defmodule TheMaestro.TUI.ModelSelection do
         {:error, :back_to_provider}
 
       {:error, :invalid_choice} ->
-        MenuHelpers.display_error("Invalid choice. Please select a number between 1 and #{max_choice}.")
+        MenuHelpers.display_error(
+          "Invalid choice. Please select a number between 1 and #{max_choice}."
+        )
+
         :timer.sleep(2000)
         select_model(provider, auth_context)
 
@@ -314,10 +333,11 @@ defmodule TheMaestro.TUI.ModelSelection do
     # Show model details before confirmation
     show_model_details(model, provider)
 
-    model_name = case get_model_info(model) do
-      nil -> model
-      info -> info.name
-    end
+    model_name =
+      case get_model_info(model) do
+        nil -> model
+        info -> info.name
+      end
 
     MenuHelpers.display_info("You selected: #{model_name}")
     IO.puts("")
@@ -489,7 +509,7 @@ defmodule TheMaestro.TUI.ModelSelection do
   end
 
   defp get_provider_name(:anthropic), do: "Claude (Anthropic)"
-  defp get_provider_name(:google), do: "Gemini (Google)" 
+  defp get_provider_name(:google), do: "Gemini (Google)"
   defp get_provider_name(:openai), do: "ChatGPT (OpenAI)"
   defp get_provider_name(provider), do: String.capitalize(to_string(provider))
 end

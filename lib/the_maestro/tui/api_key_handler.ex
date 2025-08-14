@@ -9,7 +9,6 @@ defmodule TheMaestro.TUI.APIKeyHandler do
   alias TheMaestro.TUI.MenuHelpers
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
 
-
   @doc """
   Handles API key input and validation for a specific provider.
 
@@ -52,7 +51,7 @@ defmodule TheMaestro.TUI.APIKeyHandler do
       google: ~r/^[A-Za-z0-9_-]{39}$/,
       openai: ~r/^sk-[A-Za-z0-9]{48}$/
     }
-    
+
     pattern = Map.get(api_key_patterns, provider)
 
     cond do
@@ -116,7 +115,12 @@ defmodule TheMaestro.TUI.APIKeyHandler do
 
     display_provider_specific_instructions(provider)
 
-    IO.puts([IO.ANSI.faint(), "Your API key will be masked as you type for security.", IO.ANSI.reset()])
+    IO.puts([
+      IO.ANSI.faint(),
+      "Your API key will be masked as you type for security.",
+      IO.ANSI.reset()
+    ])
+
     IO.puts([IO.ANSI.faint(), "Press Ctrl+C to cancel at any time.", IO.ANSI.reset()])
     IO.puts("")
   end
@@ -179,13 +183,19 @@ defmodule TheMaestro.TUI.APIKeyHandler do
   defp display_format_error(provider) do
     case provider do
       :anthropic ->
-        MenuHelpers.display_error("Invalid API key format. Claude API keys should start with 'sk-ant-api03-' and be 104 characters long.")
+        MenuHelpers.display_error(
+          "Invalid API key format. Claude API keys should start with 'sk-ant-api03-' and be 104 characters long."
+        )
 
       :google ->
-        MenuHelpers.display_error("Invalid API key format. Gemini API keys should be 39 characters of letters, numbers, underscores, and hyphens.")
+        MenuHelpers.display_error(
+          "Invalid API key format. Gemini API keys should be 39 characters of letters, numbers, underscores, and hyphens."
+        )
 
       :openai ->
-        MenuHelpers.display_error("Invalid API key format. OpenAI API keys should start with 'sk-' and be 51 characters long.")
+        MenuHelpers.display_error(
+          "Invalid API key format. OpenAI API keys should start with 'sk-' and be 51 characters long."
+        )
 
       _ ->
         MenuHelpers.display_error("Invalid API key format for this provider.")
