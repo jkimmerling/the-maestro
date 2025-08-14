@@ -17,10 +17,13 @@ defmodule TheMaestro.TUI.Application do
       {Finch, name: TheMaestro.Finch},
       # Start the Registry for agent processes (needed for core functionality)
       {Registry, keys: :unique, name: TheMaestro.Agents.Registry},
+      # Start PubSub for real-time communication (needed for agent messaging)
+      {Phoenix.PubSub, name: TheMaestro.PubSub},
       # Start the DynamicSupervisor for agent processes
       {TheMaestro.Agents.DynamicSupervisor, []},
       # Start the Tooling registry GenServer (needed for agent tools)
       TheMaestro.Tooling
+      # Note: Embedded server will be started dynamically when OAuth is needed
     ]
 
     # Start with minimal supervision tree

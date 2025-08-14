@@ -43,6 +43,16 @@ defmodule TheMaestro.Agents do
   end
 
   @doc """
+  Updates the authentication context for an agent.
+
+  This is useful when the user's OAuth tokens are refreshed and the agent
+  needs to use the updated credentials.
+  """
+  def update_agent_auth_context(agent_id, auth_context) do
+    Agent.update_auth_context(agent_id, auth_context)
+  end
+
+  @doc """
   Terminates an agent process.
   """
   def terminate_agent(agent_pid) do

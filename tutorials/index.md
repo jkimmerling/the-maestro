@@ -329,8 +329,20 @@ Learn how to implement real-time tool status display in Terminal User Interface 
 
 **Difficulty**: Advanced
 
-### Coming in Epic 4
-- Story 4.5: Epic 4 comprehensive demonstration
+### [Story 4.5: Epic 4 Demo Creation](epic4/story4.5/)
+
+Learn how to create comprehensive demonstration materials for complete technical features, focusing on user experience and professional documentation practices:
+
+- Design effective technical demonstrations with progressive disclosure patterns
+- Create user-friendly CLI tool documentation with troubleshooting guides
+- Build and distribute standalone Elixir escript executables
+- Implement multi-audience documentation strategies (developers, evaluators, end-users)
+- Apply professional UX principles to command-line interfaces
+- Develop comprehensive testing and validation processes for demo materials
+
+**Key Concepts**: Demo design, user experience documentation, escript distribution, technical writing, CLI UX design, quality assurance processes
+
+**Difficulty**: Intermediate to Advanced
 
 ## Contributing
 

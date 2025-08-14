@@ -106,6 +106,24 @@ defmodule TheMaestro.Agents.Agent do
   end
 
   @doc """
+  Updates the authentication context for an agent.
+
+  This is useful when the user's OAuth tokens are refreshed and the agent
+  needs to use the updated credentials.
+
+  ## Parameters
+    - `agent_id`: The unique identifier for the agent
+    - `auth_context`: The new authentication context
+    
+  ## Returns
+    `:ok` if successful
+  """
+  @spec update_auth_context(String.t(), term()) :: :ok
+  def update_auth_context(agent_id, auth_context) do
+    GenServer.call(via_tuple(agent_id), {:update_auth_context, auth_context})
+  end
+
+  @doc """
   Saves the current agent session to the database.
 
   ## Parameters
@@ -294,6 +312,12 @@ defmodule TheMaestro.Agents.Agent do
   @impl true
   def handle_call(:get_state, _from, state) do
     {:reply, state, state}
+  end
+
+  @impl true
+  def handle_call({:update_auth_context, auth_context}, _from, state) do
+    updated_state = %{state | auth_context: auth_context}
+    {:reply, :ok, updated_state}
   end
 
   @impl true

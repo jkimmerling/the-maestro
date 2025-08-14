@@ -9,6 +9,7 @@ defmodule TheMaestro.TUI.CLI do
   """
 
   alias TheMaestro.Agents.{Agent, DynamicSupervisor}
+  alias TheMaestro.Providers.Gemini
 
   @doc """
   Main entry point for the escript executable.
@@ -59,7 +60,30 @@ defmodule TheMaestro.TUI.CLI do
     # Build welcome message based on authentication status
     welcome_messages =
       case auth_info do
+        %{authenticated: true, method: :api_key} ->
+          [
+            %{type: :system, content: "Welcome to The Maestro TUI!"},
+            %{type: :system, content: "Authenticated with API Key"},
+            %{
+              type: :system,
+              content: "Type your message and press Enter to chat with the agent."
+            },
+            %{type: :system, content: "Press Ctrl-C or 'q' to exit."}
+          ]
+
+        %{authenticated: true, method: :oauth, user_email: email} ->
+          [
+            %{type: :system, content: "Welcome to The Maestro TUI!"},
+            %{type: :system, content: "Authenticated as: #{email}"},
+            %{
+              type: :system,
+              content: "Type your message and press Enter to chat with the agent."
+            },
+            %{type: :system, content: "Press Ctrl-C or 'q' to exit."}
+          ]
+
         %{authenticated: true, user_email: email} ->
+          # Legacy OAuth format
           [
             %{type: :system, content: "Welcome to The Maestro TUI!"},
             %{type: :system, content: "Authenticated as: #{email}"},
@@ -93,6 +117,8 @@ defmodule TheMaestro.TUI.CLI do
 
     # Store state in process dictionary for simple state management
     Process.put(:tui_state, initial_state)
+    # Also store auth info separately for agent creation
+    Process.put(:tui_auth_info, auth_info)
   end
 
   defp run_tui do
@@ -157,7 +183,7 @@ defmodule TheMaestro.TUI.CLI do
     {width, height} = get_terminal_size()
 
     # Clear screen and move to top
-    IO.write([IO.ANSI.home()])
+    IO.write([IO.ANSI.clear(), IO.ANSI.home()])
 
     # Render header
     header = "╔" <> String.duplicate("═", width - 2) <> "╗"
@@ -306,8 +332,17 @@ defmodule TheMaestro.TUI.CLI do
   defp get_session_agent_id(auth_info) do
     # Create a unique agent ID for this TUI session
     case auth_info do
+      %{authenticated: true, method: :api_key} ->
+        # For API key auth, use a hash of the API key
+        api_key = auth_info[:api_key] || "default"
+        :crypto.hash(:sha256, api_key) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+
+      %{authenticated: true, method: :oauth, user_email: email} ->
+        # Use a hash of the email for OAuth sessions
+        :crypto.hash(:sha256, email) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+
       %{authenticated: true, user_email: email} ->
-        # Use a hash of the email for authenticated sessions
+        # Legacy OAuth format
         :crypto.hash(:sha256, email) |> Base.encode16(case: :lower) |> binary_part(0, 16)
 
       %{authenticated: false} ->
@@ -328,15 +363,49 @@ defmodule TheMaestro.TUI.CLI do
   defp ensure_agent_exists(agent_id) do
     case GenServer.whereis(Agent.via_tuple(agent_id)) do
       nil ->
-        # Agent doesn't exist, start it
+        # Agent doesn't exist, start it with proper auth context
+        provider = Agent.get_default_provider()
+        auth_info = Process.get(:tui_auth_info)
+
+        # Create the appropriate auth context based on the authentication method
+        auth_context = create_auth_context_for_provider(auth_info, provider)
+
         DynamicSupervisor.start_agent(
           agent_id,
-          llm_provider: Agent.get_default_provider()
+          llm_provider: provider,
+          auth_context: auth_context
         )
 
       pid when is_pid(pid) ->
         # Agent already exists
         {:ok, pid}
+    end
+  end
+
+  defp create_auth_context_for_provider(auth_info, provider) do
+    case {auth_info.method, provider} do
+      {:api_key, _} ->
+        # For API key authentication, create context in provider format
+        %{
+          type: :api_key,
+          credentials: %{api_key: auth_info.api_key},
+          config: %{}
+        }
+
+      {:oauth, _} ->
+        # For OAuth authentication, create OAuth context with tokens
+        %{
+          type: :oauth,
+          credentials: %{
+            access_token: auth_info.access_token,
+            user_email: auth_info.user_email
+          },
+          config: %{}
+        }
+
+      _ ->
+        # Fallback - let provider initialize its own auth
+        nil
     end
   end
 
@@ -548,8 +617,8 @@ defmodule TheMaestro.TUI.CLI do
     # Read configuration to determine if authentication is required
     case read_authentication_config() do
       {:ok, true} ->
-        # Authentication is required - start device authorization flow
-        initiate_device_authorization_flow()
+        # Authentication is required - detect available methods and let user choose
+        detect_and_choose_authentication_method()
 
       {:ok, false} ->
         # Authentication is disabled - proceed in anonymous mode
@@ -570,6 +639,161 @@ defmodule TheMaestro.TUI.CLI do
       nil -> {:ok, true}
       _ -> {:error, "Invalid authentication configuration"}
     end
+  end
+
+  defp detect_and_choose_authentication_method do
+    # Check if user has a saved authentication preference
+    case load_auth_preference() do
+      {:ok, auth_method} ->
+        # User has a saved preference, try to use it
+        case attempt_saved_authentication_method(auth_method) do
+          {:ok, auth_info} ->
+            {:ok, auth_info}
+
+          {:error, _reason} ->
+            # Saved method failed, show menu to choose again
+            IO.puts([IO.ANSI.yellow(), "Previous authentication method failed.", IO.ANSI.reset()])
+            show_authentication_menu()
+        end
+
+      {:error, :no_preference} ->
+        # No saved preference, show menu
+        show_authentication_menu()
+
+      {:error, reason} ->
+        {:error, "Failed to load authentication preference: #{reason}"}
+    end
+  end
+
+  defp show_authentication_menu do
+    IO.write([IO.ANSI.clear(), IO.ANSI.home()])
+
+    IO.puts([
+      IO.ANSI.bright(),
+      IO.ANSI.blue(),
+      "┌────────────────────────────────────────────────────────────────────────────┐",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts([
+      IO.ANSI.bright(),
+      IO.ANSI.blue(),
+      "│                           AUTHENTICATION METHOD                            │",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts([
+      IO.ANSI.bright(),
+      IO.ANSI.blue(),
+      "└────────────────────────────────────────────────────────────────────────────┘",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts("")
+
+    IO.puts([IO.ANSI.bright(), "Choose your preferred authentication method:", IO.ANSI.reset()])
+    IO.puts("")
+
+    # Check what methods are available
+    api_key_available = System.get_env("GEMINI_API_KEY") != nil
+
+    if api_key_available do
+      IO.puts([
+        IO.ANSI.bright(),
+        IO.ANSI.green(),
+        "1. ",
+        IO.ANSI.reset(),
+        IO.ANSI.bright(),
+        "API Key",
+        IO.ANSI.reset(),
+        " (GEMINI_API_KEY detected)"
+      ])
+
+      IO.puts("   Fast and simple - uses your API key from environment variable")
+    else
+      IO.puts([
+        IO.ANSI.faint(),
+        "1. API Key (No GEMINI_API_KEY found in environment)",
+        IO.ANSI.reset()
+      ])
+    end
+
+    IO.puts("")
+
+    IO.puts([
+      IO.ANSI.bright(),
+      IO.ANSI.cyan(),
+      "2. ",
+      IO.ANSI.reset(),
+      IO.ANSI.bright(),
+      "OAuth (Google Account)",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts("   Secure OAuth flow - sign in with your Google account")
+    IO.puts("")
+
+    if api_key_available do
+      IO.puts([IO.ANSI.faint(), "Enter your choice (1-2): ", IO.ANSI.reset()])
+    else
+      IO.puts([
+        IO.ANSI.faint(),
+        "Enter your choice (2 for OAuth, or set GEMINI_API_KEY): ",
+        IO.ANSI.reset()
+      ])
+    end
+
+    case IO.gets("") do
+      "1\n" when api_key_available ->
+        handle_api_key_authentication()
+
+      "2\n" ->
+        handle_oauth_authentication()
+
+      "1\n" ->
+        IO.puts([
+          IO.ANSI.red(),
+          "No GEMINI_API_KEY found. Please set it or choose OAuth (2).",
+          IO.ANSI.reset()
+        ])
+
+        :timer.sleep(2000)
+        show_authentication_menu()
+
+      _ ->
+        IO.puts([IO.ANSI.red(), "Invalid choice. Please enter 1 or 2.", IO.ANSI.reset()])
+        :timer.sleep(1000)
+        show_authentication_menu()
+    end
+  end
+
+  defp handle_api_key_authentication do
+    IO.puts([IO.ANSI.bright(), "Using API Key authentication...", IO.ANSI.reset()])
+
+    # Save user's preference
+    save_auth_preference("api_key")
+
+    # Create auth context for API key
+    auth_info = %{
+      authenticated: true,
+      method: :api_key,
+      api_key: System.get_env("GEMINI_API_KEY")
+    }
+
+    IO.puts([IO.ANSI.green(), "✓ API Key authentication configured!", IO.ANSI.reset()])
+    :timer.sleep(1000)
+
+    {:ok, auth_info}
+  end
+
+  defp handle_oauth_authentication do
+    IO.puts([IO.ANSI.bright(), "Using Google OAuth authentication...", IO.ANSI.reset()])
+
+    # Save user's preference
+    save_auth_preference("oauth")
+
+    # Start the Google OAuth device flow directly
+    initiate_device_authorization_flow()
   end
 
   defp initiate_device_authorization_flow do
@@ -593,51 +817,22 @@ defmodule TheMaestro.TUI.CLI do
   end
 
   defp start_device_authorization do
-    # Get device authorization parameters
-    base_url = get_base_url()
-
     IO.puts([
       IO.ANSI.bright(),
-      "Starting device authorization flow...",
+      "Starting Google OAuth device authorization flow...",
       IO.ANSI.reset()
     ])
 
-    # Step 1: Request device code
-    case request_device_code(base_url) do
-      {:ok, device_response} ->
-        display_authorization_instructions(device_response)
-        poll_for_authorization(base_url, device_response)
-
-      {:error, reason} ->
-        {:error, "Failed to request device code: #{reason}"}
+    # Use the Gemini provider's device authorization flow
+    case Gemini.device_authorization_flow() do
+      {:ok,
+       %{auth_url: auth_url, state: state, code_verifier: code_verifier, polling_fn: polling_fn}} ->
+        display_google_oauth_instructions(auth_url, state)
+        poll_for_google_authorization(polling_fn, code_verifier)
     end
   end
 
-  defp get_base_url do
-    # For TUI, we assume the web server is running on localhost:4000
-    # In a production deployment, this could be configurable
-    "http://localhost:4000"
-  end
-
-  defp request_device_code(base_url) do
-    url = "#{base_url}/api/cli/auth/device"
-
-    case HTTPoison.post(url, "", [{"Content-Type", "application/json"}]) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-        case Jason.decode(body) do
-          {:ok, response} -> {:ok, response}
-          {:error, _} -> {:error, "Invalid JSON response"}
-        end
-
-      {:ok, %HTTPoison.Response{status_code: status_code}} ->
-        {:error, "HTTP error: #{status_code}"}
-
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        {:error, "Network error: #{reason}"}
-    end
-  end
-
-  defp display_authorization_instructions(device_response) do
+  defp display_google_oauth_instructions(auth_url, _state) do
     IO.write([IO.ANSI.clear(), IO.ANSI.home()])
 
     IO.puts([
@@ -650,7 +845,7 @@ defmodule TheMaestro.TUI.CLI do
     IO.puts([
       IO.ANSI.bright(),
       IO.ANSI.blue(),
-      "│                        DEVICE AUTHORIZATION REQUIRED                       │",
+      "│                        GOOGLE OAUTH AUTHORIZATION                          │",
       IO.ANSI.reset()
     ])
 
@@ -665,7 +860,7 @@ defmodule TheMaestro.TUI.CLI do
 
     IO.puts([
       IO.ANSI.bright(),
-      "To authorize this device, please:",
+      "To authorize The Maestro TUI with Google, please:",
       IO.ANSI.reset()
     ])
 
@@ -681,7 +876,7 @@ defmodule TheMaestro.TUI.CLI do
       "   ",
       IO.ANSI.bright(),
       IO.ANSI.cyan(),
-      device_response["verification_uri_complete"],
+      auth_url,
       IO.ANSI.reset()
     ])
 
@@ -689,110 +884,62 @@ defmodule TheMaestro.TUI.CLI do
 
     IO.puts([
       IO.ANSI.bright(),
-      "2. Enter this user code if prompted:",
-      IO.ANSI.reset()
-    ])
-
-    IO.puts([
-      "   ",
-      IO.ANSI.bright(),
-      IO.ANSI.yellow(),
-      device_response["user_code"],
+      "2. Sign in with your Google account and authorize The Maestro",
       IO.ANSI.reset()
     ])
 
     IO.puts("")
 
+    IO.puts([
+      IO.ANSI.bright(),
+      "3. Copy the authorization code from the browser and paste it below",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts("")
+  end
+
+  defp poll_for_google_authorization(polling_fn, code_verifier) do
     IO.puts([
       IO.ANSI.faint(),
-      "Waiting for authorization... (this will timeout in #{div(device_response["expires_in"], 60)} minutes)",
+      "Waiting for you to complete authorization in your browser...",
       IO.ANSI.reset()
     ])
 
-    IO.puts("")
-  end
+    # Get the authorization code from the user
+    case polling_fn.() do
+      "" ->
+        {:error, "No authorization code provided"}
 
-  defp poll_for_authorization(base_url, device_response) do
-    device_code = device_response["device_code"]
-    # Convert to milliseconds
-    interval = device_response["interval"] * 1000
-    url = "#{base_url}/api/cli/auth/poll?device_code=#{device_code}"
+      auth_code ->
+        # Complete the device authorization with the code
+        case Gemini.complete_device_authorization(auth_code, code_verifier) do
+          {:ok, auth_info} ->
+            handle_successful_google_authorization(auth_info)
 
-    poll_loop(url, interval, device_response["expires_in"])
-  end
-
-  defp poll_loop(url, interval, remaining_time) when remaining_time > 0 do
-    :timer.sleep(interval)
-
-    case HTTPoison.get(url) do
-      {:ok, response} ->
-        handle_poll_response(response, url, interval, remaining_time)
-
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        {:error, "Network error during polling: #{reason}"}
+          {:error, reason} ->
+            {:error, "Failed to complete Google OAuth: #{inspect(reason)}"}
+        end
     end
   end
 
-  defp poll_loop(_url, _interval, _remaining_time) do
-    {:error, "Authorization timeout"}
-  end
-
-  defp handle_poll_response(
-         %HTTPoison.Response{status_code: 200, body: body},
-         _url,
-         _interval,
-         _remaining_time
-       ) do
-    case Jason.decode(body) do
-      {:ok, %{"access_token" => access_token}} ->
-        handle_successful_authorization(access_token)
-
-      {:error, _} ->
-        {:error, "Invalid response from server"}
-    end
-  end
-
-  defp handle_poll_response(%HTTPoison.Response{status_code: 428}, url, interval, remaining_time) do
-    # Still waiting for authorization
-    remaining = remaining_time - div(interval, 1000)
-    poll_loop(url, interval, remaining)
-  end
-
-  defp handle_poll_response(
-         %HTTPoison.Response{status_code: 400, body: body},
-         _url,
-         _interval,
-         _remaining_time
-       ) do
-    case Jason.decode(body) do
-      {:ok, %{"error" => "expired_token"}} ->
-        {:error, "Authorization timeout - please try again"}
-
-      {:ok, %{"error" => error}} ->
-        {:error, "Authorization failed: #{error}"}
-
-      _ ->
-        {:error, "Authorization failed"}
-    end
-  end
-
-  defp handle_successful_authorization(access_token) do
-    # Success! We got the access token
-    auth_info = %{
+  defp handle_successful_google_authorization(auth_info) do
+    # Convert Gemini provider auth format to TUI format
+    tui_auth_info = %{
       authenticated: true,
-      access_token: access_token,
-      # We'd get this from the token in a real implementation
-      user_email: "authenticated_user"
+      method: :oauth,
+      access_token: auth_info.access_token,
+      user_email: auth_info[:user_email] || "google_user"
     }
 
     # Store the token for future use
-    store_token(auth_info)
+    store_token(tui_auth_info)
 
-    IO.puts([IO.ANSI.green(), "✓ Authorization successful!", IO.ANSI.reset()])
+    IO.puts([IO.ANSI.green(), "✓ Google OAuth authorization successful!", IO.ANSI.reset()])
     # Brief pause to show success message
     :timer.sleep(1000)
 
-    {:ok, auth_info}
+    {:ok, tui_auth_info}
   end
 
   defp store_token(auth_info) do
@@ -824,6 +971,29 @@ defmodule TheMaestro.TUI.CLI do
   end
 
   defp load_stored_token do
+    # Try to load OAuth credentials from the Gemini provider's cache first
+    case Gemini.initialize_auth() do
+      {:ok, %{type: :oauth, credentials: credentials}} ->
+        # Convert to TUI format
+        auth_info = %{
+          authenticated: true,
+          method: :oauth,
+          access_token: credentials.access_token,
+          user_email: credentials[:user_email] || "google_user"
+        }
+
+        {:ok, auth_info}
+
+      {:ok, _other_auth} ->
+        {:error, "No OAuth credentials found"}
+
+      {:error, _reason} ->
+        # Fallback to TUI-specific token file
+        load_tui_specific_token()
+    end
+  end
+
+  defp load_tui_specific_token do
     home_dir = System.user_home!()
     token_file = Path.join([home_dir, ".maestro", "tui_credentials.json"])
 
@@ -831,12 +1001,11 @@ defmodule TheMaestro.TUI.CLI do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, token_data} ->
-            # In a real implementation, we'd validate the token here
-            # For now, assume it's valid if it exists
             auth_info = %{
               authenticated: true,
+              method: :oauth,
               access_token: token_data["access_token"],
-              user_email: token_data["user_email"] || "authenticated_user"
+              user_email: token_data["user_email"] || "google_user"
             }
 
             {:ok, auth_info}
@@ -847,6 +1016,69 @@ defmodule TheMaestro.TUI.CLI do
 
       {:error, _} ->
         {:error, "No stored token found"}
+    end
+  end
+
+  # Authentication preference management
+  defp load_auth_preference do
+    home_dir = System.user_home!()
+    pref_file = Path.join([home_dir, ".maestro", "auth_preference.txt"])
+
+    case File.read(pref_file) do
+      {:ok, content} ->
+        method = String.trim(content)
+
+        if method in ["api_key", "oauth"] do
+          {:ok, method}
+        else
+          {:error, :invalid_preference}
+        end
+
+      {:error, :enoent} ->
+        {:error, :no_preference}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp save_auth_preference(method) when method in ["api_key", "oauth"] do
+    home_dir = System.user_home!()
+    maestro_dir = Path.join(home_dir, ".maestro")
+    pref_file = Path.join(maestro_dir, "auth_preference.txt")
+
+    # Ensure directory exists
+    File.mkdir_p!(maestro_dir)
+
+    # Write preference
+    File.write!(pref_file, method)
+  end
+
+  defp attempt_saved_authentication_method("api_key") do
+    # Check if API key is still available
+    case System.get_env("GEMINI_API_KEY") do
+      nil ->
+        {:error, "GEMINI_API_KEY not found"}
+
+      api_key ->
+        auth_info = %{
+          authenticated: true,
+          method: :api_key,
+          api_key: api_key
+        }
+
+        {:ok, auth_info}
+    end
+  end
+
+  defp attempt_saved_authentication_method("oauth") do
+    # Try to load existing OAuth token
+    case load_stored_token() do
+      {:ok, auth_info} ->
+        {:ok, auth_info}
+
+      {:error, _reason} ->
+        {:error, "No valid OAuth token found"}
     end
   end
 end

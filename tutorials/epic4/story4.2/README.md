@@ -2,24 +2,27 @@
 
 ## Overview
 
-This tutorial explains how we implemented configurable authentication for the Terminal User Interface (TUI) in The Maestro project. The TUI now supports both authenticated mode (using OAuth 2.0 device authorization flow) and anonymous mode based on application configuration.
+This tutorial explains how we implemented configurable authentication for the Terminal User Interface (TUI) in The Maestro project. The TUI now supports multiple authentication methods including API key authentication (via GEMINI_API_KEY environment variable), Google OAuth 2.0 device authorization flow, and anonymous mode based on application configuration.
 
 ## Learning Objectives
 
 By the end of this tutorial, you'll understand:
-- How to implement OAuth 2.0 Device Authorization Grant (RFC 8628) in Elixir
-- How to create configurable authentication flows
-- How to securely store authentication tokens locally
-- How to integrate HTTP client functionality in an escript application
+- How to implement multiple authentication methods (API key and OAuth 2.0)
+- How to integrate with Gemini provider authentication system
+- How to create user-friendly authentication selection menus
+- How to securely store authentication tokens and preferences locally
+- How to implement Google OAuth 2.0 Device Authorization Grant flow
 
 ## Architecture Overview
 
 The TUI authentication system consists of several components:
 
 1. **Configuration Reading**: Reads `require_authentication` from application config
-2. **Device Authorization Flow**: Implements OAuth 2.0 device flow for CLI authentication
-3. **Token Storage**: Securely stores access tokens in the user's home directory
-4. **Anonymous Mode**: Bypasses authentication when configured
+2. **Authentication Method Selection**: Interactive menu to choose between API key and OAuth
+3. **API Key Authentication**: Uses GEMINI_API_KEY environment variable
+4. **Google OAuth Device Flow**: Implements OAuth 2.0 device flow via Gemini provider
+5. **Token Storage**: Securely stores access tokens and preferences in user's home directory
+6. **Anonymous Mode**: Bypasses authentication when configured
 
 ## Implementation Details
 
@@ -45,33 +48,71 @@ defp read_authentication_config do
 end
 ```
 
-### 2. Device Authorization Flow Implementation
+### 2. Authentication Method Selection
 
-The OAuth 2.0 Device Authorization Grant works as follows:
-
-1. **Request Device Code**: TUI requests a device code from the server
-2. **Display Instructions**: Show user the authorization URL and user code
-3. **Poll for Token**: Continuously poll the server until user completes authorization
-4. **Store Token**: Save the access token securely for future use
-
-#### Device Code Request
+The TUI provides an interactive menu for users to choose their preferred authentication method:
 
 ```elixir
-defp request_device_code(base_url) do
-  url = "#{base_url}/api/cli/auth/device"
+defp show_authentication_menu do
+  IO.write([IO.ANSI.clear(), IO.ANSI.home()])
+  
+  # Display menu with current environment status
+  api_key_available = System.get_env("GEMINI_API_KEY") != nil
+  
+  if api_key_available do
+    IO.puts([IO.ANSI.bright(), IO.ANSI.green(), "1. ", IO.ANSI.reset(),
+            IO.ANSI.bright(), "API Key", IO.ANSI.reset(), 
+            " (GEMINI_API_KEY detected)"])
+  else
+    IO.puts([IO.ANSI.faint(), "1. API Key (No GEMINI_API_KEY found)", IO.ANSI.reset()])
+  end
+  
+  IO.puts([IO.ANSI.bright(), IO.ANSI.cyan(), "2. ", IO.ANSI.reset(),
+          IO.ANSI.bright(), "OAuth (Google Account)", IO.ANSI.reset()])
+end
+```
 
-  case HTTPoison.post(url, "", [{"Content-Type", "application/json"}]) do
-    {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-      case Jason.decode(body) do
-        {:ok, response} -> {:ok, response}
-        {:error, _} -> {:error, "Invalid JSON response"}
-      end
+### 3. API Key Authentication
 
-    {:ok, %HTTPoison.Response{status_code: status_code}} ->
-      {:error, "HTTP error: #{status_code}"}
+For users with GEMINI_API_KEY environment variable set:
 
-    {:error, %HTTPoison.Error{reason: reason}} ->
-      {:error, "Network error: #{reason}"}
+```elixir
+defp handle_api_key_authentication do
+  case System.get_env("GEMINI_API_KEY") do
+    nil ->
+      {:error, "GEMINI_API_KEY not found"}
+    
+    api_key ->
+      auth_info = %{
+        authenticated: true,
+        method: :api_key,
+        api_key: api_key
+      }
+      
+      save_auth_preference("api_key")
+      {:ok, auth_info}
+  end
+end
+```
+
+### 4. Google OAuth Device Authorization Flow
+
+The OAuth 2.0 Device Authorization Grant integrates with the Gemini provider system:
+
+#### OAuth Flow Implementation
+
+The TUI delegates OAuth authentication to the Gemini provider:
+
+```elixir
+defp start_device_authorization do
+  # Use the Gemini provider's device authorization flow
+  case TheMaestro.Providers.Gemini.device_authorization_flow() do
+    {:ok, %{auth_url: auth_url, state: state, code_verifier: code_verifier, polling_fn: polling_fn}} ->
+      display_google_oauth_instructions(auth_url, state)
+      poll_for_google_authorization(polling_fn, code_verifier)
+      
+    {:error, reason} ->
+      {:error, "Failed to start Google OAuth: #{reason}"}
   end
 end
 ```
@@ -114,42 +155,44 @@ defp display_authorization_instructions(device_response) do
 end
 ```
 
-#### Token Polling Loop
+#### Authorization Completion
 
-The TUI polls the server until authorization is complete:
+The TUI uses the Gemini provider's polling function and completion handler:
 
 ```elixir
-defp poll_loop(url, interval, remaining_time) when remaining_time > 0 do
-  :timer.sleep(interval)
-
-  case HTTPoison.get(url) do
-    {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-      case Jason.decode(body) do
-        {:ok, %{"access_token" => access_token}} ->
-          # Success! Store and return token
-          auth_info = %{
-            authenticated: true,
-            access_token: access_token,
-            user_email: "authenticated_user"
-          }
-          store_token(auth_info)
-          {:ok, auth_info}
-
-        {:error, _} ->
-          {:error, "Invalid response from server"}
+defp poll_for_google_authorization(polling_fn, code_verifier) do
+  # Get the authorization code from the user
+  case polling_fn.() do
+    "" ->
+      {:error, "No authorization code provided"}
+      
+    auth_code ->
+      # Complete the device authorization with the code
+      case TheMaestro.Providers.Gemini.complete_device_authorization(auth_code, code_verifier) do
+        {:ok, auth_info} ->
+          handle_successful_google_authorization(auth_info)
+          
+        {:error, reason} ->
+          {:error, "Failed to complete Google OAuth: #{inspect(reason)}"}
       end
-
-    {:ok, %HTTPoison.Response{status_code: 428}} ->
-      # Still waiting - continue polling
-      remaining = remaining_time - div(interval, 1000)
-      poll_loop(url, interval, remaining)
-
-    # Handle errors and expiration...
   end
+end
+
+defp handle_successful_google_authorization(auth_info) do
+  # Convert Gemini provider auth format to TUI format
+  tui_auth_info = %{
+    authenticated: true,
+    method: :oauth,
+    access_token: auth_info.access_token,
+    user_email: auth_info[:user_email] || "google_user"
+  }
+  
+  store_token(tui_auth_info)
+  {:ok, tui_auth_info}
 end
 ```
 
-### 3. Secure Token Storage
+### 5. Secure Token Storage and Preference Management
 
 Authentication tokens are stored in the user's home directory with restricted permissions:
 
@@ -181,7 +224,35 @@ defp store_token(auth_info) do
 end
 ```
 
-### 4. Anonymous Mode Implementation
+The system also stores user authentication preferences:
+
+```elixir
+defp save_auth_preference(method) when method in ["api_key", "oauth"] do
+  home_dir = System.user_home!()
+  maestro_dir = Path.join(home_dir, ".maestro")
+  pref_file = Path.join(maestro_dir, "auth_preference.txt")
+  
+  File.mkdir_p!(maestro_dir)
+  File.write!(pref_file, method)
+end
+
+defp load_auth_preference do
+  home_dir = System.user_home!()
+  pref_file = Path.join([home_dir, ".maestro", "auth_preference.txt"])
+  
+  case File.read(pref_file) do
+    {:ok, content} ->
+      method = String.trim(content)
+      if method in ["api_key", "oauth"], do: {:ok, method}, else: {:error, :invalid_preference}
+    {:error, :enoent} ->
+      {:error, :no_preference}
+    {:error, reason} ->
+      {:error, reason}
+  end
+end
+```
+
+### 6. Anonymous Mode Implementation
 
 When authentication is disabled, the TUI bypasses the entire authentication flow:
 
@@ -202,16 +273,29 @@ defp handle_authentication do
 end
 ```
 
-### 5. HTTP Client Integration
+### 7. Integration with Existing Gemini Provider
 
-For escript applications, we need to ensure the HTTP client is available. We added Finch to the TUI supervision tree:
+The TUI leverages the existing Gemini provider authentication system:
 
 ```elixir
-# In TUI.Application
-children = [
-  {Finch, name: TheMaestro.Finch},
-  # ... other children
-]
+defp load_stored_token do
+  # Try to load OAuth credentials from the Gemini provider's cache first
+  case TheMaestro.Providers.Gemini.initialize_auth() do
+    {:ok, %{type: :oauth, credentials: credentials}} ->
+      # Convert to TUI format
+      auth_info = %{
+        authenticated: true,
+        method: :oauth,
+        access_token: credentials.access_token,
+        user_email: credentials[:user_email] || "google_user"
+      }
+      {:ok, auth_info}
+      
+    {:error, _reason} ->
+      # Fallback to TUI-specific token file
+      load_tui_specific_token()
+  end
+end
 ```
 
 ## Security Considerations
@@ -230,30 +314,40 @@ children = [
 3. Run TUI: `./maestro_tui`
 4. Should display "Running in anonymous mode"
 
-### Test Authenticated Mode
+### Test API Key Authentication
 
-1. Set `require_authentication: true` in config
-2. Start Phoenix server: `mix phx.server`
+1. Set `GEMINI_API_KEY` environment variable
+2. Set `require_authentication: true` in config
 3. Build escript: `MIX_ENV=prod mix escript.build`
 4. Run TUI: `./maestro_tui`
-5. Should display device authorization instructions
-6. Follow the URL to complete authorization
-7. TUI should proceed with authentication info
+5. Should detect API key and offer it as option 1
+6. Select option 1 to use API key authentication
 
-### Test Token Persistence
+### Test OAuth Authentication
 
-1. Complete authentication once
+1. Unset `GEMINI_API_KEY` or choose option 2 in menu
+2. Set `require_authentication: true` in config
+3. Build escript: `MIX_ENV=prod mix escript.build`
+4. Run TUI: `./maestro_tui`
+5. Select option 2 for OAuth
+6. Follow the Google OAuth flow
+7. Complete authorization in browser
+
+### Test Authentication Preference
+
+1. Complete authentication once with your preferred method
 2. Exit and restart TUI
-3. Should display "Found valid authentication token"
-4. Should show "Authenticated as: [email]"
+3. Should automatically use saved preference
+4. Should display authentication status accordingly
 
 ## Key Learning Points
 
-1. **Configuration-Driven Behavior**: Using application configuration to control authentication requirements
-2. **OAuth 2.0 Device Flow**: Implementing the complete device authorization grant flow
-3. **Secure Storage**: Properly securing authentication credentials on the local filesystem
-4. **Error Handling**: Comprehensive error handling for network issues and authorization failures
-5. **User Experience**: Clear instructions and feedback for CLI users
+1. **Multi-Method Authentication**: Supporting both API key and OAuth authentication methods
+2. **User Choice**: Providing interactive menus for authentication method selection
+3. **Provider Integration**: Leveraging existing Gemini provider authentication system
+4. **Preference Management**: Storing and reusing user authentication preferences
+5. **Secure Storage**: Properly securing authentication credentials on the local filesystem
+6. **User Experience**: Clear instructions and visual feedback for CLI authentication flows
 
 ## Best Practices Demonstrated
 
@@ -265,11 +359,12 @@ children = [
 
 ## Integration with Existing System
 
-The TUI authentication integrates seamlessly with the existing web authentication system:
+The TUI authentication integrates seamlessly with the existing Gemini provider system:
 
-1. Uses the same OAuth endpoints as the web interface
-2. Stores tokens in a separate location to avoid conflicts
-3. Respects the same configuration settings
-4. Follows the same security practices
+1. **Shared Provider Logic**: Uses the same Gemini provider authentication methods
+2. **Consistent Token Management**: Leverages existing OAuth token caching where possible
+3. **Fallback Strategy**: Falls back to TUI-specific storage when needed
+4. **Configuration Compatibility**: Respects the same application configuration settings
+5. **Security Consistency**: Follows the same security practices across all interfaces
 
-This implementation provides a complete, production-ready authentication system for CLI applications while maintaining the flexibility to operate in anonymous mode when appropriate.
+This implementation provides a complete, production-ready authentication system for CLI applications that leverages existing infrastructure while maintaining the flexibility to operate in anonymous mode when appropriate. The multi-method approach ensures users can choose the authentication method that best fits their workflow and security requirements.
