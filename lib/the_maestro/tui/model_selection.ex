@@ -268,17 +268,7 @@ defmodule TheMaestro.TUI.ModelSelection do
   defp display_model_menu(provider, models) do
     provider_name = get_provider_name(provider)
 
-    options =
-      Enum.map(models, fn model ->
-        case get_model_info(model) do
-          nil ->
-            model
-
-          info ->
-            name = if info[:recommended], do: "#{info.name} (Recommended)", else: info.name
-            name
-        end
-      end)
+    options = Enum.map(models, &format_model_option/1)
 
     additional_info =
       models
@@ -403,6 +393,16 @@ defmodule TheMaestro.TUI.ModelSelection do
   defp get_default_model(:google), do: "gemini-1.5-pro"
   defp get_default_model(:openai), do: "gpt-4o"
   defp get_default_model(_), do: "default"
+
+  defp format_model_option(model) do
+    case get_model_info(model) do
+      nil ->
+        model
+
+      info ->
+        if info[:recommended], do: "#{info.name} (Recommended)", else: info.name
+    end
+  end
 
   defp display_basic_model_info(model_id, provider) do
     provider_name = get_provider_name(provider)

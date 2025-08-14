@@ -6,8 +6,8 @@ defmodule TheMaestro.TUI.ProviderSelection do
   between Claude (Anthropic), Gemini (Google), and ChatGPT (OpenAI).
   """
 
-  alias TheMaestro.TUI.MenuHelpers
   alias TheMaestro.Providers.Auth.ProviderRegistry
+  alias TheMaestro.TUI.MenuHelpers
 
   # Provider information for display
   @provider_info %{

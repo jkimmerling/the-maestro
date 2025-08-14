@@ -6,8 +6,8 @@ defmodule TheMaestro.TUI.AuthFlow do
   authentication execution, and state management for the TUI interface.
   """
 
-  alias TheMaestro.TUI.{MenuHelpers, APIKeyHandler, OAuthHandler}
   alias TheMaestro.Providers.Auth.ProviderRegistry
+  alias TheMaestro.TUI.{APIKeyHandler, MenuHelpers, OAuthHandler}
 
   @doc """
   Coordinates the complete authentication flow for a provider.

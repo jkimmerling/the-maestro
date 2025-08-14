@@ -9,7 +9,7 @@ defmodule TheMaestro.TUI.CLI do
   """
 
   alias TheMaestro.Agents.{Agent, DynamicSupervisor}
-  alias TheMaestro.TUI.{ProviderSelection, AuthFlow, ModelSelection}
+  alias TheMaestro.TUI.{AuthFlow, ModelSelection, ProviderSelection}
 
   @doc """
   Main entry point for the escript executable.
@@ -601,28 +601,36 @@ defmodule TheMaestro.TUI.CLI do
   defp execute_selection_flow do
     case ProviderSelection.select_provider() do
       {:ok, provider} ->
-        case AuthFlow.authenticate_provider(provider) do
-          {:ok, auth_context} ->
-            case ModelSelection.select_model(provider, auth_context) do
-              {:ok, {provider, model, auth_context}} ->
-                {:ok, {provider, model, auth_context}}
+        handle_provider_authentication(provider)
 
-              {:error, :back_to_auth} ->
-                execute_selection_flow()
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 
-              {:error, :back_to_provider} ->
-                execute_selection_flow()
+  defp handle_provider_authentication(provider) do
+    case AuthFlow.authenticate_provider(provider) do
+      {:ok, auth_context} ->
+        handle_model_selection(provider, auth_context)
 
-              {:error, reason} ->
-                {:error, reason}
-            end
+      {:error, :back_to_provider} ->
+        execute_selection_flow()
 
-          {:error, :back_to_provider} ->
-            execute_selection_flow()
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 
-          {:error, reason} ->
-            {:error, reason}
-        end
+  defp handle_model_selection(provider, auth_context) do
+    case ModelSelection.select_model(provider, auth_context) do
+      {:ok, {provider, model, auth_context}} ->
+        {:ok, {provider, model, auth_context}}
+
+      {:error, :back_to_auth} ->
+        execute_selection_flow()
+
+      {:error, :back_to_provider} ->
+        execute_selection_flow()
 
       {:error, reason} ->
         {:error, reason}

@@ -161,19 +161,7 @@ defmodule TheMaestro.TUI.APIKeyHandler do
       {:ok, api_key} ->
         trimmed_key = String.trim(api_key)
 
-        if trimmed_key == "" do
-          MenuHelpers.display_error("API key cannot be empty")
-          handle_input_error(provider)
-        else
-          case validate_api_key_format(provider, trimmed_key) do
-            {:ok, validated_key} ->
-              {:ok, validated_key}
-
-            {:error, :invalid_format} ->
-              display_format_error(provider)
-              handle_input_error(provider)
-          end
-        end
+        handle_api_key_validation(provider, trimmed_key)
 
       {:error, :cancelled} ->
         {:error, :cancelled}
@@ -332,6 +320,22 @@ defmodule TheMaestro.TUI.APIKeyHandler do
     end
   rescue
     _ -> {:error, "Network error"}
+  end
+
+  defp handle_api_key_validation(provider, trimmed_key) do
+    if trimmed_key == "" do
+      MenuHelpers.display_error("API key cannot be empty")
+      handle_input_error(provider)
+    else
+      case validate_api_key_format(provider, trimmed_key) do
+        {:ok, validated_key} ->
+          {:ok, validated_key}
+
+        {:error, :invalid_format} ->
+          display_format_error(provider)
+          handle_input_error(provider)
+      end
+    end
   end
 
   defp get_provider_name(:anthropic), do: "Claude (Anthropic)"
