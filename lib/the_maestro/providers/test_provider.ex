@@ -119,6 +119,30 @@ defmodule TheMaestro.Providers.TestProvider do
     {:error, :invalid_test_auth}
   end
 
+  @impl LLMProvider
+  def list_models(_auth_context) do
+    {:ok, [
+      %{
+        id: "test-model-1",
+        name: "Test Model 1",
+        description: "A test model for development",
+        context_length: 4096,
+        multimodal: false,
+        function_calling: true,
+        cost_tier: "free"
+      },
+      %{
+        id: "test-model-2",
+        name: "Test Model 2", 
+        description: "Another test model for development",
+        context_length: 8192,
+        multimodal: true,
+        function_calling: true,
+        cost_tier: "free"
+      }
+    ]}
+  end
+
   # Helper function to simulate streaming
   defp simulate_streaming(content, stream_callback) do
     # Split content into words and stream them

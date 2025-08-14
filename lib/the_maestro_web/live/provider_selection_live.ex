@@ -13,7 +13,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
 
   alias TheMaestro.Providers.Auth
   alias TheMaestro.Providers.Auth.ProviderRegistry
-  alias TheMaestro.Providers.{Anthropic, Gemini, Openai}
+  alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
 
   require Logger
 
@@ -141,7 +141,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       |> assign(:validating_api_key, true)
       |> assign(:error_message, nil)
 
-    case Auth.authenticate(provider, :api_key, %{api_key: api_key}) do
+    case Auth.authenticate(provider, :api_key, %{api_key: api_key}, "anonymous_user") do
       {:ok, credentials} ->
         socket =
           socket
@@ -264,21 +264,18 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   end
 
   def handle_info({:validate_api_key, api_key}, socket) do
-    provider = socket.assigns.selected_provider
+    # Basic API key validation - just check if it's not empty
+    # More sophisticated validation would happen in the Auth module
+    socket =
+      if String.trim(api_key) != "" and String.length(api_key) > 10 do
+        assign(socket, :validating_api_key, false)
+      else
+        socket
+        |> assign(:validating_api_key, false)
+        |> assign(:error_message, "Invalid API key format")
+      end
 
-    case Auth.validate_api_key(provider, api_key) do
-      {:ok, _} ->
-        socket = assign(socket, :validating_api_key, false)
-        {:noreply, socket}
-
-      {:error, _reason} ->
-        socket =
-          socket
-          |> assign(:validating_api_key, false)
-          |> assign(:error_message, "Invalid API key format")
-
-        {:noreply, socket}
-    end
+    {:noreply, socket}
   end
 
   def handle_info({:load_models, provider, credentials}, socket) do
@@ -305,7 +302,15 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   def handle_info({:oauth_callback, code}, socket) do
     provider = socket.assigns.selected_provider
 
-    case Auth.exchange_oauth_code(provider, code, %{redirect_uri: get_oauth_redirect_uri()}) do
+    # Use provider-specific exchange function
+    result = case provider do
+      :anthropic -> Anthropic.exchange_oauth_code(:anthropic, code, %{redirect_uri: get_oauth_redirect_uri()})
+      :google -> Gemini.exchange_oauth_code(:google, code, %{redirect_uri: get_oauth_redirect_uri()})
+      :openai -> OpenAI.exchange_oauth_code(:openai, code, %{redirect_uri: get_oauth_redirect_uri()})
+      _ -> {:error, :unsupported_provider}
+    end
+
+    case result do
       {:ok, credentials} ->
         socket =
           socket
@@ -920,7 +925,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
         Gemini.list_models(auth_context)
 
       :openai ->
-        Openai.list_models(auth_context)
+        OpenAI.list_models(auth_context)
 
       _ ->
         {:error, :unsupported_provider}

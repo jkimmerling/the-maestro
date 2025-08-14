@@ -11,7 +11,7 @@ defmodule TheMaestroWeb.ProvidersController do
   use TheMaestroWeb, :controller
 
   alias TheMaestro.Providers.Auth
-  alias TheMaestro.Providers.{Anthropic, Gemini, Openai}
+  alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
 
   require Logger
 
@@ -233,7 +233,7 @@ defmodule TheMaestroWeb.ProvidersController do
         Gemini.list_models(auth_context)
 
       :openai ->
-        Openai.list_models(auth_context)
+        OpenAI.list_models(auth_context)
 
       _ ->
         {:error, :unsupported_provider}
