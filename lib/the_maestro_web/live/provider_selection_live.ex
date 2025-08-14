@@ -12,7 +12,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   use TheMaestroWeb, :live_view
 
   alias TheMaestro.Providers.Auth
-  alias TheMaestro.Providers.Auth.{AnthropicAuth, GoogleAuth, OpenaiAuth, ProviderRegistry}
+  alias TheMaestro.Providers.Auth.{AnthropicAuth, GoogleAuth, OpenAIAuth, ProviderRegistry}
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
 
   require Logger
@@ -314,7 +314,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
           GoogleAuth.exchange_oauth_code(:google, code, %{redirect_uri: get_oauth_redirect_uri()})
 
         :openai ->
-          OpenaiAuth.exchange_oauth_code(:openai, code, %{redirect_uri: get_oauth_redirect_uri()})
+          OpenAIAuth.exchange_oauth_code(:openai, code, %{redirect_uri: get_oauth_redirect_uri()})
 
         _ ->
           {:error, :unsupported_provider}

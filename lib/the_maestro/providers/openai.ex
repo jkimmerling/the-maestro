@@ -563,6 +563,10 @@ defmodule TheMaestro.Providers.OpenAI do
     {:ok, OpenaiEx.new(access_token)}
   end
 
+  defp create_openai_client(_auth_context) do
+    {:error, :unsupported_auth_type}
+  end
+
   defp validate_auth_context(%{type: _type, credentials: _credentials}), do: :ok
   defp validate_auth_context(_), do: {:error, :invalid_auth_context}
 
