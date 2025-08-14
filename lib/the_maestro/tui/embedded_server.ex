@@ -474,7 +474,6 @@ defmodule TheMaestro.TUI.EmbeddedServer do
     authorize_device(user_code)
   end
 
-
   defp extract_form_data_from_request(data) do
     # Extract form data from the full HTTP request
     case String.split(data, "\r\n\r\n", parts: 2) do
