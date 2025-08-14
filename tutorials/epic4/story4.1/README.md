@@ -79,7 +79,7 @@ defp render_interface(state) do
   {width, height} = get_terminal_size()
   
   # Clear screen and move to top
-  IO.write([IO.ANSI.home()])
+  IO.write([IO.ANSI.clear(), IO.ANSI.home()])
   
   # Render header with Unicode box drawing characters
   header = "╔" <> String.duplicate("═", width - 2) <> "╗"
@@ -91,11 +91,25 @@ defp render_interface(state) do
   IO.puts([IO.ANSI.bright(), IO.ANSI.blue(), separator, IO.ANSI.reset()])
   
   # Calculate areas and render conversation history
-  conversation_height = height - 8  # Leave space for header, input, borders
+  conversation_height = height - 10  # Leave space for header, status line, input, borders
+  IO.puts([IO.ANSI.bright(), "Conversation History:", IO.ANSI.reset()])
   render_conversation_history(state.conversation_history, conversation_height, width)
   
-  # Render input area with footer
-  render_input_area(state, width)
+  # Render status line
+  status_separator = "╠" <> String.duplicate("═", width - 2) <> "╣"
+  IO.puts([IO.ANSI.bright(), IO.ANSI.blue(), status_separator, IO.ANSI.reset()])
+  render_status_line(state, width)
+  
+  # Render input area
+  input_separator = "╠" <> String.duplicate("═", width - 2) <> "╣"
+  IO.puts([IO.ANSI.bright(), IO.ANSI.blue(), input_separator, IO.ANSI.reset()])
+  
+  IO.puts([IO.ANSI.bright(), "Input: ", IO.ANSI.reset(), state.current_input])
+  IO.puts([IO.ANSI.faint(), "Press Enter to send, Ctrl-C or 'q' to quit", IO.ANSI.reset()])
+  
+  # Bottom border
+  footer = "╚" <> String.duplicate("═", width - 2) <> "╝"
+  IO.puts([IO.ANSI.bright(), IO.ANSI.blue(), footer, IO.ANSI.reset()])
 end
 ```
 
@@ -134,7 +148,9 @@ defp initialize_tui do
       %{type: :system, content: "Type your message and press Enter to chat with the agent."},
       %{type: :system, content: "Press Ctrl-C or 'q' to exit."}
     ],
-    current_input: ""
+    current_input: "",
+    status_message: "",
+    streaming_buffer: ""
   }
   
   Process.put(:tui_state, initial_state)
@@ -145,8 +161,8 @@ end
 
 1. **Process Dictionary**: Simple state storage for single-process TUI
 2. **Signal Handling Process**: Separate process for handling terminal signals
-3. **Minimal State**: Only store essential UI state, not full agent state
-4. **ANSI State Management**: Proper cursor and screen state initialization
+3. **Enhanced State**: Includes status messaging and streaming support for real-time feedback
+4. **ANSI State Management**: Proper cursor and screen state initialization with full screen clearing
 
 ### Step 4: Input Handling and User Interaction
 
@@ -182,11 +198,30 @@ end
 defp run_tui do
   state = Process.get(:tui_state)
   
-  # Check for shutdown message from signal handler
+  # Check for messages (including PubSub messages and shutdown)
   receive do
-    :shutdown -> cleanup_and_exit()
+    :shutdown ->
+      cleanup_and_exit()
+    
+    # Handle agent status messages for real-time feedback
+    {:status_update, status} ->
+      new_state = handle_status_update(state, status)
+      Process.put(:tui_state, new_state)
+      run_tui()
+    
+    {:tool_call_start, tool_info} ->
+      new_state = handle_tool_call_start(state, tool_info)
+      Process.put(:tui_state, new_state)
+      run_tui()
+      
+    # Additional message handlers for streaming and completion
+    {:stream_chunk, chunk} ->
+      new_state = handle_stream_chunk(state, chunk)
+      Process.put(:tui_state, new_state)
+      run_tui()
+      
   after
-    0 -> :ok
+    100 -> :ok  # Small timeout to allow for input processing
   end
   
   # Render interface and handle input
@@ -208,9 +243,11 @@ end
 **Input Handling Best Practices**:
 
 1. **Comprehensive Error Handling**: Handle EOF, errors, and exceptions gracefully
-2. **Signal Integration**: Check for shutdown messages from signal handler
-3. **Command Recognition**: Special handling for quit commands ('q')
-4. **Recursive Loop**: Tail-recursive main loop for memory efficiency
+2. **Message Processing**: Handle PubSub messages for real-time agent communication
+3. **Signal Integration**: Check for shutdown messages from signal handler
+4. **Command Recognition**: Special handling for quit commands ('q')
+5. **Recursive Loop**: Tail-recursive main loop for memory efficiency
+6. **Status Updates**: Real-time feedback during agent tool execution
 
 ### Step 5: Production Configuration and Deployment
 

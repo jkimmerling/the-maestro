@@ -9,7 +9,6 @@ defmodule TheMaestro.TUI.CLI do
   """
 
   alias TheMaestro.Agents.{Agent, DynamicSupervisor}
-  alias TheMaestro.TUI.EmbeddedServer
 
   @doc """
   Main entry point for the escript executable.
@@ -183,7 +182,7 @@ defmodule TheMaestro.TUI.CLI do
     {width, height} = get_terminal_size()
 
     # Clear screen and move to top
-    IO.write([IO.ANSI.home()])
+    IO.write([IO.ANSI.clear(), IO.ANSI.home()])
 
     # Render header
     header = "╔" <> String.duplicate("═", width - 2) <> "╗"
@@ -787,46 +786,13 @@ defmodule TheMaestro.TUI.CLI do
   end
 
   defp handle_oauth_authentication do
-    IO.puts([IO.ANSI.bright(), "Using OAuth authentication...", IO.ANSI.reset()])
+    IO.puts([IO.ANSI.bright(), "Using Google OAuth authentication...", IO.ANSI.reset()])
 
     # Save user's preference
     save_auth_preference("oauth")
 
-    # Start the embedded server for OAuth device flow
-    case start_embedded_server_if_needed() do
-      :ok ->
-        # Start the OAuth device flow
-        initiate_device_authorization_flow()
-
-      {:error, reason} ->
-        IO.puts([IO.ANSI.red(), "Failed to start OAuth server: #{reason}", IO.ANSI.reset()])
-
-        IO.puts([
-          IO.ANSI.yellow(),
-          "Please try again or choose API Key authentication.",
-          IO.ANSI.reset()
-        ])
-
-        :timer.sleep(2000)
-        show_authentication_menu()
-    end
-  end
-
-  defp start_embedded_server_if_needed do
-    # Check if server is already running
-    case GenServer.whereis(EmbeddedServer) do
-      nil ->
-        # Server not running, start it
-        case Supervisor.start_child(TheMaestro.TUI.Supervisor, {EmbeddedServer, [port: 4001]}) do
-          {:ok, _pid} -> :ok
-          {:error, {:already_started, _pid}} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
-
-      _pid ->
-        # Server already running
-        :ok
-    end
+    # Start the Google OAuth device flow directly
+    initiate_device_authorization_flow()
   end
 
   defp initiate_device_authorization_flow do
@@ -850,41 +816,25 @@ defmodule TheMaestro.TUI.CLI do
   end
 
   defp start_device_authorization do
-    # Get device authorization parameters
-    base_url = get_base_url()
-
     IO.puts([
       IO.ANSI.bright(),
-      "Starting device authorization flow...",
+      "Starting Google OAuth device authorization flow...",
       IO.ANSI.reset()
     ])
 
-    # Step 1: Request device code
-    case request_device_code(base_url) do
-      {:ok, device_response} ->
-        display_authorization_instructions(device_response)
-        poll_for_authorization(base_url, device_response)
+    # Use the Gemini provider's device authorization flow
+    case TheMaestro.Providers.Gemini.device_authorization_flow() do
+      {:ok,
+       %{auth_url: auth_url, state: state, code_verifier: code_verifier, polling_fn: polling_fn}} ->
+        display_google_oauth_instructions(auth_url, state)
+        poll_for_google_authorization(polling_fn, code_verifier)
 
       {:error, reason} ->
-        {:error, "Failed to request device code: #{reason}"}
+        {:error, "Failed to start Google OAuth: #{reason}"}
     end
   end
 
-  defp get_base_url do
-    # Use the embedded server running on port 4001
-    port = EmbeddedServer.get_port()
-    "http://localhost:#{port}"
-  end
-
-  defp request_device_code(_base_url) do
-    # Use the embedded server directly instead of HTTP requests
-    case EmbeddedServer.generate_device_code() do
-      {:ok, response} -> {:ok, response}
-      {:error, reason} -> {:error, "Failed to generate device code: #{reason}"}
-    end
-  end
-
-  defp display_authorization_instructions(device_response) do
+  defp display_google_oauth_instructions(auth_url, _state) do
     IO.write([IO.ANSI.clear(), IO.ANSI.home()])
 
     IO.puts([
@@ -897,7 +847,7 @@ defmodule TheMaestro.TUI.CLI do
     IO.puts([
       IO.ANSI.bright(),
       IO.ANSI.blue(),
-      "│                        DEVICE AUTHORIZATION REQUIRED                       │",
+      "│                        GOOGLE OAUTH AUTHORIZATION                          │",
       IO.ANSI.reset()
     ])
 
@@ -912,7 +862,7 @@ defmodule TheMaestro.TUI.CLI do
 
     IO.puts([
       IO.ANSI.bright(),
-      "To authorize this device, please:",
+      "To authorize The Maestro TUI with Google, please:",
       IO.ANSI.reset()
     ])
 
@@ -928,7 +878,7 @@ defmodule TheMaestro.TUI.CLI do
       "   ",
       IO.ANSI.bright(),
       IO.ANSI.cyan(),
-      device_response["verification_uri_complete"],
+      auth_url,
       IO.ANSI.reset()
     ])
 
@@ -936,80 +886,62 @@ defmodule TheMaestro.TUI.CLI do
 
     IO.puts([
       IO.ANSI.bright(),
-      "2. Enter this user code if prompted:",
-      IO.ANSI.reset()
-    ])
-
-    IO.puts([
-      "   ",
-      IO.ANSI.bright(),
-      IO.ANSI.yellow(),
-      device_response["user_code"],
+      "2. Sign in with your Google account and authorize The Maestro",
       IO.ANSI.reset()
     ])
 
     IO.puts("")
 
+    IO.puts([
+      IO.ANSI.bright(),
+      "3. Copy the authorization code from the browser and paste it below",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts("")
+  end
+
+  defp poll_for_google_authorization(polling_fn, code_verifier) do
     IO.puts([
       IO.ANSI.faint(),
-      "Waiting for authorization... (this will timeout in #{div(device_response["expires_in"], 60)} minutes)",
+      "Waiting for you to complete authorization in your browser...",
       IO.ANSI.reset()
     ])
 
-    IO.puts("")
-  end
+    # Get the authorization code from the user
+    case polling_fn.() do
+      "" ->
+        {:error, "No authorization code provided"}
 
-  defp poll_for_authorization(_base_url, device_response) do
-    device_code = device_response["device_code"]
-    # Convert to milliseconds
-    interval = device_response["interval"] * 1000
-    expires_in = device_response["expires_in"]
+      auth_code ->
+        # Complete the device authorization with the code
+        case TheMaestro.Providers.Gemini.complete_device_authorization(auth_code, code_verifier) do
+          {:ok, auth_info} ->
+            handle_successful_google_authorization(auth_info)
 
-    poll_loop(device_code, interval, expires_in)
-  end
-
-  defp poll_loop(device_code, interval, remaining_time) when remaining_time > 0 do
-    :timer.sleep(interval)
-
-    case EmbeddedServer.poll_authorization(device_code) do
-      {:ok, %{"access_token" => access_token}} ->
-        handle_successful_authorization(access_token)
-
-      {:error, "authorization_pending"} ->
-        # Still waiting for authorization
-        remaining = remaining_time - div(interval, 1000)
-        poll_loop(device_code, interval, remaining)
-
-      {:error, "expired_token"} ->
-        {:error, "Authorization timeout - please try again"}
-
-      {:error, reason} ->
-        {:error, "Authorization failed: #{reason}"}
+          {:error, reason} ->
+            {:error, "Failed to complete Google OAuth: #{inspect(reason)}"}
+        end
     end
   end
 
-  defp poll_loop(_device_code, _interval, _remaining_time) do
-    {:error, "Authorization timeout"}
-  end
-
-  defp handle_successful_authorization(access_token) do
-    # Success! We got the access token
-    auth_info = %{
+  defp handle_successful_google_authorization(auth_info) do
+    # Convert Gemini provider auth format to TUI format
+    tui_auth_info = %{
       authenticated: true,
       method: :oauth,
-      access_token: access_token,
-      # We'd get this from the token in a real implementation
-      user_email: "authenticated_user"
+      access_token: auth_info.access_token,
+      user_email: auth_info[:user_email] || "google_user"
     }
 
     # Store the token for future use
-    store_token(auth_info)
+    store_token(tui_auth_info)
 
-    IO.puts([IO.ANSI.green(), "✓ Authorization successful!", IO.ANSI.reset()])
+    IO.puts([IO.ANSI.green(), "✓ Google OAuth authorization successful!", IO.ANSI.reset()])
     # Brief pause to show success message
     :timer.sleep(1000)
 
-    {:ok, auth_info}
+    {:ok, tui_auth_info}
   end
 
   defp store_token(auth_info) do
@@ -1041,6 +973,29 @@ defmodule TheMaestro.TUI.CLI do
   end
 
   defp load_stored_token do
+    # Try to load OAuth credentials from the Gemini provider's cache first
+    case TheMaestro.Providers.Gemini.initialize_auth() do
+      {:ok, %{type: :oauth, credentials: credentials}} ->
+        # Convert to TUI format
+        auth_info = %{
+          authenticated: true,
+          method: :oauth,
+          access_token: credentials.access_token,
+          user_email: credentials[:user_email] || "google_user"
+        }
+
+        {:ok, auth_info}
+
+      {:ok, _other_auth} ->
+        {:error, "No OAuth credentials found"}
+
+      {:error, _reason} ->
+        # Fallback to TUI-specific token file
+        load_tui_specific_token()
+    end
+  end
+
+  defp load_tui_specific_token do
     home_dir = System.user_home!()
     token_file = Path.join([home_dir, ".maestro", "tui_credentials.json"])
 
@@ -1048,13 +1003,11 @@ defmodule TheMaestro.TUI.CLI do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, token_data} ->
-            # In a real implementation, we'd validate the token here
-            # For now, assume it's valid if it exists
             auth_info = %{
               authenticated: true,
               method: :oauth,
               access_token: token_data["access_token"],
-              user_email: token_data["user_email"] || "authenticated_user"
+              user_email: token_data["user_email"] || "google_user"
             }
 
             {:ok, auth_info}
