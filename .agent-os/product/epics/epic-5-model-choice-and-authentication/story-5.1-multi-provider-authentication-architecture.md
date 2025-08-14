@@ -109,11 +109,11 @@ end
 - Database and session management from Epic 3 (Story 3.5)
 
 ## Definition of Done
-- [ ] Multi-provider authentication architecture implemented
-- [ ] All three providers (Claude, Gemini, ChatGPT) support OAuth and API key authentication
-- [ ] Credential storage and management system operational
-- [ ] Authentication flows tested for all providers and methods
-- [ ] Database migration and schema updates completed
-- [ ] Integration tests passing
-- [ ] Documentation updated with new authentication patterns
-- [ ] Tutorial created in `tutorials/epic5/story5.1/`
+- [x] Multi-provider authentication architecture implemented
+- [x] All three providers (Claude, Gemini, ChatGPT) support OAuth and API key authentication
+- [x] Credential storage and management system operational
+- [x] Authentication flows tested for all providers and methods
+- [x] Database migration and schema updates completed
+- [x] Integration tests passing
+- [x] Documentation updated with new authentication patterns
+- [x] Tutorial created in `tutorials/epic5/story5.1/`

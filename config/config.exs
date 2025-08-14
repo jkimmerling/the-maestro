@@ -95,12 +95,41 @@ config :the_maestro, :providers,
   },
   openai: %{
     module: TheMaestro.Providers.OpenAI,
-    models: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"]
+    models: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
+    oauth_client_id: {:system, "OPENAI_OAUTH_CLIENT_ID"},
+    oauth_client_secret: {:system, "OPENAI_OAUTH_CLIENT_SECRET"},
+    api_key: {:system, "OPENAI_API_KEY"}
   },
   anthropic: %{
     module: TheMaestro.Providers.Anthropic,
-    models: ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
+    models: ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+    oauth_client_id: {:system, "ANTHROPIC_OAUTH_CLIENT_ID"},
+    oauth_client_secret: {:system, "ANTHROPIC_OAUTH_CLIENT_SECRET"},
+    api_key: {:system, "ANTHROPIC_API_KEY"}
+  },
+  google: %{
+    # Reuse existing Gemini configuration
+    module: TheMaestro.Providers.Gemini,
+    models: ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    oauth_client_id: "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com",
+    oauth_client_secret: "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",
+    api_key: {:system, "GEMINI_API_KEY"}
   }
+
+# Multi-provider authentication configuration
+config :the_maestro, :multi_provider_auth,
+  # Encryption key for credential storage (change in production!)
+  credential_encryption_key: {:system, "CREDENTIAL_ENCRYPTION_KEY", :crypto.hash(:sha256, "the_maestro_default_key_change_in_production")},
+  # Default redirect URIs for OAuth flows
+  default_redirect_uris: %{
+    anthropic: "http://localhost:4000/auth/anthropic/callback",
+    openai: "http://localhost:4000/auth/openai/callback", 
+    google: "http://localhost:4000/auth/google/callback"
+  },
+  # Session timeout (in seconds)
+  session_timeout: 3600 * 24,  # 24 hours
+  # Credential refresh threshold (refresh when < X seconds remaining)
+  refresh_threshold: 300  # 5 minutes
 
 # Configure Shell Tool
 config :the_maestro, :shell_tool,
