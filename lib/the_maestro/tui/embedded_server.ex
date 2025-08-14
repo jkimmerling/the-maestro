@@ -179,19 +179,6 @@ defmodule TheMaestro.TUI.EmbeddedServer do
   end
 
   @impl true
-  def handle_info({:tcp, socket, data}, state) do
-    response = handle_http_request(data, state)
-    :gen_tcp.send(socket, response)
-    :gen_tcp.close(socket)
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:tcp_closed, _socket}, state) do
-    {:noreply, state}
-  end
-
-  @impl true
   def terminate(_reason, state) do
     if state.socket do
       :gen_tcp.close(state.socket)
@@ -203,12 +190,46 @@ defmodule TheMaestro.TUI.EmbeddedServer do
   ## Private Functions
 
   defp start_http_server(port) do
-    :gen_tcp.listen(port, [
-      :binary,
-      {:packet, :http_bin},
-      {:active, true},
-      {:reuseaddr, true}
-    ])
+    case :gen_tcp.listen(port, [
+           :binary,
+           {:packet, 0},
+           {:active, false},
+           {:reuseaddr, true}
+         ]) do
+      {:ok, listen_socket} ->
+        # Start accepting connections in a separate process
+        spawn_link(fn -> accept_loop(listen_socket) end)
+        {:ok, listen_socket}
+
+      error ->
+        error
+    end
+  end
+
+  defp accept_loop(listen_socket) do
+    case :gen_tcp.accept(listen_socket) do
+      {:ok, client_socket} ->
+        # Handle request in separate process
+        spawn(fn -> handle_client(client_socket) end)
+        accept_loop(listen_socket)
+
+      {:error, reason} ->
+        Logger.error("Accept failed: #{inspect(reason)}")
+        accept_loop(listen_socket)
+    end
+  end
+
+  defp handle_client(socket) do
+    case :gen_tcp.recv(socket, 0, 5000) do
+      {:ok, data} ->
+        response = handle_http_request(data, %{})
+        :gen_tcp.send(socket, response)
+        :gen_tcp.close(socket)
+
+      {:error, reason} ->
+        Logger.error("Client recv failed: #{inspect(reason)}")
+        :gen_tcp.close(socket)
+    end
   end
 
   defp handle_http_request(data, state) do

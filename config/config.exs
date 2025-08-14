@@ -91,7 +91,7 @@ config :the_maestro, :llm_provider, default: :gemini
 config :the_maestro, :providers,
   gemini: %{
     module: TheMaestro.Providers.Gemini,
-    models: ["gemini-2.5-pro", "gemini-1.5-pro", "gemini-1.5-flash"]
+    models: ["gemini-1.5-pro", "gemini-1.5-flash"]
   },
   openai: %{
     module: TheMaestro.Providers.OpenAI,
