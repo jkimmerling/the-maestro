@@ -67,7 +67,8 @@ defmodule TheMaestro.Providers.Auth.SessionManager do
     - `{:ok, {provider, auth_context}}`: Active provider found
     - `{:error, :no_active_provider}`: No active provider set
   """
-  @spec get_active_provider(pid()) :: {:ok, {ProviderAuth.provider(), map()}} | {:error, :no_active_provider}
+  @spec get_active_provider(pid()) ::
+          {:ok, {ProviderAuth.provider(), map()}} | {:error, :no_active_provider}
   def get_active_provider(session) do
     GenServer.call(session, :get_active_provider)
   end
@@ -112,7 +113,9 @@ defmodule TheMaestro.Providers.Auth.SessionManager do
   ## Returns
     Map of providers to their authentication status
   """
-  @spec list_session_providers(pid()) :: %{ProviderAuth.provider() => :authenticated | :needs_auth}
+  @spec list_session_providers(pid()) :: %{
+          ProviderAuth.provider() => :authenticated | :needs_auth
+        }
   def list_session_providers(session) do
     GenServer.call(session, :list_providers)
   end
@@ -151,11 +154,12 @@ defmodule TheMaestro.Providers.Auth.SessionManager do
   def handle_call({:set_active_provider, provider, method}, _from, state) do
     case ensure_provider_context(state, provider, method) do
       {:ok, updated_state, auth_context} ->
-        new_state = %{updated_state | 
-          active_provider: provider,
-          last_activity: DateTime.utc_now()
+        new_state = %{
+          updated_state
+          | active_provider: provider,
+            last_activity: DateTime.utc_now()
         }
-        
+
         Logger.info("Set active provider to #{provider} for user #{state.user_id}")
         {:reply, {:ok, auth_context}, new_state}
 
@@ -198,17 +202,21 @@ defmodule TheMaestro.Providers.Auth.SessionManager do
   @impl GenServer
   def handle_call(:refresh_all_credentials, _from, state) do
     {updated_contexts, failed_providers} = refresh_provider_contexts(state)
-    
-    updated_state = %{state | 
-      provider_contexts: updated_contexts,
-      last_activity: DateTime.utc_now()
+
+    updated_state = %{
+      state
+      | provider_contexts: updated_contexts,
+        last_activity: DateTime.utc_now()
     }
 
     if Enum.empty?(failed_providers) do
       Logger.info("Successfully refreshed all provider credentials for user #{state.user_id}")
       {:reply, :ok, updated_state}
     else
-      Logger.warning("Failed to refresh some providers for user #{state.user_id}: #{inspect(failed_providers)}")
+      Logger.warning(
+        "Failed to refresh some providers for user #{state.user_id}: #{inspect(failed_providers)}"
+      )
+
       {:reply, {:error, failed_providers}, updated_state}
     end
   end
@@ -216,19 +224,11 @@ defmodule TheMaestro.Providers.Auth.SessionManager do
   @impl GenServer
   def handle_call(:list_providers, _from, state) do
     available_providers = Auth.get_available_providers()
-    
-    provider_status = Enum.into(available_providers, %{}, fn {provider, _methods} ->
-      status = if Map.has_key?(state.provider_contexts, provider) do
-        :authenticated
-      else
-        case Auth.get_credentials(state.user_id, provider) do
-          {:ok, _} -> :authenticated
-          {:error, _} -> :needs_auth
-        end
-      end
-      
-      {provider, status}
-    end)
+
+    provider_status =
+      Enum.into(available_providers, %{}, fn {provider, _methods} ->
+        {provider, get_provider_status(state, provider)}
+      end)
 
     updated_state = %{state | last_activity: DateTime.utc_now()}
     {:reply, provider_status, updated_state}
@@ -239,12 +239,15 @@ defmodule TheMaestro.Providers.Auth.SessionManager do
     case Auth.revoke_credentials(state.user_id, provider) do
       :ok ->
         updated_contexts = Map.delete(state.provider_contexts, provider)
-        active_provider = if state.active_provider == provider, do: nil, else: state.active_provider
-        
-        updated_state = %{state |
-          provider_contexts: updated_contexts,
-          active_provider: active_provider,
-          last_activity: DateTime.utc_now()
+
+        active_provider =
+          if state.active_provider == provider, do: nil, else: state.active_provider
+
+        updated_state = %{
+          state
+          | provider_contexts: updated_contexts,
+            active_provider: active_provider,
+            last_activity: DateTime.utc_now()
         }
 
         Logger.info("Cleared provider #{provider} for user #{state.user_id}")
@@ -298,7 +301,7 @@ defmodule TheMaestro.Providers.Auth.SessionManager do
   defp validate_context(_), do: :ok
 
   defp refresh_provider_contexts(state) do
-    {updated_contexts, failed_providers} = 
+    {updated_contexts, failed_providers} =
       state.provider_contexts
       |> Enum.reduce({%{}, []}, fn {provider, _context}, {acc_contexts, acc_failed} ->
         case Auth.get_credentials(state.user_id, provider) do
@@ -311,5 +314,16 @@ defmodule TheMaestro.Providers.Auth.SessionManager do
       end)
 
     {updated_contexts, failed_providers}
+  end
+
+  defp get_provider_status(state, provider) do
+    if Map.has_key?(state.provider_contexts, provider) do
+      :authenticated
+    else
+      case Auth.get_credentials(state.user_id, provider) do
+        {:ok, _} -> :authenticated
+        {:error, _} -> :needs_auth
+      end
+    end
   end
 end

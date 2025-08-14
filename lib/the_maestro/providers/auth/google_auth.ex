@@ -17,20 +17,20 @@ defmodule TheMaestro.Providers.Auth.GoogleAuth do
   @impl ProviderAuth
   def get_available_methods(:google) do
     methods = [:api_key]
-    
+
     # OAuth is always available for Google/Gemini
     [:oauth | methods]
   end
 
   @impl ProviderAuth
-  def authenticate(:google, :api_key, %{api_key: api_key} = params) do
+  def authenticate(:google, :api_key, %{api_key: api_key} = _params) do
     case validate_api_key(api_key) do
       :ok ->
         credentials = %{
           api_key: api_key,
           token_type: "api_key"
         }
-        
+
         Logger.info("Successfully authenticated with Google/Gemini using API key")
         {:ok, credentials}
 
@@ -40,7 +40,7 @@ defmodule TheMaestro.Providers.Auth.GoogleAuth do
     end
   end
 
-  def authenticate(:google, :oauth, %{oauth_code: code, redirect_uri: redirect_uri} = params) do
+  def authenticate(:google, :oauth, %{oauth_code: code, redirect_uri: redirect_uri} = _params) do
     case Gemini.exchange_authorization_code(code, redirect_uri) do
       {:ok, tokens} ->
         credentials = %{
@@ -72,7 +72,7 @@ defmodule TheMaestro.Providers.Auth.GoogleAuth do
     end
   end
 
-  def validate_credentials(:google, %{access_token: token} = credentials) do
+  def validate_credentials(:google, %{access_token: _token} = credentials) do
     # Create a temporary auth context to use existing Gemini validation
     auth_context = %{
       type: :oauth,
@@ -81,17 +81,17 @@ defmodule TheMaestro.Providers.Auth.GoogleAuth do
     }
 
     case Gemini.validate_auth(auth_context) do
-      :ok -> 
+      :ok ->
         {:ok, credentials}
-      
+
       {:error, :expired} ->
         # Try to refresh if we have a refresh token
         case credentials[:refresh_token] do
           nil -> {:error, :expired}
-          refresh_token -> refresh_credentials(:google, credentials)
+          _refresh_token -> refresh_credentials(:google, credentials)
         end
-      
-      {:error, reason} -> 
+
+      {:error, reason} ->
         {:error, reason}
     end
   end
@@ -102,7 +102,7 @@ defmodule TheMaestro.Providers.Auth.GoogleAuth do
   end
 
   @impl ProviderAuth
-  def refresh_credentials(:google, %{refresh_token: refresh_token} = credentials) do
+  def refresh_credentials(:google, %{refresh_token: _refresh_token} = credentials) do
     # Create a temporary auth context to use existing Gemini refresh logic
     auth_context = %{
       type: :oauth,
@@ -128,27 +128,21 @@ defmodule TheMaestro.Providers.Auth.GoogleAuth do
     validate_credentials(:google, credentials)
   end
 
-  def refresh_credentials(:google, credentials) do
+  def refresh_credentials(:google, _credentials) do
     {:error, {:cannot_refresh, :missing_refresh_token}}
   end
 
   @impl ProviderAuth
   def initiate_oauth_flow(:google, options \\ %{}) do
-    case Gemini.web_authorization_flow(options) do
-      {:ok, flow_data} ->
-        Logger.info("Initiated Google/Gemini OAuth flow")
-        {:ok, flow_data.auth_url}
-
-      {:error, reason} ->
-        Logger.error("Failed to initiate Google/Gemini OAuth flow: #{inspect(reason)}")
-        {:error, reason}
-    end
+    {:ok, flow_data} = Gemini.web_authorization_flow(options)
+    Logger.info("Initiated Google/Gemini OAuth flow")
+    {:ok, flow_data.auth_url}
   end
 
   @impl ProviderAuth
   def exchange_oauth_code(:google, code, options \\ %{}) do
     redirect_uri = Map.get(options, :redirect_uri, get_default_redirect_uri())
-    
+
     case Gemini.exchange_authorization_code(code, redirect_uri) do
       {:ok, tokens} ->
         credentials = %{
@@ -190,7 +184,7 @@ defmodule TheMaestro.Providers.Auth.GoogleAuth do
   defp validate_api_key(_), do: {:error, :invalid_api_key_format}
 
   defp calculate_expiry(nil), do: nil
-  
+
   defp calculate_expiry(expires_at) when is_integer(expires_at) do
     DateTime.from_unix(expires_at)
     |> case do

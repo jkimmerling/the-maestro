@@ -60,7 +60,7 @@ defmodule TheMaestro.Providers.Auth.ProviderAuth do
     - `{:ok, credentials}`: Successfully authenticated
     - `{:error, reason}`: Authentication failed
   """
-  @callback authenticate(provider(), auth_method(), auth_params()) :: 
+  @callback authenticate(provider(), auth_method(), auth_params()) ::
               {:ok, credentials()} | {:error, term()}
 
   @doc """
@@ -74,7 +74,7 @@ defmodule TheMaestro.Providers.Auth.ProviderAuth do
     - `{:ok, validated_credentials}`: Credentials are valid (possibly refreshed)
     - `{:error, reason}`: Credentials are invalid or expired
   """
-  @callback validate_credentials(provider(), credentials()) :: 
+  @callback validate_credentials(provider(), credentials()) ::
               {:ok, credentials()} | {:error, term()}
 
   @doc """
@@ -88,7 +88,7 @@ defmodule TheMaestro.Providers.Auth.ProviderAuth do
     - `{:ok, new_credentials}`: Successfully refreshed
     - `{:error, reason}`: Refresh failed
   """
-  @callback refresh_credentials(provider(), credentials()) :: 
+  @callback refresh_credentials(provider(), credentials()) ::
               {:ok, credentials()} | {:error, term()}
 
   @doc """
@@ -102,7 +102,7 @@ defmodule TheMaestro.Providers.Auth.ProviderAuth do
     - `{:ok, auth_url}`: Authorization URL for user to visit
     - `{:error, reason}`: Failed to initiate OAuth flow
   """
-  @callback initiate_oauth_flow(provider(), map()) :: 
+  @callback initiate_oauth_flow(provider(), map()) ::
               {:ok, String.t()} | {:error, term()}
 
   @doc """
@@ -117,6 +117,6 @@ defmodule TheMaestro.Providers.Auth.ProviderAuth do
     - `{:ok, credentials}`: Successfully exchanged for tokens
     - `{:error, reason}`: Exchange failed
   """
-  @callback exchange_oauth_code(provider(), String.t(), map()) :: 
+  @callback exchange_oauth_code(provider(), String.t(), map()) ::
               {:ok, credentials()} | {:error, term()}
 end

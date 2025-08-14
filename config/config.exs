@@ -119,17 +119,20 @@ config :the_maestro, :providers,
 # Multi-provider authentication configuration
 config :the_maestro, :multi_provider_auth,
   # Encryption key for credential storage (change in production!)
-  credential_encryption_key: {:system, "CREDENTIAL_ENCRYPTION_KEY", :crypto.hash(:sha256, "the_maestro_default_key_change_in_production")},
+  credential_encryption_key:
+    {:system, "CREDENTIAL_ENCRYPTION_KEY", "the_maestro_default_key_change_in_production"},
   # Default redirect URIs for OAuth flows
   default_redirect_uris: %{
     anthropic: "http://localhost:4000/auth/anthropic/callback",
-    openai: "http://localhost:4000/auth/openai/callback", 
+    openai: "http://localhost:4000/auth/openai/callback",
     google: "http://localhost:4000/auth/google/callback"
   },
   # Session timeout (in seconds)
-  session_timeout: 3600 * 24,  # 24 hours
+  # 24 hours
+  session_timeout: 3600 * 24,
   # Credential refresh threshold (refresh when < X seconds remaining)
-  refresh_threshold: 300  # 5 minutes
+  # 5 minutes
+  refresh_threshold: 300
 
 # Configure Shell Tool
 config :the_maestro, :shell_tool,

@@ -7,7 +7,12 @@ defmodule TheMaestro.Providers.Auth do
   (OAuth, API keys). It handles credential storage, validation, and refresh operations.
   """
 
-  alias TheMaestro.Providers.Auth.{ProviderAuth, ProviderRegistry, CredentialStore, SessionManager}
+  alias TheMaestro.Providers.Auth.{
+    CredentialStore,
+    ProviderAuth,
+    ProviderRegistry
+  }
+
   alias TheMaestro.Providers.LLMProvider
 
   require Logger
@@ -57,9 +62,9 @@ defmodule TheMaestro.Providers.Auth do
 
     with {:ok, provider_module} <- ProviderRegistry.get_provider_module(provider),
          {:ok, credentials} <- provider_module.authenticate(provider, method, params),
-         {:ok, stored_credentials} <- CredentialStore.store_credentials(user_id, provider, method, credentials),
+         {:ok, stored_credentials} <-
+           CredentialStore.store_credentials(user_id, provider, method, credentials),
          {:ok, auth_context} <- build_auth_context(provider, method, stored_credentials) do
-      
       result = %{
         provider: provider,
         method: method,
@@ -96,8 +101,8 @@ defmodule TheMaestro.Providers.Auth do
   def get_credentials(user_id, provider, method \\ nil) do
     with {:ok, provider_module} <- ProviderRegistry.get_provider_module(provider),
          {:ok, stored_creds} <- CredentialStore.get_credentials(user_id, provider, method),
-         {:ok, validated_creds} <- provider_module.validate_credentials(provider, stored_creds.credentials) do
-      
+         {:ok, validated_creds} <-
+           provider_module.validate_credentials(provider, stored_creds.credentials) do
       # Update stored credentials if they were refreshed during validation
       if validated_creds != stored_creds.credentials do
         CredentialStore.update_credentials(stored_creds.id, validated_creds)
@@ -107,14 +112,14 @@ defmodule TheMaestro.Providers.Auth do
     else
       {:error, :not_found} ->
         {:error, :credentials_not_found}
-      
+
       {:error, :expired} = error ->
         # Try to refresh if possible
         case attempt_refresh(user_id, provider, method) do
           {:ok, result} -> {:ok, result}
           {:error, _} -> error
         end
-      
+
       {:error, reason} = error ->
         Logger.error("Failed to get credentials for #{user_id}/#{provider}: #{inspect(reason)}")
         error
@@ -132,7 +137,8 @@ defmodule TheMaestro.Providers.Auth do
     - `{:ok, auth_url}`: Authorization URL for user to visit
     - `{:error, reason}`: Failed to initiate flow
   """
-  @spec initiate_oauth_flow(ProviderAuth.provider(), map()) :: {:ok, String.t()} | {:error, term()}
+  @spec initiate_oauth_flow(ProviderAuth.provider(), map()) ::
+          {:ok, String.t()} | {:error, term()}
   def initiate_oauth_flow(provider, options \\ %{}) do
     with {:ok, provider_module} <- ProviderRegistry.get_provider_module(provider) do
       provider_module.initiate_oauth_flow(provider, options)
@@ -157,9 +163,9 @@ defmodule TheMaestro.Providers.Auth do
   def complete_oauth_flow(provider, code, user_id, options \\ %{}) do
     with {:ok, provider_module} <- ProviderRegistry.get_provider_module(provider),
          {:ok, credentials} <- provider_module.exchange_oauth_code(provider, code, options),
-         {:ok, stored_credentials} <- CredentialStore.store_credentials(user_id, provider, :oauth, credentials),
+         {:ok, stored_credentials} <-
+           CredentialStore.store_credentials(user_id, provider, :oauth, credentials),
          {:ok, auth_context} <- build_auth_context(provider, :oauth, stored_credentials) do
-      
       result = %{
         provider: provider,
         method: :oauth,
@@ -207,10 +213,11 @@ defmodule TheMaestro.Providers.Auth do
   # Private Functions
 
   defp build_auth_context(provider, method, credentials) do
-    auth_type = case method do
-      :oauth -> :oauth
-      :api_key -> :api_key
-    end
+    auth_type =
+      case method do
+        :oauth -> :oauth
+        :api_key -> :api_key
+      end
 
     context = %{
       type: auth_type,
@@ -223,7 +230,7 @@ defmodule TheMaestro.Providers.Auth do
 
   defp build_auth_result(provider, method, credentials) do
     {:ok, auth_context} = build_auth_context(provider, method, credentials)
-    
+
     %{
       provider: provider,
       method: method,
@@ -235,14 +242,17 @@ defmodule TheMaestro.Providers.Auth do
   defp attempt_refresh(user_id, provider, method) do
     with {:ok, provider_module} <- ProviderRegistry.get_provider_module(provider),
          {:ok, stored_creds} <- CredentialStore.get_credentials(user_id, provider, method),
-         {:ok, refreshed_creds} <- provider_module.refresh_credentials(provider, stored_creds.credentials),
+         {:ok, refreshed_creds} <-
+           provider_module.refresh_credentials(provider, stored_creds.credentials),
          {:ok, _} <- CredentialStore.update_credentials(stored_creds.id, refreshed_creds) do
-      
       Logger.info("Successfully refreshed credentials for #{user_id}/#{provider}")
       {:ok, build_auth_result(provider, stored_creds.auth_method, refreshed_creds)}
     else
       error ->
-        Logger.error("Failed to refresh credentials for #{user_id}/#{provider}: #{inspect(error)}")
+        Logger.error(
+          "Failed to refresh credentials for #{user_id}/#{provider}: #{inspect(error)}"
+        )
+
         error
     end
   end

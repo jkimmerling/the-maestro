@@ -11,7 +11,7 @@ defmodule TheMaestro.Providers.Auth.ProviderRegistry do
   # Provider module mapping
   @providers %{
     anthropic: TheMaestro.Providers.Auth.AnthropicAuth,
-    google: TheMaestro.Providers.Auth.GoogleAuth,  
+    google: TheMaestro.Providers.Auth.GoogleAuth,
     openai: TheMaestro.Providers.Auth.OpenAIAuth
   }
 
@@ -91,12 +91,12 @@ defmodule TheMaestro.Providers.Auth.ProviderRegistry do
           :ok | {:error, term()}
   def validate_provider_method(provider, method) do
     cond do
-      not (provider in list_providers()) ->
+      provider not in list_providers() ->
         {:error, :invalid_provider}
-      
+
       not supports_method?(provider, method) ->
         {:error, :unsupported_method}
-      
+
       true ->
         :ok
     end

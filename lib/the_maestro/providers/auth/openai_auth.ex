@@ -14,15 +14,20 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
 
   # OAuth Configuration for OpenAI
   @oauth_client_id Application.compile_env(:the_maestro, [:providers, :openai, :oauth_client_id])
-  @oauth_client_secret Application.compile_env(:the_maestro, [:providers, :openai, :oauth_client_secret])
-  @oauth_scopes ["read", "write"]  # OpenAI OAuth scopes
+  @oauth_client_secret Application.compile_env(:the_maestro, [
+                         :providers,
+                         :openai,
+                         :oauth_client_secret
+                       ])
+  # OpenAI OAuth scopes
+  @oauth_scopes ["read", "write"]
   @oauth_base_url "https://api.openai.com/oauth"
   @api_base_url "https://api.openai.com/v1"
 
   @impl ProviderAuth
   def get_available_methods(:openai) do
     methods = [:api_key]
-    
+
     # Add OAuth if configured
     if @oauth_client_id && @oauth_client_secret do
       [:oauth | methods]
@@ -32,14 +37,14 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
   end
 
   @impl ProviderAuth
-  def authenticate(:openai, :api_key, %{api_key: api_key} = params) do
+  def authenticate(:openai, :api_key, %{api_key: api_key} = _params) do
     case validate_api_key(api_key) do
       :ok ->
         credentials = %{
           api_key: api_key,
           token_type: "api_key"
         }
-        
+
         Logger.info("Successfully authenticated with OpenAI using API key")
         {:ok, credentials}
 
@@ -51,7 +56,7 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
 
   def authenticate(:openai, :oauth, %{oauth_code: code, redirect_uri: redirect_uri} = params) do
     state = Map.get(params, :state)
-    
+
     case exchange_code_for_tokens(code, redirect_uri, state) do
       {:ok, tokens} ->
         credentials = %{
@@ -85,17 +90,17 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
 
   def validate_credentials(:openai, %{access_token: token} = credentials) do
     case validate_access_token(token) do
-      :ok -> 
+      :ok ->
         {:ok, credentials}
-      
+
       {:error, :expired} ->
         # Try to refresh if we have a refresh token
         case credentials[:refresh_token] do
           nil -> {:error, :expired}
-          refresh_token -> refresh_credentials(:openai, credentials)
+          _refresh_token -> refresh_credentials(:openai, credentials)
         end
-      
-      error -> 
+
+      error ->
         error
     end
   end
@@ -110,17 +115,18 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
     case refresh_access_token(refresh_token) do
       {:ok, new_tokens} ->
         refreshed_credentials = %{
-          credentials |
-          access_token: new_tokens[:access_token],
-          expires_at: calculate_expiry(new_tokens[:expires_in])
+          credentials
+          | access_token: new_tokens[:access_token],
+            expires_at: calculate_expiry(new_tokens[:expires_in])
         }
-        
+
         # Keep the refresh token if a new one wasn't provided
-        refreshed_credentials = if new_tokens[:refresh_token] do
-          %{refreshed_credentials | refresh_token: new_tokens[:refresh_token]}
-        else
-          refreshed_credentials
-        end
+        refreshed_credentials =
+          if new_tokens[:refresh_token] do
+            %{refreshed_credentials | refresh_token: new_tokens[:refresh_token]}
+          else
+            refreshed_credentials
+          end
 
         Logger.info("Successfully refreshed OpenAI OAuth credentials")
         {:ok, refreshed_credentials}
@@ -136,7 +142,7 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
     validate_credentials(:openai, credentials)
   end
 
-  def refresh_credentials(:openai, credentials) do
+  def refresh_credentials(:openai, _credentials) do
     {:error, {:cannot_refresh, :missing_refresh_token}}
   end
 
@@ -145,7 +151,7 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
     if @oauth_client_id && @oauth_client_secret do
       state = generate_state()
       redirect_uri = Map.get(options, :redirect_uri, get_default_redirect_uri())
-      
+
       auth_params = %{
         client_id: @oauth_client_id,
         redirect_uri: redirect_uri,
@@ -193,16 +199,16 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
     case HTTPoison.get("#{@api_base_url}/models", headers) do
       {:ok, %HTTPoison.Response{status_code: 200}} ->
         :ok
-      
+
       {:ok, %HTTPoison.Response{status_code: 401}} ->
         {:error, :unauthorized}
-      
+
       {:ok, %HTTPoison.Response{status_code: 403}} ->
         {:error, :forbidden}
-      
+
       {:ok, %HTTPoison.Response{status_code: status}} ->
         {:error, {:api_error, status}}
-      
+
       {:error, reason} ->
         Logger.error("Failed to test OpenAI API key: #{inspect(reason)}")
         {:error, :api_request_failed}
@@ -218,20 +224,20 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
     case HTTPoison.get("#{@api_base_url}/models", headers) do
       {:ok, %HTTPoison.Response{status_code: 200}} ->
         :ok
-      
+
       {:ok, %HTTPoison.Response{status_code: 401}} ->
         {:error, :expired}
-      
+
       {:ok, %HTTPoison.Response{status_code: status}} ->
         {:error, {:token_validation_failed, status}}
-      
+
       {:error, reason} ->
         Logger.error("Failed to validate OpenAI access token: #{inspect(reason)}")
         {:error, :token_request_failed}
     end
   end
 
-  defp exchange_code_for_tokens(code, redirect_uri, state) do
+  defp exchange_code_for_tokens(code, redirect_uri, _state) do
     token_params = %{
       client_id: @oauth_client_id,
       client_secret: @oauth_client_secret,
@@ -246,10 +252,10 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
     case HTTPoison.post("#{@oauth_base_url}/token", body, headers) do
       {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
         case Jason.decode(response_body) do
-          {:ok, tokens} -> 
+          {:ok, tokens} ->
             {:ok, atomize_keys(tokens)}
-          
-          {:error, reason} -> 
+
+          {:error, reason} ->
             {:error, {:token_decode_failed, reason}}
         end
 
@@ -275,10 +281,10 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
     case HTTPoison.post("#{@oauth_base_url}/token", body, headers) do
       {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
         case Jason.decode(response_body) do
-          {:ok, tokens} -> 
+          {:ok, tokens} ->
             {:ok, atomize_keys(tokens)}
-          
-          {:error, reason} -> 
+
+          {:error, reason} ->
             {:error, {:refresh_decode_failed, reason}}
         end
 
@@ -291,7 +297,7 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
   end
 
   defp calculate_expiry(nil), do: nil
-  
+
   defp calculate_expiry(expires_in) when is_integer(expires_in) do
     DateTime.utc_now()
     |> DateTime.add(expires_in, :second)
