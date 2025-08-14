@@ -267,6 +267,17 @@ defmodule TheMaestro.Providers.Gemini do
     end
   end
 
+  @impl LLMProvider
+  def list_models(auth_context) do
+    case validate_auth_context(auth_context) do
+      :ok ->
+        fetch_gemini_models(auth_context)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   # Public API for OAuth flows
 
   @doc """
@@ -1150,4 +1161,117 @@ defmodule TheMaestro.Providers.Gemini do
     Logger.debug("Using project ID: #{inspect(project_id)}")
     project_id
   end
+
+  # Helper function to fetch Gemini models from API
+  defp fetch_gemini_models(auth_context) do
+    case get_access_token(auth_context) do
+      {:ok, access_token} ->
+        headers = [
+          {"Authorization", "Bearer #{access_token}"},
+          {"Content-Type", "application/json"}
+        ]
+
+        url = "https://generativelanguage.googleapis.com/v1beta/models"
+
+        case HTTPoison.get(url, headers) do
+          {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+            decode_and_format_models(body)
+
+          {:ok, %HTTPoison.Response{status_code: status}} ->
+            {:error, {:api_error, status}}
+
+          {:error, reason} ->
+            {:error, {:request_failed, reason}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp decode_and_format_models(body) do
+    case Jason.decode(body) do
+      {:ok, %{"models" => models}} ->
+        formatted_models =
+          models
+          |> Enum.filter(&gemini_generation_model?/1)
+          |> Enum.map(&format_gemini_model/1)
+          |> Enum.sort_by(& &1.name)
+
+        {:ok, formatted_models}
+
+      {:error, reason} ->
+        {:error, {:decode_failed, reason}}
+    end
+  end
+
+  defp gemini_generation_model?(%{"name" => name}) do
+    String.contains?(name, ["gemini"]) and
+      String.contains?(name, ["generateContent"])
+  end
+
+  defp format_gemini_model(%{"name" => name, "displayName" => display_name} = _model) do
+    model_id = name |> String.split("/") |> List.last()
+
+    %{
+      id: model_id,
+      name: display_name || format_model_name(model_id),
+      description: get_gemini_model_description(model_id),
+      context_length: get_gemini_context_length(model_id),
+      multimodal: gemini_multimodal?(model_id),
+      function_calling: supports_gemini_function_calling?(model_id),
+      cost_tier: get_gemini_cost_tier(model_id)
+    }
+  end
+
+  defp format_model_name("gemini-1.5-pro"), do: "Gemini 1.5 Pro"
+  defp format_model_name("gemini-1.5-flash"), do: "Gemini 1.5 Flash"
+  defp format_model_name("gemini-1.0-pro"), do: "Gemini 1.0 Pro"
+  defp format_model_name("gemini-pro"), do: "Gemini Pro"
+  defp format_model_name("gemini-pro-vision"), do: "Gemini Pro Vision"
+
+  defp format_model_name(id),
+    do:
+      String.replace(id, "-", " ")
+      |> String.split()
+      |> Enum.map(&String.capitalize/1)
+      |> Enum.join(" ")
+
+  defp get_gemini_model_description("gemini-1.5-pro"),
+    do: "Most capable multimodal model with extended context"
+
+  defp get_gemini_model_description("gemini-1.5-flash"), do: "Fast and efficient multimodal model"
+
+  defp get_gemini_model_description("gemini-1.0-pro"),
+    do: "High-performance text generation model"
+
+  defp get_gemini_model_description("gemini-pro"),
+    do: "Versatile model for text and code generation"
+
+  defp get_gemini_model_description("gemini-pro-vision"),
+    do: "Multimodal model for text and image understanding"
+
+  defp get_gemini_model_description(_), do: "Google Gemini language model"
+
+  defp get_gemini_context_length("gemini-1.5-pro"), do: 2_000_000
+  defp get_gemini_context_length("gemini-1.5-flash"), do: 1_000_000
+  defp get_gemini_context_length("gemini-1.0-pro"), do: 32_768
+  defp get_gemini_context_length("gemini-pro"), do: 32_768
+  defp get_gemini_context_length("gemini-pro-vision"), do: 16_384
+  defp get_gemini_context_length(_), do: nil
+
+  defp gemini_multimodal?(id) do
+    String.contains?(id, ["1.5", "vision"]) or id in ["gemini-pro-vision"]
+  end
+
+  defp supports_gemini_function_calling?(id) do
+    not String.contains?(id, ["vision"]) or String.contains?(id, ["1.5"])
+  end
+
+  defp get_gemini_cost_tier("gemini-1.5-flash"), do: :economy
+  defp get_gemini_cost_tier("gemini-1.0-pro"), do: :balanced
+  defp get_gemini_cost_tier("gemini-pro"), do: :balanced
+  defp get_gemini_cost_tier("gemini-1.5-pro"), do: :premium
+  defp get_gemini_cost_tier("gemini-pro-vision"), do: :premium
+  defp get_gemini_cost_tier(_), do: :balanced
 end

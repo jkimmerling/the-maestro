@@ -137,6 +137,18 @@ defmodule TheMaestro.Providers.Anthropic do
     end
   end
 
+  @impl LLMProvider
+  def list_models(auth_context) do
+    case validate_auth_context(auth_context) do
+      :ok ->
+        # Anthropic doesn't have a public models API endpoint, so we return the known models
+        {:ok, get_anthropic_models()}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   # Public API for OAuth flows
 
   @doc """
@@ -721,4 +733,55 @@ defmodule TheMaestro.Providers.Anthropic do
   end
 
   defp extract_tool_calls(_), do: []
+
+  # Helper function to return available Anthropic models
+  defp get_anthropic_models do
+    [
+      %{
+        id: "claude-3-5-sonnet-20241022",
+        name: "Claude 3.5 Sonnet",
+        description: "Anthropic's most intelligent model with enhanced reasoning capabilities",
+        context_length: 200_000,
+        multimodal: true,
+        function_calling: true,
+        cost_tier: :premium
+      },
+      %{
+        id: "claude-3-5-haiku-20241022",
+        name: "Claude 3.5 Haiku",
+        description: "Fast and cost-effective model for simple tasks",
+        context_length: 200_000,
+        multimodal: true,
+        function_calling: true,
+        cost_tier: :balanced
+      },
+      %{
+        id: "claude-3-haiku-20240307",
+        name: "Claude 3 Haiku",
+        description: "Fast and efficient model for everyday tasks",
+        context_length: 200_000,
+        multimodal: true,
+        function_calling: true,
+        cost_tier: :balanced
+      },
+      %{
+        id: "claude-3-sonnet-20240229",
+        name: "Claude 3 Sonnet",
+        description: "Balanced intelligence and speed for complex tasks",
+        context_length: 200_000,
+        multimodal: true,
+        function_calling: true,
+        cost_tier: :premium
+      },
+      %{
+        id: "claude-3-opus-20240229",
+        name: "Claude 3 Opus",
+        description: "Most powerful model for the most complex tasks",
+        context_length: 200_000,
+        multimodal: true,
+        function_calling: true,
+        cost_tier: :premium
+      }
+    ]
+  end
 end

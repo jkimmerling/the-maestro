@@ -43,6 +43,7 @@ defmodule TheMaestroWeb.Router do
   scope "/", TheMaestroWeb do
     pipe_through :auth_required
 
+    live "/setup", ProviderSelectionLive, :index
     live "/agent", AgentLive, :index
   end
 
@@ -51,6 +52,16 @@ defmodule TheMaestroWeb.Router do
     pipe_through :oauth
 
     get "/oauth2callback", OAuthController, :callback
+  end
+
+  # Provider API Routes
+  scope "/api", TheMaestroWeb do
+    pipe_through :api
+
+    get "/providers", ProvidersController, :index
+    post "/providers/:provider/auth", ProvidersController, :auth
+    get "/providers/:provider/models", ProvidersController, :models
+    post "/providers/:provider/test", ProvidersController, :test
   end
 
   # CLI Authentication API Routes
