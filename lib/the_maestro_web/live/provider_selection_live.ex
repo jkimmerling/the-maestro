@@ -303,12 +303,22 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
     provider = socket.assigns.selected_provider
 
     # Use provider-specific exchange function
-    result = case provider do
-      :anthropic -> Anthropic.exchange_oauth_code(:anthropic, code, %{redirect_uri: get_oauth_redirect_uri()})
-      :google -> Gemini.exchange_oauth_code(:google, code, %{redirect_uri: get_oauth_redirect_uri()})
-      :openai -> OpenAI.exchange_oauth_code(:openai, code, %{redirect_uri: get_oauth_redirect_uri()})
-      _ -> {:error, :unsupported_provider}
-    end
+    result =
+      case provider do
+        :anthropic ->
+          Anthropic.exchange_oauth_code(:anthropic, code, %{
+            redirect_uri: get_oauth_redirect_uri()
+          })
+
+        :google ->
+          Gemini.exchange_oauth_code(:google, code, %{redirect_uri: get_oauth_redirect_uri()})
+
+        :openai ->
+          OpenAI.exchange_oauth_code(:openai, code, %{redirect_uri: get_oauth_redirect_uri()})
+
+        _ ->
+          {:error, :unsupported_provider}
+      end
 
     case result do
       {:ok, credentials} ->

@@ -673,7 +673,7 @@ defmodule TheMaestro.Providers.OpenAI do
   # Helper function to fetch OpenAI models from API
   defp fetch_openai_models(auth_context) do
     client = create_openai_client(auth_context)
-    
+
     case OpenaiEx.Models.list(client) do
       {:ok, %{"data" => models}} ->
         formatted_models =
