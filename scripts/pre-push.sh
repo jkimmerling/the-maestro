@@ -37,6 +37,8 @@ fi
 
 echo ""
 echo "🔨 Compiling with warnings as errors..."
+# Clean first to ensure we catch all warnings like CI does
+mix clean
 if ! mix compile --warnings-as-errors; then
     echo "❌ Compilation failed with warnings!"
     echo "💡 Fix all compiler warnings before pushing"

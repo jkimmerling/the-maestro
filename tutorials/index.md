@@ -266,6 +266,28 @@ Learn how to create comprehensive demonstrations that showcase all advanced capa
 
 ---
 
+## Epic 5: Model Choice and Authentication
+
+Learn how to build comprehensive multi-provider authentication systems that enable seamless switching between multiple LLM providers with secure credential management.
+
+### [Story 5.1: Multi-Provider Authentication Architecture](epic5/story5.1/)
+
+Learn how to implement a comprehensive multi-provider authentication system that supports Claude, Gemini, and ChatGPT with both OAuth and API key authentication:
+
+- Design provider-agnostic authentication behaviours using Elixir behaviours
+- Implement secure credential storage with AES-256-CBC encryption
+- Build multi-provider session management with automatic token refresh
+- Create provider-specific authentication implementations (Anthropic, OpenAI, Google)
+- Design database schemas for secure credential persistence
+- Implement comprehensive security measures and input validation
+- Build modular authentication system architecture
+
+**Key Concepts**: Multi-provider authentication, OAuth 2.0 flows, secure credential storage, encryption, session management, provider abstraction, security architecture
+
+**Difficulty**: Advanced
+
+---
+
 ## Epic 4: Terminal User Interface (TUI)
 
 Learn how to build professional terminal user interfaces for AI agents using pure Elixir and ANSI escape codes.
