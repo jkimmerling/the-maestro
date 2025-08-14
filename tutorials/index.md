@@ -286,6 +286,22 @@ Learn how to implement a comprehensive multi-provider authentication system that
 
 **Difficulty**: Advanced
 
+### [Story 5.3: TUI Model Selection Flow](epic5/story5.3/)
+
+Learn how to implement a comprehensive Terminal User Interface (TUI) model selection flow with numbered menus, secure authentication, and dynamic model discovery:
+
+- Build modular TUI components with consistent user experience patterns
+- Implement secure API key input with masking and real-time validation
+- Create OAuth flows optimized for terminal environments with device authorization
+- Design dynamic model selection with provider-specific capabilities display
+- Build comprehensive error handling and recovery mechanisms
+- Implement navigation flows with back/cancel operations throughout
+- Create seamless integration between provider selection, authentication, and model choice
+
+**Key Concepts**: Terminal user interfaces, secure input handling, OAuth device flows, API key validation, dynamic model discovery, error recovery patterns, state machine design, user experience design
+
+**Difficulty**: Advanced
+
 ---
 
 ## Epic 4: Terminal User Interface (TUI)
