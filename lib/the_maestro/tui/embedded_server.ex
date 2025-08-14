@@ -235,48 +235,16 @@ defmodule TheMaestro.TUI.EmbeddedServer do
   defp handle_http_request(data, state) do
     case parse_http_request(data) do
       {:get, "/api/cli/auth/device", _query_params} ->
-        # Device authorization endpoint
-        case generate_device_code() do
-          {:ok, response} ->
-            json_response(200, response)
-
-          {:error, reason} ->
-            json_response(400, %{"error" => reason})
-        end
+        handle_device_code_request()
 
       {:get, "/api/cli/auth/poll", query_params} ->
-        # Polling endpoint
-        device_code = Map.get(query_params, "device_code")
-
-        case poll_authorization(device_code) do
-          {:ok, response} ->
-            json_response(200, response)
-
-          {:error, reason} ->
-            json_response(400, %{"error" => reason})
-        end
+        handle_poll_request(query_params)
 
       {:get, "/auth/device", query_params} ->
-        # Device authorization page
-        user_code = Map.get(query_params, "user_code", "")
-        html_response(200, device_auth_page(user_code))
+        handle_device_auth_page(query_params)
 
       {:post, "/auth/device", _query_params} ->
-        # Handle device authorization form submission
-        # For simplicity, we'll parse from the original data
-        case extract_form_data_from_request(data) do
-          %{"user_code" => user_code} ->
-            case authorize_device_by_user_code(user_code, state) do
-              :ok ->
-                html_response(200, success_page())
-
-              {:error, _reason} ->
-                html_response(400, error_page())
-            end
-
-          _ ->
-            html_response(400, error_page())
-        end
+        handle_device_auth_form(data, state)
 
       _ ->
         html_response(404, not_found_page())
@@ -285,6 +253,53 @@ defmodule TheMaestro.TUI.EmbeddedServer do
     error ->
       Logger.error("Error handling HTTP request: #{inspect(error)}")
       html_response(500, error_page())
+  end
+
+  defp handle_device_code_request do
+    case generate_device_code() do
+      {:ok, response} ->
+        json_response(200, response)
+
+      {:error, reason} ->
+        json_response(400, %{"error" => reason})
+    end
+  end
+
+  defp handle_poll_request(query_params) do
+    device_code = Map.get(query_params, "device_code")
+
+    case poll_authorization(device_code) do
+      {:ok, response} ->
+        json_response(200, response)
+
+      {:error, reason} ->
+        json_response(400, %{"error" => reason})
+    end
+  end
+
+  defp handle_device_auth_page(query_params) do
+    user_code = Map.get(query_params, "user_code", "")
+    html_response(200, device_auth_page(user_code))
+  end
+
+  defp handle_device_auth_form(data, state) do
+    case extract_form_data_from_request(data) do
+      %{"user_code" => user_code} ->
+        authorize_user_code(user_code, state)
+
+      _ ->
+        html_response(400, error_page())
+    end
+  end
+
+  defp authorize_user_code(user_code, state) do
+    case authorize_device_by_user_code(user_code, state) do
+      :ok ->
+        html_response(200, success_page())
+
+      {:error, _reason} ->
+        html_response(400, error_page())
+    end
   end
 
   defp parse_http_request(data) when is_binary(data) do
