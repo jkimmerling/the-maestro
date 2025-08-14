@@ -474,19 +474,6 @@ defmodule TheMaestro.TUI.EmbeddedServer do
     authorize_device(user_code)
   end
 
-  defp parse_form_data(body) do
-    # Simple form data parsing for POST requests
-    # In a real implementation, this would be more robust
-    case String.split(body, "\r\n\r\n", parts: 2) do
-      [_headers, form_body] ->
-        URI.decode_query(form_body)
-
-      _ ->
-        %{}
-    end
-  rescue
-    _ -> %{}
-  end
 
   defp extract_form_data_from_request(data) do
     # Extract form data from the full HTTP request

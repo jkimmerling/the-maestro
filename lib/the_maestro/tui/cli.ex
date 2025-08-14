@@ -829,9 +829,6 @@ defmodule TheMaestro.TUI.CLI do
        %{auth_url: auth_url, state: state, code_verifier: code_verifier, polling_fn: polling_fn}} ->
         display_google_oauth_instructions(auth_url, state)
         poll_for_google_authorization(polling_fn, code_verifier)
-
-      {:error, reason} ->
-        {:error, "Failed to start Google OAuth: #{reason}"}
     end
   end
 
