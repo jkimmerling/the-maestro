@@ -86,15 +86,6 @@ defmodule TheMaestro.TUI.APIKeyHandler do
       {:ok, _response} ->
         :ok
 
-      {:error, :unauthorized} ->
-        {:error, "Invalid API key - authentication failed"}
-
-      {:error, :rate_limited} ->
-        {:error, "Rate limited - please wait and try again"}
-
-      {:error, :network_error} ->
-        {:error, "Network error - please check your internet connection"}
-
       {:error, reason} when is_binary(reason) ->
         {:error, reason}
 

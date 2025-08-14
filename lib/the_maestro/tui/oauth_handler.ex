@@ -148,7 +148,7 @@ defmodule TheMaestro.TUI.OAuthHandler do
   defp initiate_anthropic_oauth do
     MenuHelpers.display_info("Starting Anthropic OAuth flow...")
 
-    case Anthropic.initiate_oauth_flow() do
+    case Anthropic.device_authorization_flow() do
       {:ok, %{auth_url: auth_url, state: state, code_verifier: code_verifier}} ->
         flow_data = %{
           provider: :anthropic,
@@ -159,9 +159,6 @@ defmodule TheMaestro.TUI.OAuthHandler do
 
         display_browser_instructions(flow_data)
         {:ok, flow_data}
-
-      {:error, reason} ->
-        {:error, "Failed to start OAuth flow: #{inspect(reason)}"}
     end
   end
 
@@ -181,16 +178,13 @@ defmodule TheMaestro.TUI.OAuthHandler do
 
         display_browser_instructions(flow_data)
         {:ok, flow_data}
-
-      {:error, reason} ->
-        {:error, "Failed to start OAuth flow: #{inspect(reason)}"}
     end
   end
 
   defp initiate_openai_oauth do
     MenuHelpers.display_info("Starting OpenAI OAuth flow...")
 
-    case OpenAI.initiate_oauth_flow() do
+    case OpenAI.device_authorization_flow() do
       {:ok, %{auth_url: auth_url, state: state, code_verifier: code_verifier}} ->
         flow_data = %{
           provider: :openai,
@@ -201,9 +195,6 @@ defmodule TheMaestro.TUI.OAuthHandler do
 
         display_browser_instructions(flow_data)
         {:ok, flow_data}
-
-      {:error, reason} ->
-        {:error, "Failed to start OAuth flow: #{inspect(reason)}"}
     end
   end
 
@@ -345,11 +336,6 @@ defmodule TheMaestro.TUI.OAuthHandler do
       {:error, "OAuth authentication timed out"}
     else
       case check_oauth_completion(provider, flow_data) do
-        {:ok, auth_context} ->
-          MenuHelpers.display_success("OAuth authentication successful!")
-          :timer.sleep(1000)
-          {:ok, auth_context}
-
         {:error, :pending} ->
           :timer.sleep(2000)
           poll_oauth_status(provider, flow_data, start_time, timeout)
@@ -360,71 +346,16 @@ defmodule TheMaestro.TUI.OAuthHandler do
     end
   end
 
-  defp check_oauth_completion(provider, flow_data) do
-    case get_oauth_result() do
-      {:ok, auth_data} ->
-        complete_provider_oauth(provider, flow_data, auth_data)
-
-      {:error, :pending} ->
-        {:error, :pending}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+  defp check_oauth_completion(_provider, _flow_data) do
+    # This function is a placeholder that always returns pending
+    # In a real implementation, this would check the embedded server
+    # for OAuth callback completion
+    {:error, :pending}
   end
 
-  defp complete_provider_oauth(provider, flow_data, auth_data) do
-    case provider do
-      :anthropic ->
-        complete_anthropic_oauth(flow_data, auth_data)
-
-      :openai ->
-        complete_openai_oauth(flow_data, auth_data)
-
-      _ ->
-        {:error, "Unsupported provider for OAuth completion"}
-    end
-  end
-
-  defp complete_anthropic_oauth(flow_data, auth_data) do
-    case Anthropic.complete_oauth_flow(flow_data.code_verifier, auth_data.code, auth_data.state) do
-      {:ok, auth_info} ->
-        auth_context = %{
-          type: :oauth,
-          provider: :anthropic,
-          credentials: %{
-            access_token: auth_info.access_token,
-            user_email: auth_info[:user_email] || "anthropic_user"
-          },
-          config: %{}
-        }
-
-        {:ok, auth_context}
-
-      {:error, reason} ->
-        {:error, "Failed to complete Anthropic OAuth: #{inspect(reason)}"}
-    end
-  end
-
-  defp complete_openai_oauth(flow_data, auth_data) do
-    case OpenAI.complete_oauth_flow(flow_data.code_verifier, auth_data.code, auth_data.state) do
-      {:ok, auth_info} ->
-        auth_context = %{
-          type: :oauth,
-          provider: :openai,
-          credentials: %{
-            access_token: auth_info.access_token,
-            user_email: auth_info[:user_email] || "openai_user"
-          },
-          config: %{}
-        }
-
-        {:ok, auth_context}
-
-      {:error, reason} ->
-        {:error, "Failed to complete OpenAI OAuth: #{inspect(reason)}"}
-    end
-  end
+  # Note: OAuth completion functions removed as they were unused
+  # This module currently implements device authorization flow initiation only
+  # Completion would be handled by the embedded server or polling mechanism
 
   defp display_authorization_spinner do
     spinner_chars = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]

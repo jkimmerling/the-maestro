@@ -61,11 +61,31 @@ fi
 
 echo ""
 echo "🧪 Running tests (matching CI/CD)..."
-if ! mix test; then
+# Capture test warnings to check for quality issues
+test_output=$(mix test 2>&1)
+test_exit_code=$?
+
+if [ $test_exit_code -ne 0 ]; then
     echo "❌ Tests failed!"
     echo "💡 Fix failing tests before pushing"
     exit 1
 fi
+
+# Check for compilation warnings in test output
+if echo "$test_output" | grep -q "warning:.*was set but never used"; then
+    echo "⚠️  Found unused module attributes in tests:"
+    echo "$test_output" | grep -A2 "warning:.*was set but never used"
+    echo "💡 Consider cleaning up unused module attributes"
+fi
+
+# Check for deprecation warnings
+if echo "$test_output" | grep -q "warning:.*is deprecated"; then
+    echo "⚠️  Found deprecated function usage:"
+    echo "$test_output" | grep -A1 "warning:.*is deprecated"
+    echo "💡 Consider updating deprecated function calls"
+fi
+
+echo "$test_output" | tail -3
 
 echo ""
 echo "✅ All pre-push checks passed! Safe to push."
