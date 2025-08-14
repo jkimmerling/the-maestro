@@ -22,6 +22,10 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
+// Import provider authentication modules
+import ProviderAuth from "./provider_auth"
+import ApiKeyValidator from "./api_key_validator"
+
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,

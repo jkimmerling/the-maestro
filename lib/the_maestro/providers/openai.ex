@@ -138,6 +138,17 @@ defmodule TheMaestro.Providers.OpenAI do
     end
   end
 
+  @impl LLMProvider
+  def list_models(auth_context) do
+    case validate_auth_context(auth_context) do
+      :ok ->
+        fetch_openai_models(auth_context)
+      
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   # Public API for OAuth flows
 
   @doc """
@@ -658,4 +669,83 @@ defmodule TheMaestro.Providers.OpenAI do
   end
 
   defp extract_tool_calls(_), do: []
+
+  # Helper function to fetch OpenAI models from API
+  defp fetch_openai_models(auth_context) do
+    with {:ok, client} <- create_openai_client(auth_context) do
+      case OpenaiEx.Models.list(client) do
+        {:ok, %{"data" => models}} ->
+          formatted_models = 
+            models
+            |> Enum.filter(&is_chat_model?/1)
+            |> Enum.map(&format_openai_model/1)
+            |> Enum.sort_by(& &1.name)
+          
+          {:ok, formatted_models}
+        
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp is_chat_model?(%{"id" => id}) do
+    String.contains?(id, ["gpt-3.5", "gpt-4", "gpt-4o"]) and 
+    not String.contains?(id, ["instruct", "edit", "search", "similarity"])
+  end
+
+  defp format_openai_model(%{"id" => id} = model) do
+    %{
+      id: id,
+      name: format_model_name(id),
+      description: get_model_description(id),
+      context_length: get_model_context_length(id),
+      multimodal: is_multimodal_model?(id),
+      function_calling: supports_function_calling?(id),
+      cost_tier: get_cost_tier(id)
+    }
+  end
+
+  defp format_model_name("gpt-3.5-turbo"), do: "GPT-3.5 Turbo"
+  defp format_model_name("gpt-3.5-turbo-16k"), do: "GPT-3.5 Turbo 16K"
+  defp format_model_name("gpt-4"), do: "GPT-4"
+  defp format_model_name("gpt-4-32k"), do: "GPT-4 32K"
+  defp format_model_name("gpt-4-turbo"), do: "GPT-4 Turbo"
+  defp format_model_name("gpt-4o"), do: "GPT-4o"
+  defp format_model_name("gpt-4o-mini"), do: "GPT-4o mini"
+  defp format_model_name(id), do: String.replace(id, "-", " ") |> String.upcase()
+
+  defp get_model_description("gpt-3.5-turbo"), do: "Most capable GPT-3.5 model, optimized for chat"
+  defp get_model_description("gpt-4"), do: "More capable than any GPT-3.5 model, able to do more complex tasks"
+  defp get_model_description("gpt-4-turbo"), do: "Latest GPT-4 model with improved instruction following"
+  defp get_model_description("gpt-4o"), do: "Most advanced multimodal model, faster and cheaper than GPT-4"
+  defp get_model_description("gpt-4o-mini"), do: "Fast and affordable model for simple tasks"
+  defp get_model_description(_), do: "OpenAI language model"
+
+  defp get_model_context_length("gpt-3.5-turbo"), do: 16_384
+  defp get_model_context_length("gpt-3.5-turbo-16k"), do: 16_384
+  defp get_model_context_length("gpt-4"), do: 8_192
+  defp get_model_context_length("gpt-4-32k"), do: 32_768
+  defp get_model_context_length("gpt-4-turbo"), do: 128_000
+  defp get_model_context_length("gpt-4o"), do: 128_000
+  defp get_model_context_length("gpt-4o-mini"), do: 128_000
+  defp get_model_context_length(_), do: nil
+
+  defp is_multimodal_model?(id) do
+    String.contains?(id, ["gpt-4", "gpt-4o"]) and not String.contains?(id, ["gpt-4-32k"])
+  end
+
+  defp supports_function_calling?(id) do
+    String.contains?(id, ["gpt-3.5-turbo", "gpt-4"])
+  end
+
+  defp get_cost_tier("gpt-3.5-turbo"), do: :economy
+  defp get_cost_tier("gpt-4o-mini"), do: :economy
+  defp get_cost_tier("gpt-4-turbo"), do: :balanced
+  defp get_cost_tier("gpt-4o"), do: :balanced
+  defp get_cost_tier(id) when id in ["gpt-4", "gpt-4-32k"], do: :premium
+  defp get_cost_tier(_), do: :balanced
 end

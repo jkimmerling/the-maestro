@@ -72,6 +72,19 @@ defmodule TheMaestro.Providers.LLMProvider do
           usage: map()
         }
 
+  @typedoc """
+  Model information returned by list_models/1.
+  """
+  @type model_info :: %{
+          id: String.t(),
+          name: String.t(),
+          description: String.t(),
+          context_length: integer() | nil,
+          multimodal: boolean(),
+          function_calling: boolean(),
+          cost_tier: :economy | :balanced | :premium
+        }
+
   @doc """
   Initializes authentication for the provider.
 
@@ -145,4 +158,18 @@ defmodule TheMaestro.Providers.LLMProvider do
     - `{:error, reason}`: Authentication is invalid or expired
   """
   @callback validate_auth(auth_context()) :: :ok | {:error, term()}
+
+  @doc """
+  Lists available models for the provider.
+
+  This callback should fetch the current list of available models from the provider's API.
+
+  ## Parameters
+    - `auth_context`: Authentication context from initialize_auth/1
+
+  ## Returns
+    - `{:ok, [model_info]}`: Successfully retrieved model list
+    - `{:error, reason}`: Failed to retrieve models
+  """
+  @callback list_models(auth_context()) :: {:ok, [model_info()]} | {:error, term()}
 end
