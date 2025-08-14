@@ -26,6 +26,11 @@ defmodule TheMaestroWeb.AgentLive do
 
     case Agents.find_or_start_agent(agent_id, agent_opts) do
       {:ok, _pid} ->
+        # Ensure agent has the latest auth context from session
+        if auth_context do
+          Agents.update_agent_auth_context(agent_id, auth_context)
+        end
+
         # Subscribe to PubSub updates for this agent
         Phoenix.PubSub.subscribe(TheMaestro.PubSub, "agent:#{agent_id}")
 

@@ -60,7 +60,7 @@ defmodule TheMaestro.Providers.Gemini do
     case validate_auth_context(auth_context) do
       :ok ->
         with {:ok, token} <- get_access_token(auth_context) do
-          model = Map.get(opts, :model, "gemini-2.5-pro")
+          model = Map.get(opts, :model, "gemini-2.5-flash")
 
           request_body =
             build_text_request_body(auth_context.type, messages, opts, model, auth_context)
@@ -125,7 +125,7 @@ defmodule TheMaestro.Providers.Gemini do
       :ok ->
         with {:ok, token} <- get_access_token(auth_context) do
           tools = Map.get(opts, :tools, [])
-          model = Map.get(opts, :model, "gemini-2.5-pro")
+          model = Map.get(opts, :model, "gemini-2.5-flash")
 
           request_body =
             build_tools_request_body(
