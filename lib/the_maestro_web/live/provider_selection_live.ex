@@ -31,6 +31,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       |> assign(:current_user, current_user)
       |> assign(:authentication_enabled, authentication_enabled)
       |> assign(:current_step, :provider)
+      |> assign(:steps, @steps)
       |> assign(:selected_provider, nil)
       |> assign(:available_providers, get_available_providers())
       |> assign(:selected_auth_method, nil)
