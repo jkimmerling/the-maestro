@@ -21,15 +21,11 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   @steps [:provider, :auth_method, :authenticate, :model, :ready]
 
   def mount(_params, session, socket) do
-    current_user = Map.get(session, "current_user")
-    authentication_enabled = authentication_enabled?()
     previous_selection = Map.get(session, "provider_selection")
 
     # Initialize the UI state
     socket =
       socket
-      |> assign(:current_user, current_user)
-      |> assign(:authentication_enabled, authentication_enabled)
       |> assign(:current_step, :provider)
       |> assign(:steps, @steps)
       |> assign(:selected_provider, nil)
@@ -861,9 +857,6 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   defp status_text(:degraded), do: "Issues"
   defp status_text(_), do: "Unknown"
 
-  defp authentication_enabled? do
-    Application.get_env(:the_maestro, :require_authentication, true)
-  end
 
   defp get_available_providers do
     ProviderRegistry.list_providers()

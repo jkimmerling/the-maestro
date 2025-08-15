@@ -11,7 +11,7 @@ config :the_maestro,
   ecto_repos: [TheMaestro.Repo],
   generators: [timestamp_type: :utc_datetime],
   # Authentication configuration - set to false to disable authentication requirement
-  require_authentication: true
+  require_authentication: false
 
 # Configures the endpoint
 config :the_maestro, TheMaestroWeb.Endpoint,
