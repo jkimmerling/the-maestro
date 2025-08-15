@@ -585,17 +585,8 @@ defmodule TheMaestro.TUI.CLI do
   # Handles the complete provider and model selection flow.
   # Returns {:ok, {provider, model, auth_context}} or {:error, reason}.
   defp handle_provider_and_model_selection do
-    case AuthFlow.authentication_required?() do
-      false ->
-        # Authentication disabled - use default provider and anonymous mode
-        {:ok,
-         {:google, "gemini-1.5-pro",
-          %{type: :anonymous, provider: :google, credentials: %{}, config: %{}}}}
-
-      true ->
-        # Full provider and model selection flow
-        execute_selection_flow()
-    end
+    # Always execute provider selection flow - users need to auth with providers
+    execute_selection_flow()
   end
 
   defp execute_selection_flow do

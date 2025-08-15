@@ -53,10 +53,8 @@ defmodule TheMaestro.TUI.AuthFlow do
   """
   @spec authentication_required?() :: boolean()
   def authentication_required? do
-    case Application.get_env(:the_maestro, :require_authentication) do
-      false -> false
-      _ -> true
-    end
+    # Provider authentication is always required to use their APIs
+    true
   end
 
   @doc """
