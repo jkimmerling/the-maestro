@@ -1,7 +1,7 @@
 defmodule TheMaestro.Demo.Epic5Story54DemoTest do
   use ExUnit.Case, async: false
 
-  alias TheMaestro.Providers.{LLMProvider, Anthropic, OpenAI, Gemini}
+  alias TheMaestro.Providers.{Anthropic, Gemini, LLMProvider, OpenAI}
   alias TheMaestro.Providers.Auth.ProviderRegistry
 
   setup_all do
