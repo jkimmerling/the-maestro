@@ -24,14 +24,27 @@ defmodule TheMaestro.Providers.AnthropicTest do
       end
     end
 
-    test "returns error when no authentication method available" do
+    test "returns device flow when no API key available" do
       System.delete_env("ANTHROPIC_API_KEY")
-      # In CI environment (non-interactive), different error is returned
+      # Now returns device flow setup when no API key is available
       case Anthropic.initialize_auth(%{}) do
-        {:error, :oauth_initialization_required} -> :ok
-        {:error, :no_auth_method_available} -> :ok
-        {:error, :oauth_not_available_in_non_interactive} -> :ok
-        other -> flunk("Unexpected result: #{inspect(other)}")
+        {:error, :oauth_initialization_required} ->
+          :ok
+
+        {:error, :no_auth_method_available} ->
+          :ok
+
+        {:error, :oauth_not_available_in_non_interactive} ->
+          :ok
+
+        {:ok,
+         %{auth_url: auth_url, state: state, code_verifier: code_verifier, polling_fn: polling_fn}}
+        when is_binary(auth_url) and is_binary(state) and is_binary(code_verifier) and
+               is_function(polling_fn) ->
+          :ok
+
+        other ->
+          flunk("Unexpected result: #{inspect(other)}")
       end
     end
   end
