@@ -2,31 +2,26 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
   @moduledoc """
   Anthropic (Claude) authentication provider implementation.
 
-  This module implements OAuth and API key authentication for Anthropic's Claude API.
-  It follows Anthropic's authentication patterns and security best practices.
+  This module implements OAuth device flow and API key authentication for Anthropic's Claude API.
+  It follows Anthropic's authentication patterns and mimics Claude Code's device flow authentication.
+  
+  Completely revamped to match llxprt-code reference implementation for Claude Code compatibility.
   """
 
   @behaviour TheMaestro.Providers.Auth.ProviderAuth
 
   alias TheMaestro.Providers.Auth.ProviderAuth
+  alias TheMaestro.Providers.Auth.AnthropicDeviceFlow
 
   require Logger
 
-  # Anthropic OAuth scopes and URLs
-  @oauth_scopes ["read", "write"]
-  @oauth_base_url "https://api.anthropic.com/oauth"
+  # Configuration matching llxprt-code reference
   @api_base_url "https://api.anthropic.com/v1"
 
   @impl ProviderAuth
   def get_available_methods(:anthropic) do
-    methods = [:api_key]
-
-    # Add OAuth if configured
-    if get_oauth_client_id() && get_oauth_client_secret() do
-      [:oauth | methods]
-    else
-      methods
-    end
+    # OAuth (using device flow under the hood) and API key are available
+    [:oauth, :api_key]
   end
 
   @impl ProviderAuth
@@ -34,8 +29,8 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
     case validate_api_key(api_key) do
       :ok ->
         credentials = %{
-          api_key: api_key,
-          token_type: "api_key"
+          "api_key" => api_key,
+          "token_type" => "api_key"
         }
 
         Logger.info("Successfully authenticated with Anthropic using API key")
@@ -47,25 +42,25 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
     end
   end
 
-  def authenticate(:anthropic, :oauth, %{oauth_code: code, redirect_uri: redirect_uri} = params) do
-    state = Map.get(params, :state)
-
-    case exchange_code_for_tokens(code, redirect_uri, state) do
-      {:ok, tokens} ->
-        credentials = %{
-          access_token: tokens[:access_token],
-          refresh_token: tokens[:refresh_token],
-          expires_at: calculate_expiry(tokens[:expires_in]),
-          token_type: "Bearer",
-          scope: tokens[:scope]
-        }
-
-        Logger.info("Successfully authenticated with Anthropic using OAuth")
-        {:ok, credentials}
-
-      {:error, reason} ->
-        Logger.error("Anthropic OAuth authentication failed: #{inspect(reason)}")
-        {:error, reason}
+  def authenticate(:anthropic, :oauth, params) do
+    # Initialize device flow (OAuth implementation)
+    flow_state = AnthropicDeviceFlow.new()
+    
+    {:ok, device_response, updated_flow_state} = AnthropicDeviceFlow.initiate_device_flow(flow_state)
+    
+    # Display authentication instructions
+    display_device_flow_instructions(device_response)
+    
+    # Check if we have an authorization code provided directly
+    case Map.get(params, :auth_code) do
+      nil ->
+        # Wait for user to complete authentication manually
+        Logger.info("Waiting for user to complete authentication at: #{device_response.verification_uri_complete}")
+        {:error, {:manual_auth_required, device_response.verification_uri_complete}}
+      
+      auth_code ->
+        # Exchange provided authorization code for tokens
+        complete_device_flow_with_state(auth_code, updated_flow_state)
     end
   end
 
@@ -74,21 +69,21 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
   end
 
   @impl ProviderAuth
-  def validate_credentials(:anthropic, %{api_key: api_key}) do
+  def validate_credentials(:anthropic, %{"api_key" => api_key}) do
     case validate_api_key(api_key) do
-      :ok -> {:ok, %{api_key: api_key, token_type: "api_key"}}
+      :ok -> {:ok, %{"api_key" => api_key, "token_type" => "api_key"}}
       error -> error
     end
   end
 
-  def validate_credentials(:anthropic, %{access_token: token} = credentials) do
+  def validate_credentials(:anthropic, %{"access_token" => token} = credentials) do
     case validate_access_token(token) do
       :ok ->
         {:ok, credentials}
 
       {:error, :expired} ->
         # Try to refresh if we have a refresh token
-        case credentials[:refresh_token] do
+        case credentials["refresh_token"] do
           nil -> {:error, :expired}
           _refresh_token -> refresh_credentials(:anthropic, credentials)
         end
@@ -104,22 +99,18 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
   end
 
   @impl ProviderAuth
-  def refresh_credentials(:anthropic, %{refresh_token: refresh_token} = credentials) do
-    case refresh_access_token(refresh_token) do
-      {:ok, new_tokens} ->
+  def refresh_credentials(:anthropic, %{"refresh_token" => refresh_token} = credentials) do
+    flow_state = AnthropicDeviceFlow.new()
+    
+    case AnthropicDeviceFlow.refresh_token(refresh_token, flow_state) do
+      {:ok, token_struct} ->
         refreshed_credentials = %{
-          credentials
-          | access_token: new_tokens[:access_token],
-            expires_at: calculate_expiry(new_tokens[:expires_in])
+          "access_token" => token_struct.access_token,
+          "refresh_token" => token_struct.refresh_token || credentials["refresh_token"],
+          "expires_at" => token_struct.expiry,
+          "token_type" => token_struct.token_type,
+          "scope" => token_struct.scope
         }
-
-        # Keep the refresh token if a new one wasn't provided
-        refreshed_credentials =
-          if new_tokens[:refresh_token] do
-            %{refreshed_credentials | refresh_token: new_tokens[:refresh_token]}
-          else
-            refreshed_credentials
-          end
 
         Logger.info("Successfully refreshed Anthropic OAuth credentials")
         {:ok, refreshed_credentials}
@@ -130,7 +121,7 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
     end
   end
 
-  def refresh_credentials(:anthropic, %{api_key: _api_key} = credentials) do
+  def refresh_credentials(:anthropic, %{"api_key" => _api_key} = credentials) do
     # API keys don't need refresh, just validate
     validate_credentials(:anthropic, credentials)
   end
@@ -141,31 +132,113 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
 
   @impl ProviderAuth
   def initiate_oauth_flow(:anthropic, options \\ %{}) do
-    if get_oauth_client_id() && get_oauth_client_secret() do
-      state = generate_state()
-      redirect_uri = Map.get(options, :redirect_uri, get_default_redirect_uri())
-
-      auth_params = %{
-        client_id: get_oauth_client_id(),
-        redirect_uri: redirect_uri,
-        response_type: "code",
-        scope: Enum.join(@oauth_scopes, " "),
-        state: state
-      }
-
-      auth_url = "#{@oauth_base_url}/authorize?" <> URI.encode_query(auth_params)
-
-      Logger.info("Initiated Anthropic OAuth flow with state: #{state}")
-      {:ok, auth_url}
-    else
-      {:error, :oauth_not_configured}
+    # Use device flow instead of traditional OAuth
+    flow_state = AnthropicDeviceFlow.new()
+    
+    {:ok, device_response, updated_flow_state} = AnthropicDeviceFlow.initiate_device_flow(flow_state)
+    
+    # Check if we need to return flow state data for web UI
+    case Map.get(options, :return_flow_state, false) do
+      true ->
+        # Return both URL and flow state for web UI
+        {:ok, %{
+          auth_url: device_response.verification_uri_complete,
+          code_verifier: updated_flow_state.code_verifier,
+          state: updated_flow_state.state
+        }}
+      false ->
+        # Return just URL for backward compatibility
+        {:ok, device_response.verification_uri_complete}
     end
   end
 
   @impl ProviderAuth
   def exchange_oauth_code(:anthropic, code, options \\ %{}) do
-    redirect_uri = Map.get(options, :redirect_uri, get_default_redirect_uri())
-    exchange_code_for_tokens(code, redirect_uri, Map.get(options, :state))
+    # Use device flow for code exchange
+    flow_state = AnthropicDeviceFlow.new()
+    
+    # Set the code verifier from options if provided
+    flow_state = case Map.get(options, :code_verifier) do
+      nil ->
+        # Try to get from process dictionary (backward compatibility)
+        case Process.get(:oauth_code_verifier) do
+          nil -> flow_state
+          verifier -> %{flow_state | code_verifier: verifier, state: verifier}
+        end
+      verifier ->
+        # Set both code_verifier and state to the same value like llxprt-code does
+        %{flow_state | code_verifier: verifier, state: verifier}
+    end
+    
+    case AnthropicDeviceFlow.exchange_code_for_token(code, flow_state) do
+      {:ok, token_struct} ->
+        credentials = %{
+          "access_token" => token_struct.access_token,
+          "refresh_token" => token_struct.refresh_token,
+          "expires_at" => token_struct.expiry,
+          "token_type" => token_struct.token_type,
+          "scope" => token_struct.scope
+        }
+        {:ok, credentials}
+      
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Complete device flow authentication with authorization code.
+  This is a convenience function for completing the device flow after receiving the auth code.
+  """
+  def complete_device_flow_auth(:anthropic, auth_code) do
+    flow_state = AnthropicDeviceFlow.new()
+    complete_device_flow_with_state(auth_code, flow_state)
+  end
+
+  # Device Flow Helper Functions
+
+  defp display_device_flow_instructions(device_response) do
+    IO.puts("\n🔐 Anthropic Claude OAuth Authentication")
+    IO.puts("─" |> String.duplicate(40))
+    
+    # Try to launch browser if appropriate
+    if AnthropicDeviceFlow.should_launch_browser?() do
+      IO.puts("🌐 Opening browser for authentication...")
+      IO.puts("If the browser does not open, please visit:")
+      IO.puts("#{device_response.verification_uri_complete}")
+      
+      case AnthropicDeviceFlow.launch_browser(device_response.verification_uri_complete) do
+        {_, 0} -> :ok
+        _ -> IO.puts("⚠️  Failed to open browser automatically.")
+      end
+    else
+      IO.puts("🌐 Visit this URL to authorize:")
+      IO.puts("#{device_response.verification_uri_complete}")
+    end
+    
+    IO.puts("─" |> String.duplicate(40))
+    IO.puts("📋 After authorization, you'll receive a code to enter.")
+    IO.puts("⏰ This authorization will expire in #{device_response.expires_in} seconds.")
+  end
+
+  defp complete_device_flow_with_state(auth_code, flow_state) do
+    case AnthropicDeviceFlow.exchange_code_for_token(auth_code, flow_state) do
+      {:ok, token_struct} ->
+        credentials = %{
+          "access_token" => token_struct.access_token,
+          "refresh_token" => token_struct.refresh_token,
+          "expires_at" => token_struct.expiry,
+          "token_type" => token_struct.token_type,
+          "scope" => token_struct.scope
+        }
+
+        Logger.info("Successfully authenticated with Anthropic using device flow")
+        {:ok, credentials}
+
+      {:error, reason} ->
+        Logger.error("Anthropic device flow authentication failed: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   # Private Functions
@@ -231,94 +304,5 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
     end
   end
 
-  defp exchange_code_for_tokens(code, redirect_uri, _state) do
-    token_params = %{
-      client_id: get_oauth_client_id(),
-      client_secret: get_oauth_client_secret(),
-      code: code,
-      grant_type: "authorization_code",
-      redirect_uri: redirect_uri
-    }
-
-    headers = [{"Content-Type", "application/x-www-form-urlencoded"}]
-    body = URI.encode_query(token_params)
-
-    case HTTPoison.post("#{@oauth_base_url}/token", body, headers) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-        case Jason.decode(response_body) do
-          {:ok, tokens} ->
-            {:ok, atomize_keys(tokens)}
-
-          {:error, reason} ->
-            {:error, {:token_decode_failed, reason}}
-        end
-
-      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
-        {:error, {:token_exchange_failed, status, response_body}}
-
-      {:error, reason} ->
-        {:error, {:token_request_failed, reason}}
-    end
-  end
-
-  defp refresh_access_token(refresh_token) do
-    token_params = %{
-      client_id: get_oauth_client_id(),
-      client_secret: get_oauth_client_secret(),
-      refresh_token: refresh_token,
-      grant_type: "refresh_token"
-    }
-
-    headers = [{"Content-Type", "application/x-www-form-urlencoded"}]
-    body = URI.encode_query(token_params)
-
-    case HTTPoison.post("#{@oauth_base_url}/token", body, headers) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-        case Jason.decode(response_body) do
-          {:ok, tokens} ->
-            {:ok, atomize_keys(tokens)}
-
-          {:error, reason} ->
-            {:error, {:refresh_decode_failed, reason}}
-        end
-
-      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
-        {:error, {:refresh_failed, status, response_body}}
-
-      {:error, reason} ->
-        {:error, {:refresh_request_failed, reason}}
-    end
-  end
-
-  defp calculate_expiry(nil), do: nil
-
-  defp calculate_expiry(expires_in) when is_integer(expires_in) do
-    DateTime.utc_now()
-    |> DateTime.add(expires_in, :second)
-  end
-
-  defp calculate_expiry(_), do: nil
-
-  defp generate_state do
-    32 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
-  end
-
-  defp get_default_redirect_uri do
-    "http://localhost:4000/auth/anthropic/callback"
-  end
-
-  defp atomize_keys(map) when is_map(map) do
-    for {key, value} <- map, into: %{} do
-      atom_key = if is_binary(key), do: String.to_atom(key), else: key
-      {atom_key, value}
-    end
-  end
-
-  defp get_oauth_client_id do
-    Application.get_env(:the_maestro, [:providers, :anthropic, :oauth_client_id])
-  end
-
-  defp get_oauth_client_secret do
-    Application.get_env(:the_maestro, [:providers, :anthropic, :oauth_client_secret])
-  end
+  # Removed old OAuth functions - now using device flow implementation
 end

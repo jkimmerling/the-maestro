@@ -279,7 +279,7 @@ defmodule TheMaestro.Providers.Auth.SessionManager do
   end
 
   defp load_provider_context(state, provider, method) do
-    case Auth.get_credentials(state.user_id, provider, method) do
+    case Auth.get_credentials(provider, method) do
       {:ok, auth_result} ->
         updated_contexts = Map.put(state.provider_contexts, provider, auth_result.auth_context)
         updated_state = %{state | provider_contexts: updated_contexts}

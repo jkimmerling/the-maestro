@@ -159,6 +159,10 @@ defmodule TheMaestro.TUI.OAuthHandler do
 
         display_browser_instructions(flow_data)
         {:ok, flow_data}
+      
+      {:error, reason} ->
+        MenuHelpers.display_error("Failed to start Anthropic OAuth: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 

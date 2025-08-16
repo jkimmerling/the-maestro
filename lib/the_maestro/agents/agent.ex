@@ -26,7 +26,8 @@ defmodule TheMaestro.Agents.Agent do
           loop_state: atom(),
           created_at: DateTime.t(),
           llm_provider: module(),
-          auth_context: term()
+          auth_context: term(),
+          model: String.t() | nil
         }
 
   @typedoc """
@@ -43,7 +44,7 @@ defmodule TheMaestro.Agents.Agent do
           timestamp: DateTime.t()
         }
 
-  defstruct [:agent_id, :message_history, :loop_state, :created_at, :llm_provider, :auth_context]
+  defstruct [:agent_id, :message_history, :loop_state, :created_at, :llm_provider, :auth_context, :model]
 
   # Client API
 
@@ -62,11 +63,13 @@ defmodule TheMaestro.Agents.Agent do
     # Resolve LLM provider - support both module names and provider atoms
     llm_provider = resolve_llm_provider(opts)
     auth_context = Keyword.get(opts, :auth_context)
+    model = Keyword.get(opts, :model)
 
     init_args = %{
       agent_id: agent_id,
       llm_provider: llm_provider,
-      auth_context: auth_context
+      auth_context: auth_context,
+      model: model
     }
 
     GenServer.start_link(__MODULE__, init_args, name: via_tuple(agent_id))
@@ -204,7 +207,7 @@ defmodule TheMaestro.Agents.Agent do
   # Server Callbacks
 
   @impl true
-  def init(%{agent_id: agent_id, llm_provider: llm_provider, auth_context: auth_context}) do
+  def init(%{agent_id: agent_id, llm_provider: llm_provider, auth_context: auth_context, model: model}) do
     # Initialize authentication if auth_context is nil
     final_auth_context =
       case auth_context do
@@ -234,7 +237,8 @@ defmodule TheMaestro.Agents.Agent do
       loop_state: :idle,
       created_at: DateTime.utc_now(),
       llm_provider: llm_provider,
-      auth_context: final_auth_context
+      auth_context: final_auth_context,
+      model: model
     }
 
     {:ok, state}
@@ -381,7 +385,7 @@ defmodule TheMaestro.Agents.Agent do
     tool_definitions = TheMaestro.Tooling.get_tool_definitions()
 
     completion_opts =
-      build_completion_opts_with_streaming(state.agent_id, tool_definitions, state.llm_provider)
+      build_completion_opts_with_streaming(state, tool_definitions)
 
     if Enum.empty?(tool_definitions) do
       execute_basic_completion_with_streaming(
@@ -400,13 +404,15 @@ defmodule TheMaestro.Agents.Agent do
     end
   end
 
-  defp build_completion_opts_with_streaming(agent_id, tool_definitions, provider_module) do
+  defp build_completion_opts_with_streaming(state, tool_definitions) do
     stream_callback = fn
-      {:chunk, chunk} -> broadcast_stream_chunk(agent_id, chunk)
+      {:chunk, chunk} -> broadcast_stream_chunk(state.agent_id, chunk)
       :complete -> :ok
     end
 
-    model = get_default_model_for_provider(provider_module)
+    # Use the selected model from state, fall back to default if not set
+    # Handle case where existing agent doesn't have model field (for backwards compatibility)
+    model = Map.get(state, :model) || get_default_model_for_provider(state.llm_provider)
 
     %{
       model: model,
@@ -490,7 +496,7 @@ defmodule TheMaestro.Agents.Agent do
     end
 
     completion_opts = %{
-      model: get_default_model_for_provider(state.llm_provider),
+      model: Map.get(state, :model) || get_default_model_for_provider(state.llm_provider),
       temperature: 0.0,
       max_tokens: 8192,
       stream_callback: stream_callback

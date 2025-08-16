@@ -41,6 +41,8 @@ defmodule TheMaestroWeb.Router do
 
     live "/setup", ProviderSelectionLive, :index
     live "/agent", AgentLive, :index
+    get "/start_chat", SessionController, :start_chat
+    post "/start_chat", SessionController, :start_chat
   end
 
   # OAuth callback endpoint (separate pipeline to avoid CSRF protection)
@@ -56,6 +58,7 @@ defmodule TheMaestroWeb.Router do
 
     get "/providers", ProvidersController, :index
     post "/providers/:provider/auth", ProvidersController, :auth
+    post "/providers/:provider/complete_device_flow", ProvidersController, :complete_device_flow
     get "/providers/:provider/models", ProvidersController, :models
     post "/providers/:provider/test", ProvidersController, :test
   end

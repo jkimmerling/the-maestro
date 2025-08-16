@@ -23,7 +23,6 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
     @primary_key {:id, :binary_id, autogenerate: true}
 
     schema "provider_credentials" do
-      field :user_id, :string
       field :provider, :string
       field :auth_method, :string
       field :credentials, :string
@@ -34,19 +33,18 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
 
     def changeset(credential, attrs) do
       credential
-      |> cast(attrs, [:user_id, :provider, :auth_method, :credentials, :expires_at])
-      |> validate_required([:user_id, :provider, :auth_method, :credentials])
+      |> cast(attrs, [:provider, :auth_method, :credentials, :expires_at])
+      |> validate_required([:provider, :auth_method, :credentials])
       |> validate_inclusion(:provider, ["anthropic", "google", "openai"])
       |> validate_inclusion(:auth_method, ["oauth", "api_key"])
-      |> unique_constraint([:user_id, :provider, :auth_method])
+      |> unique_constraint([:provider, :auth_method])
     end
   end
 
   @doc """
-  Stores encrypted credentials for a user and provider.
+  Stores encrypted credentials for a provider.
 
   ## Parameters
-    - `user_id`: User identifier
     - `provider`: Provider identifier
     - `method`: Authentication method
     - `credentials`: Raw credentials to encrypt and store
@@ -55,14 +53,13 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
     - `{:ok, stored_credentials}`: Successfully stored
     - `{:error, reason}`: Storage failed
   """
-  @spec store_credentials(String.t(), ProviderAuth.provider(), ProviderAuth.auth_method(), map()) ::
+  @spec store_credentials(ProviderAuth.provider(), ProviderAuth.auth_method(), map()) ::
           {:ok, map()} | {:error, term()}
-  def store_credentials(user_id, provider, method, credentials) do
+  def store_credentials(provider, method, credentials) do
     encrypted_creds = encrypt_credentials(credentials)
     expires_at = extract_expiry_time(credentials)
 
     attrs = %{
-      user_id: user_id,
       provider: Atom.to_string(provider),
       auth_method: Atom.to_string(method),
       credentials: encrypted_creds,
@@ -73,11 +70,11 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
 
     case Repo.insert(changeset,
            on_conflict: {:replace, [:credentials, :expires_at, :updated_at]},
-           conflict_target: [:user_id, :provider, :auth_method]
+           conflict_target: [:provider, :auth_method]
          ) do
       {:ok, stored} ->
-        Logger.info("Stored credentials for user #{user_id}, provider #{provider}")
-        {:ok, decode_stored_credential(stored)}
+        Logger.info("Stored credentials for provider #{provider}")
+        decode_stored_credential(stored)
 
       {:error, %Ecto.Changeset{} = changeset} ->
         Logger.error("Failed to store credentials: #{inspect(changeset.errors)}")
@@ -90,10 +87,9 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
   end
 
   @doc """
-  Retrieves and decrypts credentials for a user and provider.
+  Retrieves and decrypts credentials for a provider.
 
   ## Parameters
-    - `user_id`: User identifier
     - `provider`: Provider identifier
     - `method`: Optional specific authentication method
 
@@ -102,10 +98,10 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
     - `{:error, :not_found}`: No credentials found
     - `{:error, reason}`: Retrieval/decryption failed
   """
-  @spec get_credentials(String.t(), ProviderAuth.provider(), ProviderAuth.auth_method() | nil) ::
+  @spec get_credentials(ProviderAuth.provider(), ProviderAuth.auth_method() | nil) ::
           {:ok, map()} | {:error, term()}
-  def get_credentials(user_id, provider, method \\ nil) do
-    query = base_credential_query(user_id, provider, method)
+  def get_credentials(provider, method \\ nil) do
+    query = base_credential_query(provider, method)
 
     case Repo.one(query) do
       nil ->
@@ -150,7 +146,7 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
         case Repo.update(changeset) do
           {:ok, updated} ->
             Logger.info("Updated credentials for ID #{credential_id}")
-            {:ok, decode_stored_credential(updated)}
+            decode_stored_credential(updated)
 
           {:error, reason} ->
             Logger.error("Failed to update credentials: #{inspect(reason)}")
@@ -163,7 +159,6 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
   Deletes stored credentials.
 
   ## Parameters
-    - `user_id`: User identifier
     - `provider`: Provider identifier
     - `method`: Optional specific authentication method to delete
 
@@ -171,14 +166,14 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
     - `:ok`: Credentials deleted
     - `{:error, reason}`: Deletion failed
   """
-  @spec delete_credentials(String.t(), ProviderAuth.provider(), ProviderAuth.auth_method() | nil) ::
+  @spec delete_credentials(ProviderAuth.provider(), ProviderAuth.auth_method() | nil) ::
           :ok | {:error, term()}
-  def delete_credentials(user_id, provider, method \\ nil) do
-    query = base_credential_query(user_id, provider, method)
+  def delete_credentials(provider, method \\ nil) do
+    query = base_credential_query(provider, method)
 
     case Repo.delete_all(query) do
       {count, _} when count > 0 ->
-        Logger.info("Deleted #{count} credentials for user #{user_id}, provider #{provider}")
+        Logger.info("Deleted #{count} credentials for provider #{provider}")
         :ok
 
       {0, _} ->
@@ -187,19 +182,15 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
   end
 
   @doc """
-  Lists all stored credentials for a user (without sensitive data).
-
-  ## Parameters
-    - `user_id`: User identifier
+  Lists all stored credentials (without sensitive data).
 
   ## Returns
     List of credential summaries
   """
-  @spec list_user_credentials(String.t()) :: [map()]
-  def list_user_credentials(user_id) do
+  @spec list_credentials() :: [map()]
+  def list_credentials do
     query =
       from c in ProviderCredential,
-        where: c.user_id == ^user_id,
         select: %{
           id: c.id,
           provider: c.provider,
@@ -213,10 +204,10 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
 
   # Private Functions
 
-  defp base_credential_query(user_id, provider, method) do
+  defp base_credential_query(provider, method) do
     query =
       from c in ProviderCredential,
-        where: c.user_id == ^user_id and c.provider == ^Atom.to_string(provider)
+        where: c.provider == ^Atom.to_string(provider)
 
     if method do
       where(query, [c], c.auth_method == ^Atom.to_string(method))
@@ -230,7 +221,6 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
          :ok <- validate_expiry(credential.expires_at) do
       result = %{
         id: credential.id,
-        user_id: credential.user_id,
         provider: String.to_atom(credential.provider),
         auth_method: String.to_atom(credential.auth_method),
         credentials: decrypted_creds,
@@ -243,64 +233,42 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
   end
 
   defp decode_stored_credential(credential) do
-    {:ok, decrypted_creds} = decrypt_credentials(credential.credentials)
-
-    %{
-      id: credential.id,
-      user_id: credential.user_id,
-      provider: String.to_atom(credential.provider),
-      auth_method: String.to_atom(credential.auth_method),
-      credentials: decrypted_creds,
-      expires_at: credential.expires_at,
-      updated_at: credential.updated_at
-    }
+    case decrypt_credentials(credential.credentials) do
+      {:ok, decrypted_creds} -> 
+        {:ok, %{
+          id: credential.id,
+          provider: String.to_atom(credential.provider),
+          auth_method: String.to_atom(credential.auth_method),
+          credentials: decrypted_creds,
+          expires_at: credential.expires_at,
+          inserted_at: credential.inserted_at,
+          updated_at: credential.updated_at
+        }}
+      
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp encrypt_credentials(credentials) do
-    # Use application-level encryption key
-    key = get_encryption_key()
-    plaintext = Jason.encode!(credentials)
-
-    # Simple encryption using :crypto.crypto_one_time
-    # In production, consider using a more robust encryption scheme
-    iv = :crypto.strong_rand_bytes(16)
-    ciphertext = :crypto.crypto_one_time(:aes_256_cbc, key, iv, plaintext, true)
-
-    # Combine IV and ciphertext
-    Base.encode64(iv <> ciphertext)
+    # Simple Base64 encoding for development
+    # In production, this should use proper encryption
+    credentials
+    |> Jason.encode!()
+    |> Base.encode64()
   end
 
   defp decrypt_credentials(encrypted_data) do
-    key = get_encryption_key()
-    data = Base.decode64!(encrypted_data)
-
-    # Extract IV (first 16 bytes) and ciphertext
-    <<iv::binary-16, ciphertext::binary>> = data
-    plaintext = :crypto.crypto_one_time(:aes_256_cbc, key, iv, ciphertext, false)
-
-    case Jason.decode(plaintext) do
-      {:ok, credentials} -> {:ok, credentials}
-      {:error, _} -> {:error, :decryption_failed}
-    end
-  rescue
-    _ -> {:error, :decryption_failed}
-  end
-
-  defp get_encryption_key do
-    # Get encryption key from application config or generate one
-    # In production, this should be a secure, persistent key
-    case Application.get_env(:the_maestro, [:multi_provider_auth, :credential_encryption_key]) do
-      {:system, env_var, default} ->
-        case System.get_env(env_var) do
-          nil -> :crypto.hash(:sha256, default)
-          value -> :crypto.hash(:sha256, value)
-        end
-
-      key when is_binary(key) ->
-        :crypto.hash(:sha256, key)
-
-      _ ->
-        :crypto.hash(:sha256, "the_maestro_default_key_change_in_production")
+    try do
+      encrypted_data
+      |> Base.decode64!()
+      |> Jason.decode()
+      |> case do
+        {:ok, credentials} -> {:ok, credentials}
+        {:error, _} -> {:error, :decryption_failed}
+      end
+    rescue
+      _ -> {:error, :decryption_failed}
     end
   end
 

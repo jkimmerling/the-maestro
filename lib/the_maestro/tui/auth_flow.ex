@@ -136,6 +136,9 @@ defmodule TheMaestro.TUI.AuthFlow do
       :oauth ->
         execute_oauth_auth(provider)
 
+      :device_flow ->
+        execute_oauth_auth(provider)  # Device flow uses the same OAuth handler
+
       :service_account ->
         execute_service_account_auth(provider)
 
@@ -406,6 +409,7 @@ defmodule TheMaestro.TUI.AuthFlow do
 
   defp get_auth_method_description(:api_key), do: "Fast and simple - uses your API key"
   defp get_auth_method_description(:oauth), do: "Secure browser-based authentication"
+  defp get_auth_method_description(:device_flow), do: "Secure device flow authentication (like Claude Code)"
 
   defp get_auth_method_description(:service_account),
     do: "Enterprise authentication for Google services"
@@ -414,6 +418,7 @@ defmodule TheMaestro.TUI.AuthFlow do
 
   defp format_auth_method(:api_key), do: "API Key"
   defp format_auth_method(:oauth), do: "OAuth (Browser)"
+  defp format_auth_method(:device_flow), do: "Device Flow (Recommended)"
   defp format_auth_method(:service_account), do: "Service Account"
   defp format_auth_method(method), do: String.capitalize(to_string(method))
 

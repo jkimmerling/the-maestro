@@ -6,6 +6,7 @@ defmodule TheMaestroWeb.AgentLive do
   It handles both authenticated and anonymous sessions based on configuration.
   """
   use TheMaestroWeb, :live_view
+  require Logger
 
   alias TheMaestro.Agents
 
@@ -15,14 +16,15 @@ defmodule TheMaestroWeb.AgentLive do
 
     current_user = Map.get(session, "current_user")
     oauth_credentials = Map.get(session, "oauth_credentials")
+    provider_selection = Map.get(session, "provider_selection")
     Logger.debug("oauth_credentials from session: #{inspect(oauth_credentials)}")
+    Logger.debug("provider_selection from session: #{inspect(provider_selection)}")
 
     authentication_enabled = authentication_enabled?()
 
     agent_id = determine_agent_id(authentication_enabled, current_user, session, socket)
-    llm_provider = Application.get_env(:the_maestro, :llm_provider, TheMaestro.Providers.Gemini)
-    auth_context = create_auth_context(oauth_credentials)
-    agent_opts = build_agent_opts(llm_provider, auth_context)
+    {llm_provider, auth_context} = get_selected_provider_and_auth(current_user, oauth_credentials)
+    agent_opts = build_agent_opts(llm_provider, auth_context, provider_selection)
 
     case Agents.find_or_start_agent(agent_id, agent_opts) do
       {:ok, _pid} ->
@@ -673,9 +675,18 @@ defmodule TheMaestroWeb.AgentLive do
     end
   end
 
-  defp build_agent_opts(llm_provider, auth_context) do
+  defp build_agent_opts(llm_provider, auth_context, provider_selection \\ nil) do
     agent_opts = [llm_provider: llm_provider]
-    if auth_context, do: Keyword.put(agent_opts, :auth_context, auth_context), else: agent_opts
+    
+    # Add auth context if available
+    agent_opts = if auth_context, do: Keyword.put(agent_opts, :auth_context, auth_context), else: agent_opts
+    
+    # Add model if available from provider selection
+    if provider_selection && provider_selection["model"] do
+      Keyword.put(agent_opts, :model, provider_selection["model"])
+    else
+      agent_opts
+    end
   end
 
   defp get_user_id(nil), do: nil
@@ -686,4 +697,49 @@ defmodule TheMaestroWeb.AgentLive do
     |> Enum.map(fn {field, {msg, _opts}} -> "#{field} #{msg}" end)
     |> Enum.join(", ")
   end
+
+  defp get_selected_provider_and_auth(_current_user, _oauth_credentials) do
+    # Single-user system - check for stored credentials
+    case get_stored_provider_credentials() do
+      {:ok, provider, credentials} ->
+        {resolve_provider_module(provider), credentials}
+      
+      {:error, :not_found} ->
+        # No stored credentials found - use fallback
+        {TheMaestro.Providers.Gemini, nil}
+    end
+  end
+
+  defp get_stored_provider_credentials() do
+    # Check for Anthropic credentials first (since that's what user selected)
+    case TheMaestro.Providers.Auth.CredentialStore.get_credentials(:anthropic, :oauth) do
+      {:ok, cred_data} ->
+        auth_context = %{
+          type: :oauth,
+          credentials: cred_data.credentials,
+          config: %{provider: :anthropic}
+        }
+        {:ok, :anthropic, auth_context}
+      
+      {:error, :not_found} ->
+        # Try other providers if needed
+        case TheMaestro.Providers.Auth.CredentialStore.get_credentials(:google, :oauth) do
+          {:ok, cred_data} ->
+            auth_context = %{
+              type: :oauth,
+              credentials: cred_data.credentials,
+              config: %{provider: :google}
+            }
+            {:ok, :google, auth_context}
+          
+          {:error, :not_found} ->
+            {:error, :not_found}
+        end
+    end
+  end
+
+  defp resolve_provider_module(:anthropic), do: TheMaestro.Providers.Anthropic
+  defp resolve_provider_module(:google), do: TheMaestro.Providers.Gemini
+  defp resolve_provider_module(:openai), do: TheMaestro.Providers.OpenAI
+  defp resolve_provider_module(_), do: TheMaestro.Providers.Gemini
 end

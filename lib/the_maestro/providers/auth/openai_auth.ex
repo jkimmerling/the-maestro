@@ -314,10 +314,10 @@ defmodule TheMaestro.Providers.Auth.OpenAIAuth do
   end
 
   defp get_oauth_client_id do
-    Application.get_env(:the_maestro, [:providers, :openai, :oauth_client_id])
+    get_in(Application.get_env(:the_maestro, :providers, %{}), [:openai, :oauth_client_id])
   end
 
   defp get_oauth_client_secret do
-    Application.get_env(:the_maestro, [:providers, :openai, :oauth_client_secret])
+    get_in(Application.get_env(:the_maestro, :providers, %{}), [:openai, :oauth_client_secret])
   end
 end
