@@ -15,8 +15,8 @@ defmodule TheMaestro.Providers.OpenAI do
   @behaviour TheMaestro.Providers.LLMProvider
 
   alias OpenaiEx.Chat.Completions
-  alias TheMaestro.Providers.LLMProvider
   alias TheMaestro.Models.Model
+  alias TheMaestro.Providers.LLMProvider
 
   require Logger
 
@@ -767,21 +767,21 @@ defmodule TheMaestro.Providers.OpenAI do
 
   defp get_openai_capabilities(model_id) do
     base_capabilities = ["text", "code"]
-    
-    capabilities = 
+
+    capabilities =
       if multimodal_model?(model_id) do
         base_capabilities ++ ["multimodal", "vision", "image_analysis"]
       else
         base_capabilities
       end
-    
+
     capabilities =
       if supports_function_calling?(model_id) do
         capabilities ++ ["function_calling", "tools"]
       else
         capabilities
       end
-    
+
     if String.contains?(model_id, ["gpt-4"]) do
       capabilities ++ ["analysis", "reasoning", "complex_tasks"]
     else

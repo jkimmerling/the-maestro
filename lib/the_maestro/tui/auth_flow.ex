@@ -6,7 +6,7 @@ defmodule TheMaestro.TUI.AuthFlow do
   authentication execution, and state management for the TUI interface.
   """
 
-  alias TheMaestro.Providers.Auth.{ProviderRegistry, CredentialStore}
+  alias TheMaestro.Providers.Auth.{CredentialStore, ProviderRegistry}
   alias TheMaestro.TUI.{APIKeyHandler, MenuHelpers, OAuthHandler}
 
   @doc """
@@ -23,12 +23,12 @@ defmodule TheMaestro.TUI.AuthFlow do
   def authenticate_provider(provider) do
     # First check for existing credentials
     existing_creds = get_existing_credentials(provider)
-    
+
     case existing_creds do
       [] ->
         # No existing credentials, proceed with normal auth flow
         proceed_with_auth_method_selection(provider)
-        
+
       creds ->
         # Show existing credentials and allow user to choose
         display_credential_selection_menu(provider, creds)
@@ -439,11 +439,11 @@ defmodule TheMaestro.TUI.AuthFlow do
 
   defp get_existing_credentials(provider) do
     provider_str = to_string(provider)
-    
+
     case CredentialStore.list_credentials() do
       [] ->
         []
-        
+
       all_creds ->
         Enum.filter(all_creds, fn cred -> cred.provider == provider_str end)
     end
@@ -465,7 +465,12 @@ defmodule TheMaestro.TUI.AuthFlow do
     provider_name = get_provider_name(provider)
     MenuHelpers.display_title("EXISTING #{String.upcase(provider_name)} CREDENTIALS")
 
-    IO.puts([IO.ANSI.bright(), "Found existing credentials for #{provider_name}:", IO.ANSI.reset()])
+    IO.puts([
+      IO.ANSI.bright(),
+      "Found existing credentials for #{provider_name}:",
+      IO.ANSI.reset()
+    ])
+
     IO.puts("")
 
     # Display existing credentials as menu options
@@ -473,30 +478,38 @@ defmodule TheMaestro.TUI.AuthFlow do
     |> Enum.with_index(1)
     |> Enum.each(fn {cred, index} ->
       auth_method_name = format_auth_method(String.to_atom(cred.auth_method))
-      status = if cred.expires_at && DateTime.compare(cred.expires_at, DateTime.utc_now()) == :lt do
-        IO.ANSI.yellow() <> " (Expired)" <> IO.ANSI.reset()
-      else
-        IO.ANSI.green() <> " (Active)" <> IO.ANSI.reset()
-      end
-      
+
+      status =
+        if cred.expires_at && DateTime.compare(cred.expires_at, DateTime.utc_now()) == :lt do
+          IO.ANSI.yellow() <> " (Expired)" <> IO.ANSI.reset()
+        else
+          IO.ANSI.green() <> " (Active)" <> IO.ANSI.reset()
+        end
+
       IO.puts([
-        IO.ANSI.faint(), 
+        IO.ANSI.faint(),
         "#{index}. #{auth_method_name}#{status}",
         IO.ANSI.reset()
       ])
-      
+
       if cred.updated_at do
         updated_str = cred.updated_at |> DateTime.to_date() |> Date.to_string()
         IO.puts([IO.ANSI.faint(), "   Last updated: #{updated_str}", IO.ANSI.reset()])
       end
-      
+
       IO.puts("")
     end)
 
     # Add options for new authentication
     new_auth_index = length(existing_creds) + 1
     IO.puts([IO.ANSI.faint(), "#{new_auth_index}. Set up new authentication", IO.ANSI.reset()])
-    IO.puts([IO.ANSI.faint(), "#{new_auth_index + 1}. Back to provider selection", IO.ANSI.reset()])
+
+    IO.puts([
+      IO.ANSI.faint(),
+      "#{new_auth_index + 1}. Back to provider selection",
+      IO.ANSI.reset()
+    ])
+
     IO.puts("")
   end
 
@@ -519,7 +532,10 @@ defmodule TheMaestro.TUI.AuthFlow do
         {:error, :back_to_provider}
 
       {:error, :invalid_choice} ->
-        MenuHelpers.display_error("Invalid choice. Please select a number between 1 and #{max_choice}.")
+        MenuHelpers.display_error(
+          "Invalid choice. Please select a number between 1 and #{max_choice}."
+        )
+
         :timer.sleep(2000)
         handle_credential_selection(provider, existing_creds)
 
@@ -529,10 +545,15 @@ defmodule TheMaestro.TUI.AuthFlow do
   end
 
   defp use_existing_credential(provider, cred) do
-    MenuHelpers.display_info("Loading existing #{format_auth_method(String.to_atom(cred.auth_method))} credentials...")
+    MenuHelpers.display_info(
+      "Loading existing #{format_auth_method(String.to_atom(cred.auth_method))} credentials..."
+    )
 
     # Retrieve the actual credentials from the store
-    case CredentialStore.get_credentials(String.to_atom(cred.provider), String.to_atom(cred.auth_method)) do
+    case CredentialStore.get_credentials(
+           String.to_atom(cred.provider),
+           String.to_atom(cred.auth_method)
+         ) do
       {:ok, credentials} ->
         # Convert to auth context format expected by the providers
         auth_context = %{

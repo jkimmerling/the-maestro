@@ -44,11 +44,11 @@ if config_env() == :prod do
   if is_escript do
     # For TUI escript, use environment variables with sensible defaults for credential sync
     database_url = System.get_env("DATABASE_URL")
-    
+
     if database_url do
       # Use DATABASE_URL if provided (for production TUI)
       maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
-      
+
       config :the_maestro, TheMaestro.Repo,
         url: database_url,
         pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5"),

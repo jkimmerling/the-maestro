@@ -3,7 +3,7 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
   Component for dynamic model selection with capability indicators.
   """
   use TheMaestroWeb, :live_component
-  
+
   alias TheMaestro.Models.Model
 
   def render(assigns) do
@@ -159,19 +159,23 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
     ]
   end
 
-  defp get_context_length(%Model{context_length: context_length}) when not is_nil(context_length) do
+  defp get_context_length(%Model{context_length: context_length})
+       when not is_nil(context_length) do
     cond do
       context_length >= 1_000_000 -> "#{div(context_length, 1_000_000)}M"
       context_length >= 1_000 -> "#{div(context_length, 1_000)}K"
       true -> "#{context_length}"
     end
   end
+
   defp get_context_length(_), do: "Unknown"
 
   defp supports_multimodal?(%Model{multimodal: multimodal}), do: multimodal == true
   defp supports_multimodal?(_), do: false
 
-  defp supports_function_calling?(%Model{function_calling: function_calling}), do: function_calling == true
+  defp supports_function_calling?(%Model{function_calling: function_calling}),
+    do: function_calling == true
+
   defp supports_function_calling?(_), do: false
 
   defp get_cost_indicator(%Model{cost_tier: cost_tier}) do
@@ -182,5 +186,6 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
       _ -> "Variable"
     end
   end
+
   defp get_cost_indicator(_), do: "Variable"
 end

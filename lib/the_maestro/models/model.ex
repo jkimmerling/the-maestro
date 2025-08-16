@@ -1,41 +1,50 @@
 defmodule TheMaestro.Models.Model do
   @moduledoc """
   Standardized model data structure for all LLM providers.
-  
+
   This struct provides a consistent interface for model data across all providers,
   eliminating the need for defensive programming and type checking throughout
   the application.
   """
 
   defstruct [
-    :id,                # String - "claude-sonnet-4-20250514" 
-    :name,              # String - "Claude 4 Sonnet"
-    :description,       # String - "Most intelligent model..."
-    :provider,          # Atom - :anthropic, :openai, :google
-    :context_length,    # Integer - 200000
-    :cost_tier,         # Atom - :economy, :balanced, :premium
-    :multimodal,        # Boolean
-    :function_calling,  # Boolean
-    :capabilities       # List - ["text", "code", "analysis"]
+    # String - "claude-sonnet-4-20250514"
+    :id,
+    # String - "Claude 4 Sonnet"
+    :name,
+    # String - "Most intelligent model..."
+    :description,
+    # Atom - :anthropic, :openai, :google
+    :provider,
+    # Integer - 200000
+    :context_length,
+    # Atom - :economy, :balanced, :premium
+    :cost_tier,
+    # Boolean
+    :multimodal,
+    # Boolean
+    :function_calling,
+    # List - ["text", "code", "analysis"]
+    :capabilities
   ]
 
   @type t :: %__MODULE__{
-    id: String.t(),
-    name: String.t(),
-    description: String.t(),
-    provider: atom(),
-    context_length: non_neg_integer(),
-    cost_tier: :economy | :balanced | :premium,
-    multimodal: boolean(),
-    function_calling: boolean(),
-    capabilities: [String.t()]
-  }
+          id: String.t(),
+          name: String.t(),
+          description: String.t(),
+          provider: atom(),
+          context_length: non_neg_integer(),
+          cost_tier: :economy | :balanced | :premium,
+          multimodal: boolean(),
+          function_calling: boolean(),
+          capabilities: [String.t()]
+        }
 
   @doc """
   Creates a new Model struct from a map with atom keys.
-  
+
   ## Examples
-  
+
       iex> TheMaestro.Models.Model.new(%{
       ...>   id: "claude-3-5-sonnet-20241022",
       ...>   name: "Claude 3.5 Sonnet",
@@ -70,11 +79,11 @@ defmodule TheMaestro.Models.Model do
 
   @doc """
   Converts a legacy map with mixed key types to a Model struct.
-  
+
   Handles maps with atom keys, string keys, or mixed keys.
-  
+
   ## Examples
-  
+
       iex> TheMaestro.Models.Model.from_legacy_map(%{
       ...>   "id" => "claude-3-5-sonnet-20241022",
       ...>   "name" => "Claude 3.5 Sonnet",
@@ -99,12 +108,12 @@ defmodule TheMaestro.Models.Model do
 
   @doc """
   Converts a legacy string model ID to a basic Model struct.
-  
+
   When only an ID is available, creates a minimal Model struct
   with the ID as both id and name.
-  
+
   ## Examples
-  
+
       iex> TheMaestro.Models.Model.from_legacy_string("claude-3-5-sonnet-20241022")
       %TheMaestro.Models.Model{
         id: "claude-3-5-sonnet-20241022",
@@ -129,11 +138,11 @@ defmodule TheMaestro.Models.Model do
 
   @doc """
   Converts any legacy model data (map or string) to a Model struct.
-  
+
   This is the main conversion function that handles all legacy formats.
-  
+
   ## Examples
-  
+
       iex> TheMaestro.Models.Model.from_legacy(%{id: "model-1", name: "Model 1"})
       %TheMaestro.Models.Model{id: "model-1", name: "Model 1", ...}
       
@@ -146,7 +155,7 @@ defmodule TheMaestro.Models.Model do
 
   @doc """
   Enriches a basic Model struct with additional provider information.
-  
+
   Used when converting from legacy string IDs to add missing metadata.
   """
   @spec enrich_with_provider_info(t(), atom()) :: t()
@@ -158,7 +167,7 @@ defmodule TheMaestro.Models.Model do
 
   @doc """
   Returns the display name for a model.
-  
+
   Uses the name field if available, falls back to id.
   """
   @spec display_name(t()) :: String.t()
@@ -181,13 +190,16 @@ defmodule TheMaestro.Models.Model do
     end)
   end
 
-  defp maybe_set_default_capabilities(%__MODULE__{capabilities: caps} = model) when caps == [] or is_nil(caps) do
+  defp maybe_set_default_capabilities(%__MODULE__{capabilities: caps} = model)
+       when caps == [] or is_nil(caps) do
     %{model | capabilities: ["text"]}
   end
+
   defp maybe_set_default_capabilities(model), do: model
 
   defp maybe_set_default_context_length(%__MODULE__{context_length: nil} = model) do
     %{model | context_length: 8192}
   end
+
   defp maybe_set_default_context_length(model), do: model
 end

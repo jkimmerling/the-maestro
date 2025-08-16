@@ -7,9 +7,9 @@ defmodule TheMaestro.Sessions do
   """
 
   import Ecto.Query, warn: false
+  alias TheMaestro.Models.Model
   alias TheMaestro.Repo
   alias TheMaestro.Sessions.ConversationSession
-  alias TheMaestro.Models.Model
 
   @doc """
   Creates a conversation session.
@@ -299,9 +299,11 @@ defmodule TheMaestro.Sessions do
   end
 
   defp serialize_model(nil), do: nil
+
   defp serialize_model(%Model{} = model) do
     Model.to_map(model)
   end
+
   defp serialize_model(legacy_model) do
     # Handle legacy model data that might be a string or map
     case legacy_model do
@@ -312,17 +314,21 @@ defmodule TheMaestro.Sessions do
   end
 
   defp deserialize_model(nil), do: nil
+
   defp deserialize_model(%{legacy: true} = model_data) do
     # Handle legacy model data
     Model.from_legacy(model_data)
   end
+
   defp deserialize_model(model_data) when is_map(model_data) do
     # Handle Model struct data
     Model.from_legacy_map(model_data)
   end
+
   defp deserialize_model(model_data) when is_binary(model_data) do
     # Handle string model ID
     Model.from_legacy_string(model_data)
   end
+
   defp deserialize_model(_), do: nil
 end

@@ -14,8 +14,8 @@ defmodule TheMaestro.Providers.Anthropic do
 
   @behaviour TheMaestro.Providers.LLMProvider
 
-  alias TheMaestro.Providers.LLMProvider
   alias TheMaestro.Models.Model
+  alias TheMaestro.Providers.LLMProvider
 
   require Logger
 
@@ -215,8 +215,10 @@ defmodule TheMaestro.Providers.Anthropic do
         scopes: ["org:create_api_key", "user:profile", "user:inference"]
       },
       code_verifier: code_verifier,
-      code_challenge: nil,  # Not needed for token exchange
-      state: code_verifier  # Use verifier as state like llxprt-code does
+      # Not needed for token exchange
+      code_challenge: nil,
+      # Use verifier as state like llxprt-code does
+      state: code_verifier
     }
 
     case AnthropicDeviceFlow.exchange_code_for_token(auth_code, flow_state) do

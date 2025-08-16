@@ -427,12 +427,13 @@ defmodule TheMaestro.Agents.Agent do
 
     # Use the selected model from state, fall back to default if not set
     # Always expect a Model struct, convert legacy formats if needed
-    model = case Map.get(state, :model) do
-      %Model{} = model_struct -> model_struct
-      legacy_model when not is_nil(legacy_model) -> Model.from_legacy(legacy_model)
-      nil -> get_default_model_for_provider(state.llm_provider)
-    end
-    
+    model =
+      case Map.get(state, :model) do
+        %Model{} = model_struct -> model_struct
+        legacy_model when not is_nil(legacy_model) -> Model.from_legacy(legacy_model)
+        nil -> get_default_model_for_provider(state.llm_provider)
+      end
+
     model_id = model.id
 
     %{
@@ -517,11 +518,12 @@ defmodule TheMaestro.Agents.Agent do
     end
 
     # Get the model, ensuring it's a Model struct
-    model = case Map.get(state, :model) do
-      %Model{} = model_struct -> model_struct
-      legacy_model when not is_nil(legacy_model) -> Model.from_legacy(legacy_model)
-      nil -> get_default_model_for_provider(state.llm_provider)
-    end
+    model =
+      case Map.get(state, :model) do
+        %Model{} = model_struct -> model_struct
+        legacy_model when not is_nil(legacy_model) -> Model.from_legacy(legacy_model)
+        nil -> get_default_model_for_provider(state.llm_provider)
+      end
 
     completion_opts = %{
       model: model.id,
@@ -713,15 +715,17 @@ defmodule TheMaestro.Agents.Agent do
     # Convert keyword list to map if needed
     providers_map = if is_list(providers), do: Map.new(providers), else: providers
 
-    default_model_id = case find_provider_by_module(providers_map, provider_module) do
-      {_name, %{models: [first_model | _]}} -> first_model
-      # fallback
-      _ -> "gemini-2.5-flash"
-    end
-    
+    default_model_id =
+      case find_provider_by_module(providers_map, provider_module) do
+        {_name, %{models: [first_model | _]}} -> first_model
+        # fallback
+        _ -> "gemini-2.5-flash"
+      end
+
     # Convert the default model ID to a basic Model struct
     # The provider will enrich it when needed
     provider_atom = module_to_provider_atom(provider_module)
+
     Model.from_legacy_string(default_model_id)
     |> Model.enrich_with_provider_info(provider_atom)
   end

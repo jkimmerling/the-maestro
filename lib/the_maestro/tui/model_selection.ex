@@ -6,9 +6,9 @@ defmodule TheMaestro.TUI.ModelSelection do
   models from the authenticated provider and allowing users to choose.
   """
 
-  alias TheMaestro.TUI.MenuHelpers
-  alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
   alias TheMaestro.Models.Model
+  alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
+  alias TheMaestro.TUI.MenuHelpers
 
   # Model information for display
   @model_info %{
@@ -276,15 +276,19 @@ defmodule TheMaestro.TUI.ModelSelection do
       |> Enum.with_index(1)
       |> Enum.reduce(%{}, fn {model, index}, acc ->
         case get_model_info(model) do
-          nil -> 
+          nil ->
             # Handle case where model info is not found - extract name from Model struct
-            model_display = case model do
-              %Model{id: id} -> id
-              model_id when is_binary(model_id) -> model_id
-              _ -> inspect(model)
-            end
+            model_display =
+              case model do
+                %Model{id: id} -> id
+                model_id when is_binary(model_id) -> model_id
+                _ -> inspect(model)
+              end
+
             Map.put(acc, index, "Model: #{model_display}")
-          info -> Map.put(acc, index, info.description)
+
+          info ->
+            Map.put(acc, index, info.description)
         end
       end)
       |> Map.put(length(models) + 1, "Back to authentication method")
@@ -333,7 +337,7 @@ defmodule TheMaestro.TUI.ModelSelection do
 
     model_name =
       case get_model_info(model) do
-        nil -> 
+        nil ->
           # Extract name from Model struct or fallback to string
           case model do
             %Model{name: name} when not is_nil(name) -> name
@@ -341,7 +345,9 @@ defmodule TheMaestro.TUI.ModelSelection do
             model_id when is_binary(model_id) -> model_id
             _ -> inspect(model)
           end
-        info -> info.name
+
+        info ->
+          info.name
       end
 
     MenuHelpers.display_info("You selected: #{model_name}")
@@ -427,14 +433,15 @@ defmodule TheMaestro.TUI.ModelSelection do
 
   defp display_basic_model_info(model, provider) do
     provider_name = get_provider_name(provider)
-    
+
     # Extract model ID from Model struct or string
-    model_id = case model do
-      %Model{id: id} -> id
-      model_id when is_binary(model_id) -> model_id
-      _ -> inspect(model)
-    end
-    
+    model_id =
+      case model do
+        %Model{id: id} -> id
+        model_id when is_binary(model_id) -> model_id
+        _ -> inspect(model)
+      end
+
     IO.puts([IO.ANSI.bright(), "Model: #{model_id}", IO.ANSI.reset()])
     IO.puts([IO.ANSI.faint(), "Provider: #{provider_name}", IO.ANSI.reset()])
     IO.puts("")

@@ -9,8 +9,8 @@ defmodule TheMaestro.TUI.CLI do
   """
 
   alias TheMaestro.Agents.{Agent, DynamicSupervisor}
-  alias TheMaestro.TUI.{AuthFlow, ModelSelection, ProviderSelection}
   alias TheMaestro.Models.Model
+  alias TheMaestro.TUI.{AuthFlow, ModelSelection, ProviderSelection}
 
   @doc """
   Main entry point for the escript executable.
@@ -61,8 +61,8 @@ defmodule TheMaestro.TUI.CLI do
     # Build welcome message based on provider and model selection
     provider_name = get_provider_name(provider)
     model_info = ModelSelection.get_model_info(model)
-    
-    model_display = 
+
+    model_display =
       if model_info do
         model_info.name
       else
@@ -327,11 +327,12 @@ defmodule TheMaestro.TUI.CLI do
     auth_context = Process.get(:tui_auth_context)
 
     # Extract model ID from Model struct or string
-    model_id = case model do
-      %Model{id: id} -> id
-      model_id when is_binary(model_id) -> model_id
-      _ -> "unknown"
-    end
+    model_id =
+      case model do
+        %Model{id: id} -> id
+        model_id when is_binary(model_id) -> model_id
+        _ -> "unknown"
+      end
 
     # Create a unique identifier based on provider, model, and auth
     base_string =

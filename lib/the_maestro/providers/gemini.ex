@@ -14,8 +14,8 @@ defmodule TheMaestro.Providers.Gemini do
 
   @behaviour TheMaestro.Providers.LLMProvider
 
-  alias TheMaestro.Providers.LLMProvider
   alias TheMaestro.Models.Model
+  alias TheMaestro.Providers.LLMProvider
 
   require Logger
 
@@ -1280,21 +1280,21 @@ defmodule TheMaestro.Providers.Gemini do
 
   defp get_gemini_capabilities(model_id) do
     base_capabilities = ["text"]
-    
-    capabilities = 
+
+    capabilities =
       if gemini_multimodal?(model_id) do
         base_capabilities ++ ["multimodal", "vision", "image_analysis"]
       else
         base_capabilities
       end
-    
+
     capabilities =
       if supports_gemini_function_calling?(model_id) do
         capabilities ++ ["function_calling", "tools"]
       else
         capabilities
       end
-    
+
     if String.contains?(model_id, ["1.5-pro"]) do
       capabilities ++ ["code", "analysis", "reasoning"]
     else
