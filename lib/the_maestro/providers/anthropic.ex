@@ -468,7 +468,7 @@ defmodule TheMaestro.Providers.Anthropic do
     end
   end
 
-  defp validate_token(access_token) do
+  defp validate_token(access_token) when is_binary(access_token) do
     # Determine auth type based on token format
     auth_type = if String.starts_with?(access_token, "sk-ant-oat"), do: :oauth, else: :api_key
 
@@ -497,6 +497,14 @@ defmodule TheMaestro.Providers.Anthropic do
       {:error, reason} ->
         {:error, {:validation_request_failed, reason}}
     end
+  end
+
+  defp validate_token(nil) do
+    {:error, :missing_token}
+  end
+
+  defp validate_token(_invalid_token) do
+    {:error, :invalid_token_format}
   end
 
   defp refresh_oauth_token(%{credentials: credentials} = auth_context) do

@@ -25,15 +25,6 @@ defmodule TheMaestroWeb.Router do
     live "/", HomeLive, :index
   end
 
-  # Authentication routes
-  scope "/auth", TheMaestroWeb do
-    pipe_through :browser
-
-    get "/logout", AuthController, :logout
-    get "/:provider", AuthController, :request
-    get "/:provider/callback", AuthController, :callback
-  end
-
   # Main application routes
   scope "/", TheMaestroWeb do
     pipe_through :browser

@@ -63,22 +63,6 @@ config :logger, :console,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
-# Configure Ueberauth for OAuth authentication
-config :ueberauth, Ueberauth,
-  providers: [
-    google:
-      {Ueberauth.Strategy.Google,
-       [
-         default_scope:
-           "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email openid"
-       ]}
-  ]
-
-# Configure Ueberauth Google strategy with hardcoded credentials (like gemini-cli)
-config :ueberauth, Ueberauth.Strategy.Google.OAuth,
-  client_id: "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com",
-  client_secret: "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"
-
 # Configure Gemini provider with consistent project ID for all OAuth users
 config :the_maestro, :gemini, project_id: "even-setup-7wxx5"
 
