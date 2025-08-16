@@ -15,6 +15,7 @@ defmodule TheMaestro.Providers.Anthropic do
   @behaviour TheMaestro.Providers.LLMProvider
 
   alias TheMaestro.Providers.LLMProvider
+  alias TheMaestro.Models.Model
 
   require Logger
 
@@ -201,11 +202,22 @@ defmodule TheMaestro.Providers.Anthropic do
   @doc """
   Completes device authorization flow with the provided authorization code.
   """
-  def complete_device_authorization(auth_code, _code_verifier) do
+  def complete_device_authorization(auth_code, code_verifier) do
     # Use the new device flow implementation
     alias TheMaestro.Providers.Auth.AnthropicDeviceFlow
 
-    flow_state = AnthropicDeviceFlow.new()
+    # Reconstruct flow state with the provided code verifier
+    flow_state = %AnthropicDeviceFlow.State{
+      config: %{
+        client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+        authorization_endpoint: "https://claude.ai/oauth/authorize",
+        token_endpoint: "https://console.anthropic.com/v1/oauth/token",
+        scopes: ["org:create_api_key", "user:profile", "user:inference"]
+      },
+      code_verifier: code_verifier,
+      code_challenge: nil,  # Not needed for token exchange
+      state: code_verifier  # Use verifier as state like llxprt-code does
+    }
 
     case AnthropicDeviceFlow.exchange_code_for_token(auth_code, flow_state) do
       {:ok, token_struct} ->
@@ -848,76 +860,90 @@ defmodule TheMaestro.Providers.Anthropic do
   # Helper function to return OAuth-compatible models (Claude 4 models only)
   defp get_oauth_models do
     [
-      %{
+      Model.new(%{
         id: "claude-sonnet-4-20250514",
         name: "Claude 4 Sonnet",
         description:
           "Anthropic's most intelligent model with enhanced reasoning capabilities (OAuth)",
+        provider: :anthropic,
         context_length: 200_000,
         multimodal: true,
         function_calling: true,
-        cost_tier: :premium
-      },
-      %{
+        cost_tier: :premium,
+        capabilities: ["text", "code", "analysis", "multimodal"]
+      }),
+      Model.new(%{
         id: "claude-opus-4-20250514",
         name: "Claude 4 Opus",
         description: "Most powerful model for the most complex tasks (OAuth)",
+        provider: :anthropic,
         context_length: 200_000,
         multimodal: true,
         function_calling: true,
-        cost_tier: :premium
-      }
+        cost_tier: :premium,
+        capabilities: ["text", "code", "analysis", "multimodal"]
+      })
     ]
   end
 
   # Helper function to return available Anthropic models
   defp get_anthropic_models do
     [
-      %{
+      Model.new(%{
         id: "claude-3-5-sonnet-20241022",
         name: "Claude 3.5 Sonnet",
         description: "Anthropic's most intelligent model with enhanced reasoning capabilities",
+        provider: :anthropic,
         context_length: 200_000,
         multimodal: true,
         function_calling: true,
-        cost_tier: :premium
-      },
-      %{
+        cost_tier: :premium,
+        capabilities: ["text", "code", "analysis", "multimodal"]
+      }),
+      Model.new(%{
         id: "claude-3-5-haiku-20241022",
         name: "Claude 3.5 Haiku",
         description: "Fast and cost-effective model for simple tasks",
+        provider: :anthropic,
         context_length: 200_000,
         multimodal: true,
         function_calling: true,
-        cost_tier: :balanced
-      },
-      %{
+        cost_tier: :balanced,
+        capabilities: ["text", "code", "multimodal"]
+      }),
+      Model.new(%{
         id: "claude-3-haiku-20240307",
         name: "Claude 3 Haiku",
         description: "Fast and efficient model for everyday tasks",
+        provider: :anthropic,
         context_length: 200_000,
         multimodal: true,
         function_calling: true,
-        cost_tier: :balanced
-      },
-      %{
+        cost_tier: :balanced,
+        capabilities: ["text", "code", "multimodal"]
+      }),
+      Model.new(%{
         id: "claude-3-sonnet-20240229",
         name: "Claude 3 Sonnet",
         description: "Balanced intelligence and speed for complex tasks",
+        provider: :anthropic,
         context_length: 200_000,
         multimodal: true,
         function_calling: true,
-        cost_tier: :premium
-      },
-      %{
+        cost_tier: :premium,
+        capabilities: ["text", "code", "analysis", "multimodal"]
+      }),
+      Model.new(%{
         id: "claude-3-opus-20240229",
         name: "Claude 3 Opus",
         description: "Most powerful model for the most complex tasks",
+        provider: :anthropic,
         context_length: 200_000,
         multimodal: true,
         function_calling: true,
-        cost_tier: :premium
-      }
+        cost_tier: :premium,
+        capabilities: ["text", "code", "analysis", "multimodal"]
+      })
     ]
   end
 end

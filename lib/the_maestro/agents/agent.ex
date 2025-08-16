@@ -9,6 +9,8 @@ defmodule TheMaestro.Agents.Agent do
 
   use GenServer
 
+  alias TheMaestro.Models.Model
+
   @typedoc """
   The state structure for an Agent GenServer process.
 
@@ -27,7 +29,7 @@ defmodule TheMaestro.Agents.Agent do
           created_at: DateTime.t(),
           llm_provider: module(),
           auth_context: term(),
-          model: String.t() | nil
+          model: Model.t() | nil
         }
 
   @typedoc """
@@ -309,7 +311,7 @@ defmodule TheMaestro.Agents.Agent do
           type: :assistant,
           role: :assistant,
           content:
-            "I'm sorry, I encountered an error processing your request. Please check your authentication configuration.",
+            "I'm sorry, I encountered an error processing your request. Error details: #{inspect(reason)}. Please check your authentication configuration.",
           timestamp: DateTime.utc_now()
         }
 
@@ -424,11 +426,17 @@ defmodule TheMaestro.Agents.Agent do
     end
 
     # Use the selected model from state, fall back to default if not set
-    # Handle case where existing agent doesn't have model field (for backwards compatibility)
-    model = Map.get(state, :model) || get_default_model_for_provider(state.llm_provider)
+    # Always expect a Model struct, convert legacy formats if needed
+    model = case Map.get(state, :model) do
+      %Model{} = model_struct -> model_struct
+      legacy_model when not is_nil(legacy_model) -> Model.from_legacy(legacy_model)
+      nil -> get_default_model_for_provider(state.llm_provider)
+    end
+    
+    model_id = model.id
 
     %{
-      model: model,
+      model: model_id,
       temperature: 0.0,
       max_tokens: 8192,
       tools: tool_definitions,
@@ -508,8 +516,15 @@ defmodule TheMaestro.Agents.Agent do
       :complete -> :ok
     end
 
+    # Get the model, ensuring it's a Model struct
+    model = case Map.get(state, :model) do
+      %Model{} = model_struct -> model_struct
+      legacy_model when not is_nil(legacy_model) -> Model.from_legacy(legacy_model)
+      nil -> get_default_model_for_provider(state.llm_provider)
+    end
+
     completion_opts = %{
-      model: Map.get(state, :model) || get_default_model_for_provider(state.llm_provider),
+      model: model.id,
       temperature: 0.0,
       max_tokens: 8192,
       stream_callback: stream_callback
@@ -698,11 +713,17 @@ defmodule TheMaestro.Agents.Agent do
     # Convert keyword list to map if needed
     providers_map = if is_list(providers), do: Map.new(providers), else: providers
 
-    case find_provider_by_module(providers_map, provider_module) do
+    default_model_id = case find_provider_by_module(providers_map, provider_module) do
       {_name, %{models: [first_model | _]}} -> first_model
       # fallback
       _ -> "gemini-2.5-flash"
     end
+    
+    # Convert the default model ID to a basic Model struct
+    # The provider will enrich it when needed
+    provider_atom = module_to_provider_atom(provider_module)
+    Model.from_legacy_string(default_model_id)
+    |> Model.enrich_with_provider_info(provider_atom)
   end
 
   defp find_provider_by_module(providers_map, target_module) do
@@ -710,6 +731,11 @@ defmodule TheMaestro.Agents.Agent do
       Map.get(config, :module) == target_module
     end)
   end
+
+  defp module_to_provider_atom(TheMaestro.Providers.Anthropic), do: :anthropic
+  defp module_to_provider_atom(TheMaestro.Providers.Gemini), do: :google
+  defp module_to_provider_atom(TheMaestro.Providers.OpenAI), do: :openai
+  defp module_to_provider_atom(_), do: :google
 
   # Streaming and status broadcasting functions
 

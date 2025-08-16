@@ -15,6 +15,7 @@ defmodule TheMaestro.Providers.Gemini do
   @behaviour TheMaestro.Providers.LLMProvider
 
   alias TheMaestro.Providers.LLMProvider
+  alias TheMaestro.Models.Model
 
   require Logger
 
@@ -1213,15 +1214,17 @@ defmodule TheMaestro.Providers.Gemini do
   defp format_gemini_model(%{"name" => name, "displayName" => display_name} = _model) do
     model_id = name |> String.split("/") |> List.last()
 
-    %{
+    Model.new(%{
       id: model_id,
       name: display_name || format_model_name(model_id),
       description: get_gemini_model_description(model_id),
+      provider: :google,
       context_length: get_gemini_context_length(model_id),
       multimodal: gemini_multimodal?(model_id),
       function_calling: supports_gemini_function_calling?(model_id),
-      cost_tier: get_gemini_cost_tier(model_id)
-    }
+      cost_tier: get_gemini_cost_tier(model_id),
+      capabilities: get_gemini_capabilities(model_id)
+    })
   end
 
   defp format_model_name("gemini-1.5-pro"), do: "Gemini 1.5 Pro"
@@ -1274,4 +1277,28 @@ defmodule TheMaestro.Providers.Gemini do
   defp get_gemini_cost_tier("gemini-1.5-pro"), do: :premium
   defp get_gemini_cost_tier("gemini-pro-vision"), do: :premium
   defp get_gemini_cost_tier(_), do: :balanced
+
+  defp get_gemini_capabilities(model_id) do
+    base_capabilities = ["text"]
+    
+    capabilities = 
+      if gemini_multimodal?(model_id) do
+        base_capabilities ++ ["multimodal", "vision", "image_analysis"]
+      else
+        base_capabilities
+      end
+    
+    capabilities =
+      if supports_gemini_function_calling?(model_id) do
+        capabilities ++ ["function_calling", "tools"]
+      else
+        capabilities
+      end
+    
+    if String.contains?(model_id, ["1.5-pro"]) do
+      capabilities ++ ["code", "analysis", "reasoning"]
+    else
+      capabilities ++ ["code"]
+    end
+  end
 end

@@ -3,6 +3,8 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
   Component for dynamic model selection with capability indicators.
   """
   use TheMaestroWeb, :live_component
+  
+  alias TheMaestro.Models.Model
 
   def render(assigns) do
     ~H"""
@@ -157,45 +159,28 @@ defmodule TheMaestroWeb.Live.Components.ModelSelector do
     ]
   end
 
-  defp get_context_length(model) do
-    case model.id do
-      "claude-3-5-sonnet-20241022" -> "200K"
-      "claude-3-haiku-20240307" -> "200K"
-      "gemini-1.5-pro" -> "2M"
-      "gemini-1.5-flash" -> "1M"
-      "gpt-4" -> "128K"
-      "gpt-3.5-turbo" -> "16K"
-      _ -> "Unknown"
+  defp get_context_length(%Model{context_length: context_length}) when not is_nil(context_length) do
+    cond do
+      context_length >= 1_000_000 -> "#{div(context_length, 1_000_000)}M"
+      context_length >= 1_000 -> "#{div(context_length, 1_000)}K"
+      true -> "#{context_length}"
     end
   end
+  defp get_context_length(_), do: "Unknown"
 
-  defp supports_multimodal?(model) do
-    model.id in [
-      "claude-3-5-sonnet-20241022",
-      "claude-3-haiku-20240307",
-      "gemini-1.5-pro",
-      "gemini-1.5-flash",
-      "gpt-4"
-    ]
-  end
+  defp supports_multimodal?(%Model{multimodal: multimodal}), do: multimodal == true
+  defp supports_multimodal?(_), do: false
 
-  defp supports_function_calling?(model) do
-    model.id in [
-      "claude-3-5-sonnet-20241022",
-      "claude-3-haiku-20240307",
-      "gemini-1.5-pro",
-      "gemini-1.5-flash",
-      "gpt-4",
-      "gpt-3.5-turbo"
-    ]
-  end
+  defp supports_function_calling?(%Model{function_calling: function_calling}), do: function_calling == true
+  defp supports_function_calling?(_), do: false
 
-  defp get_cost_indicator(model) do
-    case model.id do
-      id when id in ["claude-3-5-sonnet-20241022", "gemini-1.5-pro", "gpt-4"] -> "Premium"
-      id when id in ["claude-3-haiku-20240307", "gemini-1.5-flash"] -> "Balanced"
-      "gpt-3.5-turbo" -> "Economy"
+  defp get_cost_indicator(%Model{cost_tier: cost_tier}) do
+    case cost_tier do
+      :premium -> "Premium"
+      :balanced -> "Balanced"
+      :economy -> "Economy"
       _ -> "Variable"
     end
   end
+  defp get_cost_indicator(_), do: "Variable"
 end

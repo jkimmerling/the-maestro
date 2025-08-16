@@ -6,7 +6,7 @@ defmodule TheMaestro.TUI.AuthFlow do
   authentication execution, and state management for the TUI interface.
   """
 
-  alias TheMaestro.Providers.Auth.ProviderRegistry
+  alias TheMaestro.Providers.Auth.{ProviderRegistry, CredentialStore}
   alias TheMaestro.TUI.{APIKeyHandler, MenuHelpers, OAuthHandler}
 
   @doc """
@@ -21,13 +21,18 @@ defmodule TheMaestro.TUI.AuthFlow do
   """
   @spec authenticate_provider(atom()) :: {:ok, map()} | {:error, atom() | String.t()}
   def authenticate_provider(provider) do
-    case get_available_auth_methods(provider) do
+    # First check for existing credentials
+    existing_creds = get_existing_credentials(provider)
+    
+    case existing_creds do
       [] ->
-        {:error, "No authentication methods available for this provider"}
-
-      methods ->
-        display_auth_method_menu(provider, methods)
-        handle_auth_method_selection(provider, methods)
+        # No existing credentials, proceed with normal auth flow
+        proceed_with_auth_method_selection(provider)
+        
+      creds ->
+        # Show existing credentials and allow user to choose
+        display_credential_selection_menu(provider, creds)
+        handle_credential_selection(provider, creds)
     end
   end
 
@@ -429,4 +434,145 @@ defmodule TheMaestro.TUI.AuthFlow do
   defp get_provider_name(:google), do: "Gemini (Google)"
   defp get_provider_name(:openai), do: "ChatGPT (OpenAI)"
   defp get_provider_name(provider), do: String.capitalize(to_string(provider))
+
+  # New functions for enhanced credential management
+
+  defp get_existing_credentials(provider) do
+    provider_str = to_string(provider)
+    
+    case CredentialStore.list_credentials() do
+      [] ->
+        []
+        
+      all_creds ->
+        Enum.filter(all_creds, fn cred -> cred.provider == provider_str end)
+    end
+  end
+
+  defp proceed_with_auth_method_selection(provider) do
+    case get_available_auth_methods(provider) do
+      [] ->
+        {:error, "No authentication methods available for this provider"}
+
+      methods ->
+        display_auth_method_menu(provider, methods)
+        handle_auth_method_selection(provider, methods)
+    end
+  end
+
+  defp display_credential_selection_menu(provider, existing_creds) do
+    MenuHelpers.clear_screen()
+    provider_name = get_provider_name(provider)
+    MenuHelpers.display_title("EXISTING #{String.upcase(provider_name)} CREDENTIALS")
+
+    IO.puts([IO.ANSI.bright(), "Found existing credentials for #{provider_name}:", IO.ANSI.reset()])
+    IO.puts("")
+
+    # Display existing credentials as menu options
+    existing_creds
+    |> Enum.with_index(1)
+    |> Enum.each(fn {cred, index} ->
+      auth_method_name = format_auth_method(String.to_atom(cred.auth_method))
+      status = if cred.expires_at && DateTime.compare(cred.expires_at, DateTime.utc_now()) == :lt do
+        IO.ANSI.yellow() <> " (Expired)" <> IO.ANSI.reset()
+      else
+        IO.ANSI.green() <> " (Active)" <> IO.ANSI.reset()
+      end
+      
+      IO.puts([
+        IO.ANSI.faint(), 
+        "#{index}. #{auth_method_name}#{status}",
+        IO.ANSI.reset()
+      ])
+      
+      if cred.updated_at do
+        updated_str = cred.updated_at |> DateTime.to_date() |> Date.to_string()
+        IO.puts([IO.ANSI.faint(), "   Last updated: #{updated_str}", IO.ANSI.reset()])
+      end
+      
+      IO.puts("")
+    end)
+
+    # Add options for new authentication
+    new_auth_index = length(existing_creds) + 1
+    IO.puts([IO.ANSI.faint(), "#{new_auth_index}. Set up new authentication", IO.ANSI.reset()])
+    IO.puts([IO.ANSI.faint(), "#{new_auth_index + 1}. Back to provider selection", IO.ANSI.reset()])
+    IO.puts("")
+  end
+
+  defp handle_credential_selection(provider, existing_creds) do
+    max_choice = length(existing_creds) + 2
+    prompt = "Enter your choice (1-#{max_choice}): "
+
+    case MenuHelpers.get_menu_choice(prompt, 1..max_choice) do
+      {:ok, choice} when choice <= length(existing_creds) ->
+        # User selected an existing credential
+        selected_cred = Enum.at(existing_creds, choice - 1)
+        use_existing_credential(provider, selected_cred)
+
+      {:ok, new_auth_choice} when new_auth_choice == length(existing_creds) + 1 ->
+        # User wants to set up new authentication
+        proceed_with_auth_method_selection(provider)
+
+      {:ok, _back_choice} ->
+        # User wants to go back
+        {:error, :back_to_provider}
+
+      {:error, :invalid_choice} ->
+        MenuHelpers.display_error("Invalid choice. Please select a number between 1 and #{max_choice}.")
+        :timer.sleep(2000)
+        handle_credential_selection(provider, existing_creds)
+
+      {:error, :quit} ->
+        {:error, :quit}
+    end
+  end
+
+  defp use_existing_credential(provider, cred) do
+    MenuHelpers.display_info("Loading existing #{format_auth_method(String.to_atom(cred.auth_method))} credentials...")
+
+    # Retrieve the actual credentials from the store
+    case CredentialStore.get_credentials(String.to_atom(cred.provider), String.to_atom(cred.auth_method)) do
+      {:ok, credentials} ->
+        # Convert to auth context format expected by the providers
+        auth_context = %{
+          type: String.to_atom(cred.auth_method),
+          provider: String.to_atom(cred.provider),
+          credentials: credentials,
+          config: %{}
+        }
+
+        # Validate the credentials are still working
+        case validate_auth_context(auth_context) do
+          :ok ->
+            MenuHelpers.display_success("Existing credentials loaded successfully!")
+            :timer.sleep(1000)
+            {:ok, auth_context}
+
+          {:error, reason} ->
+            MenuHelpers.display_error("Existing credentials are no longer valid: #{reason}")
+            IO.puts("")
+            IO.puts([IO.ANSI.bright(), "Options:", IO.ANSI.reset()])
+            IO.puts([IO.ANSI.faint(), "1. Set up new authentication", IO.ANSI.reset()])
+            IO.puts([IO.ANSI.faint(), "2. Back to credential selection", IO.ANSI.reset()])
+            IO.puts("")
+
+            case MenuHelpers.get_menu_choice("Enter your choice (1-2): ", 1..2) do
+              {:ok, 1} ->
+                proceed_with_auth_method_selection(provider)
+
+              {:ok, 2} ->
+                existing_creds = get_existing_credentials(provider)
+                handle_credential_selection(provider, existing_creds)
+
+              {:error, :quit} ->
+                {:error, :quit}
+            end
+        end
+
+      {:error, reason} ->
+        MenuHelpers.display_error("Failed to load existing credentials: #{reason}")
+        proceed_with_auth_method_selection(provider)
+    end
+  end
 end

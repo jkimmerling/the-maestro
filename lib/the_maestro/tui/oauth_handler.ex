@@ -257,13 +257,12 @@ defmodule TheMaestro.TUI.OAuthHandler do
   defp display_callback_instructions do
     IO.puts([
       IO.ANSI.bright(),
-      "4. You'll be redirected back to this application",
+      "4. After authorizing, copy the authorization code from the browser",
       IO.ANSI.reset()
     ])
 
     IO.puts("")
-    IO.puts([IO.ANSI.faint(), "Waiting for authorization...", IO.ANSI.reset()])
-    IO.puts([IO.ANSI.faint(), "Press Ctrl+C to cancel", IO.ANSI.reset()])
+    IO.puts([IO.ANSI.faint(), "You'll be prompted to enter the code next...", IO.ANSI.reset()])
     IO.puts("")
   end
 
@@ -311,14 +310,63 @@ defmodule TheMaestro.TUI.OAuthHandler do
   end
 
   defp handle_standard_oauth_completion(provider, flow_data) do
-    # Start embedded server to handle OAuth callback
-    case start_oauth_server() do
-      {:ok, callback_url} ->
-        MenuHelpers.display_info("OAuth callback server started at #{callback_url}")
-        poll_for_oauth_completion(provider, flow_data)
+    # For Anthropic, prompt for manual code entry since device flow requires it
+    case provider do
+      :anthropic ->
+        handle_anthropic_code_entry(flow_data)
+
+      _ ->
+        # For other providers, use server-based callback
+        case start_oauth_server() do
+          {:ok, callback_url} ->
+            MenuHelpers.display_info("OAuth callback server started at #{callback_url}")
+            poll_for_oauth_completion(provider, flow_data)
+
+          {:error, reason} ->
+            {:error, "Failed to start OAuth callback server: #{inspect(reason)}"}
+        end
+    end
+  end
+
+  defp handle_anthropic_code_entry(flow_data) do
+    IO.puts("")
+    IO.puts([IO.ANSI.bright(), "Enter the authorization code from the browser:", IO.ANSI.reset()])
+    IO.write("> ")
+
+    case IO.read(:stdio, :line) do
+      data when is_binary(data) ->
+        auth_code = String.trim(data)
+
+        if auth_code == "" do
+          MenuHelpers.display_error("No authorization code provided")
+          {:error, "No authorization code provided"}
+        else
+          complete_anthropic_auth(auth_code, flow_data)
+        end
+
+      _ ->
+        MenuHelpers.display_error("Failed to read authorization code")
+        {:error, "Failed to read authorization code"}
+    end
+  end
+
+  defp complete_anthropic_auth(auth_code, %{code_verifier: code_verifier}) do
+    case Anthropic.complete_device_authorization(auth_code, code_verifier) do
+      {:ok, credentials} ->
+        MenuHelpers.display_success("Anthropic OAuth authorization successful!")
+        :timer.sleep(1000)
+
+        auth_context = %{
+          type: :oauth,
+          provider: :anthropic,
+          credentials: credentials
+        }
+
+        {:ok, auth_context}
 
       {:error, reason} ->
-        {:error, "Failed to start OAuth callback server: #{inspect(reason)}"}
+        MenuHelpers.display_error("Anthropic OAuth failed: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 

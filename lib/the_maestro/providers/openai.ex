@@ -16,6 +16,7 @@ defmodule TheMaestro.Providers.OpenAI do
 
   alias OpenaiEx.Chat.Completions
   alias TheMaestro.Providers.LLMProvider
+  alias TheMaestro.Models.Model
 
   require Logger
 
@@ -703,15 +704,17 @@ defmodule TheMaestro.Providers.OpenAI do
   end
 
   defp format_openai_model(%{"id" => id} = _model) do
-    %{
+    Model.new(%{
       id: id,
       name: format_model_name(id),
       description: get_model_description(id),
+      provider: :openai,
       context_length: get_model_context_length(id),
       multimodal: multimodal_model?(id),
       function_calling: supports_function_calling?(id),
-      cost_tier: get_cost_tier(id)
-    }
+      cost_tier: get_cost_tier(id),
+      capabilities: get_openai_capabilities(id)
+    })
   end
 
   defp format_model_name("gpt-3.5-turbo"), do: "GPT-3.5 Turbo"
@@ -761,4 +764,28 @@ defmodule TheMaestro.Providers.OpenAI do
   defp get_cost_tier("gpt-4o"), do: :balanced
   defp get_cost_tier(id) when id in ["gpt-4", "gpt-4-32k"], do: :premium
   defp get_cost_tier(_), do: :balanced
+
+  defp get_openai_capabilities(model_id) do
+    base_capabilities = ["text", "code"]
+    
+    capabilities = 
+      if multimodal_model?(model_id) do
+        base_capabilities ++ ["multimodal", "vision", "image_analysis"]
+      else
+        base_capabilities
+      end
+    
+    capabilities =
+      if supports_function_calling?(model_id) do
+        capabilities ++ ["function_calling", "tools"]
+      else
+        capabilities
+      end
+    
+    if String.contains?(model_id, ["gpt-4"]) do
+      capabilities ++ ["analysis", "reasoning", "complex_tasks"]
+    else
+      capabilities
+    end
+  end
 end
