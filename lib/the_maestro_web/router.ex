@@ -19,7 +19,6 @@ defmodule TheMaestroWeb.Router do
     plug :fetch_query_params
   end
 
-
   scope "/", TheMaestroWeb do
     pipe_through :browser
 

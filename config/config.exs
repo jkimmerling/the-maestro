@@ -102,7 +102,13 @@ config :the_maestro, :providers,
   },
   anthropic: %{
     module: TheMaestro.Providers.Anthropic,
-    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+    models: [
+      "claude-3-5-sonnet-20241022",
+      "claude-3-5-haiku-20241022",
+      "claude-3-opus-20240229",
+      "claude-3-sonnet-20240229",
+      "claude-3-haiku-20240307"
+    ],
     # Uses Anthropic's public OAuth client ID for device flow authentication (matches Claude Code)
     oauth_client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
     oauth_client_secret: "not_needed_for_device_flow",

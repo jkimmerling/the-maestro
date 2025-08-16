@@ -4,14 +4,14 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
 
   This module implements OAuth device flow and API key authentication for Anthropic's Claude API.
   It follows Anthropic's authentication patterns and mimics Claude Code's device flow authentication.
-  
+
   Completely revamped to match llxprt-code reference implementation for Claude Code compatibility.
   """
 
   @behaviour TheMaestro.Providers.Auth.ProviderAuth
 
-  alias TheMaestro.Providers.Auth.ProviderAuth
   alias TheMaestro.Providers.Auth.AnthropicDeviceFlow
+  alias TheMaestro.Providers.Auth.ProviderAuth
 
   require Logger
 
@@ -45,19 +45,23 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
   def authenticate(:anthropic, :oauth, params) do
     # Initialize device flow (OAuth implementation)
     flow_state = AnthropicDeviceFlow.new()
-    
-    {:ok, device_response, updated_flow_state} = AnthropicDeviceFlow.initiate_device_flow(flow_state)
-    
+
+    {:ok, device_response, updated_flow_state} =
+      AnthropicDeviceFlow.initiate_device_flow(flow_state)
+
     # Display authentication instructions
     display_device_flow_instructions(device_response)
-    
+
     # Check if we have an authorization code provided directly
     case Map.get(params, :auth_code) do
       nil ->
         # Wait for user to complete authentication manually
-        Logger.info("Waiting for user to complete authentication at: #{device_response.verification_uri_complete}")
+        Logger.info(
+          "Waiting for user to complete authentication at: #{device_response.verification_uri_complete}"
+        )
+
         {:error, {:manual_auth_required, device_response.verification_uri_complete}}
-      
+
       auth_code ->
         # Exchange provided authorization code for tokens
         complete_device_flow_with_state(auth_code, updated_flow_state)
@@ -101,7 +105,7 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
   @impl ProviderAuth
   def refresh_credentials(:anthropic, %{"refresh_token" => refresh_token} = credentials) do
     flow_state = AnthropicDeviceFlow.new()
-    
+
     case AnthropicDeviceFlow.refresh_token(refresh_token, flow_state) do
       {:ok, token_struct} ->
         refreshed_credentials = %{
@@ -134,18 +138,21 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
   def initiate_oauth_flow(:anthropic, options \\ %{}) do
     # Use device flow instead of traditional OAuth
     flow_state = AnthropicDeviceFlow.new()
-    
-    {:ok, device_response, updated_flow_state} = AnthropicDeviceFlow.initiate_device_flow(flow_state)
-    
+
+    {:ok, device_response, updated_flow_state} =
+      AnthropicDeviceFlow.initiate_device_flow(flow_state)
+
     # Check if we need to return flow state data for web UI
     case Map.get(options, :return_flow_state, false) do
       true ->
         # Return both URL and flow state for web UI
-        {:ok, %{
-          auth_url: device_response.verification_uri_complete,
-          code_verifier: updated_flow_state.code_verifier,
-          state: updated_flow_state.state
-        }}
+        {:ok,
+         %{
+           auth_url: device_response.verification_uri_complete,
+           code_verifier: updated_flow_state.code_verifier,
+           state: updated_flow_state.state
+         }}
+
       false ->
         # Return just URL for backward compatibility
         {:ok, device_response.verification_uri_complete}
@@ -156,20 +163,22 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
   def exchange_oauth_code(:anthropic, code, options \\ %{}) do
     # Use device flow for code exchange
     flow_state = AnthropicDeviceFlow.new()
-    
+
     # Set the code verifier from options if provided
-    flow_state = case Map.get(options, :code_verifier) do
-      nil ->
-        # Try to get from process dictionary (backward compatibility)
-        case Process.get(:oauth_code_verifier) do
-          nil -> flow_state
-          verifier -> %{flow_state | code_verifier: verifier, state: verifier}
-        end
-      verifier ->
-        # Set both code_verifier and state to the same value like llxprt-code does
-        %{flow_state | code_verifier: verifier, state: verifier}
-    end
-    
+    flow_state =
+      case Map.get(options, :code_verifier) do
+        nil ->
+          # Try to get from process dictionary (backward compatibility)
+          case Process.get(:oauth_code_verifier) do
+            nil -> flow_state
+            verifier -> %{flow_state | code_verifier: verifier, state: verifier}
+          end
+
+        verifier ->
+          # Set both code_verifier and state to the same value like llxprt-code does
+          %{flow_state | code_verifier: verifier, state: verifier}
+      end
+
     case AnthropicDeviceFlow.exchange_code_for_token(code, flow_state) do
       {:ok, token_struct} ->
         credentials = %{
@@ -179,8 +188,9 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
           "token_type" => token_struct.token_type,
           "scope" => token_struct.scope
         }
+
         {:ok, credentials}
-      
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -200,13 +210,13 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
   defp display_device_flow_instructions(device_response) do
     IO.puts("\n🔐 Anthropic Claude OAuth Authentication")
     IO.puts("─" |> String.duplicate(40))
-    
+
     # Try to launch browser if appropriate
     if AnthropicDeviceFlow.should_launch_browser?() do
       IO.puts("🌐 Opening browser for authentication...")
       IO.puts("If the browser does not open, please visit:")
       IO.puts("#{device_response.verification_uri_complete}")
-      
+
       case AnthropicDeviceFlow.launch_browser(device_response.verification_uri_complete) do
         {_, 0} -> :ok
         _ -> IO.puts("⚠️  Failed to open browser automatically.")
@@ -215,7 +225,7 @@ defmodule TheMaestro.Providers.Auth.AnthropicAuth do
       IO.puts("🌐 Visit this URL to authorize:")
       IO.puts("#{device_response.verification_uri_complete}")
     end
-    
+
     IO.puts("─" |> String.duplicate(40))
     IO.puts("📋 After authorization, you'll receive a code to enter.")
     IO.puts("⏰ This authorization will expire in #{device_response.expires_in} seconds.")

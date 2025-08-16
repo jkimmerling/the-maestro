@@ -244,9 +244,7 @@ defmodule TheMaestro.Providers.Auth do
       {:ok, build_auth_result(provider, stored_creds.auth_method, refreshed_creds)}
     else
       error ->
-        Logger.error(
-          "Failed to refresh credentials for #{provider}: #{inspect(error)}"
-        )
+        Logger.error("Failed to refresh credentials for #{provider}: #{inspect(error)}")
 
         error
     end

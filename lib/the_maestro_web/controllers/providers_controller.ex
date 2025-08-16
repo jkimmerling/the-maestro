@@ -245,8 +245,8 @@ defmodule TheMaestroWeb.ProvidersController do
 
       auth_code ->
         # Complete device flow with provided auth code
-        user_id = get_user_id(conn)
-        
+        _user_id = get_user_id(conn)
+
         case Auth.authenticate(provider, :device_flow, %{auth_code: auth_code}) do
           {:ok, result} ->
             json(conn, %{

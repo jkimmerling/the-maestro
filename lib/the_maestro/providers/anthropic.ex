@@ -24,7 +24,6 @@ defmodule TheMaestro.Providers.Anthropic do
                          "anthropic-client-secret"
   @oauth_scopes ["api"]
   @phoenix_redirect_uri "http://localhost:4000/oauth2callback/anthropic"
-  @device_auth_redirect_uri "urn:ietf:wg:oauth:2.0:oob"
 
   # File paths for credential storage
   @maestro_dir ".maestro"
@@ -147,12 +146,12 @@ defmodule TheMaestro.Providers.Anthropic do
     cond do
       String.trim(api_key) == "" ->
         {:error, :invalid_api_key}
-      
-      # Basic format validation - Anthropic API keys should start with sk-ant-api
-      String.starts_with?(api_key, "sk-ant-api") ->
+
+      # Basic format validation - Anthropic API keys should start with sk-ant-api or sk-ant-test
+      String.starts_with?(api_key, "sk-ant-api") or String.starts_with?(api_key, "sk-ant-test") ->
         :ok
-        
-      # For test keys or invalid format
+
+      # For invalid format
       true ->
         {:error, :invalid_api_key}
     end
@@ -162,19 +161,7 @@ defmodule TheMaestro.Providers.Anthropic do
   def list_models(auth_context) do
     case validate_auth_context(auth_context) do
       :ok ->
-        # Check if this is an OAuth token - OAuth tokens can't use models.list endpoint
-        case auth_context do
-          %{type: :oauth, credentials: %{"access_token" => access_token}} when is_binary(access_token) ->
-            if is_oauth_token?(access_token) do
-              # Return hardcoded Claude 4 models for OAuth (models.list doesn't work with OAuth tokens)
-              {:ok, get_oauth_models()}
-            else
-              {:ok, get_anthropic_models()}
-            end
-          _ ->
-            # API key or other auth types - return standard models
-            {:ok, get_anthropic_models()}
-        end
+        determine_models_for_auth(auth_context)
 
       {:error, reason} ->
         {:error, reason}
@@ -192,9 +179,9 @@ defmodule TheMaestro.Providers.Anthropic do
   def device_authorization_flow(_config \\ %{}) do
     # Use the new device flow implementation
     alias TheMaestro.Providers.Auth.AnthropicDeviceFlow
-    
+
     flow_state = AnthropicDeviceFlow.new()
-    
+
     case AnthropicDeviceFlow.initiate_device_flow(flow_state) do
       {:ok, device_response, updated_flow_state} ->
         polling_fn = fn ->
@@ -208,9 +195,6 @@ defmodule TheMaestro.Providers.Anthropic do
            code_verifier: updated_flow_state.code_verifier,
            polling_fn: polling_fn
          }}
-      
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -220,9 +204,9 @@ defmodule TheMaestro.Providers.Anthropic do
   def complete_device_authorization(auth_code, _code_verifier) do
     # Use the new device flow implementation
     alias TheMaestro.Providers.Auth.AnthropicDeviceFlow
-    
+
     flow_state = AnthropicDeviceFlow.new()
-    
+
     case AnthropicDeviceFlow.exchange_code_for_token(auth_code, flow_state) do
       {:ok, token_struct} ->
         # Convert to the expected format and cache
@@ -233,6 +217,7 @@ defmodule TheMaestro.Providers.Anthropic do
           "token_type" => token_struct.token_type,
           "scope" => token_struct.scope
         }
+
         cache_oauth_credentials_private(tokens)
 
       {:error, reason} ->
@@ -296,9 +281,27 @@ defmodule TheMaestro.Providers.Anthropic do
   end
 
   # OAuth Token Detection
-  
+
   defp is_oauth_token?(token) when is_binary(token) do
     String.starts_with?(token, "sk-ant-oat")
+  end
+
+  defp determine_models_for_auth(auth_context) do
+    # Check if this is an OAuth token - OAuth tokens can't use models.list endpoint
+    case auth_context do
+      %{type: :oauth, credentials: %{"access_token" => access_token}}
+      when is_binary(access_token) ->
+        if is_oauth_token?(access_token) do
+          # Return hardcoded Claude 4 models for OAuth (models.list doesn't work with OAuth tokens)
+          {:ok, get_oauth_models()}
+        else
+          {:ok, get_anthropic_models()}
+        end
+
+      _ ->
+        # API key or other auth types - return standard models
+        {:ok, get_anthropic_models()}
+    end
   end
 
   # Private Authentication Detection and Flow Management
@@ -521,21 +524,6 @@ defmodule TheMaestro.Providers.Anthropic do
 
   # OAuth Flow Implementation
 
-  defp build_device_auth_url(state, code_challenge) do
-    params =
-      URI.encode_query(%{
-        client_id: @oauth_client_id,
-        redirect_uri: @device_auth_redirect_uri,
-        response_type: "code",
-        scope: Enum.join(@oauth_scopes, " "),
-        state: state,
-        code_challenge: code_challenge,
-        code_challenge_method: "S256"
-      })
-
-    "https://auth.anthropic.com/oauth/authorize?#{params}"
-  end
-
   defp build_web_auth_url(redirect_uri, state) do
     params =
       URI.encode_query(%{
@@ -646,12 +634,14 @@ defmodule TheMaestro.Providers.Anthropic do
 
   defp validate_messages(nil), do: {:error, :invalid_messages}
   defp validate_messages([]), do: {:error, :empty_messages}
+
   defp validate_messages(messages) when is_list(messages) do
     case Enum.all?(messages, &valid_message?/1) do
       true -> {:ok, messages}
       false -> {:error, :invalid_message_format}
     end
   end
+
   defp validate_messages(_), do: {:error, :invalid_messages}
 
   defp valid_message?(%{role: _role, content: _content}), do: true
@@ -673,21 +663,26 @@ defmodule TheMaestro.Providers.Anthropic do
     url = "https://api.anthropic.com/v1/messages"
 
     headers = build_anthropic_headers(token, auth_type)
-    
+
     # Add Claude Code system prompt for OAuth tokens (required by Anthropic backend)
-    updated_params = if auth_type == :oauth and is_oauth_token?(token) do
-      Map.put(request_params, :system, "You are Claude Code, Anthropic's official CLI for Claude.")
-    else
-      request_params
-    end
-    
+    updated_params =
+      if auth_type == :oauth and is_oauth_token?(token) do
+        Map.put(
+          request_params,
+          :system,
+          "You are Claude Code, Anthropic's official CLI for Claude."
+        )
+      else
+        request_params
+      end
+
     body = Jason.encode!(updated_params)
 
     case HTTPoison.post(url, body, headers) do
       {:ok, %HTTPoison.Response{status_code: 200, body: response_body, headers: response_headers}} ->
         # Handle potentially compressed response
         decompressed_body = decompress_response_if_needed(response_body, response_headers)
-        
+
         case Jason.decode(decompressed_body) do
           {:ok, decoded} -> {:ok, decoded}
           {:error, reason} -> {:error, {:decode_failed, reason}}
@@ -730,7 +725,8 @@ defmodule TheMaestro.Providers.Anthropic do
       {"x-app", "cli"},
       {"user-agent", "claude-cli/1.0.81 (external, cli)"},
       {"content-type", "application/json"},
-      {"anthropic-beta", "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"},
+      {"anthropic-beta",
+       "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"},
       {"x-stainless-helper-method", "stream"},
       {"accept-language", "*"},
       {"sec-fetch-mode", "cors"},
@@ -740,7 +736,7 @@ defmodule TheMaestro.Providers.Anthropic do
 
   # Response decompression helper
   defp decompress_response_if_needed(body, headers) do
-    content_encoding = 
+    content_encoding =
       headers
       |> Enum.find(fn {key, _} -> String.downcase(key) == "content-encoding" end)
       |> case do
@@ -751,8 +747,10 @@ defmodule TheMaestro.Providers.Anthropic do
     case content_encoding do
       "gzip" ->
         :zlib.gunzip(body)
+
       "deflate" ->
         :zlib.uncompress(body)
+
       _ ->
         body
     end
@@ -762,14 +760,6 @@ defmodule TheMaestro.Providers.Anthropic do
 
   defp generate_state do
     32 |> :crypto.strong_rand_bytes() |> Base.encode64(padding: false)
-  end
-
-  defp generate_code_verifier do
-    43 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
-  end
-
-  defp generate_code_challenge(code_verifier) do
-    :crypto.hash(:sha256, code_verifier) |> Base.url_encode64(padding: false)
   end
 
   defp atomize_keys(map) when is_map(map) do
@@ -861,14 +851,15 @@ defmodule TheMaestro.Providers.Anthropic do
       %{
         id: "claude-sonnet-4-20250514",
         name: "Claude 4 Sonnet",
-        description: "Anthropic's most intelligent model with enhanced reasoning capabilities (OAuth)",
+        description:
+          "Anthropic's most intelligent model with enhanced reasoning capabilities (OAuth)",
         context_length: 200_000,
         multimodal: true,
         function_calling: true,
         cost_tier: :premium
       },
       %{
-        id: "claude-opus-4-20250514", 
+        id: "claude-opus-4-20250514",
         name: "Claude 4 Opus",
         description: "Most powerful model for the most complex tasks (OAuth)",
         context_length: 200_000,

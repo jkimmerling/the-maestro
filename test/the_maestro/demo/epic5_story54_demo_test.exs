@@ -266,10 +266,6 @@ defmodule TheMaestro.Demo.Epic5Story54DemoTest do
           assert is_binary(flow_data.state)
           assert is_binary(flow_data.code_verifier)
           assert is_function(flow_data.polling_fn)
-
-        {:error, _reason} ->
-          # Expected if OAuth is not properly configured
-          assert true
       end
 
       # Test web authorization flow setup
@@ -277,10 +273,6 @@ defmodule TheMaestro.Demo.Epic5Story54DemoTest do
         {:ok, flow_data} ->
           assert is_binary(flow_data.auth_url)
           assert is_binary(flow_data.state)
-
-        {:error, _reason} ->
-          # Expected if OAuth is not properly configured
-          assert true
       end
     end
   end

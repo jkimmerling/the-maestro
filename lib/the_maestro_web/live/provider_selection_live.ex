@@ -21,78 +21,72 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   @steps [:provider, :auth_method, :authenticate, :model, :ready]
 
   def mount(_params, session, socket) do
-    try do
-      previous_selection = Map.get(session, "provider_selection")
-
-      # Initialize the UI state step by step with error handling
-      socket =
-        socket
-        |> assign(:current_step, :provider)
-        |> assign(:steps, @steps)
-        |> assign(:selected_provider, nil)
-
-      # Try to get available providers
-      available_providers = try do
-        get_available_providers()
-      rescue
-        error ->
-          require Logger
-          Logger.error("Error getting available providers: #{inspect(error)}")
-          []
-      end
-
-      socket =
-        socket
-        |> assign(:available_providers, available_providers)
-        |> assign(:selected_auth_method, nil)
-        |> assign(:available_auth_methods, [])
-        |> assign(:provider_status, %{})
-        |> assign(:auth_credentials, nil)
-        |> assign(:available_models, [])
-        |> assign(:selected_model, nil)
-        |> assign(:loading_models, false)
-        |> assign(:error_message, nil)
-        |> assign(:success_message, nil)
-        |> assign(:oauth_url, nil)
-        |> assign(:api_key_input, "")
-        |> assign(:validating_api_key, false)
-        |> assign(:previous_selection, previous_selection)
-
-      # Check provider status safely
-      socket = try do
-        check_provider_status(socket)
-      rescue
-        error ->
-        require Logger
-        Logger.error("Error checking provider status: #{inspect(error)}")
-        socket
-      end
-
-      # Show previous selection if available
-      socket =
-        if previous_selection do
-          assign(
-            socket,
-            :success_message,
-            "Previous configuration: #{provider_display_name(previous_selection.provider)} with #{previous_selection.model}"
-          )
-        else
-          socket
-        end
-
-      {:ok, socket}
-    rescue
-      error ->
-        require Logger
-        Logger.error("Mount error in ProviderSelectionLive: #{inspect(error)}")
-        
-        # Return minimal working socket
-        socket = assign(socket, :steps, @steps)
-        socket = assign(socket, :current_step, :provider)
-        socket = assign(socket, :available_providers, [])
-        socket = assign(socket, :error_message, "Failed to initialize: #{inspect(error)}")
-        {:ok, socket}
+    case safe_mount_initialization(session, socket) do
+      {:ok, socket} -> {:ok, socket}
+      {:error, _error, socket} -> {:ok, socket}
     end
+  end
+
+  defp safe_mount_initialization(session, socket) do
+    previous_selection = Map.get(session, "provider_selection")
+
+    # Initialize the UI state step by step with error handling
+    socket =
+      socket
+      |> assign(:current_step, :provider)
+      |> assign(:steps, @steps)
+      |> assign(:selected_provider, nil)
+
+    # Get available providers with error handling
+    available_providers = get_available_providers_safely()
+
+    socket =
+      socket
+      |> assign(:available_providers, available_providers)
+      |> assign(:selected_auth_method, nil)
+      |> assign(:available_auth_methods, [])
+      |> assign(:provider_status, %{})
+      |> assign(:auth_credentials, nil)
+      |> assign(:available_models, [])
+      |> assign(:selected_model, nil)
+      |> assign(:loading_models, false)
+      |> assign(:error_message, nil)
+      |> assign(:success_message, nil)
+      |> assign(:oauth_url, nil)
+      |> assign(:api_key_input, "")
+      |> assign(:validating_api_key, false)
+      |> assign(:previous_selection, previous_selection)
+
+    # Check provider status safely
+    socket = check_provider_status_safely(socket)
+
+    # Show previous selection if available
+    socket =
+      if previous_selection do
+        assign(
+          socket,
+          :success_message,
+          "Previous configuration: #{provider_display_name(previous_selection.provider)} with #{previous_selection.model}"
+        )
+      else
+        socket
+      end
+
+    {:ok, socket}
+  rescue
+    error ->
+      require Logger
+      Logger.error("Mount error in ProviderSelectionLive: #{inspect(error)}")
+
+      # Return minimal working socket
+      socket =
+        socket
+        |> assign(:steps, @steps)
+        |> assign(:current_step, :provider)
+        |> assign(:available_providers, [])
+        |> assign(:error_message, "Failed to initialize: #{inspect(error)}")
+
+      {:error, error, socket}
   end
 
   def handle_event("select_provider", %{"provider" => provider_string}, socket) do
@@ -130,7 +124,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
 
     # Use manual mode for OAuth with flow state return for proper PKCE handling
     oauth_options = %{manual: true, return_flow_state: true}
-    
+
     case Auth.initiate_oauth_flow(provider, oauth_options) do
       {:ok, auth_url} when is_binary(auth_url) ->
         # Backward compatibility - just URL returned
@@ -138,7 +132,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
           redirect_uri: "https://console.anthropic.com/oauth/code/callback",
           code_verifier: nil
         }
-        
+
         socket =
           socket
           |> assign(:oauth_url, auth_url)
@@ -154,7 +148,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
           code_verifier: code_verifier,
           state: state
         }
-        
+
         socket =
           socket
           |> assign(:oauth_url, auth_url)
@@ -174,20 +168,22 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
 
   def handle_event("submit_oauth_code", %{"oauth_code" => oauth_code}, socket) do
     provider = socket.assigns.selected_provider
-    
+
     # Parse the OAuth code - it might contain state after #
-    {code, state} = case String.split(oauth_code, "#", parts: 2) do
-      [code, state] -> {code, state}
-      [code] -> {code, nil}
-    end
+    {code, state} =
+      case String.split(oauth_code, "#", parts: 2) do
+        [code, state] -> {code, state}
+        [code] -> {code, nil}
+      end
 
     # Get stored OAuth parameters from socket
     oauth_params = socket.assigns[:oauth_params] || %{}
-    
+
     options = %{
       manual: true,
       state: state,
-      redirect_uri: oauth_params[:redirect_uri] || "https://console.anthropic.com/oauth/code/callback",
+      redirect_uri:
+        oauth_params[:redirect_uri] || "https://console.anthropic.com/oauth/code/callback",
       code_verifier: oauth_params[:code_verifier]
     }
 
@@ -292,7 +288,10 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
     # Navigate to /start_chat with POST-like behavior
     socket =
       socket
-      |> put_flash(:info, "Successfully configured #{provider_display_name(provider)} with #{model}")
+      |> put_flash(
+        :info,
+        "Successfully configured #{provider_display_name(provider)} with #{model}"
+      )
       |> push_navigate(to: "/start_chat?" <> URI.encode_query(query_params))
 
     {:noreply, socket}
@@ -327,14 +326,22 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
 
       previous ->
         # Convert provider string back to atom
-        provider = if is_binary(previous.provider), do: String.to_existing_atom(previous.provider), else: previous.provider
-        auth_method = if is_binary(previous.auth_method), do: String.to_existing_atom(previous.auth_method), else: previous.auth_method
-        
+        provider =
+          if is_binary(previous.provider),
+            do: String.to_existing_atom(previous.provider),
+            else: previous.provider
+
+        auth_method =
+          if is_binary(previous.auth_method),
+            do: String.to_existing_atom(previous.auth_method),
+            else: previous.auth_method
+
         socket =
           socket
           |> assign(:selected_provider, provider)
           |> assign(:selected_auth_method, auth_method)
-          |> assign(:auth_credentials, nil)  # Will be loaded when needed
+          # Will be loaded when needed
+          |> assign(:auth_credentials, nil)
           |> assign(:selected_model, previous.model)
           |> assign(:current_step, :ready)
           |> assign(:error_message, nil)
@@ -395,7 +402,6 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
         {:noreply, socket}
     end
   end
-
 
   # OAuth callback handling (from external window)
   def handle_info({:oauth_callback, code}, socket) do
@@ -769,7 +775,9 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
             <%= if @oauth_url do %>
               <div class="space-y-6">
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 class="text-sm font-medium text-blue-900 mb-2">Step 1: Visit Authorization URL</h4>
+                  <h4 class="text-sm font-medium text-blue-900 mb-2">
+                    Step 1: Visit Authorization URL
+                  </h4>
                   <p class="text-sm text-blue-700 mb-3">
                     Copy and paste this URL into your browser to authorize the application:
                   </p>
@@ -785,9 +793,11 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
                     Open in Browser
                   </a>
                 </div>
-                
+
                 <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 class="text-sm font-medium text-green-900 mb-2">Step 2: Enter Authorization Code</h4>
+                  <h4 class="text-sm font-medium text-green-900 mb-2">
+                    Step 2: Enter Authorization Code
+                  </h4>
                   <p class="text-sm text-green-700 mb-3">
                     After authorizing, you'll be redirected to a page with an authorization code. Copy and paste it here:
                   </p>
@@ -988,7 +998,6 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   defp status_text(:degraded), do: "Issues"
   defp status_text(_), do: "Unknown"
 
-
   defp get_available_providers do
     ProviderRegistry.list_providers()
     |> Enum.map(fn provider ->
@@ -1065,5 +1074,23 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       _ ->
         {:error, :unsupported_provider}
     end
+  end
+
+  defp get_available_providers_safely do
+    get_available_providers()
+  rescue
+    error ->
+      require Logger
+      Logger.error("Error getting available providers: #{inspect(error)}")
+      []
+  end
+
+  defp check_provider_status_safely(socket) do
+    check_provider_status(socket)
+  rescue
+    error ->
+      require Logger
+      Logger.error("Error checking provider status: #{inspect(error)}")
+      socket
   end
 end

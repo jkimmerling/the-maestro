@@ -4,9 +4,9 @@ defmodule TheMaestroWeb.SessionController do
   def start_chat(conn, params) do
     # Extract provider/model selection from params
     provider = params["provider"]
-    model = params["model"] 
+    model = params["model"]
     auth_method = params["auth_method"]
-    
+
     # Create session data
     session_data = %{
       provider: provider,
@@ -14,7 +14,7 @@ defmodule TheMaestroWeb.SessionController do
       auth_method: auth_method,
       selected_at: DateTime.utc_now()
     }
-    
+
     # Store in session and redirect to agent
     conn
     |> put_session(:provider_selection, session_data)

@@ -234,17 +234,18 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
 
   defp decode_stored_credential(credential) do
     case decrypt_credentials(credential.credentials) do
-      {:ok, decrypted_creds} -> 
-        {:ok, %{
-          id: credential.id,
-          provider: String.to_atom(credential.provider),
-          auth_method: String.to_atom(credential.auth_method),
-          credentials: decrypted_creds,
-          expires_at: credential.expires_at,
-          inserted_at: credential.inserted_at,
-          updated_at: credential.updated_at
-        }}
-      
+      {:ok, decrypted_creds} ->
+        {:ok,
+         %{
+           id: credential.id,
+           provider: String.to_atom(credential.provider),
+           auth_method: String.to_atom(credential.auth_method),
+           credentials: decrypted_creds,
+           expires_at: credential.expires_at,
+           inserted_at: credential.inserted_at,
+           updated_at: credential.updated_at
+         }}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -259,17 +260,15 @@ defmodule TheMaestro.Providers.Auth.CredentialStore do
   end
 
   defp decrypt_credentials(encrypted_data) do
-    try do
-      encrypted_data
-      |> Base.decode64!()
-      |> Jason.decode()
-      |> case do
-        {:ok, credentials} -> {:ok, credentials}
-        {:error, _} -> {:error, :decryption_failed}
-      end
-    rescue
-      _ -> {:error, :decryption_failed}
+    encrypted_data
+    |> Base.decode64!()
+    |> Jason.decode()
+    |> case do
+      {:ok, credentials} -> {:ok, credentials}
+      {:error, _} -> {:error, :decryption_failed}
     end
+  rescue
+    _ -> {:error, :decryption_failed}
   end
 
   defp extract_expiry_time(%{expires_at: expires_at}) when not is_nil(expires_at) do

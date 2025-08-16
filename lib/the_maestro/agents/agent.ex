@@ -44,7 +44,15 @@ defmodule TheMaestro.Agents.Agent do
           timestamp: DateTime.t()
         }
 
-  defstruct [:agent_id, :message_history, :loop_state, :created_at, :llm_provider, :auth_context, :model]
+  defstruct [
+    :agent_id,
+    :message_history,
+    :loop_state,
+    :created_at,
+    :llm_provider,
+    :auth_context,
+    :model
+  ]
 
   # Client API
 
@@ -207,7 +215,12 @@ defmodule TheMaestro.Agents.Agent do
   # Server Callbacks
 
   @impl true
-  def init(%{agent_id: agent_id, llm_provider: llm_provider, auth_context: auth_context, model: model}) do
+  def init(%{
+        agent_id: agent_id,
+        llm_provider: llm_provider,
+        auth_context: auth_context,
+        model: model
+      }) do
     # Initialize authentication if auth_context is nil
     final_auth_context =
       case auth_context do

@@ -9,6 +9,7 @@ defmodule TheMaestroWeb.AgentLive do
   require Logger
 
   alias TheMaestro.Agents
+  alias TheMaestro.Providers.Auth.CredentialStore
 
   def mount(_params, session, socket) do
     require Logger
@@ -659,28 +660,13 @@ defmodule TheMaestroWeb.AgentLive do
     end
   end
 
-  defp create_auth_context(oauth_credentials) do
-    if oauth_credentials && oauth_credentials["access_token"] do
-      %{
-        type: :oauth,
-        credentials: %{
-          access_token: oauth_credentials["access_token"],
-          refresh_token: oauth_credentials["refresh_token"],
-          expires_at: oauth_credentials["expires_at"],
-          token_type: oauth_credentials["token_type"] || "Bearer"
-        }
-      }
-    else
-      nil
-    end
-  end
-
-  defp build_agent_opts(llm_provider, auth_context, provider_selection \\ nil) do
+  defp build_agent_opts(llm_provider, auth_context, provider_selection) do
     agent_opts = [llm_provider: llm_provider]
-    
+
     # Add auth context if available
-    agent_opts = if auth_context, do: Keyword.put(agent_opts, :auth_context, auth_context), else: agent_opts
-    
+    agent_opts =
+      if auth_context, do: Keyword.put(agent_opts, :auth_context, auth_context), else: agent_opts
+
     # Add model if available from provider selection
     if provider_selection && provider_selection["model"] do
       Keyword.put(agent_opts, :model, provider_selection["model"])
@@ -703,35 +689,37 @@ defmodule TheMaestroWeb.AgentLive do
     case get_stored_provider_credentials() do
       {:ok, provider, credentials} ->
         {resolve_provider_module(provider), credentials}
-      
+
       {:error, :not_found} ->
         # No stored credentials found - use fallback
         {TheMaestro.Providers.Gemini, nil}
     end
   end
 
-  defp get_stored_provider_credentials() do
+  defp get_stored_provider_credentials do
     # Check for Anthropic credentials first (since that's what user selected)
-    case TheMaestro.Providers.Auth.CredentialStore.get_credentials(:anthropic, :oauth) do
+    case CredentialStore.get_credentials(:anthropic, :oauth) do
       {:ok, cred_data} ->
         auth_context = %{
           type: :oauth,
           credentials: cred_data.credentials,
           config: %{provider: :anthropic}
         }
+
         {:ok, :anthropic, auth_context}
-      
+
       {:error, :not_found} ->
         # Try other providers if needed
-        case TheMaestro.Providers.Auth.CredentialStore.get_credentials(:google, :oauth) do
+        case CredentialStore.get_credentials(:google, :oauth) do
           {:ok, cred_data} ->
             auth_context = %{
               type: :oauth,
               credentials: cred_data.credentials,
               config: %{provider: :google}
             }
+
             {:ok, :google, auth_context}
-          
+
           {:error, :not_found} ->
             {:error, :not_found}
         end
@@ -740,6 +728,5 @@ defmodule TheMaestroWeb.AgentLive do
 
   defp resolve_provider_module(:anthropic), do: TheMaestro.Providers.Anthropic
   defp resolve_provider_module(:google), do: TheMaestro.Providers.Gemini
-  defp resolve_provider_module(:openai), do: TheMaestro.Providers.OpenAI
   defp resolve_provider_module(_), do: TheMaestro.Providers.Gemini
 end
