@@ -7,6 +7,10 @@ defmodule TheMaestro.MCP.Discovery do
   """
 
   require Logger
+  
+  alias TheMaestro.MCP.Transport.Stdio
+  alias TheMaestro.MCP.Transport.SSE
+  alias TheMaestro.MCP.Transport.HTTP
 
   @type server_config :: %{
           id: String.t(),
@@ -323,7 +327,7 @@ defmodule TheMaestro.MCP.Discovery do
     }
 
     try do
-      case TheMaestro.MCP.Transport.Stdio.start(transport_config) do
+      case Stdio.start(transport_config) do
         {:ok, transport_pid} ->
           # Create a connection GenServer that manages this transport
           connection_config = %{
@@ -340,7 +344,7 @@ defmodule TheMaestro.MCP.Discovery do
 
             {:error, reason} ->
               # Clean up transport if connection manager failed
-              TheMaestro.MCP.Transport.Stdio.close(transport_pid)
+              Stdio.close(transport_pid)
               {:error, reason}
           end
 
@@ -365,7 +369,7 @@ defmodule TheMaestro.MCP.Discovery do
       headers: config.headers || %{}
     }
 
-    case TheMaestro.MCP.Transport.SSE.start_link(transport_config) do
+    case SSE.start_link(transport_config) do
       {:ok, transport_pid} ->
         connection_config = %{
           server_id: config.id,
@@ -380,7 +384,7 @@ defmodule TheMaestro.MCP.Discovery do
             {:ok, connection_pid}
 
           {:error, reason} ->
-            TheMaestro.MCP.Transport.SSE.close(transport_pid)
+            SSE.close(transport_pid)
             {:error, reason}
         end
 
@@ -397,7 +401,7 @@ defmodule TheMaestro.MCP.Discovery do
       headers: config.headers || %{}
     }
 
-    case TheMaestro.MCP.Transport.HTTP.start_link(transport_config) do
+    case HTTP.start_link(transport_config) do
       {:ok, transport_pid} ->
         connection_config = %{
           server_id: config.id,
@@ -412,7 +416,7 @@ defmodule TheMaestro.MCP.Discovery do
             {:ok, connection_pid}
 
           {:error, reason} ->
-            TheMaestro.MCP.Transport.HTTP.close(transport_pid)
+            HTTP.close(transport_pid)
             {:error, reason}
         end
 
