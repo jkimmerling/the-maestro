@@ -110,20 +110,25 @@ defmodule TheMaestro.MCP.Tools.Executor do
       # result.text_content contains the file contents
       # result.content contains the full MCP response
   """
-  @spec execute(String.t(), map(), map()) :: {:ok, ExecutionResult.t()} | {:error, ExecutionError.t()}
+  @spec execute(String.t(), map(), map()) ::
+          {:ok, ExecutionResult.t()} | {:error, ExecutionError.t()}
   def execute(tool_name, parameters, context) do
     start_time = System.monotonic_time(:millisecond)
-    
+
     # Emit execution start metric
-    emit_metric(:tool_execution_started, %{tool_name: tool_name, server_id: Map.get(context, :server_id)})
-    
+    emit_metric(:tool_execution_started, %{
+      tool_name: tool_name,
+      server_id: Map.get(context, :server_id)
+    })
+
     with {:ok, connection} <- get_server_connection(context),
-         {:ok, marshalled_params} <- validate_and_marshall_parameters(parameters, tool_name, context),
+         {:ok, marshalled_params} <-
+           validate_and_marshall_parameters(parameters, tool_name, context),
          {:ok, mcp_result} <- call_mcp_tool(connection, tool_name, marshalled_params, context),
-         {:ok, processed_result} <- process_tool_result(mcp_result, Map.put(context, :tool_name, tool_name)) do
-      
+         {:ok, processed_result} <-
+           process_tool_result(mcp_result, Map.put(context, :tool_name, tool_name)) do
       execution_time = System.monotonic_time(:millisecond) - start_time
-      
+
       result = %ExecutionResult{
         server_id: processed_result.server_id,
         tool_name: processed_result.tool_name,
@@ -135,17 +140,17 @@ defmodule TheMaestro.MCP.Tools.Executor do
         execution_time_ms: execution_time,
         timestamp: DateTime.utc_now()
       }
-      
+
       # Emit success metrics
       emit_metric(:tool_execution_completed, %{
-        tool_name: tool_name, 
+        tool_name: tool_name,
         server_id: Map.get(context, :server_id),
         execution_time_ms: execution_time,
         has_images: result.has_images,
         has_resources: result.has_resources,
         has_binary: result.has_binary
       })
-      
+
       {:ok, result}
     else
       {:error, reason} ->
@@ -157,20 +162,20 @@ defmodule TheMaestro.MCP.Tools.Executor do
           tool_name: tool_name,
           timestamp: DateTime.utc_now()
         }
-        
-        Logger.warning("MCP tool execution failed: #{error.message}", 
-          server_id: error.server_id, 
+
+        Logger.warning("MCP tool execution failed: #{error.message}",
+          server_id: error.server_id,
           tool_name: error.tool_name,
           error_type: error.type
         )
-        
+
         # Emit error metrics
         emit_metric(:tool_execution_failed, %{
           tool_name: tool_name,
           server_id: Map.get(context, :server_id),
           error_type: error.type
         })
-        
+
         {:error, error}
     end
   end
@@ -223,11 +228,11 @@ defmodule TheMaestro.MCP.Tools.Executor do
   @spec process_tool_result(map(), map()) :: {:ok, map()} | {:error, map()}
   def process_tool_result(mcp_result, context) do
     content = Map.get(mcp_result, :content) || Map.get(mcp_result, "content", [])
-    
+
     case content do
       content_list when is_list(content_list) ->
         text_content = extract_text_content(content_list)
-        
+
         processed = %{
           server_id: Map.get(context, :server_id),
           tool_name: Map.get(context, :tool_name),
@@ -235,11 +240,12 @@ defmodule TheMaestro.MCP.Tools.Executor do
           text_content: text_content,
           has_images: has_content_type?(content_list, "image"),
           has_resources: has_content_type?(content_list, "resource"),
-          has_binary: has_content_type?(content_list, "audio") or has_content_type?(content_list, "video")
+          has_binary:
+            has_content_type?(content_list, "audio") or has_content_type?(content_list, "video")
         }
-        
+
         {:ok, processed}
-        
+
       _ ->
         {:error, %{type: :malformed_content, message: "Content must be an array"}}
     end
@@ -274,14 +280,14 @@ defmodule TheMaestro.MCP.Tools.Executor do
   defp get_server_connection(context) do
     server_id = Map.get(context, :server_id)
     connection_manager = Map.get(context, :connection_manager, TheMaestro.MCP.ConnectionManager)
-    
+
     case connection_manager.get_connection(server_id) do
       {:ok, connection_info} ->
         {:ok, connection_info}
-        
+
       {:error, :not_found} ->
         {:error, %{type: :server_not_found, server_id: server_id}}
-        
+
       {:error, reason} ->
         {:error, %{type: :connection_error, reason: reason, server_id: server_id}}
     end
@@ -297,25 +303,27 @@ defmodule TheMaestro.MCP.Tools.Executor do
   end
 
   defp validate_basic_parameters(parameters) when is_map(parameters), do: :ok
-  defp validate_basic_parameters(_), do: {:error, %{type: :parameter_validation_error, message: "Parameters must be a map"}}
+
+  defp validate_basic_parameters(_),
+    do: {:error, %{type: :parameter_validation_error, message: "Parameters must be a map"}}
 
   defp call_mcp_tool(connection_info, tool_name, parameters, context) do
     timeout = Map.get(context, :timeout, 30_000)
-    
+
     # Get the actual connection process
     connection_pid = get_connection_pid(connection_info)
-    
+
     if connection_pid do
       request_id = generate_request_id()
       call_request = Protocol.call_tool(request_id, tool_name, parameters)
-      
+
       case send_mcp_request(connection_pid, call_request, timeout) do
         {:ok, response} ->
           case Protocol.parse_response(response) do
             {:ok, parsed} -> {:ok, parsed.result}
             {:error, error} -> {:error, %{type: :mcp_protocol_error, details: error}}
           end
-          
+
         {:error, reason} ->
           {:error, %{type: :mcp_protocol_error, details: reason}}
       end
@@ -354,7 +362,7 @@ defmodule TheMaestro.MCP.Tools.Executor do
 
   defp validate_required_parameters(parameters, required) do
     missing = Enum.filter(required, &(!Map.has_key?(parameters, &1)))
-    
+
     if length(missing) > 0 do
       {:error, %{type: :missing_required_parameters, missing: missing}}
     else
@@ -363,21 +371,25 @@ defmodule TheMaestro.MCP.Tools.Executor do
   end
 
   defp apply_default_values(parameters, properties) do
-    defaults = 
+    defaults =
       properties
       |> Enum.filter(fn {_key, prop} -> Map.has_key?(prop, "default") end)
       |> Enum.into(%{}, fn {key, prop} -> {key, prop["default"]} end)
-    
+
     {:ok, Map.merge(defaults, parameters)}
   end
 
   defp validate_parameter_types(parameters, properties) do
-    validation_errors = 
+    validation_errors =
       Enum.flat_map(parameters, fn {key, value} ->
         case Map.get(properties, key) do
-          nil -> []  # Allow extra parameters for flexibility
+          # Allow extra parameters for flexibility
+          nil ->
+            []
+
           prop_def ->
             expected_type = Map.get(prop_def, "type", "string")
+
             if valid_type?(value, expected_type) do
               []
             else
@@ -385,7 +397,7 @@ defmodule TheMaestro.MCP.Tools.Executor do
             end
         end
       end)
-    
+
     if length(validation_errors) > 0 do
       {:error, %{type: :parameter_type_error, errors: validation_errors}}
     else
@@ -399,7 +411,8 @@ defmodule TheMaestro.MCP.Tools.Executor do
   defp valid_type?(value, "boolean"), do: is_boolean(value)
   defp valid_type?(value, "array"), do: is_list(value)
   defp valid_type?(value, "object"), do: is_map(value)
-  defp valid_type?(_, _), do: true  # Allow unknown types
+  # Allow unknown types
+  defp valid_type?(_, _), do: true
 
   defp has_content_type?(content_list, type) do
     Enum.any?(content_list, &(Map.get(&1, "type") == type))
@@ -409,33 +422,45 @@ defmodule TheMaestro.MCP.Tools.Executor do
   defp determine_error_type(atom) when is_atom(atom), do: atom
   defp determine_error_type(_), do: :unknown_error
 
-  defp format_error_message(%{type: :server_not_found, server_id: server_id}), 
+  defp format_error_message(%{type: :server_not_found, server_id: server_id}),
     do: "MCP server not found: #{server_id}"
-  defp format_error_message(%{type: :connection_error, reason: reason}), 
+
+  defp format_error_message(%{type: :connection_error, reason: reason}),
     do: "Connection error: #{inspect(reason)}"
-  defp format_error_message(%{type: :mcp_protocol_error, details: details}), 
+
+  defp format_error_message(%{type: :mcp_protocol_error, details: details}),
     do: "MCP protocol error: #{inspect(details)}"
-  defp format_error_message(%{type: :parameter_validation_error, message: message}), 
+
+  defp format_error_message(%{type: :parameter_validation_error, message: message}),
     do: "Parameter validation error: #{message}"
-  defp format_error_message(%{type: :missing_required_parameters, missing: missing}), 
+
+  defp format_error_message(%{type: :missing_required_parameters, missing: missing}),
     do: "Missing required parameters: #{Enum.join(missing, ", ")}"
-  defp format_error_message(%{type: :parameter_type_error, errors: errors}), 
+
+  defp format_error_message(%{type: :parameter_type_error, errors: errors}),
     do: "Parameter type errors: #{length(errors)} parameter(s) have invalid types"
-  defp format_error_message(%{type: :execution_timeout}), 
+
+  defp format_error_message(%{type: :execution_timeout}),
     do: "Tool execution timed out"
-  defp format_error_message(%{type: :malformed_content}), 
+
+  defp format_error_message(%{type: :malformed_content}),
     do: "Malformed content in tool response"
-  defp format_error_message(reason), 
+
+  defp format_error_message(reason),
     do: "Tool execution failed: #{inspect(reason)}"
 
   # Observability and metrics collection
   defp emit_metric(event_type, metadata) do
     # Emit telemetry events for monitoring
-    :telemetry.execute([:the_maestro, :mcp, :tool_execution], %{}, Map.put(metadata, :event, event_type))
-    
+    :telemetry.execute(
+      [:the_maestro, :mcp, :tool_execution],
+      %{},
+      Map.put(metadata, :event, event_type)
+    )
+
     # Log metrics for basic observability
-    Logger.debug("MCP Tool Metric", 
-      event: event_type, 
+    Logger.debug("MCP Tool Metric",
+      event: event_type,
       metadata: metadata
     )
   end

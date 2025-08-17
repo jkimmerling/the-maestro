@@ -75,14 +75,14 @@ defmodule TheMaestro.MCP.Tools.RegistryTest do
 
     test "validates tool schemas", %{registry: registry} do
       invalid_tool = %{"name" => "invalid", "inputSchema" => "not_a_map"}
-      
-      assert {:error, :invalid_schema} = 
-        Registry.register_tools(registry, "test_server", [invalid_tool])
+
+      assert {:error, :invalid_schema} =
+               Registry.register_tools(registry, "test_server", [invalid_tool])
     end
 
     test "handles empty tool list", %{registry: registry} do
       assert :ok = Registry.register_tools(registry, "empty_server", [])
-      
+
       {:ok, tools} = Registry.get_server_tools(registry, "empty_server")
       assert tools == []
     end
@@ -124,7 +124,7 @@ defmodule TheMaestro.MCP.Tools.RegistryTest do
 
       all_tools = Registry.get_all_tools(registry)
       assert length(all_tools) == 2
-      
+
       tool_names = Enum.map(all_tools, & &1.name)
       assert "read_file" in tool_names
       assert "write_file" in tool_names
@@ -136,7 +136,7 @@ defmodule TheMaestro.MCP.Tools.RegistryTest do
 
       all_tools = Registry.get_all_tools(registry)
       assert length(all_tools) == 2
-      
+
       tool_names = Enum.map(all_tools, & &1.name)
       assert "server1__read_file" in tool_names
       assert "server2__read_file" in tool_names
@@ -205,6 +205,7 @@ defmodule TheMaestro.MCP.Tools.RegistryTest do
   describe "tool_count/1" do
     test "returns total number of tools", %{registry: registry} do
       Registry.register_tools(registry, "server1", [@mock_read_file_tool])
+
       Registry.register_tools(registry, "server2", [@mock_write_file_tool, @mock_conflicting_tool])
 
       assert Registry.tool_count(registry) == 3

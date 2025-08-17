@@ -46,12 +46,12 @@ defmodule TheMaestro.MCP.ToolAdapter do
     try do
       # Get all tools from the registry
       all_tools = Registry.get_all_tools(Registry)
-      
+
       Logger.info("Registering #{length(all_tools)} MCP tools with agent system")
-      
+
       # Register each tool as an adapter
       Enum.each(all_tools, &register_tool_adapter/1)
-      
+
       :ok
     rescue
       error ->
@@ -93,12 +93,13 @@ defmodule TheMaestro.MCP.ToolAdapter do
     else
       {:error, :not_found} ->
         {:error, "MCP tool '#{tool_name}' not found"}
-      
+
       {:error, reason} ->
-        Logger.warning("MCP tool execution failed", 
-          tool: tool_name, 
+        Logger.warning("MCP tool execution failed",
+          tool: tool_name,
           reason: inspect(reason)
         )
+
         {:error, reason}
     end
   end
@@ -121,29 +122,30 @@ defmodule TheMaestro.MCP.ToolAdapter do
   def create_tool_adapter(tool_metadata) do
     tool_name = tool_metadata.tool_name
     server_id = tool_metadata.server_id
-    
+
     # Create a dynamic module for this specific tool
     module_name = Module.concat([TheMaestro.MCP.ToolAdapters, camelize(tool_name)])
-    
-    contents = quote do
-      use TheMaestro.Tooling.Tool
-      
-      @tool_name unquote(tool_name)
-      @server_id unquote(server_id)
-      @tool_metadata unquote(Macro.escape(tool_metadata))
-      
-      @impl true
-      def definition do
-        # Convert MCP tool definition to agent tool format
-        TheMaestro.MCP.ToolAdapter.convert_mcp_definition(@tool_metadata)
+
+    contents =
+      quote do
+        use TheMaestro.Tooling.Tool
+
+        @tool_name unquote(tool_name)
+        @server_id unquote(server_id)
+        @tool_metadata unquote(Macro.escape(tool_metadata))
+
+        @impl true
+        def definition do
+          # Convert MCP tool definition to agent tool format
+          TheMaestro.MCP.ToolAdapter.convert_mcp_definition(@tool_metadata)
+        end
+
+        @impl true
+        def execute(arguments) do
+          TheMaestro.MCP.ToolAdapter.execute_mcp_tool(@tool_name, arguments)
+        end
       end
-      
-      @impl true
-      def execute(arguments) do
-        TheMaestro.MCP.ToolAdapter.execute_mcp_tool(@tool_name, arguments)
-      end
-    end
-    
+
     Module.create(module_name, contents, Macro.Env.location(__ENV__))
     module_name
   end
@@ -165,7 +167,7 @@ defmodule TheMaestro.MCP.ToolAdapter do
   @spec convert_mcp_definition(map()) :: map()
   def convert_mcp_definition(tool_metadata) do
     tool = tool_metadata.tool
-    
+
     %{
       "name" => tool.name,
       "description" => tool.description,
@@ -212,7 +214,7 @@ defmodule TheMaestro.MCP.ToolAdapter do
   end
 
   ## TheMaestro.Tooling.Tool Implementation
-  
+
   @impl true
   def definition do
     %{
@@ -255,19 +257,20 @@ defmodule TheMaestro.MCP.ToolAdapter do
       connection_manager: ConnectionManager,
       timeout: Map.get(options, :timeout, 30_000)
     }
-    
+
     Executor.execute(tool_route.tool.name, parameters, context)
   end
 
   defp format_result_for_agent(execution_result, options) do
     agent_type = Map.get(options, :agent_type, :multimodal)
-    
+
     # Process content for agent consumption
-    optimized_content = ContentHandler.optimize_content_for_agent(
-      execution_result.content,
-      %{agent_type: agent_type}
-    )
-    
+    optimized_content =
+      ContentHandler.optimize_content_for_agent(
+        execution_result.content,
+        %{agent_type: agent_type}
+      )
+
     # Format result for agent system
     agent_result = %{
       "success" => true,
@@ -282,7 +285,7 @@ defmodule TheMaestro.MCP.ToolAdapter do
         "has_binary" => execution_result.has_binary
       }
     }
-    
+
     {:ok, agent_result}
   end
 
@@ -292,21 +295,23 @@ defmodule TheMaestro.MCP.ToolAdapter do
       Logger.debug("Created adapter for MCP tool: #{tool_metadata.tool_name}")
     rescue
       error ->
-        Logger.warning("Failed to create adapter for tool #{tool_metadata.tool_name}: #{inspect(error)}")
+        Logger.warning(
+          "Failed to create adapter for tool #{tool_metadata.tool_name}: #{inspect(error)}"
+        )
     end
   end
 
   defp convert_mcp_parameters(mcp_parameters) when is_list(mcp_parameters) do
-    properties = 
+    properties =
       mcp_parameters
       |> Enum.map(&convert_parameter_definition/1)
       |> Enum.into(%{})
-    
-    required = 
+
+    required =
       mcp_parameters
       |> Enum.filter(& &1.required)
       |> Enum.map(& &1.name)
-    
+
     %{
       "type" => "object",
       "properties" => properties,
@@ -314,20 +319,21 @@ defmodule TheMaestro.MCP.ToolAdapter do
     }
   end
 
-  defp convert_mcp_parameters(_), do: %{
-    "type" => "object",
-    "properties" => %{},
-    "required" => []
-  }
+  defp convert_mcp_parameters(_),
+    do: %{
+      "type" => "object",
+      "properties" => %{},
+      "required" => []
+    }
 
   defp convert_parameter_definition(param) do
     type_string = atom_to_string_type(param.type)
-    
+
     definition = %{
       "type" => type_string,
       "description" => param.description
     }
-    
+
     {param.name, definition}
   end
 

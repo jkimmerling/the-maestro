@@ -10,12 +10,14 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
     use GenServer
 
     def start_link(opts \\ []) do
-      initial_state = Keyword.get(opts, :initial_state, %{
-        tools_response: nil,
-        call_response: nil,
-        should_error: false,
-        request_history: []
-      })
+      initial_state =
+        Keyword.get(opts, :initial_state, %{
+          tools_response: nil,
+          call_response: nil,
+          should_error: false,
+          request_history: []
+        })
+
       GenServer.start_link(__MODULE__, initial_state)
     end
 
@@ -122,6 +124,7 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
     test "successfully executes MCP tool with text response", %{mock_connection: mock_conn} do
       tool_name = "read_file"
       parameters = %{"path" => "/test/file.txt"}
+
       context = %{
         server_id: "test_server",
         connection_manager: MockConnectionManager
@@ -151,6 +154,7 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
 
       tool_name = "complex_tool"
       parameters = %{"input" => "test"}
+
       context = %{
         server_id: "test_server",
         connection_manager: MockConnectionManager
@@ -168,6 +172,7 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
     test "handles server connection errors" do
       tool_name = "read_file"
       parameters = %{"path" => "/test/file.txt"}
+
       context = %{
         server_id: "missing_server",
         connection_manager: MockConnectionManager
@@ -183,6 +188,7 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
 
       tool_name = "read_file"
       parameters = %{"path" => "/test/file.txt"}
+
       context = %{
         server_id: "test_server",
         connection_manager: MockConnectionManager
@@ -197,7 +203,9 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
 
     test "validates required parameters", %{mock_connection: mock_conn} do
       tool_name = "read_file"
-      parameters = %{}  # Missing required 'path' parameter
+      # Missing required 'path' parameter
+      parameters = %{}
+
       context = %{
         server_id: "test_server",
         connection_manager: MockConnectionManager
@@ -212,11 +220,13 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
 
     test "marshals parameters correctly", %{mock_connection: mock_conn} do
       tool_name = "write_file"
+
       parameters = %{
         "path" => "/test/output.txt",
         "content" => "Hello, World!",
         "mode" => "append"
       }
+
       context = %{
         server_id: "test_server",
         connection_manager: MockConnectionManager
@@ -235,14 +245,17 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
 
     test "handles timeout scenarios", %{mock_connection: mock_conn} do
       # Set up a delay in the mock response to simulate timeout
-      :timer.sleep(50)  # Small delay to simulate slow response
-      
+      # Small delay to simulate slow response
+      :timer.sleep(50)
+
       tool_name = "slow_tool"
       parameters = %{"delay" => 5000}
+
       context = %{
         server_id: "test_server",
         connection_manager: MockConnectionManager,
-        timeout: 10  # Very short timeout
+        # Very short timeout
+        timeout: 10
       }
 
       Process.put(:mock_connection, mock_conn)
@@ -250,6 +263,7 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
       # For now, our mock doesn't actually handle timeouts properly
       # This test would work with a real implementation
       assert {:error, reason} = Executor.execute(tool_name, parameters, context)
+
       # The actual error type will be mcp_protocol_error until we implement proper timeout handling
       assert reason.type in [:execution_timeout, :mcp_protocol_error]
     end
@@ -291,7 +305,8 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
         }
       }
 
-      input_params = %{"path" => "/test/file.txt"}  # Missing 'content'
+      # Missing 'content'
+      input_params = %{"path" => "/test/file.txt"}
 
       assert {:error, reason} = Executor.marshall_parameters(input_params, tool_schema)
       assert reason.type == :missing_required_parameters
@@ -356,7 +371,8 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
         "content" => [
           %{
             "type" => "image",
-            "data" => "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+            "data" =>
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
             "mimeType" => "image/png"
           }
         ]
@@ -458,6 +474,7 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
 
       tool_name = "retry_tool"
       parameters = %{"data" => "test"}
+
       context = %{
         server_id: "test_server",
         connection_manager: MockConnectionManager,
@@ -471,6 +488,7 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
 
       # Set up for success on retry
       MockConnection.set_should_error(mock_conn, false)
+
       MockConnection.set_call_response(mock_conn, %{
         "jsonrpc" => "2.0",
         "id" => "test",

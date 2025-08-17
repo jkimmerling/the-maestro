@@ -102,8 +102,10 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
   end
 
   # Configuration constants
-  @max_content_size 10 * 1024 * 1024  # 10MB limit for individual content blocks
-  @max_total_size 50 * 1024 * 1024    # 50MB limit for total content
+  # 10MB limit for individual content blocks
+  @max_content_size 10 * 1024 * 1024
+  # 50MB limit for total content
+  @max_total_size 50 * 1024 * 1024
   @supported_image_types ["image/png", "image/jpeg", "image/gif", "image/webp"]
   @supported_audio_types ["audio/wav", "audio/mp3", "audio/ogg", "audio/m4a"]
   @supported_video_types ["video/mp4", "video/webm", "video/avi", "video/mov"]
@@ -137,17 +139,17 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
   @spec process_content([map()]) :: ProcessingResult.t()
   def process_content(content) when is_list(content) do
     processed_blocks = Enum.map(content, &process_content_block/1)
-    
-    text_content = 
+
+    text_content =
       processed_blocks
       |> Enum.filter(&(&1.type in [:text, :resource]))
-      |> Enum.map(&(&1.content))
+      |> Enum.map(& &1.content)
       |> Enum.join(" ")
       |> String.trim()
-    
+
     content_types = Enum.map(processed_blocks, & &1.type) |> Enum.uniq()
     total_size = Enum.sum(Enum.map(processed_blocks, & &1.size))
-    
+
     %ProcessingResult{
       text_content: text_content,
       has_images: :image in content_types,
@@ -159,15 +161,16 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
     }
   end
 
-  def process_content(_), do: %ProcessingResult{
-    text_content: "",
-    has_images: false,
-    has_resources: false,
-    has_binary: false,
-    processed_blocks: [],
-    total_size: 0,
-    content_types: []
-  }
+  def process_content(_),
+    do: %ProcessingResult{
+      text_content: "",
+      has_images: false,
+      has_resources: false,
+      has_binary: false,
+      processed_blocks: [],
+      total_size: 0,
+      content_types: []
+    }
 
   @doc """
   Decode base64 content with validation and size limits.
@@ -190,45 +193,52 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
       {:ok, decoded} = ContentHandler.decode_base64_content("aGVsbG8=", "text/plain")
       # decoded == "hello"
   """
-  @spec decode_base64_content(String.t(), String.t()) :: {:ok, binary()} | {:error, SecurityError.t()}
+  @spec decode_base64_content(String.t(), String.t()) ::
+          {:ok, binary()} | {:error, SecurityError.t()}
   def decode_base64_content(base64_data, mime_type) when is_binary(base64_data) do
     # Estimate decoded size (base64 is ~4/3 of original size)
     estimated_size = trunc(String.length(base64_data) * 0.75)
-    
+
     if estimated_size > @max_content_size do
-      {:error, %SecurityError{
-        type: :content_too_large,
-        message: "Content size exceeds limit of #{@max_content_size} bytes",
-        details: %{estimated_size: estimated_size, limit: @max_content_size}
-      }}
+      {:error,
+       %SecurityError{
+         type: :content_too_large,
+         message: "Content size exceeds limit of #{@max_content_size} bytes",
+         details: %{estimated_size: estimated_size, limit: @max_content_size}
+       }}
     else
       case Base.decode64(base64_data) do
         {:ok, decoded} ->
           if byte_size(decoded) > @max_content_size do
-            {:error, %SecurityError{
-              type: :content_too_large,
-              message: "Decoded content size exceeds limit",
-              details: %{actual_size: byte_size(decoded), limit: @max_content_size}
-            }}
+            {:error,
+             %SecurityError{
+               type: :content_too_large,
+               message: "Decoded content size exceeds limit",
+               details: %{actual_size: byte_size(decoded), limit: @max_content_size}
+             }}
           else
             validate_decoded_content(decoded, mime_type)
           end
-          
+
         :error ->
-          {:error, %SecurityError{
-            type: :invalid_base64,
-            message: "Invalid base64 encoding",
-            details: %{mime_type: mime_type}
-          }}
+          {:error,
+           %SecurityError{
+             type: :invalid_base64,
+             message: "Invalid base64 encoding",
+             details: %{mime_type: mime_type}
+           }}
       end
     end
   end
 
-  def decode_base64_content(_, _), do: {:error, %SecurityError{
-    type: :invalid_input,
-    message: "Base64 data must be a string",
-    details: %{}
-  }}
+  def decode_base64_content(_, _),
+    do:
+      {:error,
+       %SecurityError{
+         type: :invalid_input,
+         message: "Base64 data must be a string",
+         details: %{}
+       }}
 
   @doc """
   Extract text content from MCP content array.
@@ -336,7 +346,7 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
   def optimize_content_for_agent(content, options \\ %{}) when is_list(content) do
     agent_type = Map.get(options, :agent_type, :multimodal)
     max_size = Map.get(options, :max_content_size, @max_total_size)
-    
+
     content
     |> filter_content_by_agent_type(agent_type)
     |> limit_content_size(max_size)
@@ -360,12 +370,13 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
   defp process_content_block(%{"type" => "image"} = block) do
     data = Map.get(block, "data", "")
     mime_type = Map.get(block, "mimeType", "image/png")
-    
-    {decoded_data, size} = case decode_base64_content(data, mime_type) do
-      {:ok, decoded} -> {decoded, byte_size(decoded)}
-      {:error, _} -> {nil, String.length(data)}
-    end
-    
+
+    {decoded_data, size} =
+      case decode_base64_content(data, mime_type) do
+        {:ok, decoded} -> {decoded, byte_size(decoded)}
+        {:error, _} -> {nil, String.length(data)}
+      end
+
     %ContentBlock{
       type: :image,
       content: "",
@@ -385,7 +396,7 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
     uri = Map.get(resource, "uri", "")
     text = Map.get(resource, "text", "")
     mime_type = Map.get(resource, "mimeType", "text/plain")
-    
+
     %ContentBlock{
       type: :resource,
       content: text,
@@ -403,12 +414,13 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
   defp process_content_block(%{"type" => "audio"} = block) do
     data = Map.get(block, "data", "")
     mime_type = Map.get(block, "mimeType", "audio/wav")
-    
-    {decoded_data, size} = case decode_base64_content(data, mime_type) do
-      {:ok, decoded} -> {decoded, byte_size(decoded)}
-      {:error, _} -> {nil, String.length(data)}
-    end
-    
+
+    {decoded_data, size} =
+      case decode_base64_content(data, mime_type) do
+        {:ok, decoded} -> {decoded, byte_size(decoded)}
+        {:error, _} -> {nil, String.length(data)}
+      end
+
     %ContentBlock{
       type: :audio,
       content: "",
@@ -426,12 +438,13 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
   defp process_content_block(%{"type" => "video"} = block) do
     data = Map.get(block, "data", "")
     mime_type = Map.get(block, "mimeType", "video/mp4")
-    
-    {decoded_data, size} = case decode_base64_content(data, mime_type) do
-      {:ok, decoded} -> {decoded, byte_size(decoded)}
-      {:error, _} -> {nil, String.length(data)}
-    end
-    
+
+    {decoded_data, size} =
+      case decode_base64_content(data, mime_type) do
+        {:ok, decoded} -> {decoded, byte_size(decoded)}
+        {:error, _} -> {nil, String.length(data)}
+      end
+
     %ContentBlock{
       type: :video,
       content: "",
@@ -450,7 +463,7 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
     # Handle unknown or malformed content blocks
     type = Map.get(block, "type", "unknown")
     content = Map.get(block, "text") || Map.get(block, "data", "")
-    
+
     %ContentBlock{
       type: :unknown,
       content: to_string(content),
@@ -466,13 +479,13 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
     cond do
       mime_type in @supported_image_types ->
         validate_image_content(decoded, mime_type)
-      
+
       mime_type in @supported_audio_types ->
         validate_audio_content(decoded, mime_type)
-      
+
       mime_type in @supported_video_types ->
         validate_video_content(decoded, mime_type)
-      
+
       true ->
         # Generic validation for other types
         {:ok, decoded}
@@ -483,19 +496,30 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
     # Basic image validation - check for common image file signatures
     case mime_type do
       "image/png" ->
-        if binary_part(decoded, 0, min(8, byte_size(decoded))) == <<137, 80, 78, 71, 13, 10, 26, 10>> do
+        if binary_part(decoded, 0, min(8, byte_size(decoded))) ==
+             <<137, 80, 78, 71, 13, 10, 26, 10>> do
           {:ok, decoded}
         else
-          {:error, %SecurityError{type: :invalid_image_format, message: "Invalid PNG format", details: %{}}}
+          {:error,
+           %SecurityError{
+             type: :invalid_image_format,
+             message: "Invalid PNG format",
+             details: %{}
+           }}
         end
-      
+
       "image/jpeg" ->
         if byte_size(decoded) >= 2 and binary_part(decoded, 0, 2) == <<255, 216>> do
           {:ok, decoded}
         else
-          {:error, %SecurityError{type: :invalid_image_format, message: "Invalid JPEG format", details: %{}}}
+          {:error,
+           %SecurityError{
+             type: :invalid_image_format,
+             message: "Invalid JPEG format",
+             details: %{}
+           }}
         end
-      
+
       _ ->
         # For other image types, just return the decoded data
         {:ok, decoded}
@@ -504,29 +528,36 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
 
   defp validate_audio_content(decoded, _mime_type) do
     # Basic audio validation - check minimum size
-    if byte_size(decoded) > 44 do  # Minimum WAV header size
+    # Minimum WAV header size
+    if byte_size(decoded) > 44 do
       {:ok, decoded}
     else
-      {:error, %SecurityError{type: :invalid_audio_format, message: "Audio data too small", details: %{}}}
+      {:error,
+       %SecurityError{type: :invalid_audio_format, message: "Audio data too small", details: %{}}}
     end
   end
 
   defp validate_video_content(decoded, _mime_type) do
     # Basic video validation - check minimum size
-    if byte_size(decoded) > 100 do  # Minimum for any video format
+    # Minimum for any video format
+    if byte_size(decoded) > 100 do
       {:ok, decoded}
     else
-      {:error, %SecurityError{type: :invalid_video_format, message: "Video data too small", details: %{}}}
+      {:error,
+       %SecurityError{type: :invalid_video_format, message: "Video data too small", details: %{}}}
     end
   end
 
   defp extract_text_from_block(%{"type" => "text", "text" => text}), do: [text]
-  defp extract_text_from_block(%{"type" => "resource", "resource" => %{"text" => text}}), do: [text]
+
+  defp extract_text_from_block(%{"type" => "resource", "resource" => %{"text" => text}}),
+    do: [text]
+
   defp extract_text_from_block(_), do: []
 
   defp validate_content_block_security(%{"type" => "resource", "resource" => resource}) do
     uri = Map.get(resource, "uri", "")
-    
+
     cond do
       contains_path_traversal?(uri) ->
         %SecurityError{
@@ -534,14 +565,14 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
           message: "Path traversal detected in URI",
           details: %{uri: uri}
         }
-      
+
       is_suspicious_resource?(uri) ->
         %SecurityError{
           type: :suspicious_resource,
           message: "Suspicious resource URI detected",
           details: %{uri: uri}
         }
-      
+
       true ->
         nil
     end
@@ -550,9 +581,9 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
   defp validate_content_block_security(_), do: nil
 
   defp contains_path_traversal?(uri) do
-    String.contains?(uri, "..") or 
-    String.contains?(uri, "%2e%2e") or
-    String.contains?(uri, "%2E%2E")
+    String.contains?(uri, "..") or
+      String.contains?(uri, "%2e%2e") or
+      String.contains?(uri, "%2E%2E")
   end
 
   defp is_suspicious_resource?(uri) do
@@ -567,34 +598,35 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
   defp filter_content_by_agent_type(content, _), do: content
 
   defp limit_content_size(content, max_size) do
-    {result, _current_size} = 
+    {result, _current_size} =
       Enum.reduce_while(content, {[], 0}, fn block, {acc, current_size} ->
         block_size = estimate_block_size(block)
-        
+
         if current_size + block_size <= max_size do
           {:cont, {[block | acc], current_size + block_size}}
         else
           {:halt, {acc, current_size}}
         end
       end)
-    
+
     Enum.reverse(result)
   end
 
   defp optimize_text_content(content, options) do
     max_text_length = Map.get(options, :max_text_length, 10_000)
-    
+
     Enum.map(content, fn block ->
       case Map.get(block, "type") do
         "text" ->
           text = Map.get(block, "text", "")
+
           if String.length(text) > max_text_length do
             truncated = String.slice(text, 0, max_text_length - 20) <> "... [truncated]"
             Map.put(block, "text", truncated)
           else
             block
           end
-        
+
         _ ->
           block
       end
@@ -602,11 +634,21 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
   end
 
   defp estimate_block_size(%{"type" => "text", "text" => text}), do: String.length(text)
-  defp estimate_block_size(%{"type" => "image", "data" => data}), do: trunc(String.length(data) * 0.75)
-  defp estimate_block_size(%{"type" => "audio", "data" => data}), do: trunc(String.length(data) * 0.75)
-  defp estimate_block_size(%{"type" => "video", "data" => data}), do: trunc(String.length(data) * 0.75)
-  defp estimate_block_size(%{"type" => "resource", "resource" => %{"text" => text}}), do: String.length(text)
-  defp estimate_block_size(_), do: 100  # Default estimate
+
+  defp estimate_block_size(%{"type" => "image", "data" => data}),
+    do: trunc(String.length(data) * 0.75)
+
+  defp estimate_block_size(%{"type" => "audio", "data" => data}),
+    do: trunc(String.length(data) * 0.75)
+
+  defp estimate_block_size(%{"type" => "video", "data" => data}),
+    do: trunc(String.length(data) * 0.75)
+
+  defp estimate_block_size(%{"type" => "resource", "resource" => %{"text" => text}}),
+    do: String.length(text)
+
+  # Default estimate
+  defp estimate_block_size(_), do: 100
 
   defp extract_image_format("image/png"), do: :png
   defp extract_image_format("image/jpeg"), do: :jpeg
