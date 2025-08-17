@@ -2,11 +2,11 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
   use ExUnit.Case, async: false
 
   alias TheMaestro.MCP.ConnectionManager
-  alias TheMaestro.MCP.Connection
 
   setup do
-    # Start the connection manager for each test
-    {:ok, manager_pid} = ConnectionManager.start_link([])
+    # Start the connection manager for each test with unique name
+    test_name = :"ConnectionManager_#{:rand.uniform(1000000)}"
+    {:ok, manager_pid} = ConnectionManager.start_link(name: test_name)
     
     on_exit(fn ->
       if Process.alive?(manager_pid) do
@@ -28,7 +28,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
         trust: false
       }
 
-      assert {:ok, connection_pid} = ConnectionManager.start_connection(manager, server_config)
+      assert {:ok, _connection_pid} = ConnectionManager.start_connection(manager, server_config)
       assert is_pid(connection_pid)
       
       # Verify connection is tracked
@@ -48,7 +48,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
       }
 
       # Start connection
-      assert {:ok, connection_pid} = ConnectionManager.start_connection(manager, server_config)
+      assert {:ok, _connection_pid} = ConnectionManager.start_connection(manager, server_config)
       
       # Check initial state
       assert {:ok, connection_info} = ConnectionManager.get_connection(manager, "lifecycleTest")

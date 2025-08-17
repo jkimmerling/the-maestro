@@ -2,11 +2,11 @@ defmodule TheMaestro.MCP.RegistryTest do
   use ExUnit.Case, async: false
 
   alias TheMaestro.MCP.Registry, as: MCPRegistry
-  alias TheMaestro.MCP.Connection
 
   setup do
-    # Start the MCP registry for each test
-    {:ok, registry_pid} = MCPRegistry.start_link([])
+    # Start the MCP registry for each test with unique name
+    test_name = :"Registry_#{:rand.uniform(1000000)}"
+    {:ok, registry_pid} = MCPRegistry.start_link(name: test_name)
     
     on_exit(fn ->
       if Process.alive?(registry_pid) do
