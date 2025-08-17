@@ -114,6 +114,9 @@ defmodule TheMaestro.MCP.Tools.Executor do
   def execute(tool_name, parameters, context) do
     start_time = System.monotonic_time(:millisecond)
     
+    # Emit execution start metric
+    emit_metric(:tool_execution_started, %{tool_name: tool_name, server_id: Map.get(context, :server_id)})
+    
     with {:ok, connection} <- get_server_connection(context),
          {:ok, marshalled_params} <- validate_and_marshall_parameters(parameters, tool_name, context),
          {:ok, mcp_result} <- call_mcp_tool(connection, tool_name, marshalled_params, context),
@@ -133,6 +136,16 @@ defmodule TheMaestro.MCP.Tools.Executor do
         timestamp: DateTime.utc_now()
       }
       
+      # Emit success metrics
+      emit_metric(:tool_execution_completed, %{
+        tool_name: tool_name, 
+        server_id: Map.get(context, :server_id),
+        execution_time_ms: execution_time,
+        has_images: result.has_images,
+        has_resources: result.has_resources,
+        has_binary: result.has_binary
+      })
+      
       {:ok, result}
     else
       {:error, reason} ->
@@ -150,6 +163,13 @@ defmodule TheMaestro.MCP.Tools.Executor do
           tool_name: error.tool_name,
           error_type: error.type
         )
+        
+        # Emit error metrics
+        emit_metric(:tool_execution_failed, %{
+          tool_name: tool_name,
+          server_id: Map.get(context, :server_id),
+          error_type: error.type
+        })
         
         {:error, error}
     end
@@ -407,4 +427,16 @@ defmodule TheMaestro.MCP.Tools.Executor do
     do: "Malformed content in tool response"
   defp format_error_message(reason), 
     do: "Tool execution failed: #{inspect(reason)}"
+
+  # Observability and metrics collection
+  defp emit_metric(event_type, metadata) do
+    # Emit telemetry events for monitoring
+    :telemetry.execute([:the_maestro, :mcp, :tool_execution], %{}, Map.put(metadata, :event, event_type))
+    
+    # Log metrics for basic observability
+    Logger.debug("MCP Tool Metric", 
+      event: event_type, 
+      metadata: metadata
+    )
+  end
 end
