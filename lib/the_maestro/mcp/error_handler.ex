@@ -1,7 +1,7 @@
 defmodule TheMaestro.MCP.ErrorHandler do
   @moduledoc """
   Centralized error handling for MCP protocol operations.
-  
+
   This module provides functions for handling MCP-specific errors,
   converting errors to appropriate formats, and implementing error
   recovery strategies.
@@ -10,35 +10,35 @@ defmodule TheMaestro.MCP.ErrorHandler do
   require Logger
 
   # MCP Error Codes from JSON-RPC 2.0 and MCP specification
-  @parse_error -32700
-  @invalid_request -32600
-  @method_not_found -32601
-  @invalid_params -32602
-  @internal_error -32603
+  @parse_error -32_700
+  @invalid_request -32_600
+  @method_not_found -32_601
+  @invalid_params -32_602
+  @internal_error -32_603
 
   @type mcp_error :: %{
-    code: integer(),
-    message: String.t(),
-    data: any()
-  }
+          code: integer(),
+          message: String.t(),
+          data: any()
+        }
 
   @type error_context :: %{
-    server_name: String.t() | nil,
-    method: String.t() | nil,
-    transport: atom() | nil,
-    request_id: String.t() | nil
-  }
+          server_name: String.t() | nil,
+          method: String.t() | nil,
+          transport: atom() | nil,
+          request_id: String.t() | nil
+        }
 
   @doc """
   Handle and format an MCP error with context.
-  
+
   ## Parameters
-  
+
   * `error` - The error to handle
   * `context` - Context information about where the error occurred
-  
+
   ## Examples
-  
+
       iex> context = %{server_name: "test_server", method: "initialize"}
       iex> error = TheMaestro.MCP.ErrorHandler.handle_error(:timeout, context)
       iex> error.code
@@ -49,7 +49,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error(:timeout, context) do
     Logger.warning("MCP request timeout: #{format_context(context)}")
-    
+
     %{
       code: @internal_error,
       message: "Request timeout",
@@ -62,7 +62,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error(:connection_failed, context) do
     Logger.error("MCP connection failed: #{format_context(context)}")
-    
+
     %{
       code: @internal_error,
       message: "Connection failed",
@@ -75,7 +75,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error(:transport_dead, context) do
     Logger.error("MCP transport process died: #{format_context(context)}")
-    
+
     %{
       code: @internal_error,
       message: "Transport process terminated",
@@ -88,7 +88,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error(:invalid_json, context) do
     Logger.warning("Invalid JSON received: #{format_context(context)}")
-    
+
     %{
       code: @parse_error,
       message: "Parse error",
@@ -101,7 +101,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error(:method_not_found, context) do
     Logger.warning("Method not found: #{format_context(context)}")
-    
+
     %{
       code: @method_not_found,
       message: "Method not found",
@@ -114,7 +114,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error(:invalid_params, context) do
     Logger.warning("Invalid parameters: #{format_context(context)}")
-    
+
     %{
       code: @invalid_params,
       message: "Invalid params",
@@ -127,7 +127,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error({:http_error, status_code, body}, context) do
     Logger.error("HTTP error #{status_code}: #{format_context(context)}")
-    
+
     %{
       code: @internal_error,
       message: "HTTP error",
@@ -142,7 +142,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error({:json_decode_error, reason}, context) do
     Logger.warning("JSON decode error: #{inspect(reason)}, #{format_context(context)}")
-    
+
     %{
       code: @parse_error,
       message: "JSON decode error",
@@ -156,7 +156,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error({:validation_error, field, reason}, context) do
     Logger.warning("Validation error for #{field}: #{reason}, #{format_context(context)}")
-    
+
     %{
       code: @invalid_request,
       message: "Validation error",
@@ -170,8 +170,10 @@ defmodule TheMaestro.MCP.ErrorHandler do
   end
 
   def handle_error(error, context) when is_exception(error) do
-    Logger.error("Exception in MCP operation: #{Exception.message(error)}, #{format_context(context)}")
-    
+    Logger.error(
+      "Exception in MCP operation: #{Exception.message(error)}, #{format_context(context)}"
+    )
+
     %{
       code: @internal_error,
       message: "Internal error",
@@ -185,7 +187,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   def handle_error(error, context) do
     Logger.error("Unknown MCP error: #{inspect(error)}, #{format_context(context)}")
-    
+
     %{
       code: @internal_error,
       message: "Unknown error",
@@ -199,13 +201,13 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   @doc """
   Determine if an error is recoverable and suggest recovery strategy.
-  
+
   ## Parameters
-  
+
   * `error` - The MCP error to analyze
-  
+
   ## Returns
-  
+
   * `{:recoverable, strategy}` - Error is recoverable with suggested strategy
   * `:not_recoverable` - Error is not recoverable
   """
@@ -222,7 +224,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
     {:recoverable, :restart_transport}
   end
 
-  def recoverable?(%{code: @internal_error, data: %{type: "http_error", status_code: code}}) 
+  def recoverable?(%{code: @internal_error, data: %{type: "http_error", status_code: code}})
       when code in [500, 502, 503, 504] do
     {:recoverable, :retry}
   end
@@ -251,9 +253,9 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   @doc """
   Convert an MCP error to a JSON-RPC error response.
-  
+
   ## Parameters
-  
+
   * `error` - The MCP error
   * `request_id` - The request ID to include in the response
   """
@@ -269,9 +271,9 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   @doc """
   Get a human-readable description of an MCP error.
-  
+
   ## Parameters
-  
+
   * `error` - The MCP error to describe
   """
   @spec describe_error(mcp_error()) :: String.t()

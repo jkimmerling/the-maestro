@@ -7,7 +7,7 @@ defmodule TheMaestro.MCP.MessageRouterTest do
     test "starts message router with options" do
       assert {:ok, pid} = MessageRouter.start_link([])
       assert Process.alive?(pid)
-      
+
       GenServer.stop(pid)
     end
   end
@@ -15,12 +15,13 @@ defmodule TheMaestro.MCP.MessageRouterTest do
   describe "send_request/4" do
     test "sends request and tracks response" do
       {:ok, router} = MessageRouter.start_link([])
-      
-      transport_pid = spawn(fn -> 
-        receive do
-          {:send_message, _message} -> :ok
-        end
-      end)
+
+      transport_pid =
+        spawn(fn ->
+          receive do
+            {:send_message, _message} -> :ok
+          end
+        end)
 
       message = %{
         jsonrpc: "2.0",
@@ -36,7 +37,7 @@ defmodule TheMaestro.MCP.MessageRouterTest do
 
     test "handles transport send failure" do
       {:ok, router} = MessageRouter.start_link([])
-      
+
       # Dead transport
       transport_pid = spawn(fn -> :ok end)
       Process.exit(transport_pid, :kill)
@@ -57,19 +58,21 @@ defmodule TheMaestro.MCP.MessageRouterTest do
   describe "handle_response/2" do
     test "correlates response with pending request" do
       {:ok, router} = MessageRouter.start_link([])
-      
+
       # Mock transport that we can control
       test_process = self()
-      transport_pid = spawn(fn ->
-        receive do
-          {:send_message, message} -> 
-            send(test_process, {:message_sent, message})
-            :ok
-        end
-      end)
+
+      transport_pid =
+        spawn(fn ->
+          receive do
+            {:send_message, message} ->
+              send(test_process, {:message_sent, message})
+              :ok
+          end
+        end)
 
       request_message = %{
-        jsonrpc: "2.0", 
+        jsonrpc: "2.0",
         method: "test",
         params: %{}
       }
@@ -125,20 +128,36 @@ defmodule TheMaestro.MCP.MessageRouterTest do
       {:ok, router} = MessageRouter.start_link([])
 
       # Create a transport that can handle multiple messages
-      transport_pid = spawn(fn ->
-        receive_loop = fn receive_loop ->
-          receive do
-            {:send_message, _} -> :ok
+      transport_pid =
+        spawn(fn ->
+          receive_loop = fn receive_loop ->
+            receive do
+              {:send_message, _} -> :ok
+            end
+
+            receive_loop.(receive_loop)
           end
+
           receive_loop.(receive_loop)
-        end
-        receive_loop.(receive_loop)
-      end)
+        end)
 
       assert MessageRouter.pending_requests(router) == 0
 
-      {:ok, _id1} = MessageRouter.send_request(router, transport_pid, %{jsonrpc: "2.0", method: "test1"}, 5000)
-      {:ok, _id2} = MessageRouter.send_request(router, transport_pid, %{jsonrpc: "2.0", method: "test2"}, 5000)
+      {:ok, _id1} =
+        MessageRouter.send_request(
+          router,
+          transport_pid,
+          %{jsonrpc: "2.0", method: "test1"},
+          5000
+        )
+
+      {:ok, _id2} =
+        MessageRouter.send_request(
+          router,
+          transport_pid,
+          %{jsonrpc: "2.0", method: "test2"},
+          5000
+        )
 
       assert MessageRouter.pending_requests(router) == 2
 
@@ -150,13 +169,15 @@ defmodule TheMaestro.MCP.MessageRouterTest do
     test "times out pending requests" do
       {:ok, router} = MessageRouter.start_link([])
 
-      transport_pid = spawn(fn ->
-        receive do
-          {:send_message, _} -> :ok
-        end
-      end)
+      transport_pid =
+        spawn(fn ->
+          receive do
+            {:send_message, _} -> :ok
+          end
+        end)
 
-      {:ok, request_id} = MessageRouter.send_request(router, transport_pid, %{jsonrpc: "2.0", method: "test"}, 100)
+      {:ok, request_id} =
+        MessageRouter.send_request(router, transport_pid, %{jsonrpc: "2.0", method: "test"}, 100)
 
       # Wait for timeout
       Process.sleep(150)

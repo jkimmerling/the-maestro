@@ -87,7 +87,7 @@ defmodule TheMaestro.MCP.ProtocolTest do
   describe "format_error/3" do
     test "formats MCP protocol error" do
       request_id = "error-123"
-      code = -32600
+      code = -32_600
       message = "Invalid Request"
 
       error = Protocol.format_error(request_id, code, message)
@@ -100,7 +100,7 @@ defmodule TheMaestro.MCP.ProtocolTest do
 
     test "formats error with additional data" do
       request_id = "error-456"
-      code = -32603
+      code = -32_603
       message = "Internal error"
       data = %{details: "Something went wrong"}
 
@@ -128,13 +128,13 @@ defmodule TheMaestro.MCP.ProtocolTest do
         "jsonrpc" => "2.0",
         "id" => "test-123",
         "error" => %{
-          "code" => -32600,
+          "code" => -32_600,
           "message" => "Invalid Request"
         }
       }
 
       assert {:error, error} = Protocol.parse_response(response)
-      assert error.code == -32600
+      assert error.code == -32_600
       assert error.message == "Invalid Request"
     end
   end

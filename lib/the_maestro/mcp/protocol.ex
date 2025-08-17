@@ -1,7 +1,7 @@
 defmodule TheMaestro.MCP.Protocol do
   @moduledoc """
   Core MCP (Model Context Protocol) implementation following JSON-RPC 2.0 specification.
-  
+
   This module provides functions to create and validate MCP protocol messages,
   handle responses, and format errors according to the MCP specification.
   """
@@ -10,45 +10,45 @@ defmodule TheMaestro.MCP.Protocol do
   @jsonrpc_version "2.0"
 
   # MCP Error Codes
-  @parse_error -32700
-  @invalid_request -32600
-  @method_not_found -32601
-  @invalid_params -32602
-  @internal_error -32603
+  @parse_error -32_700
+  @invalid_request -32_600
+  @method_not_found -32_601
+  @invalid_params -32_602
+  @internal_error -32_603
 
   @type json_rpc_message :: %{
-    jsonrpc: String.t(),
-    id: String.t() | nil,
-    method: String.t(),
-    params: map()
-  }
+          jsonrpc: String.t(),
+          id: String.t() | nil,
+          method: String.t(),
+          params: map()
+        }
 
   @type json_rpc_response :: %{
-    jsonrpc: String.t(),
-    id: String.t(),
-    result: map()
-  }
+          jsonrpc: String.t(),
+          id: String.t(),
+          result: map()
+        }
 
   @type json_rpc_error :: %{
-    jsonrpc: String.t(),
-    id: String.t(),
-    error: %{
-      code: integer(),
-      message: String.t(),
-      data: any()
-    }
-  }
+          jsonrpc: String.t(),
+          id: String.t(),
+          error: %{
+            code: integer(),
+            message: String.t(),
+            data: any()
+          }
+        }
 
   @doc """
   Create an MCP initialize message.
-  
+
   ## Parameters
-  
+
   * `request_id` - Unique identifier for this request
   * `client_info` - Map containing client name and version
-  
+
   ## Examples
-  
+
       iex> client_info = %{name: "the_maestro", version: "1.0.0"}
       iex> msg = TheMaestro.MCP.Protocol.initialize("123", client_info)
       iex> msg.method
@@ -75,13 +75,13 @@ defmodule TheMaestro.MCP.Protocol do
 
   @doc """
   Create a list_tools request message.
-  
+
   ## Parameters
-  
+
   * `request_id` - Unique identifier for this request
-  
+
   ## Examples
-  
+
       iex> msg = TheMaestro.MCP.Protocol.list_tools("456")
       iex> msg.method
       "tools/list"
@@ -98,15 +98,15 @@ defmodule TheMaestro.MCP.Protocol do
 
   @doc """
   Create a call_tool request message.
-  
+
   ## Parameters
-  
+
   * `request_id` - Unique identifier for this request
   * `tool_name` - Name of the tool to call
   * `arguments` - Arguments to pass to the tool
-  
+
   ## Examples
-  
+
       iex> msg = TheMaestro.MCP.Protocol.call_tool("789", "test_tool", %{param: "value"})
       iex> msg.method
       "tools/call"
@@ -128,13 +128,13 @@ defmodule TheMaestro.MCP.Protocol do
 
   @doc """
   Validate a JSON-RPC message structure.
-  
+
   ## Parameters
-  
+
   * `message` - The message map to validate
-  
+
   ## Examples
-  
+
       iex> msg = %{jsonrpc: "2.0", id: "123", method: "test", params: %{}}
       iex> {:ok, validated} = TheMaestro.MCP.Protocol.validate_message(msg)
       iex> validated.jsonrpc
@@ -152,16 +152,16 @@ defmodule TheMaestro.MCP.Protocol do
 
   @doc """
   Format an MCP protocol error response.
-  
+
   ## Parameters
-  
+
   * `request_id` - The ID of the request that caused the error
   * `code` - MCP error code
   * `message` - Error message description
   * `data` - Optional additional error data
-  
+
   ## Examples
-  
+
       iex> error = TheMaestro.MCP.Protocol.format_error("123", -32600, "Invalid Request")
       iex> error.error.code
       -32600
@@ -184,13 +184,13 @@ defmodule TheMaestro.MCP.Protocol do
 
   @doc """
   Parse a JSON-RPC response, determining if it's successful or an error.
-  
+
   ## Parameters
-  
+
   * `response` - The response map to parse
-  
+
   ## Examples
-  
+
       iex> response = %{"jsonrpc" => "2.0", "id" => "123", "result" => %{"status" => "ok"}}
       iex> {:ok, parsed} = TheMaestro.MCP.Protocol.parse_response(response)
       iex> parsed.result.status
@@ -203,7 +203,7 @@ defmodule TheMaestro.MCP.Protocol do
         # Convert error to atom keys for consistency
         converted_error = convert_error(error)
         {:error, converted_error}
-      
+
       %{"result" => _result} = resp ->
         # Convert string keys to atoms for consistency
         converted = %{
@@ -211,8 +211,9 @@ defmodule TheMaestro.MCP.Protocol do
           id: resp["id"],
           result: convert_result(resp["result"])
         }
+
         {:ok, converted}
-      
+
       _ ->
         {:error, %{code: @invalid_request, message: "Invalid response format"}}
     end
@@ -226,9 +227,9 @@ defmodule TheMaestro.MCP.Protocol do
 
   defp validate_required_fields(message) do
     required_keys = [:method, "method"]
-    
+
     has_method = Enum.any?(required_keys, &Map.has_key?(message, &1))
-    
+
     if has_method do
       :ok
     else
@@ -241,6 +242,7 @@ defmodule TheMaestro.MCP.Protocol do
     |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
     |> Enum.into(%{})
   end
+
   defp convert_result(result), do: result
 
   defp convert_error(error) when is_map(error) do
@@ -248,6 +250,7 @@ defmodule TheMaestro.MCP.Protocol do
     |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
     |> Enum.into(%{})
   end
+
   defp convert_error(error), do: error
 
   @doc """

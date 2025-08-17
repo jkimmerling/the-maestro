@@ -1,7 +1,7 @@
 defmodule TheMaestro.MCP.Transport.Stdio do
   @moduledoc """
   Stdio transport implementation for MCP servers.
-  
+
   This transport communicates with MCP servers by spawning a subprocess
   and communicating via stdin/stdout using JSON-RPC messages.
   """
@@ -12,12 +12,12 @@ defmodule TheMaestro.MCP.Transport.Stdio do
   @behaviour TheMaestro.MCP.Transport
 
   @type state :: %{
-    config: map(),
-    port: port() | nil,
-    process_state: :starting | :running | :terminated | :dead,
-    buffer: binary(),
-    pending_responses: list()
-  }
+          config: map(),
+          port: port() | nil,
+          process_state: :starting | :running | :terminated | :dead,
+          buffer: binary(),
+          pending_responses: list()
+        }
 
   # Client API
 
@@ -51,7 +51,7 @@ defmodule TheMaestro.MCP.Transport.Stdio do
     case start_subprocess(config) do
       {:ok, port} ->
         {:ok, %{state | port: port, process_state: :running}}
-      
+
       {:error, reason} ->
         {:stop, reason}
     end
@@ -66,7 +66,7 @@ defmodule TheMaestro.MCP.Transport.Stdio do
     try do
       json_message = Jason.encode!(message)
       data = json_message <> "\n"
-      
+
       Port.command(port, data)
       {:reply, :ok, state}
     rescue
@@ -94,7 +94,7 @@ defmodule TheMaestro.MCP.Transport.Stdio do
     # Handle data received from subprocess stdout
     new_buffer = state.buffer <> data
     {processed_buffer, responses} = process_messages(new_buffer)
-    
+
     # TODO: Send responses to message router or parent process
     Enum.each(responses, fn response ->
       Logger.debug("Received MCP response: #{inspect(response)}")
@@ -150,12 +150,13 @@ defmodule TheMaestro.MCP.Transport.Stdio do
 
       try do
         # Try to resolve the command if it's not an absolute path
-        resolved_command = if String.starts_with?(command, "/") do
-          command
-        else
-          System.find_executable(command) || command
-        end
-        
+        resolved_command =
+          if String.starts_with?(command, "/") do
+            command
+          else
+            System.find_executable(command) || command
+          end
+
         port = Port.open({:spawn_executable, resolved_command}, port_opts)
         {:ok, port}
       rescue
@@ -182,13 +183,13 @@ defmodule TheMaestro.MCP.Transport.Stdio do
         case Jason.decode(line) do
           {:ok, message} ->
             process_messages(rest, [message | acc])
-          
+
           {:error, _} ->
             # Invalid JSON, skip this line
             Logger.warning("Received invalid JSON from MCP server: #{line}")
             process_messages(rest, acc)
         end
-      
+
       _ ->
         # No complete message in buffer
         {buffer, Enum.reverse(acc)}

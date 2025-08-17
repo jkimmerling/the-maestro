@@ -6,7 +6,7 @@ defmodule TheMaestro.MCP.ConnectionTest do
   describe "new/2" do
     test "creates connection with transport and state" do
       transport_pid = spawn(fn -> :ok end)
-      
+
       connection = Connection.new(transport_pid, :connecting)
 
       assert connection.transport == transport_pid
@@ -33,7 +33,7 @@ defmodule TheMaestro.MCP.ConnectionTest do
     test "sets server information" do
       transport_pid = spawn(fn -> :ok end)
       connection = Connection.new(transport_pid, :connecting)
-      
+
       server_info = %{
         name: "test_server",
         version: "1.0.0",
@@ -50,7 +50,7 @@ defmodule TheMaestro.MCP.ConnectionTest do
     test "sets server capabilities" do
       transport_pid = spawn(fn -> :ok end)
       connection = Connection.new(transport_pid, :connecting)
-      
+
       capabilities = %{
         tools: %{listChanged: true},
         resources: %{subscribe: true}
@@ -66,7 +66,7 @@ defmodule TheMaestro.MCP.ConnectionTest do
     test "adds tool to connection" do
       transport_pid = spawn(fn -> :ok end)
       connection = Connection.new(transport_pid, :connected)
-      
+
       tool = %{
         name: "test_tool",
         description: "A test tool",
@@ -87,12 +87,13 @@ defmodule TheMaestro.MCP.ConnectionTest do
     test "prevents duplicate tools" do
       transport_pid = spawn(fn -> :ok end)
       connection = Connection.new(transport_pid, :connected)
-      
+
       tool = %{name: "test_tool", description: "A test tool"}
 
-      updated = connection
-                |> Connection.add_tool(tool)
-                |> Connection.add_tool(tool)
+      updated =
+        connection
+        |> Connection.add_tool(tool)
+        |> Connection.add_tool(tool)
 
       assert length(updated.tools) == 1
     end
@@ -102,9 +103,10 @@ defmodule TheMaestro.MCP.ConnectionTest do
     test "removes tool from connection" do
       transport_pid = spawn(fn -> :ok end)
       tool = %{name: "test_tool", description: "A test tool"}
-      
-      connection = Connection.new(transport_pid, :connected)
-                  |> Connection.add_tool(tool)
+
+      connection =
+        Connection.new(transport_pid, :connected)
+        |> Connection.add_tool(tool)
 
       updated = Connection.remove_tool(connection, "test_tool")
 
@@ -125,9 +127,10 @@ defmodule TheMaestro.MCP.ConnectionTest do
     test "finds tool by name" do
       transport_pid = spawn(fn -> :ok end)
       tool = %{name: "test_tool", description: "A test tool"}
-      
-      connection = Connection.new(transport_pid, :connected)
-                  |> Connection.add_tool(tool)
+
+      connection =
+        Connection.new(transport_pid, :connected)
+        |> Connection.add_tool(tool)
 
       assert {:ok, found_tool} = Connection.get_tool(connection, "test_tool")
       assert found_tool == tool
@@ -151,7 +154,7 @@ defmodule TheMaestro.MCP.ConnectionTest do
 
     test "returns false for other states" do
       transport_pid = spawn(fn -> :ok end)
-      
+
       for state <- [:disconnected, :connecting, :error] do
         connection = Connection.new(transport_pid, state)
         refute Connection.connected?(connection)

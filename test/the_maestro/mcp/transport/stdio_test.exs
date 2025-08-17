@@ -27,12 +27,12 @@ defmodule TheMaestro.MCP.Transport.StdioTest do
       # The GenServer will exit during init with spawn_failed error
       Process.flag(:trap_exit, true)
       result = Stdio.start_link(config)
-      
+
       case result do
         {:error, _reason} ->
           # This is what we expect
           assert true
-        
+
         {:ok, pid} ->
           # If it somehow starts, wait for it to die
           receive do
@@ -50,7 +50,8 @@ defmodule TheMaestro.MCP.Transport.StdioTest do
   describe "send_message/2" do
     test "sends JSON message to process stdin" do
       config = %{
-        command: "cat",  # cat will echo back what we send
+        # cat will echo back what we send
+        command: "cat",
         args: [],
         timeout: 5_000
       }
@@ -77,7 +78,7 @@ defmodule TheMaestro.MCP.Transport.StdioTest do
       }
 
       {:ok, transport} = Stdio.start_link(config)
-      
+
       # Wait for echo to finish and exit
       Process.sleep(100)
 
@@ -100,12 +101,12 @@ defmodule TheMaestro.MCP.Transport.StdioTest do
       }
 
       {:ok, transport} = Stdio.start_link(config)
-      
+
       assert :ok = Stdio.close(transport)
-      
+
       # Transport should still be alive but port should be closed
       assert Process.alive?(transport)
-      
+
       # Cleanup by stopping the GenServer
       GenServer.stop(transport)
     end
@@ -120,10 +121,10 @@ defmodule TheMaestro.MCP.Transport.StdioTest do
       }
 
       {:ok, transport} = Stdio.start_link(config)
-      
+
       # Echo will terminate quickly
       Process.sleep(200)
-      
+
       # Transport should handle subprocess termination gracefully
       state = :sys.get_state(transport)
       assert state.process_state in [:terminated, :dead]
