@@ -91,9 +91,6 @@ defmodule TheMaestro.MixProject do
       {:httpoison, "~> 2.0"},
       {:openai_ex, "~> 0.6"},
       {:anthropix, "~> 0.3"},
-      # Authentication Dependencies
-      {:ueberauth, "~> 0.10"},
-      {:ueberauth_google, "~> 0.12"},
       # YAML parsing for OpenAPI specs
       {:yaml_elixir, "~> 2.9"},
       # Testing Dependencies

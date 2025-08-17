@@ -45,7 +45,7 @@ defmodule TheMaestroWeb.ProvidersController do
 
   Initiates authentication flow for the specified provider.
   Expects JSON body with:
-  - method: "oauth" or "api_key"
+  - method: "oauth", "device_flow", or "api_key"
   - params: method-specific parameters
   """
   def auth(conn, %{"provider" => provider_string} = _params) do
@@ -54,6 +54,9 @@ defmodule TheMaestroWeb.ProvidersController do
     case get_request_body(conn) do
       {:ok, %{"method" => "oauth"} = auth_params} ->
         initiate_oauth_auth(conn, provider, auth_params)
+
+      {:ok, %{"method" => "device_flow"} = auth_params} ->
+        initiate_device_flow_auth(conn, provider, auth_params)
 
       {:ok, %{"method" => "api_key"} = auth_params} ->
         initiate_api_key_auth(conn, provider, auth_params)
@@ -93,6 +96,49 @@ defmodule TheMaestroWeb.ProvidersController do
         conn
         |> put_status(:bad_request)
         |> json(%{error: "Failed to fetch models", reason: inspect(reason)})
+    end
+  rescue
+    ArgumentError ->
+      conn
+      |> put_status(:bad_request)
+      |> json(%{error: "Invalid provider: #{provider_string}"})
+  end
+
+  @doc """
+  POST /api/providers/:provider/complete_device_flow
+
+  Completes device flow authentication with authorization code.
+  Expects JSON body with:
+  - auth_code: authorization code from OAuth callback
+  """
+  def complete_device_flow(conn, %{"provider" => provider_string}) do
+    provider = String.to_existing_atom(provider_string)
+
+    case get_request_body(conn) do
+      {:ok, %{"auth_code" => auth_code}} ->
+        case Auth.authenticate(provider, :device_flow, %{auth_code: auth_code}) do
+          {:ok, result} ->
+            json(conn, %{
+              status: "success",
+              method: "device_flow",
+              provider: result.provider,
+              message: "Successfully authenticated with #{provider_display_name(provider)}"
+            })
+
+          {:error, reason} ->
+            conn
+            |> put_status(:bad_request)
+            |> json(%{
+              status: "error",
+              error: "Device flow completion failed",
+              reason: inspect(reason)
+            })
+        end
+
+      {:error, reason} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "Invalid request body", reason: reason})
     end
   rescue
     ArgumentError ->
@@ -166,12 +212,67 @@ defmodule TheMaestroWeb.ProvidersController do
     end
   end
 
+  defp initiate_device_flow_auth(conn, provider, auth_params) do
+    # Check if we have an auth code to complete the flow
+    case Map.get(auth_params, "auth_code") do
+      nil ->
+        # Initiate device flow - return auth URL for user
+        case Auth.authenticate(provider, :device_flow, %{}) do
+          {:error, {:manual_auth_required, auth_url}} ->
+            json(conn, %{
+              status: "pending",
+              auth_url: auth_url,
+              method: "device_flow",
+              message: "Visit the URL to authorize this application"
+            })
+
+          {:ok, result} ->
+            json(conn, %{
+              status: "success",
+              method: "device_flow",
+              provider: result.provider
+            })
+
+          {:error, reason} ->
+            conn
+            |> put_status(:bad_request)
+            |> json(%{
+              status: "error",
+              error: "Failed to initiate device flow",
+              reason: inspect(reason)
+            })
+        end
+
+      auth_code ->
+        # Complete device flow with provided auth code
+        _user_id = get_user_id(conn)
+
+        case Auth.authenticate(provider, :device_flow, %{auth_code: auth_code}) do
+          {:ok, result} ->
+            json(conn, %{
+              status: "success",
+              method: "device_flow",
+              provider: result.provider
+            })
+
+          {:error, reason} ->
+            conn
+            |> put_status(:bad_request)
+            |> json(%{
+              status: "error",
+              error: "Device flow authentication failed",
+              reason: inspect(reason)
+            })
+        end
+    end
+  end
+
   defp initiate_api_key_auth(conn, provider, auth_params) do
     api_key = Map.get(auth_params, "api_key")
     user_id = get_user_id(conn)
 
     if api_key && user_id do
-      case Auth.authenticate(provider, :api_key, %{api_key: api_key}, user_id) do
+      case Auth.authenticate(provider, :api_key, %{api_key: api_key}) do
         {:ok, result} ->
           json(conn, %{
             status: "success",
@@ -198,8 +299,8 @@ defmodule TheMaestroWeb.ProvidersController do
     end
   end
 
-  defp get_provider_models(provider, user_id) do
-    case Auth.get_credentials(user_id, provider) do
+  defp get_provider_models(provider, _user_id) do
+    case Auth.get_credentials(provider) do
       {:ok, auth_result} ->
         fetch_models_from_provider(provider, auth_result.credentials)
 

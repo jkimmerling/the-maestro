@@ -9,6 +9,8 @@ defmodule TheMaestro.Agents.Agent do
 
   use GenServer
 
+  alias TheMaestro.Models.Model
+
   @typedoc """
   The state structure for an Agent GenServer process.
 
@@ -26,7 +28,8 @@ defmodule TheMaestro.Agents.Agent do
           loop_state: atom(),
           created_at: DateTime.t(),
           llm_provider: module(),
-          auth_context: term()
+          auth_context: term(),
+          model: Model.t() | nil
         }
 
   @typedoc """
@@ -43,7 +46,15 @@ defmodule TheMaestro.Agents.Agent do
           timestamp: DateTime.t()
         }
 
-  defstruct [:agent_id, :message_history, :loop_state, :created_at, :llm_provider, :auth_context]
+  defstruct [
+    :agent_id,
+    :message_history,
+    :loop_state,
+    :created_at,
+    :llm_provider,
+    :auth_context,
+    :model
+  ]
 
   # Client API
 
@@ -62,11 +73,13 @@ defmodule TheMaestro.Agents.Agent do
     # Resolve LLM provider - support both module names and provider atoms
     llm_provider = resolve_llm_provider(opts)
     auth_context = Keyword.get(opts, :auth_context)
+    model = Keyword.get(opts, :model)
 
     init_args = %{
       agent_id: agent_id,
       llm_provider: llm_provider,
-      auth_context: auth_context
+      auth_context: auth_context,
+      model: model
     }
 
     GenServer.start_link(__MODULE__, init_args, name: via_tuple(agent_id))
@@ -204,7 +217,12 @@ defmodule TheMaestro.Agents.Agent do
   # Server Callbacks
 
   @impl true
-  def init(%{agent_id: agent_id, llm_provider: llm_provider, auth_context: auth_context}) do
+  def init(%{
+        agent_id: agent_id,
+        llm_provider: llm_provider,
+        auth_context: auth_context,
+        model: model
+      }) do
     # Initialize authentication if auth_context is nil
     final_auth_context =
       case auth_context do
@@ -234,7 +252,8 @@ defmodule TheMaestro.Agents.Agent do
       loop_state: :idle,
       created_at: DateTime.utc_now(),
       llm_provider: llm_provider,
-      auth_context: final_auth_context
+      auth_context: final_auth_context,
+      model: model
     }
 
     {:ok, state}
@@ -292,7 +311,7 @@ defmodule TheMaestro.Agents.Agent do
           type: :assistant,
           role: :assistant,
           content:
-            "I'm sorry, I encountered an error processing your request. Please check your authentication configuration.",
+            "I'm sorry, I encountered an error processing your request. Error details: #{inspect(reason)}. Please check your authentication configuration.",
           timestamp: DateTime.utc_now()
         }
 
@@ -381,7 +400,7 @@ defmodule TheMaestro.Agents.Agent do
     tool_definitions = TheMaestro.Tooling.get_tool_definitions()
 
     completion_opts =
-      build_completion_opts_with_streaming(state.agent_id, tool_definitions, state.llm_provider)
+      build_completion_opts_with_streaming(state, tool_definitions)
 
     if Enum.empty?(tool_definitions) do
       execute_basic_completion_with_streaming(
@@ -400,16 +419,25 @@ defmodule TheMaestro.Agents.Agent do
     end
   end
 
-  defp build_completion_opts_with_streaming(agent_id, tool_definitions, provider_module) do
+  defp build_completion_opts_with_streaming(state, tool_definitions) do
     stream_callback = fn
-      {:chunk, chunk} -> broadcast_stream_chunk(agent_id, chunk)
+      {:chunk, chunk} -> broadcast_stream_chunk(state.agent_id, chunk)
       :complete -> :ok
     end
 
-    model = get_default_model_for_provider(provider_module)
+    # Use the selected model from state, fall back to default if not set
+    # Always expect a Model struct, convert legacy formats if needed
+    model =
+      case Map.get(state, :model) do
+        %Model{} = model_struct -> model_struct
+        legacy_model when not is_nil(legacy_model) -> Model.from_legacy(legacy_model)
+        nil -> get_default_model_for_provider(state.llm_provider)
+      end
+
+    model_id = model.id
 
     %{
-      model: model,
+      model: model_id,
       temperature: 0.0,
       max_tokens: 8192,
       tools: tool_definitions,
@@ -489,8 +517,16 @@ defmodule TheMaestro.Agents.Agent do
       :complete -> :ok
     end
 
+    # Get the model, ensuring it's a Model struct
+    model =
+      case Map.get(state, :model) do
+        %Model{} = model_struct -> model_struct
+        legacy_model when not is_nil(legacy_model) -> Model.from_legacy(legacy_model)
+        nil -> get_default_model_for_provider(state.llm_provider)
+      end
+
     completion_opts = %{
-      model: get_default_model_for_provider(state.llm_provider),
+      model: model.id,
       temperature: 0.0,
       max_tokens: 8192,
       stream_callback: stream_callback
@@ -679,11 +715,19 @@ defmodule TheMaestro.Agents.Agent do
     # Convert keyword list to map if needed
     providers_map = if is_list(providers), do: Map.new(providers), else: providers
 
-    case find_provider_by_module(providers_map, provider_module) do
-      {_name, %{models: [first_model | _]}} -> first_model
-      # fallback
-      _ -> "gemini-2.5-flash"
-    end
+    default_model_id =
+      case find_provider_by_module(providers_map, provider_module) do
+        {_name, %{models: [first_model | _]}} -> first_model
+        # fallback
+        _ -> "gemini-2.5-flash"
+      end
+
+    # Convert the default model ID to a basic Model struct
+    # The provider will enrich it when needed
+    provider_atom = module_to_provider_atom(provider_module)
+
+    Model.from_legacy_string(default_model_id)
+    |> Model.enrich_with_provider_info(provider_atom)
   end
 
   defp find_provider_by_module(providers_map, target_module) do
@@ -691,6 +735,11 @@ defmodule TheMaestro.Agents.Agent do
       Map.get(config, :module) == target_module
     end)
   end
+
+  defp module_to_provider_atom(TheMaestro.Providers.Anthropic), do: :anthropic
+  defp module_to_provider_atom(TheMaestro.Providers.Gemini), do: :google
+  defp module_to_provider_atom(TheMaestro.Providers.OpenAI), do: :openai
+  defp module_to_provider_atom(_), do: :google
 
   # Streaming and status broadcasting functions
 

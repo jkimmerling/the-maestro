@@ -40,8 +40,30 @@ if config_env() == :prod do
         false
     end
 
-  # Skip database configuration for TUI mode (escript)
-  unless is_escript do
+  # Database configuration for production
+  if is_escript do
+    # For TUI escript, use environment variables with sensible defaults for credential sync
+    database_url = System.get_env("DATABASE_URL")
+
+    if database_url do
+      # Use DATABASE_URL if provided (for production TUI)
+      maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
+
+      config :the_maestro, TheMaestro.Repo,
+        url: database_url,
+        pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5"),
+        socket_options: maybe_ipv6
+    else
+      # Use individual settings with defaults (for development TUI)
+      config :the_maestro, TheMaestro.Repo,
+        username: System.get_env("DB_USERNAME") || "postgres",
+        password: System.get_env("DB_PASSWORD") || "postgres",
+        hostname: System.get_env("DB_HOSTNAME") || "localhost",
+        database: System.get_env("DB_DATABASE") || "the_maestro_dev",
+        pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
+    end
+  else
+    # For production server, use DATABASE_URL environment variable
     database_url =
       System.get_env("DATABASE_URL") ||
         raise """

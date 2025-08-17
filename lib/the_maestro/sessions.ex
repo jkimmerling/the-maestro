@@ -7,6 +7,7 @@ defmodule TheMaestro.Sessions do
   """
 
   import Ecto.Query, warn: false
+  alias TheMaestro.Models.Model
   alias TheMaestro.Repo
   alias TheMaestro.Sessions.ConversationSession
 
@@ -221,7 +222,8 @@ defmodule TheMaestro.Sessions do
       loop_state: agent_state.loop_state,
       created_at: DateTime.to_iso8601(agent_state.created_at),
       llm_provider: module_to_atom(agent_state.llm_provider),
-      auth_context: serialize_auth_context(agent_state.auth_context)
+      auth_context: serialize_auth_context(agent_state.auth_context),
+      model: serialize_model(Map.get(agent_state, :model))
     }
 
     Jason.encode!(serializable_state)
@@ -238,7 +240,8 @@ defmodule TheMaestro.Sessions do
       loop_state: String.to_existing_atom(data["loop_state"]),
       created_at: created_at,
       llm_provider: atom_to_module(data["llm_provider"]),
-      auth_context: deserialize_auth_context(data["auth_context"])
+      auth_context: deserialize_auth_context(data["auth_context"]),
+      model: deserialize_model(Map.get(data, "model"))
     }
 
     {:ok, agent_state}
@@ -294,4 +297,38 @@ defmodule TheMaestro.Sessions do
   defp atom_to_module(module_string) when is_binary(module_string) do
     Module.concat([module_string])
   end
+
+  defp serialize_model(nil), do: nil
+
+  defp serialize_model(%Model{} = model) do
+    Model.to_map(model)
+  end
+
+  defp serialize_model(legacy_model) do
+    # Handle legacy model data that might be a string or map
+    case legacy_model do
+      model when is_binary(model) -> %{id: model, legacy: true}
+      model when is_map(model) -> Map.put(model, :legacy, true)
+      _ -> nil
+    end
+  end
+
+  defp deserialize_model(nil), do: nil
+
+  defp deserialize_model(%{legacy: true} = model_data) do
+    # Handle legacy model data
+    Model.from_legacy(model_data)
+  end
+
+  defp deserialize_model(model_data) when is_map(model_data) do
+    # Handle Model struct data
+    Model.from_legacy_map(model_data)
+  end
+
+  defp deserialize_model(model_data) when is_binary(model_data) do
+    # Handle string model ID
+    Model.from_legacy_string(model_data)
+  end
+
+  defp deserialize_model(_), do: nil
 end

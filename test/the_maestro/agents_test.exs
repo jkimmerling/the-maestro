@@ -44,10 +44,9 @@ defmodule TheMaestro.AgentsTest do
 
         assert response.type == :assistant
         # OAuth may work with cached credentials or return error message
-        assert response.content in [
-                 "I'm sorry, I encountered an error processing your request. Please check your authentication configuration.",
-                 "Hello! How can I help you today?"
-               ] or String.contains?(response.content, "help")
+        assert String.contains?(response.content, "I'm sorry, I encountered an error") or
+                 response.content == "Hello! How can I help you today?" or
+                 String.contains?(response.content, "help")
 
         assert %DateTime{} = response.timestamp
       end

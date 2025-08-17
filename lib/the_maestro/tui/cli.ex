@@ -9,6 +9,7 @@ defmodule TheMaestro.TUI.CLI do
   """
 
   alias TheMaestro.Agents.{Agent, DynamicSupervisor}
+  alias TheMaestro.Models.Model
   alias TheMaestro.TUI.{AuthFlow, ModelSelection, ProviderSelection}
 
   @doc """
@@ -60,7 +61,19 @@ defmodule TheMaestro.TUI.CLI do
     # Build welcome message based on provider and model selection
     provider_name = get_provider_name(provider)
     model_info = ModelSelection.get_model_info(model)
-    model_display = if model_info, do: model_info.name, else: model
+
+    model_display =
+      if model_info do
+        model_info.name
+      else
+        # Extract model name from Model struct or fallback to string
+        case model do
+          %Model{name: name} when not is_nil(name) -> name
+          %Model{id: id} -> id
+          model_id when is_binary(model_id) -> model_id
+          _ -> inspect(model)
+        end
+      end
 
     auth_type =
       case auth_context.type do
@@ -313,26 +326,34 @@ defmodule TheMaestro.TUI.CLI do
     model = Process.get(:tui_model)
     auth_context = Process.get(:tui_auth_context)
 
+    # Extract model ID from Model struct or string
+    model_id =
+      case model do
+        %Model{id: id} -> id
+        model_id when is_binary(model_id) -> model_id
+        _ -> "unknown"
+      end
+
     # Create a unique identifier based on provider, model, and auth
     base_string =
       case auth_context.type do
         :api_key ->
           api_key = get_in(auth_context, [:credentials, :api_key]) || "default"
-          "#{provider}-#{model}-apikey-#{api_key}"
+          "#{provider}-#{model_id}-apikey-#{api_key}"
 
         :oauth ->
           user_email = get_in(auth_context, [:credentials, :user_email]) || "oauth_user"
-          "#{provider}-#{model}-oauth-#{user_email}"
+          "#{provider}-#{model_id}-oauth-#{user_email}"
 
         :service_account ->
-          "#{provider}-#{model}-service"
+          "#{provider}-#{model_id}-service"
 
         _ ->
           # For anonymous or unknown auth types
           case Process.get(:tui_agent_id) do
             nil ->
               agent_id =
-                "#{provider}-#{model}-anon-#{:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)}"
+                "#{provider}-#{model_id}-anon-#{:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)}"
 
               Process.put(:tui_agent_id, agent_id)
               agent_id
@@ -585,17 +606,8 @@ defmodule TheMaestro.TUI.CLI do
   # Handles the complete provider and model selection flow.
   # Returns {:ok, {provider, model, auth_context}} or {:error, reason}.
   defp handle_provider_and_model_selection do
-    case AuthFlow.authentication_required?() do
-      false ->
-        # Authentication disabled - use default provider and anonymous mode
-        {:ok,
-         {:google, "gemini-1.5-pro",
-          %{type: :anonymous, provider: :google, credentials: %{}, config: %{}}}}
-
-      true ->
-        # Full provider and model selection flow
-        execute_selection_flow()
-    end
+    # Always execute provider selection flow - users need to auth with providers
+    execute_selection_flow()
   end
 
   defp execute_selection_flow do

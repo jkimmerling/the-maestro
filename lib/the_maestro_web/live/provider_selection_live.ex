@@ -21,18 +21,28 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   @steps [:provider, :auth_method, :authenticate, :model, :ready]
 
   def mount(_params, session, socket) do
-    current_user = Map.get(session, "current_user")
-    authentication_enabled = authentication_enabled?()
+    case safe_mount_initialization(session, socket) do
+      {:ok, socket} -> {:ok, socket}
+      {:error, _error, socket} -> {:ok, socket}
+    end
+  end
+
+  defp safe_mount_initialization(session, socket) do
     previous_selection = Map.get(session, "provider_selection")
 
-    # Initialize the UI state
+    # Initialize the UI state step by step with error handling
     socket =
       socket
-      |> assign(:current_user, current_user)
-      |> assign(:authentication_enabled, authentication_enabled)
       |> assign(:current_step, :provider)
+      |> assign(:steps, @steps)
       |> assign(:selected_provider, nil)
-      |> assign(:available_providers, get_available_providers())
+
+    # Get available providers with error handling
+    available_providers = get_available_providers_safely()
+
+    socket =
+      socket
+      |> assign(:available_providers, available_providers)
       |> assign(:selected_auth_method, nil)
       |> assign(:available_auth_methods, [])
       |> assign(:provider_status, %{})
@@ -47,8 +57,8 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       |> assign(:validating_api_key, false)
       |> assign(:previous_selection, previous_selection)
 
-    # Check provider status
-    socket = check_provider_status(socket)
+    # Check provider status safely
+    socket = check_provider_status_safely(socket)
 
     # Show previous selection if available
     socket =
@@ -63,6 +73,20 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       end
 
     {:ok, socket}
+  rescue
+    error ->
+      require Logger
+      Logger.error("Mount error in ProviderSelectionLive: #{inspect(error)}")
+
+      # Return minimal working socket
+      socket =
+        socket
+        |> assign(:steps, @steps)
+        |> assign(:current_step, :provider)
+        |> assign(:available_providers, [])
+        |> assign(:error_message, "Failed to initialize: #{inspect(error)}")
+
+      {:error, error, socket}
   end
 
   def handle_event("select_provider", %{"provider" => provider_string}, socket) do
@@ -98,11 +122,37 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   def handle_event("initiate_oauth", _params, socket) do
     provider = socket.assigns.selected_provider
 
-    case Auth.initiate_oauth_flow(provider, %{redirect_uri: get_oauth_redirect_uri()}) do
-      {:ok, auth_url} ->
+    # Use manual mode for OAuth with flow state return for proper PKCE handling
+    oauth_options = %{manual: true, return_flow_state: true}
+
+    case Auth.initiate_oauth_flow(provider, oauth_options) do
+      {:ok, auth_url} when is_binary(auth_url) ->
+        # Backward compatibility - just URL returned
+        oauth_params = %{
+          redirect_uri: "https://console.anthropic.com/oauth/code/callback",
+          code_verifier: nil
+        }
+
         socket =
           socket
           |> assign(:oauth_url, auth_url)
+          |> assign(:oauth_params, oauth_params)
+          |> assign(:error_message, nil)
+
+        {:noreply, socket}
+
+      {:ok, %{auth_url: auth_url, code_verifier: code_verifier, state: state}} ->
+        # New format with flow state data
+        oauth_params = %{
+          redirect_uri: "https://console.anthropic.com/oauth/code/callback",
+          code_verifier: code_verifier,
+          state: state
+        }
+
+        socket =
+          socket
+          |> assign(:oauth_url, auth_url)
+          |> assign(:oauth_params, oauth_params)
           |> assign(:error_message, nil)
 
         {:noreply, socket}
@@ -111,6 +161,51 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
         socket =
           socket
           |> assign(:error_message, "Failed to initiate OAuth: #{inspect(reason)}")
+
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("submit_oauth_code", %{"oauth_code" => oauth_code}, socket) do
+    provider = socket.assigns.selected_provider
+
+    # Parse the OAuth code - it might contain state after #
+    {code, state} =
+      case String.split(oauth_code, "#", parts: 2) do
+        [code, state] -> {code, state}
+        [code] -> {code, nil}
+      end
+
+    # Get stored OAuth parameters from socket
+    oauth_params = socket.assigns[:oauth_params] || %{}
+
+    options = %{
+      manual: true,
+      state: state,
+      redirect_uri:
+        oauth_params[:redirect_uri] || "https://console.anthropic.com/oauth/code/callback",
+      code_verifier: oauth_params[:code_verifier]
+    }
+
+    case Auth.complete_oauth_flow(provider, code, options) do
+      {:ok, credentials} ->
+        socket =
+          socket
+          |> assign(:auth_credentials, credentials)
+          |> assign(:current_step, :model)
+          |> assign(:loading_models, true)
+          |> assign(:oauth_url, nil)
+          |> assign(:error_message, nil)
+
+        # Load models for this provider
+        send(self(), {:load_models, provider, credentials})
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        socket =
+          socket
+          |> assign(:error_message, "OAuth authentication failed: #{inspect(reason)}")
 
         {:noreply, socket}
     end
@@ -141,7 +236,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       |> assign(:validating_api_key, true)
       |> assign(:error_message, nil)
 
-    case Auth.authenticate(provider, :api_key, %{api_key: api_key}, "anonymous_user") do
+    case Auth.authenticate(provider, :api_key, %{api_key: api_key}) do
       {:ok, credentials} ->
         socket =
           socket
@@ -176,32 +271,30 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   end
 
   def handle_event("start_chat", _params, socket) do
-    # Store the selection in the session and redirect to chat
+    # Get the selection data
     provider = socket.assigns.selected_provider
     model = socket.assigns.selected_model
-    credentials = socket.assigns.auth_credentials
     auth_method = socket.assigns.selected_auth_method
-
-    # Store provider/model selection in session
-    session_data = %{
-      provider: provider,
-      model: model,
-      auth_method: auth_method,
-      credentials: credentials,
-      selected_at: DateTime.utc_now()
-    }
 
     Logger.info("Starting chat with provider: #{provider}, model: #{model}")
 
+    # Create query parameters with the selection data
+    query_params = %{
+      "provider" => to_string(provider),
+      "model" => model,
+      "auth_method" => to_string(auth_method)
+    }
+
+    # Navigate to /start_chat with POST-like behavior
     socket =
       socket
-      |> assign(:session_data, session_data)
       |> put_flash(
         :info,
         "Successfully configured #{provider_display_name(provider)} with #{model}"
       )
+      |> push_navigate(to: "/start_chat?" <> URI.encode_query(query_params))
 
-    {:noreply, redirect(socket, to: ~p"/agent")}
+    {:noreply, socket}
   end
 
   def handle_event("go_back", _params, socket) do
@@ -232,11 +325,23 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
         {:noreply, socket}
 
       previous ->
+        # Convert provider string back to atom
+        provider =
+          if is_binary(previous.provider),
+            do: String.to_existing_atom(previous.provider),
+            else: previous.provider
+
+        auth_method =
+          if is_binary(previous.auth_method),
+            do: String.to_existing_atom(previous.auth_method),
+            else: previous.auth_method
+
         socket =
           socket
-          |> assign(:selected_provider, previous.provider)
-          |> assign(:selected_auth_method, previous.auth_method)
-          |> assign(:auth_credentials, previous.credentials)
+          |> assign(:selected_provider, provider)
+          |> assign(:selected_auth_method, auth_method)
+          # Will be loaded when needed
+          |> assign(:auth_credentials, nil)
           |> assign(:selected_model, previous.model)
           |> assign(:current_step, :ready)
           |> assign(:error_message, nil)
@@ -358,7 +463,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
         
     <!-- Progress indicator -->
         <div class="mb-8">
-          <.progress_indicator current_step={@current_step} />
+          <.progress_indicator current_step={@current_step} steps={@steps} />
         </div>
         
     <!-- Flash messages -->
@@ -395,6 +500,7 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
               <.provider_selection_step
                 available_providers={@available_providers}
                 provider_status={@provider_status}
+                previous_selection={@previous_selection}
               />
             <% :auth_method -> %>
               <.auth_method_selection_step
@@ -667,18 +773,50 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
             </p>
 
             <%= if @oauth_url do %>
-              <div class="space-y-4">
-                <a
-                  href={@oauth_url}
-                  target="_blank"
-                  class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <.icon name="hero-arrow-top-right-on-square" class="h-5 w-5 mr-2" />
-                  Authenticate with {@selected_provider |> provider_display_name()}
-                </a>
-                <p class="text-sm text-gray-500">
-                  After completing authentication, this page will automatically update.
-                </p>
+              <div class="space-y-6">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 class="text-sm font-medium text-blue-900 mb-2">
+                    Step 1: Visit Authorization URL
+                  </h4>
+                  <p class="text-sm text-blue-700 mb-3">
+                    Copy and paste this URL into your browser to authorize the application:
+                  </p>
+                  <div class="bg-white border rounded p-2 mb-3">
+                    <code class="text-xs text-gray-800 break-all">{@oauth_url}</code>
+                  </div>
+                  <a
+                    href={@oauth_url}
+                    target="_blank"
+                    class="inline-flex items-center px-4 py-2 border border-blue-300 text-sm font-medium rounded-md text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <.icon name="hero-arrow-top-right-on-square" class="h-4 w-4 mr-2" />
+                    Open in Browser
+                  </a>
+                </div>
+
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 class="text-sm font-medium text-green-900 mb-2">
+                    Step 2: Enter Authorization Code
+                  </h4>
+                  <p class="text-sm text-green-700 mb-3">
+                    After authorizing, you'll be redirected to a page with an authorization code. Copy and paste it here:
+                  </p>
+                  <form phx-submit="submit_oauth_code" class="space-y-3">
+                    <input
+                      type="text"
+                      name="oauth_code"
+                      placeholder="Paste authorization code here..."
+                      class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    >
+                      Complete Authentication
+                    </button>
+                  </form>
+                </div>
               </div>
             <% else %>
               <button
@@ -860,10 +998,6 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   defp status_text(:degraded), do: "Issues"
   defp status_text(_), do: "Unknown"
 
-  defp authentication_enabled? do
-    Application.get_env(:the_maestro, :require_authentication, true)
-  end
-
   defp get_available_providers do
     ProviderRegistry.list_providers()
     |> Enum.map(fn provider ->
@@ -915,13 +1049,13 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
   end
 
   defp get_oauth_redirect_uri do
-    "http://localhost:4000/oauth2callback"
+    "http://localhost:54545/callback"
   end
 
   defp load_provider_models(provider, credentials) do
     # Create auth context from credentials
     auth_context = %{
-      type: credentials.auth_method,
+      type: credentials.method,
       credentials: credentials.credentials,
       config: %{provider: provider}
     }
@@ -940,5 +1074,23 @@ defmodule TheMaestroWeb.ProviderSelectionLive do
       _ ->
         {:error, :unsupported_provider}
     end
+  end
+
+  defp get_available_providers_safely do
+    get_available_providers()
+  rescue
+    error ->
+      require Logger
+      Logger.error("Error getting available providers: #{inspect(error)}")
+      []
+  end
+
+  defp check_provider_status_safely(socket) do
+    check_provider_status(socket)
+  rescue
+    error ->
+      require Logger
+      Logger.error("Error checking provider status: #{inspect(error)}")
+      socket
   end
 end

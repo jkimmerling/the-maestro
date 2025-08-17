@@ -13,6 +13,8 @@ defmodule TheMaestro.TUI.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      # Start the Ecto repository (needed for credential storage)
+      TheMaestro.Repo,
       # Start HTTPoison (needed for device authorization flow)
       {Finch, name: TheMaestro.Finch},
       # Start the Registry for agent processes (needed for core functionality)
