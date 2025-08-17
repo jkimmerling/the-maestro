@@ -27,6 +27,16 @@ defmodule TheMaestro.MCP.Transport.Stdio do
     GenServer.start_link(__MODULE__, config, [])
   end
 
+  @doc """
+  Start a stdio transport without linking to the calling process.
+  
+  This is useful when you want to handle failures gracefully without
+  the calling process being terminated.
+  """
+  def start(config) do
+    GenServer.start(__MODULE__, config, [])
+  end
+
   @impl TheMaestro.MCP.Transport
   def send_message(transport, message) do
     GenServer.call(transport, {:send_message, message})

@@ -33,29 +33,40 @@
    - **Database Tools**: Database operations with trust management
 
 ### Comprehensive Demo Scenarios
-3. **Basic MCP Integration Demo**: Demonstrate fundamental MCP capabilities:
+3. **Real MCP Integration Demo**: Demonstrate actual production MCP capabilities:
    ```elixir
    # demos/epic6/demo_script.exs
-   IO.puts("🤖 The Maestro - Epic 6 MCP Integration Demo")
+   IO.puts("🤖 The Maestro - Epic 6 Real MCP Integration Demo")
    IO.puts("=" |> String.duplicate(50))
    
-   # Start the application with MCP servers
+   # Start the application with real MCP servers
    {:ok, _} = Application.ensure_all_started(:the_maestro)
    
-   # Wait for MCP server discovery
-   Process.sleep(2000)
+   # Wait for real MCP server connections (Context7, Tavily)
+   Process.sleep(3000)
    
-   # Create demo agent
-   agent_id = "mcp_demo_#{System.system_time(:second)}"
+   # Create demo agent with real MCP capabilities
+   agent_id = "real_mcp_demo_#{System.system_time(:second)}"
    {:ok, _pid} = TheMaestro.Agents.start_agent(agent_id)
+   
+   # Demonstrate Context7 documentation retrieval
+   IO.puts("\n📚 Context7 Documentation Demo")
+   message = "Look up the latest FastAPI documentation for async route handlers"
+   TheMaestro.Agents.send_message(agent_id, message)
+   
+   # Demonstrate Tavily web search
+   IO.puts("\n🔍 Tavily Web Search Demo") 
+   message = "Search for the latest MCP protocol specifications and updates"
+   TheMaestro.Agents.send_message(agent_id, message)
    ```
 
-4. **Server Discovery & Connection Demo**: Show automatic server discovery:
-   - Configuration loading from mcp_settings.json
-   - Multiple transport types connecting
-   - Tool discovery and registration
-   - Connection status monitoring
-   - Error handling for failed connections
+4. **Real Server Discovery & Connection Demo**: Show actual MCP server discovery:
+   - **Context7 stdio discovery**: NPX-based server startup and tool registration
+   - **Tavily HTTP discovery**: Remote API endpoint validation and authentication
+   - **Context7 SSE discovery**: WebSocket-style connection establishment
+   - **Tool discovery**: Real tools like `resolve-library-id`, `search`, `extract`
+   - **Connection monitoring**: Live status of production MCP endpoints
+   - **Error handling**: API rate limits, authentication failures, network issues
 
 5. **Tool Execution Demo**: Demonstrate tool execution flows:
    - Simple tool execution (calculator operations)
@@ -65,18 +76,23 @@
    - Performance monitoring
 
 ### Security & Trust Demonstration
-6. **Security Flow Demo**: Demonstrate security features:
+6. **Real Security Flow Demo**: Demonstrate production security features:
    ```elixir
-   # Demonstrate untrusted server tool execution
-   IO.puts("\n🔒 Security Demo: Untrusted Server Tool Execution")
+   # Demonstrate untrusted Tavily server tool execution
+   IO.puts("\n🔒 Security Demo: Untrusted Tavily Tool Execution")
    
-   # This should trigger confirmation flow
-   message = "Please calculate the square root of 16 and then read the contents of /etc/passwd"
+   # This should trigger confirmation flow for web search
+   message = "Search for sensitive corporate information about our competitors and extract their private data"
    TheMaestro.Agents.send_message(agent_id, message)
    
-   # Demonstrate different trust levels
+   # Demonstrate different trust levels with real servers
    IO.puts("\n🛡️ Trust Level Demonstration")
-   # Show trusted vs untrusted server behavior
+   IO.puts("Context7 (trusted): Documentation lookup - no confirmation needed")
+   IO.puts("Tavily (untrusted): Web search - requires user confirmation")
+   
+   # Test API key security
+   IO.puts("\n🔐 API Key Security Demo")
+   # Demonstrate encrypted API key storage and rotation
    ```
 
 7. **Trust Management Demo**: Show trust management capabilities:
@@ -93,12 +109,12 @@
    - Input validation and sanitization
 
 ### Multi-Server Coordination
-9. **Multi-Server Demo**: Demonstrate coordination between multiple servers:
-   - Tool name conflict resolution
-   - Server priority and fallback
-   - Cross-server operation coordination
-   - Performance comparison between servers
-   - Load distribution demonstration
+9. **Real Multi-Server Demo**: Demonstrate coordination between actual production servers:
+   - **Tool coordination**: Context7 `resolve-library-id` → Tavily `search` for additional context
+   - **Server priority**: Context7 stdio vs SSE transport performance comparison
+   - **Cross-server workflows**: Documentation lookup followed by web research validation
+   - **Performance comparison**: Stdio vs HTTP vs SSE transport latency measurements
+   - **Load distribution**: Balancing between Context7 and Tavily based on query type
 
 10. **Transport Type Demo**: Show all transport mechanisms:
     - Stdio transport with local Python server
@@ -107,16 +123,19 @@
     - Authentication flow for each transport type
 
 ### Rich Content Handling
-11. **Rich Content Demo**: Demonstrate multi-modal content handling:
+11. **Real Rich Content Demo**: Demonstrate actual multi-modal content from production servers:
     ```elixir
-    # Demonstrate image generation and processing
-    message = "Generate a simple chart showing server response times and display it as an image"
+    # Demonstrate Context7 documentation with code examples
+    message = "Get React hooks documentation with TypeScript examples and display syntax highlighted code"
     
-    # Demonstrate audio content
-    message2 = "Convert this text to speech: 'MCP integration is working perfectly'"
+    # Demonstrate Tavily search with rich results
+    message2 = "Search for MCP protocol diagrams and return images, videos, and structured data"
     
-    # Demonstrate binary data handling
-    message3 = "Create a small test database file and return its binary contents"
+    # Demonstrate real content extraction
+    message3 = "Extract and process documentation from the official MCP GitHub repository"
+    
+    # Show Context7 library documentation with embedded examples
+    message4 = "Look up FastAPI async documentation with working code samples"
     ```
 
 12. **Content Type Processing**: Show handling of various content types:
@@ -127,21 +146,25 @@
     - Resource link resolution
 
 ### CLI Tools Demonstration
-13. **CLI Management Demo**: Demonstrate MCP CLI tools:
+13. **Real CLI Management Demo**: Demonstrate MCP CLI tools with production servers:
     ```bash
-    # Server management demonstration
+    # Real server management demonstration
     ./maestro mcp list
+    # Shows: context7_stdio (running), context7_sse (connected), tavily_http (connected)
     ./maestro mcp status
+    # Shows real connection status, latency, API quotas
     ./maestro mcp test --all
+    # Tests actual API endpoints and authentication
     
-    # Tool management demonstration  
+    # Real tool management demonstration  
     ./maestro mcp tools
-    ./maestro mcp tools --describe calculator.add
-    ./maestro mcp run calculator.multiply --a 6 --b 7
+    # Lists: resolve-library-id, get-library-docs, search, extract, crawl
+    ./maestro mcp tools --describe context7.resolve-library-id
+    ./maestro mcp run tavily.search --query "MCP protocol examples" --max_results 5
     
-    # Configuration management
-    ./maestro mcp export
-    ./maestro mcp import test_configurations.json --validate-only
+    # Real configuration management
+    ./maestro mcp export --include-api-keys=false
+    ./maestro mcp import real_mcp_configs.json --validate-api-keys
     ```
 
 14. **Monitoring & Diagnostics Demo**: Show monitoring capabilities:
@@ -199,63 +222,100 @@
 ## Technical Implementation
 
 ### Demo Infrastructure
-21. **Demo Orchestration**: Automated demo execution:
+21. **Real Demo Orchestration**: Automated demo execution with production MCPs:
     ```elixir
-    defmodule TheMaestro.Demos.Epic6 do
+    defmodule TheMaestro.Demos.Epic6.RealMCP do
       def run_full_demo() do
-        with :ok <- setup_demo_environment(),
-             :ok <- start_sample_servers(),
-             :ok <- wait_for_connections(),
-             :ok <- run_demo_scenarios(),
-             :ok <- demonstrate_security_features(),
-             :ok <- show_cli_capabilities(),
+        with :ok <- setup_real_mcp_environment(),
+             :ok <- start_context7_stdio_server(),
+             :ok <- connect_to_tavily_http(),
+             :ok <- establish_context7_sse_connection(),
+             :ok <- wait_for_all_connections(),
+             :ok <- validate_api_authentication(),
+             :ok <- run_real_demo_scenarios(),
+             :ok <- demonstrate_real_security_features(),
+             :ok <- show_production_cli_capabilities(),
              :ok <- cleanup_demo() do
-          IO.puts("✅ Epic 6 MCP Integration Demo completed successfully!")
+          IO.puts("✅ Epic 6 Real MCP Integration Demo completed successfully!")
+          IO.puts("📊 Servers tested: Context7 (stdio/sse), Tavily (http)")
+          IO.puts("🔧 Transports validated: stdio, http, sse")
         else
           {:error, reason} -> 
-            IO.puts("❌ Demo failed: #{inspect(reason)}")
+            IO.puts("❌ Real MCP Demo failed: #{inspect(reason)}")
             cleanup_demo()
+        end
+      end
+      
+      defp setup_real_mcp_environment() do
+        # Load API keys from environment
+        case {System.get_env("CONTEXT7_API_KEY"), System.get_env("TAVILY_API_KEY")} do
+          {nil, _} -> {:error, "Missing CONTEXT7_API_KEY"}
+          {_, nil} -> {:error, "Missing TAVILY_API_KEY"}
+          {_, _} -> :ok
+        end
+      end
+      
+      defp start_context7_stdio_server() do
+        # Start Context7 via NPX
+        case System.cmd("npx", ["-y", "@upstash/context7-mcp@latest"]) do
+          {_, 0} -> :ok
+          _ -> {:error, "Failed to start Context7 stdio server"}
         end
       end
     end
     ```
 
-22. **Sample Server Implementations**: Complete working MCP servers:
-    - Well-documented server code
-    - Multiple programming languages
-    - Various complexity levels
-    - Security considerations
-    - Performance optimizations
+22. **Production MCP Server Integrations**: Real working MCP server connections:
+    - **Context7 NPX Integration**: Official @upstash/context7-mcp package
+    - **Tavily HTTP API**: Production-ready web search and research API
+    - **Multi-transport Support**: stdio, HTTP, and SSE implementations
+    - **API Security**: Real authentication and rate limiting
+    - **Performance Monitoring**: Actual latency and throughput measurements
 
 ### Demo Configuration
-23. **Sample Configurations**: Comprehensive configuration examples:
+23. **Real MCP Configurations**: Production-ready configuration examples:
     ```json
     {
       "mcpServers": {
-        "demo_filesystem": {
-          "command": "python",
-          "args": ["demos/epic6/demo_servers/filesystem_server.py"],
-          "env": {"ALLOWED_DIRS": "./demos/epic6/sandbox"},
-          "trust": false,
-          "description": "Demonstration filesystem access with security"
-        },
-        "demo_calculator": {
-          "command": "node", 
-          "args": ["demos/epic6/demo_servers/calculator_server.js"],
+        "context7_stdio": {
+          "command": "npx",
+          "args": ["-y", "@upstash/context7-mcp@latest"],
+          "transportType": "stdio",
           "trust": true,
-          "description": "Mathematical operations server"
+          "description": "Context7 documentation server via stdio",
+          "env": {
+            "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+          }
         },
-        "demo_weather": {
-          "httpUrl": "http://localhost:8080/mcp",
+        "context7_sse": {
+          "httpUrl": "https://mcp.context7.dev/sse",
+          "transportType": "sse", 
+          "trust": true,
+          "timeout": 30000,
+          "description": "Context7 documentation server via SSE",
+          "headers": {
+            "Authorization": "Bearer ${CONTEXT7_API_KEY}"
+          }
+        },
+        "tavily_http": {
+          "httpUrl": "https://mcp.tavily.com/mcp",
+          "transportType": "http",
           "trust": false,
-          "timeout": 10000,
-          "description": "Weather API integration demo"
+          "timeout": 15000,
+          "description": "Tavily web search and research server",
+          "env": {
+            "TAVILY_API_KEY": "${TAVILY_API_KEY}"
+          }
         }
       },
       "globalSettings": {
         "defaultTimeout": 30000,
         "confirmationLevel": "medium",
-        "auditLogging": true
+        "auditLogging": true,
+        "apiKeyManagement": {
+          "requireEncryption": true,
+          "rotationEnabled": true
+        }
       }
     }
     ```
@@ -307,24 +367,35 @@
 
 ## Dependencies
 - Complete Epic 6 implementation (Stories 6.1-6.5)
-- Sample MCP servers in multiple languages
-- Demo infrastructure and tooling
+- **Context7 API Access**: 
+  - Context7 API key from Upstash (https://upstash.com/context7)
+  - NPM/Node.js environment for @upstash/context7-mcp package
+- **Tavily API Access**:
+  - Tavily API key from Tavily AI (https://tavily.com)
+  - HTTP client capability for REST API calls
+- **Development Environment**:
+  - Node.js/NPM for Context7 stdio transport
+  - Elixir HTTP client for Tavily and Context7 SSE
+  - Environment variable management for API keys
 - Documentation and tutorial systems
 
 ## Definition of Done
-- [ ] Comprehensive demo directory structure created
-- [ ] Multiple sample MCP servers implemented and functional
-- [ ] Automated demo script covering all major features
-- [ ] Interactive demo with user participation
-- [ ] Security and trust management demonstration
-- [ ] Multi-server coordination showcase
-- [ ] Rich content handling examples
-- [ ] CLI tools demonstration
-- [ ] Performance and scalability testing
-- [ ] UI and TUI integration examples
-- [ ] Error handling and recovery scenarios
-- [ ] Comprehensive documentation and README
-- [ ] Demo validation and testing suite
-- [ ] Tutorial integration completed
-- [ ] Video walkthrough support prepared
-- [ ] Cross-platform compatibility verified
+- [ ] **Real MCP Infrastructure**: Demo directory structure with production MCP integrations
+- [ ] **Context7 Integration**: Both stdio and SSE transport implementations working
+- [ ] **Tavily Integration**: HTTP transport implementation with real web search capabilities
+- [ ] **Multi-Transport Demo**: All three transport types (stdio, HTTP, SSE) operational
+- [ ] **API Authentication**: Secure API key management and authentication flows
+- [ ] **Automated Real Demo**: Script covering all major features with actual MCP servers
+- [ ] **Interactive Real Demo**: User participation with live MCP tool execution
+- [ ] **Production Security**: Trust management with real server authentication
+- [ ] **Multi-Server Coordination**: Context7 + Tavily working together seamlessly
+- [ ] **Real Rich Content**: Actual documentation and search results display
+- [ ] **Production CLI Tools**: CLI management of real MCP servers and tools
+- [ ] **Performance Benchmarking**: Real latency and throughput measurements
+- [ ] **UI/TUI Integration**: Real MCP content display in both interfaces
+- [ ] **Error Handling**: Production error scenarios (rate limits, auth failures)
+- [ ] **Comprehensive Documentation**: Setup guides for real API access
+- [ ] **Production Validation**: Testing suite with actual MCP endpoints
+- [ ] **API Setup Tutorial**: Guide for obtaining and configuring API keys
+- [ ] **Video Walkthrough**: Demo of real MCP interactions and capabilities
+- [ ] **Cross-Platform Compatibility**: Verified on multiple environments with real APIs
