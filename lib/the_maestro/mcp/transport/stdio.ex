@@ -63,21 +63,19 @@ defmodule TheMaestro.MCP.Transport.Stdio do
   end
 
   def handle_call({:send_message, message}, _from, %{port: port} = state) do
-    try do
-      json_message = Jason.encode!(message)
-      data = json_message <> "\n"
+    json_message = Jason.encode!(message)
+    data = json_message <> "\n"
 
-      Port.command(port, data)
-      {:reply, :ok, state}
-    rescue
-      error ->
-        Logger.error("Failed to send message: #{inspect(error)}")
-        {:reply, {:error, :send_failed}, state}
-    catch
-      :exit, reason ->
-        Logger.error("Port died while sending: #{inspect(reason)}")
-        {:reply, {:error, :process_dead}, %{state | port: nil, process_state: :dead}}
-    end
+    Port.command(port, data)
+    {:reply, :ok, state}
+  rescue
+    error ->
+      Logger.error("Failed to send message: #{inspect(error)}")
+      {:reply, {:error, :send_failed}, state}
+  catch
+    :exit, reason ->
+      Logger.error("Port died while sending: #{inspect(reason)}")
+      {:reply, {:error, :process_dead}, %{state | port: nil, process_state: :dead}}
   end
 
   def handle_call(:close, _from, %{port: port} = state) when not is_nil(port) do

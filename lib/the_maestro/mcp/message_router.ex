@@ -206,33 +206,29 @@ defmodule TheMaestro.MCP.MessageRouter do
   end
 
   defp send_to_transport(transport, message) do
-    try do
-      if Process.alive?(transport) do
-        # Try GenServer call first, fallback to direct message
-        try do
-          case GenServer.call(transport, {:send_message, message}, 100) do
-            :ok -> :ok
-            {:error, reason} -> {:error, reason}
-          end
-        catch
-          :exit, {:timeout, _} ->
-            # Timeout on GenServer call, try direct message for tests
-            send(transport, {:send_message, message})
-            :ok
-
-          :exit, {:noproc, _} ->
-            # Not a GenServer, send direct message
-            send(transport, {:send_message, message})
-            :ok
-        end
-      else
-        {:error, :transport_dead}
+    if Process.alive?(transport) do
+      # Try GenServer call first, fallback to direct message
+      case GenServer.call(transport, {:send_message, message}, 100) do
+        :ok -> :ok
+        {:error, reason} -> {:error, reason}
       end
-    catch
-      :exit, reason ->
-        Logger.error("Transport process died: #{inspect(reason)}")
-        {:error, :transport_dead}
+    else
+      {:error, :transport_dead}
     end
+  catch
+    :exit, {:timeout, _} ->
+      # Timeout on GenServer call, try direct message for tests
+      send(transport, {:send_message, message})
+      :ok
+
+    :exit, {:noproc, _} ->
+      # Not a GenServer, send direct message
+      send(transport, {:send_message, message})
+      :ok
+
+    :exit, reason ->
+      Logger.error("Transport process died: #{inspect(reason)}")
+      {:error, :transport_dead}
   end
 
   defp get_response_id(response) do

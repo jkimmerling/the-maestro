@@ -182,18 +182,16 @@ defmodule TheMaestro.MCP.Transport.HTTP do
   end
 
   defp handle_streaming_request(parent, request_id, url, body, headers) do
-    try do
-      case HTTPoison.post(url, body, headers, stream_to: self(), async: :once) do
-        {:ok, %HTTPoison.AsyncResponse{id: id}} ->
-          receive_streaming_response(parent, request_id, id, "")
+    case HTTPoison.post(url, body, headers, stream_to: self(), async: :once) do
+      {:ok, %HTTPoison.AsyncResponse{id: id}} ->
+        receive_streaming_response(parent, request_id, id, "")
 
-        {:error, reason} ->
-          send(parent, {:http_error, request_id, reason})
-      end
-    rescue
-      error ->
-        send(parent, {:http_error, request_id, error})
+      {:error, reason} ->
+        send(parent, {:http_error, request_id, reason})
     end
+  rescue
+    error ->
+      send(parent, {:http_error, request_id, error})
   end
 
   defp receive_streaming_response(parent, request_id, id, buffer) do
