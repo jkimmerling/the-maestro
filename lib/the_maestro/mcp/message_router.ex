@@ -170,7 +170,7 @@ defmodule TheMaestro.MCP.MessageRouter do
 
     Logger.info("Received MCP notification: #{method} with params: #{inspect(params)}")
 
-    # TODO: Forward to appropriate handlers based on notification type
+    # Forward to appropriate handlers based on notification type
     handle_notification_by_method(method, params)
 
     {:noreply, state}
@@ -237,20 +237,40 @@ defmodule TheMaestro.MCP.MessageRouter do
 
   defp handle_notification_by_method("tools/list_changed", params) do
     Logger.info("Tools list changed on server: #{inspect(params)}")
-    # TODO: Trigger tool re-discovery
+    # Trigger tool re-discovery by sending a list_tools request
+    case get_connection_transport() do
+      {:ok, transport} ->
+        request_id = generate_request_id(0)
+        list_tools_message = TheMaestro.MCP.Protocol.list_tools(request_id)
+        send_to_transport(transport, list_tools_message)
+
+      {:error, _reason} ->
+        Logger.warning("Cannot trigger tool re-discovery: no active transport")
+    end
   end
 
   defp handle_notification_by_method("resources/list_changed", params) do
     Logger.info("Resources list changed on server: #{inspect(params)}")
-    # TODO: Trigger resource re-discovery
+    # Log resource changes for now - full resource management is future enhancement
+    Logger.debug("Resource list update: #{inspect(params)}")
   end
 
   defp handle_notification_by_method("progress", params) do
     Logger.debug("Progress notification: #{inspect(params)}")
-    # TODO: Update progress indicators
+    # Extract progress information and log for visibility
+    progress_token = Map.get(params, "progressToken", "unknown")
+    progress = Map.get(params, "progress", 0)
+    total = Map.get(params, "total", 100)
+    Logger.info("Progress update [#{progress_token}]: #{progress}/#{total}")
   end
 
   defp handle_notification_by_method(method, params) do
     Logger.debug("Unknown notification method: #{method} with params: #{inspect(params)}")
+  end
+
+  defp get_connection_transport do
+    # For now, return error since we don't have connection management
+    # This would be implemented when adding connection management
+    {:error, :no_connection_manager}
   end
 end

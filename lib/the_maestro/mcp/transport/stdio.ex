@@ -16,7 +16,8 @@ defmodule TheMaestro.MCP.Transport.Stdio do
           port: port() | nil,
           process_state: :starting | :running | :terminated | :dead,
           buffer: binary(),
-          pending_responses: list()
+          pending_responses: list(),
+          parent_pid: pid() | nil
         }
 
   # Client API
@@ -45,7 +46,8 @@ defmodule TheMaestro.MCP.Transport.Stdio do
       port: nil,
       process_state: :starting,
       buffer: "",
-      pending_responses: []
+      pending_responses: [],
+      parent_pid: Map.get(config, :parent_pid)
     }
 
     case start_subprocess(config) do
@@ -93,9 +95,13 @@ defmodule TheMaestro.MCP.Transport.Stdio do
     new_buffer = state.buffer <> data
     {processed_buffer, responses} = process_messages(new_buffer)
 
-    # TODO: Send responses to message router or parent process
+    # Send responses to parent process if configured, otherwise log
     Enum.each(responses, fn response ->
-      Logger.debug("Received MCP response: #{inspect(response)}")
+      if state.parent_pid && Process.alive?(state.parent_pid) do
+        send(state.parent_pid, {:mcp_response, self(), response})
+      else
+        Logger.debug("Received MCP response: #{inspect(response)}")
+      end
     end)
 
     {:noreply, %{state | buffer: processed_buffer}}
