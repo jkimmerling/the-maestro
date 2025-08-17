@@ -176,7 +176,7 @@ defmodule TheMaestro.MCP.MessageRouterTest do
           end
         end)
 
-      {:ok, request_id} =
+      {:ok, _request_id} =
         MessageRouter.send_request(router, transport_pid, %{jsonrpc: "2.0", method: "test"}, 100)
 
       # Wait for timeout

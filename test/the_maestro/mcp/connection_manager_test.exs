@@ -28,7 +28,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
         trust: false
       }
 
-      assert {:ok, _connection_pid} = ConnectionManager.start_connection(manager, server_config)
+      assert {:ok, connection_pid} = ConnectionManager.start_connection(manager, server_config)
       assert is_pid(connection_pid)
 
       # Verify connection is tracked
