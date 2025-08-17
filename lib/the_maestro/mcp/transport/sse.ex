@@ -82,18 +82,10 @@ defmodule TheMaestro.MCP.Transport.SSE do
 
   @impl GenServer
   def handle_info(:connect, state) do
-    case start_sse_stream(state) do
-      {:ok, stream_pid} ->
-        new_state = %{state | stream_pid: stream_pid, connection_state: :connected}
-        Logger.info("SSE transport connected to #{state.base_url}")
-        {:noreply, new_state}
-
-      {:error, reason} ->
-        Logger.error("Failed to connect SSE stream: #{inspect(reason)}")
-        # Retry connection after delay
-        Process.send_after(self(), :connect, 5_000)
-        {:noreply, %{state | connection_state: :error}}
-    end
+    {:ok, stream_pid} = start_sse_stream(state)
+    new_state = %{state | stream_pid: stream_pid, connection_state: :connected}
+    Logger.info("SSE transport connected to #{state.base_url}")
+    {:noreply, new_state}
   end
 
   def handle_info({:sse_message, data}, state) do

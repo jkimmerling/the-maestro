@@ -62,14 +62,9 @@ defmodule TheMaestro.MCP.Transport.HTTP do
 
   @impl GenServer
   def handle_call({:send_message, message}, from, state) do
-    case send_streaming_request(state, message, from) do
-      {:ok, request_id} ->
-        new_state = %{state | active_requests: Map.put(state.active_requests, request_id, from)}
-        {:noreply, new_state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
+    {:ok, request_id} = send_streaming_request(state, message, from)
+    new_state = %{state | active_requests: Map.put(state.active_requests, request_id, from)}
+    {:noreply, new_state}
   end
 
   def handle_call(:close, _from, state) do
@@ -160,7 +155,7 @@ defmodule TheMaestro.MCP.Transport.HTTP do
     end
   end
 
-  defp send_streaming_request(state, message, from) do
+  defp send_streaming_request(state, message, _from) do
     request_id = generate_request_id()
     json_body = Jason.encode!(message)
 
@@ -292,7 +287,7 @@ defmodule TheMaestro.MCP.Transport.HTTP do
     find_balanced_json(rest, brace_count + 1, pos + 1, acc <> "{")
   end
 
-  defp find_balanced_json(<<"}", rest::binary>>, 1, pos, acc) do
+  defp find_balanced_json(<<"}", rest::binary>>, 1, _pos, acc) do
     # Found complete JSON object
     json_str = acc <> "}"
     {json_str, rest}

@@ -238,15 +238,8 @@ defmodule TheMaestro.MCP.MessageRouter do
   defp handle_notification_by_method("tools/list_changed", params) do
     Logger.info("Tools list changed on server: #{inspect(params)}")
     # Trigger tool re-discovery by sending a list_tools request
-    case get_connection_transport() do
-      {:ok, transport} ->
-        request_id = generate_request_id(0)
-        list_tools_message = TheMaestro.MCP.Protocol.list_tools(request_id)
-        send_to_transport(transport, list_tools_message)
-
-      {:error, _reason} ->
-        Logger.warning("Cannot trigger tool re-discovery: no active transport")
-    end
+    # For now, just log since connection management is not implemented
+    Logger.warning("Cannot trigger tool re-discovery: no active transport")
   end
 
   defp handle_notification_by_method("resources/list_changed", params) do
@@ -266,11 +259,5 @@ defmodule TheMaestro.MCP.MessageRouter do
 
   defp handle_notification_by_method(method, params) do
     Logger.debug("Unknown notification method: #{method} with params: #{inspect(params)}")
-  end
-
-  defp get_connection_transport do
-    # For now, return error since we don't have connection management
-    # This would be implemented when adding connection management
-    {:error, :no_connection_manager}
   end
 end

@@ -60,7 +60,7 @@ defmodule TheMaestro.MCP.Transport.Stdio do
   end
 
   @impl GenServer
-  def handle_call({:send_message, message}, _from, %{port: nil} = state) do
+  def handle_call({:send_message, _message}, _from, %{port: nil} = state) do
     {:reply, {:error, :process_dead}, state}
   end
 
@@ -168,8 +168,8 @@ defmodule TheMaestro.MCP.Transport.Stdio do
           Logger.error("Failed to start MCP subprocess: #{inspect(error)}")
           {:error, :spawn_failed}
       catch
-        :error, reason ->
-          Logger.error("Failed to spawn MCP subprocess: #{inspect(reason)}")
+        kind, reason ->
+          Logger.error("Failed to spawn MCP subprocess: #{kind} - #{inspect(reason)}")
           {:error, reason}
       end
     else
