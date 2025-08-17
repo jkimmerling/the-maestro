@@ -110,12 +110,12 @@ defmodule TheMaestro.MCP.Discovery do
         Logger.debug("Server config validation successful")
         {:ok, result}
       else
-        Logger.warn("Server config validation failed: #{inspect(errors)}")
+        Logger.warning("Server config validation failed: #{inspect(errors)}")
         {:error, errors}
       end
     else
       {:error, errors} ->
-        Logger.warn("Server config validation failed: #{inspect(errors)}")
+        Logger.warning("Server config validation failed: #{inspect(errors)}")
         {:error, errors}
     end
   end
@@ -176,7 +176,7 @@ defmodule TheMaestro.MCP.Discovery do
             [validated | acc]
 
           {:error, errors} ->
-            Logger.warn("Skipping invalid server #{id}: #{inspect(errors)}")
+            Logger.warning("Skipping invalid server #{id}: #{inspect(errors)}")
             acc
         end
       end)
@@ -337,16 +337,9 @@ defmodule TheMaestro.MCP.Discovery do
             server_config: config
           }
 
-          case start_connection_manager(connection_config) do
-            {:ok, connection_pid} ->
-              Logger.info("Successfully started stdio connection for #{config.id}")
-              {:ok, connection_pid}
-
-            {:error, reason} ->
-              # Clean up transport if connection manager failed
-              Stdio.close(transport_pid)
-              {:error, reason}
-          end
+          {:ok, connection_pid} = start_connection_manager(connection_config)
+          Logger.info("Successfully started stdio connection for #{config.id}")
+          {:ok, connection_pid}
 
         {:error, reason} ->
           Logger.error("Failed to start stdio transport for #{config.id}: #{inspect(reason)}")
@@ -378,15 +371,9 @@ defmodule TheMaestro.MCP.Discovery do
           server_config: config
         }
 
-        case start_connection_manager(connection_config) do
-          {:ok, connection_pid} ->
-            Logger.info("Successfully started SSE connection for #{config.id}")
-            {:ok, connection_pid}
-
-          {:error, reason} ->
-            SSE.close(transport_pid)
-            {:error, reason}
-        end
+        {:ok, connection_pid} = start_connection_manager(connection_config)
+        Logger.info("Successfully started SSE connection for #{config.id}")
+        {:ok, connection_pid}
 
       {:error, reason} ->
         Logger.error("Failed to start SSE transport for #{config.id}: #{inspect(reason)}")
@@ -410,15 +397,9 @@ defmodule TheMaestro.MCP.Discovery do
           server_config: config
         }
 
-        case start_connection_manager(connection_config) do
-          {:ok, connection_pid} ->
-            Logger.info("Successfully started HTTP connection for #{config.id}")
-            {:ok, connection_pid}
-
-          {:error, reason} ->
-            HTTP.close(transport_pid)
-            {:error, reason}
-        end
+        {:ok, connection_pid} = start_connection_manager(connection_config)
+        Logger.info("Successfully started HTTP connection for #{config.id}")
+        {:ok, connection_pid}
 
       {:error, reason} ->
         Logger.error("Failed to start HTTP transport for #{config.id}: #{inspect(reason)}")
