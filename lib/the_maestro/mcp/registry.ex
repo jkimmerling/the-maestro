@@ -17,9 +17,11 @@ defmodule TheMaestro.MCP.Registry do
   use GenServer
   require Logger
 
-
   # Server information structure
   defmodule ServerInfo do
+    @moduledoc """
+    Represents comprehensive information about a registered MCP server.
+    """
     @type t :: %__MODULE__{
             server_id: String.t(),
             config: map(),
@@ -47,6 +49,9 @@ defmodule TheMaestro.MCP.Registry do
 
   # Tool with server attribution
   defmodule AttributedTool do
+    @moduledoc """
+    Represents a tool with server attribution and namespace conflict resolution.
+    """
     @type t :: %__MODULE__{
             name: String.t(),
             server_id: String.t(),
@@ -59,6 +64,9 @@ defmodule TheMaestro.MCP.Registry do
 
   # Server metrics
   defmodule Metrics do
+    @moduledoc """
+    Represents performance and health metrics for an MCP server.
+    """
     @type t :: %__MODULE__{
             uptime: integer(),
             last_heartbeat: integer(),
@@ -69,22 +77,23 @@ defmodule TheMaestro.MCP.Registry do
             avg_latency: float()
           }
 
-    defstruct [
-      uptime: 0,
-      last_heartbeat: 0,
-      status: :disconnected,
-      total_operations: 0,
-      error_count: 0,
-      error_rate: 0.0,
-      avg_latency: 0.0
-    ]
+    defstruct uptime: 0,
+              last_heartbeat: 0,
+              status: :disconnected,
+              total_operations: 0,
+              error_count: 0,
+              error_rate: 0.0,
+              avg_latency: 0.0
   end
 
   # GenServer state
   defstruct [
-    :servers,           # %{server_id => ServerInfo.t()}
-    :tool_conflicts,    # MapSet of conflicting tool names
-    :subscribers        # List of PIDs subscribed to events
+    # %{server_id => ServerInfo.t()}
+    :servers,
+    # MapSet of conflicting tool names
+    :tool_conflicts,
+    # List of PIDs subscribed to events
+    :subscribers
   ]
 
   @type state :: %__MODULE__{
@@ -155,7 +164,8 @@ defmodule TheMaestro.MCP.Registry do
   @doc """
   Resolve a tool by name, handling conflicts and priorities.
   """
-  @spec resolve_tool(GenServer.server(), String.t()) :: {:ok, AttributedTool.t()} | {:error, :not_found}
+  @spec resolve_tool(GenServer.server(), String.t()) ::
+          {:ok, AttributedTool.t()} | {:error, :not_found}
   def resolve_tool(registry, tool_name) do
     GenServer.call(registry, {:resolve_tool, tool_name})
   end
@@ -236,12 +246,13 @@ defmodule TheMaestro.MCP.Registry do
     }
 
     # Update tool conflicts
-    new_conflicts = update_tool_conflicts(state.tool_conflicts, state.servers, server_info.tools || [])
+    new_conflicts =
+      update_tool_conflicts(state.tool_conflicts, state.servers, server_info.tools || [])
 
     new_state = %{
-      state |
-      servers: Map.put(state.servers, server_id, full_server_info),
-      tool_conflicts: new_conflicts
+      state
+      | servers: Map.put(state.servers, server_id, full_server_info),
+        tool_conflicts: new_conflicts
     }
 
     # Broadcast event
@@ -264,9 +275,9 @@ defmodule TheMaestro.MCP.Registry do
         new_conflicts = recalculate_tool_conflicts(new_servers)
 
         new_state = %{
-          state |
-          servers: new_servers,
-          tool_conflicts: new_conflicts
+          state
+          | servers: new_servers,
+            tool_conflicts: new_conflicts
         }
 
         # Broadcast event
@@ -335,6 +346,7 @@ defmodule TheMaestro.MCP.Registry do
           description: Map.get(tool, :description) || Map.get(tool, "description"),
           original_tool: tool
         }
+
         {:reply, {:ok, attributed_tool}, state}
     end
   end
@@ -345,7 +357,7 @@ defmodule TheMaestro.MCP.Registry do
   end
 
   def handle_call({:get_available_servers_for_tool, tool_name}, _from, state) do
-    servers = 
+    servers =
       find_servers_with_tool(state.servers, tool_name)
       |> Enum.filter(&(&1.status == :connected))
 
@@ -406,16 +418,17 @@ defmodule TheMaestro.MCP.Registry do
 
   defp update_tool_conflicts(current_conflicts, existing_servers, new_tools) do
     # Get all existing tool names
-    existing_tool_names = 
+    existing_tool_names =
       existing_servers
       |> Map.values()
       |> Enum.flat_map(& &1.tools)
       |> Enum.map(fn tool -> Map.get(tool, :name) || Map.get(tool, "name") end)
 
     # Find conflicts with new tools
-    new_tool_names = Enum.map(new_tools, fn tool -> Map.get(tool, :name) || Map.get(tool, "name") end)
+    new_tool_names =
+      Enum.map(new_tools, fn tool -> Map.get(tool, :name) || Map.get(tool, "name") end)
 
-    new_conflicts = 
+    new_conflicts =
       new_tool_names
       |> Enum.filter(&(&1 in existing_tool_names))
       |> MapSet.new()
@@ -425,7 +438,7 @@ defmodule TheMaestro.MCP.Registry do
 
   defp recalculate_tool_conflicts(servers) do
     # Collect all tool names with their counts
-    tool_counts = 
+    tool_counts =
       servers
       |> Map.values()
       |> Enum.flat_map(& &1.tools)
@@ -445,12 +458,13 @@ defmodule TheMaestro.MCP.Registry do
     |> Enum.flat_map(fn server_info ->
       Enum.map(server_info.tools, fn tool ->
         tool_name = Map.get(tool, :name) || Map.get(tool, "name")
-        
-        final_name = if MapSet.member?(conflicts, tool_name) do
-          "#{server_info.server_id}__#{tool_name}"
-        else
-          tool_name
-        end
+
+        final_name =
+          if MapSet.member?(conflicts, tool_name) do
+            "#{server_info.server_id}__#{tool_name}"
+          else
+            tool_name
+          end
 
         %AttributedTool{
           name: final_name,
@@ -467,22 +481,35 @@ defmodule TheMaestro.MCP.Registry do
     matches = find_servers_with_tool(servers, tool_name)
 
     case matches do
-      [] -> nil
-      [single_match] -> 
-        tool = Enum.find(single_match.tools, fn t -> 
-          (Map.get(t, :name) || Map.get(t, "name")) == tool_name 
-        end)
+      [] ->
+        nil
+
+      [single_match] ->
+        tool =
+          Enum.find(single_match.tools, fn t ->
+            (Map.get(t, :name) || Map.get(t, "name")) == tool_name
+          end)
+
         {single_match, tool}
+
       multiple_matches ->
         # Sort by priority (higher priority first)
-        sorted_matches = Enum.sort_by(multiple_matches, fn server ->
-          Map.get(server.config, :priority, 5)
-        end, &>=/2)
-        
+        sorted_matches =
+          Enum.sort_by(
+            multiple_matches,
+            fn server ->
+              Map.get(server.config, :priority, 5)
+            end,
+            &>=/2
+          )
+
         best_server = hd(sorted_matches)
-        tool = Enum.find(best_server.tools, fn t -> 
-          (Map.get(t, :name) || Map.get(t, "name")) == tool_name 
-        end)
+
+        tool =
+          Enum.find(best_server.tools, fn t ->
+            (Map.get(t, :name) || Map.get(t, "name")) == tool_name
+          end)
+
         {best_server, tool}
     end
   end
@@ -500,7 +527,7 @@ defmodule TheMaestro.MCP.Registry do
   defp calculate_server_metrics(server_info) do
     registered_at = server_info.registered_at || DateTime.utc_now()
     uptime = DateTime.diff(DateTime.utc_now(), registered_at, :millisecond)
-    
+
     metrics = server_info.metrics
     total_ops = Map.get(metrics, :total_operations, 0)
     error_count = Map.get(metrics, :error_count, 0)
@@ -522,11 +549,13 @@ defmodule TheMaestro.MCP.Registry do
 
   defp update_operation_metrics(metrics, result, latency_ms) do
     total_ops = Map.get(metrics, :total_operations, 0) + 1
-    error_count = if result == :error do
-      Map.get(metrics, :error_count, 0) + 1
-    else
-      Map.get(metrics, :error_count, 0)
-    end
+
+    error_count =
+      if result == :error do
+        Map.get(metrics, :error_count, 0) + 1
+      else
+        Map.get(metrics, :error_count, 0)
+      end
 
     # Keep only last 100 latency measurements to avoid unbounded growth
     latencies = [latency_ms | Map.get(metrics, :latencies, [])]

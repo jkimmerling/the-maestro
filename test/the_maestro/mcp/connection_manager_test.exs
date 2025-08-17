@@ -5,15 +5,15 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
 
   setup do
     # Start the connection manager for each test with unique name
-    test_name = :"ConnectionManager_#{:rand.uniform(1000000)}"
+    test_name = :"ConnectionManager_#{:rand.uniform(1_000_000)}"
     {:ok, manager_pid} = ConnectionManager.start_link(name: test_name)
-    
+
     on_exit(fn ->
       if Process.alive?(manager_pid) do
         GenServer.stop(manager_pid)
       end
     end)
-    
+
     %{manager: manager_pid}
   end
 
@@ -30,7 +30,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
 
       assert {:ok, _connection_pid} = ConnectionManager.start_connection(manager, server_config)
       assert is_pid(connection_pid)
-      
+
       # Verify connection is tracked
       assert {:ok, tracked_connection} = ConnectionManager.get_connection(manager, "testServer")
       assert tracked_connection.server_id == "testServer"
@@ -49,14 +49,14 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
 
       # Start connection
       assert {:ok, _connection_pid} = ConnectionManager.start_connection(manager, server_config)
-      
+
       # Check initial state
       assert {:ok, connection_info} = ConnectionManager.get_connection(manager, "lifecycleTest")
       assert connection_info.status in [:connecting, :connected]
-      
+
       # Stop connection
       assert :ok = ConnectionManager.stop_connection(manager, "lifecycleTest")
-      
+
       # Verify connection is removed
       assert {:error, :not_found} = ConnectionManager.get_connection(manager, "lifecycleTest")
     end
@@ -69,21 +69,23 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
       ]
 
       # Start all connections
-      connection_results = Enum.map(configs, fn config ->
-        ConnectionManager.start_connection(manager, config)
-      end)
+      connection_results =
+        Enum.map(configs, fn config ->
+          ConnectionManager.start_connection(manager, config)
+        end)
 
       # Verify all started successfully
       assert Enum.all?(connection_results, fn result ->
-        match?({:ok, _pid}, result)
-      end)
+               match?({:ok, _pid}, result)
+             end)
 
       # Verify all are tracked
       connections = ConnectionManager.list_connections(manager)
       assert length(connections) == 3
+
       assert Enum.all?(["server1", "server2", "server3"], fn id ->
-        Enum.any?(connections, fn conn -> conn.server_id == id end)
-      end)
+               Enum.any?(connections, fn conn -> conn.server_id == id end)
+             end)
     end
   end
 
@@ -99,7 +101,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
       }
 
       {:ok, _connection_pid} = ConnectionManager.start_connection(manager, server_config)
-      
+
       # Get initial health status
       assert {:ok, health} = ConnectionManager.get_health_status(manager, "healthTest")
       assert health.server_id == "healthTest"
@@ -115,21 +117,24 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
         args: ["test"],
         env: %{},
         trust: false,
-        heartbeat_interval: 100  # 100ms for faster testing
+        # 100ms for faster testing
+        heartbeat_interval: 100
       }
 
       {:ok, _connection_pid} = ConnectionManager.start_connection(manager, server_config)
-      
+
       # Wait for a few heartbeats
       Process.sleep(300)
-      
+
       # Verify heartbeat was updated
       assert {:ok, health} = ConnectionManager.get_health_status(manager, "healthCheckTest")
       initial_heartbeat = health.last_heartbeat
-      
+
       Process.sleep(200)
-      
-      assert {:ok, updated_health} = ConnectionManager.get_health_status(manager, "healthCheckTest")
+
+      assert {:ok, updated_health} =
+               ConnectionManager.get_health_status(manager, "healthCheckTest")
+
       assert updated_health.last_heartbeat > initial_heartbeat
     end
 
@@ -137,7 +142,8 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
       server_config = %{
         id: "failureTest",
         transport: :stdio,
-        command: "/non/existent/command",  # This will fail
+        # This will fail
+        command: "/non/existent/command",
         args: [],
         env: %{},
         trust: false
@@ -145,7 +151,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
 
       # This should fail to start
       assert {:error, _reason} = ConnectionManager.start_connection(manager, server_config)
-      
+
       # Verify no connection is tracked
       assert {:error, :not_found} = ConnectionManager.get_connection(manager, "failureTest")
     end
@@ -163,15 +169,15 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
       }
 
       {:ok, _connection_pid} = ConnectionManager.start_connection(manager, server_config)
-      
+
       # Simulate tool discovery (this would normally come from MCP protocol)
       tools = [
         %{name: "test_tool", description: "A test tool", inputSchema: %{}},
         %{name: "another_tool", description: "Another tool", inputSchema: %{}}
       ]
-      
+
       assert :ok = ConnectionManager.register_tools(manager, "toolTest", tools)
-      
+
       # Verify tools are registered
       assert {:ok, registered_tools} = ConnectionManager.get_server_tools(manager, "toolTest")
       assert length(registered_tools) == 2
@@ -192,13 +198,13 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
 
       # Register same tool name on both servers
       conflicting_tool = %{name: "duplicate_tool", description: "A tool", inputSchema: %{}}
-      
+
       :ok = ConnectionManager.register_tools(manager, "server1", [conflicting_tool])
       :ok = ConnectionManager.register_tools(manager, "server2", [conflicting_tool])
-      
+
       # Verify namespace handling
       all_tools = ConnectionManager.get_all_tools(manager)
-      
+
       # Should have tools with prefixed names to avoid conflicts
       tool_names = Enum.map(all_tools, & &1.name)
       assert "server1__duplicate_tool" in tool_names
@@ -209,7 +215,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
   describe "dynamic server management" do
     test "supports runtime server addition", %{manager: manager} do
       initial_count = length(ConnectionManager.list_connections(manager))
-      
+
       server_config = %{
         id: "dynamicAdd",
         transport: :stdio,
@@ -220,10 +226,10 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
       }
 
       assert {:ok, _} = ConnectionManager.add_server(manager, server_config)
-      
+
       new_count = length(ConnectionManager.list_connections(manager))
       assert new_count == initial_count + 1
-      
+
       assert {:ok, _} = ConnectionManager.get_connection(manager, "dynamicAdd")
     end
 
@@ -239,7 +245,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
 
       {:ok, _} = ConnectionManager.start_connection(manager, server_config)
       assert {:ok, _} = ConnectionManager.get_connection(manager, "dynamicRemove")
-      
+
       assert :ok = ConnectionManager.remove_server(manager, "dynamicRemove")
       assert {:error, :not_found} = ConnectionManager.get_connection(manager, "dynamicRemove")
     end
@@ -254,15 +260,15 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
           }
         }
       }
-      
+
       config_path = create_temp_config(config)
-      
+
       assert :ok = ConnectionManager.reload_configuration(manager, config_path)
-      
+
       connections = ConnectionManager.list_connections(manager)
       assert length(connections) == 1
       assert Enum.any?(connections, fn conn -> conn.server_id == "initialServer" end)
-      
+
       # Update configuration
       updated_config = %{
         "mcpServers" => %{
@@ -276,15 +282,15 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
           }
         }
       }
-      
+
       File.write!(config_path, Jason.encode!(updated_config))
-      
+
       assert :ok = ConnectionManager.reload_configuration(manager, config_path)
-      
+
       updated_connections = ConnectionManager.list_connections(manager)
       assert length(updated_connections) == 2
       assert Enum.any?(updated_connections, fn conn -> conn.server_id == "newServer" end)
-      
+
       # Cleanup
       File.rm!(config_path)
     end
@@ -307,7 +313,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
       for _i <- 1..4 do
         {:error, _} = ConnectionManager.start_connection(manager, server_config)
       end
-      
+
       # Circuit should be open now
       assert {:error, :circuit_open} = ConnectionManager.start_connection(manager, server_config)
     end
@@ -325,7 +331,7 @@ defmodule TheMaestro.MCP.ConnectionManagerTest do
 
       # Simulate one server failing
       :ok = ConnectionManager.stop_connection(manager, "unstable")
-      
+
       # System should continue operating with remaining servers
       connections = ConnectionManager.list_connections(manager)
       assert length(connections) == 1

@@ -5,21 +5,22 @@ defmodule TheMaestro.MCP.DiscoveryTest do
 
   describe "discover_servers/1" do
     test "loads servers from valid mcp_settings.json configuration" do
-      config_path = create_test_config(%{
-        "mcpServers" => %{
-          "fileSystem" => %{
-            "command" => "python",
-            "args" => ["-m", "filesystem_mcp"],
-            "env" => %{"ALLOWED_DIRS" => "/tmp,/workspace"},
-            "trust" => false
-          },
-          "weatherAPI" => %{
-            "url" => "https://weather.example.com/sse",
-            "headers" => %{"Authorization" => "Bearer token"},
-            "trust" => true
+      config_path =
+        create_test_config(%{
+          "mcpServers" => %{
+            "fileSystem" => %{
+              "command" => "python",
+              "args" => ["-m", "filesystem_mcp"],
+              "env" => %{"ALLOWED_DIRS" => "/tmp,/workspace"},
+              "trust" => false
+            },
+            "weatherAPI" => %{
+              "url" => "https://weather.example.com/sse",
+              "headers" => %{"Authorization" => "Bearer token"},
+              "trust" => true
+            }
           }
-        }
-      })
+        })
 
       assert {:ok, servers} = Discovery.discover_servers(config_path)
       assert length(servers) == 2
@@ -104,6 +105,7 @@ defmodule TheMaestro.MCP.DiscoveryTest do
         "id" => "invalid",
         "invalidField" => "value"
       }
+
       assert {:error, validation_errors} = Discovery.validate_server_config(config)
       assert :unknown_transport in validation_errors
     end
@@ -168,24 +170,24 @@ defmodule TheMaestro.MCP.DiscoveryTest do
   defp create_test_config(config) do
     file_path = "/tmp/test_mcp_config_#{:rand.uniform(10000)}.json"
     File.write!(file_path, Jason.encode!(config))
-    
+
     # Register cleanup
     on_exit(fn ->
       if File.exists?(file_path), do: File.rm!(file_path)
     end)
-    
+
     file_path
   end
 
   defp create_invalid_json_file do
     file_path = "/tmp/invalid_json_#{:rand.uniform(10000)}.json"
     File.write!(file_path, "{invalid json content")
-    
+
     # Register cleanup
     on_exit(fn ->
       if File.exists?(file_path), do: File.rm!(file_path)
     end)
-    
+
     file_path
   end
 end

@@ -24,16 +24,16 @@ defmodule TheMaestro.MCP.Supervisor do
     children = [
       # MCP Registry for server tracking and tool namespace management
       {TheMaestro.MCP.Registry, []},
-      
+
       # Connection Manager for connection pool management
       {TheMaestro.MCP.ConnectionManager, []},
-      
+
       # Dynamic Supervisor for individual server connections
       {DynamicSupervisor, strategy: :one_for_one, name: TheMaestro.MCP.ConnectionSupervisor}
     ]
 
     Logger.info("Starting MCP Supervisor with #{length(children)} children")
-    
+
     Supervisor.init(children, strategy: :one_for_one)
   end
 

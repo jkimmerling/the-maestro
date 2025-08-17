@@ -29,7 +29,7 @@ defmodule TheMaestro.MCP.Transport.Stdio do
 
   @doc """
   Start a stdio transport without linking to the calling process.
-  
+
   This is useful when you want to handle failures gracefully without
   the calling process being terminated.
   """

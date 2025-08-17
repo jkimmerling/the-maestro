@@ -168,7 +168,9 @@ defmodule TheMaestro.MCP.Discovery do
     server_configs =
       Enum.reduce(servers, [], fn {id, config}, acc ->
         case validate_server_config(Map.put(config, "id", id)) do
-          {:ok, validated} -> [validated | acc]
+          {:ok, validated} ->
+            [validated | acc]
+
           {:error, errors} ->
             Logger.warn("Skipping invalid server #{id}: #{inspect(errors)}")
             acc
@@ -272,7 +274,7 @@ defmodule TheMaestro.MCP.Discovery do
   defp validate_common_fields(config, errors) do
     # Preserve trust from original config if it was explicitly set
     original_trust = Map.get(config, "trust", false)
-    
+
     validated_config =
       config
       |> Map.put(:trust, original_trust)
@@ -297,15 +299,16 @@ defmodule TheMaestro.MCP.Discovery do
     case value do
       "${" <> rest ->
         case String.split(rest, "}", parts: 2) do
-          [env_var, _] -> 
+          [env_var, _] ->
             System.get_env(env_var) || ""
-          _ -> 
+
+          _ ->
             rest
         end
-        
+
       "$" <> env_var ->
         System.get_env(env_var, "")
-        
+
       _ ->
         value
     end

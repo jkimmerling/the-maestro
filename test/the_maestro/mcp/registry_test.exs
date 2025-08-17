@@ -5,15 +5,15 @@ defmodule TheMaestro.MCP.RegistryTest do
 
   setup do
     # Start the MCP registry for each test with unique name
-    test_name = :"Registry_#{:rand.uniform(1000000)}"
+    test_name = :"Registry_#{:rand.uniform(1_000_000)}"
     {:ok, registry_pid} = MCPRegistry.start_link(name: test_name)
-    
+
     on_exit(fn ->
       if Process.alive?(registry_pid) do
         GenServer.stop(registry_pid)
       end
     end)
-    
+
     %{registry: registry_pid}
   end
 
@@ -30,7 +30,7 @@ defmodule TheMaestro.MCP.RegistryTest do
       }
 
       assert :ok = MCPRegistry.register_server(registry, server_info)
-      
+
       assert {:ok, registered_info} = MCPRegistry.get_server(registry, "testServer")
       assert registered_info.server_id == "testServer"
       assert registered_info.status == :connected
@@ -48,9 +48,9 @@ defmodule TheMaestro.MCP.RegistryTest do
       }
 
       :ok = MCPRegistry.register_server(registry, server_info)
-      
+
       assert :ok = MCPRegistry.update_server_status(registry, "statusTest", :connected)
-      
+
       {:ok, updated_info} = MCPRegistry.get_server(registry, "statusTest")
       assert updated_info.status == :connected
     end
@@ -68,7 +68,7 @@ defmodule TheMaestro.MCP.RegistryTest do
 
       :ok = MCPRegistry.register_server(registry, server_info)
       assert {:ok, _} = MCPRegistry.get_server(registry, "deregisterTest")
-      
+
       assert :ok = MCPRegistry.deregister_server(registry, "deregisterTest")
       assert {:error, :not_found} = MCPRegistry.get_server(registry, "deregisterTest")
     end
@@ -102,15 +102,16 @@ defmodule TheMaestro.MCP.RegistryTest do
 
       # Get all tools with namespace resolution
       all_tools = MCPRegistry.get_all_tools(registry)
-      
+
       tool_names = Enum.map(all_tools, fn tool -> tool.name end)
-      
+
       # Should have namespaced tools for conflicts
       assert "unique_tool" in tool_names
       assert "another_tool" in tool_names
       assert "server1__common_tool" in tool_names
       assert "server2__common_tool" in tool_names
-      refute "common_tool" in tool_names  # Should be namespaced due to conflict
+      # Should be namespaced due to conflict
+      refute "common_tool" in tool_names
     end
 
     test "handles tool priority resolution", %{registry: registry} do
@@ -176,13 +177,14 @@ defmodule TheMaestro.MCP.RegistryTest do
           capabilities: %{},
           last_heartbeat: System.system_time(:millisecond)
         }
+
         :ok = MCPRegistry.register_server(registry, server_info)
       end
 
       # Get servers for load balancing
       servers = MCPRegistry.get_servers_for_tool(registry, "balanced_tool")
       assert length(servers) == 3
-      
+
       # Verify all servers can handle the tool
       server_ids = Enum.map(servers, & &1.server_id)
       assert "loadbalance1" in server_ids
@@ -228,7 +230,7 @@ defmodule TheMaestro.MCP.RegistryTest do
   describe "metrics and monitoring" do
     test "tracks connection uptime and statistics", %{registry: registry} do
       start_time = System.system_time(:millisecond)
-      
+
       server_info = %{
         server_id: "metricsTest",
         config: %{},
@@ -240,7 +242,7 @@ defmodule TheMaestro.MCP.RegistryTest do
       }
 
       :ok = MCPRegistry.register_server(registry, server_info)
-      
+
       # Wait a bit and update heartbeat
       Process.sleep(100)
       new_heartbeat = System.system_time(:millisecond)
@@ -301,7 +303,8 @@ defmodule TheMaestro.MCP.RegistryTest do
       :ok = MCPRegistry.update_server_status(registry, "eventTest", :connected)
 
       # Should receive status change event
-      assert_receive {:mcp_registry_event, {:server_status_changed, "eventTest", :connected}}, 1000
+      assert_receive {:mcp_registry_event, {:server_status_changed, "eventTest", :connected}},
+                     1000
     end
 
     test "broadcasts tool availability changes", %{registry: registry} do

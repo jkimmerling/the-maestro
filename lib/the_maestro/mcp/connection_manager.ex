@@ -18,6 +18,9 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
   # Connection info structure that will be returned to callers
   defmodule ConnectionInfo do
+    @moduledoc """
+    Represents connection information for an MCP server.
+    """
     @type t :: %__MODULE__{
             server_id: String.t(),
             connection_pid: pid(),
@@ -28,11 +31,22 @@ defmodule TheMaestro.MCP.ConnectionManager do
             heartbeat_interval: integer()
           }
 
-    defstruct [:server_id, :connection_pid, :transport_pid, :status, :started_at, :last_heartbeat, :heartbeat_interval]
+    defstruct [
+      :server_id,
+      :connection_pid,
+      :transport_pid,
+      :status,
+      :started_at,
+      :last_heartbeat,
+      :heartbeat_interval
+    ]
   end
 
   # Health status structure
   defmodule HealthStatus do
+    @moduledoc """
+    Represents health monitoring status for an MCP server connection.
+    """
     @type t :: %__MODULE__{
             server_id: String.t(),
             status: :connecting | :connected | :error | :disconnected,
@@ -46,6 +60,9 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
   # Circuit breaker state
   defmodule CircuitBreaker do
+    @moduledoc """
+    Implements circuit breaker pattern state for failing MCP server connections.
+    """
     @type t :: %__MODULE__{
             failures: integer(),
             failure_window_start: integer(),
@@ -57,11 +74,16 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
   # GenServer state
   defstruct [
-    :connections,          # %{server_id => ConnectionInfo.t()}
-    :tools,               # %{server_id => [tool_definitions]}
-    :health_status,       # %{server_id => HealthStatus.t()}
-    :circuit_breakers,    # %{server_id => CircuitBreaker.t()}
-    :heartbeat_timers     # %{server_id => timer_ref}
+    # %{server_id => ConnectionInfo.t()}
+    :connections,
+    # %{server_id => [tool_definitions]}
+    :tools,
+    # %{server_id => HealthStatus.t()}
+    :health_status,
+    # %{server_id => CircuitBreaker.t()}
+    :circuit_breakers,
+    # %{server_id => timer_ref}
+    :heartbeat_timers
   ]
 
   @type state :: %__MODULE__{
@@ -102,7 +124,8 @@ defmodule TheMaestro.MCP.ConnectionManager do
   @doc """
   Get connection information for a specific server.
   """
-  @spec get_connection(GenServer.server(), String.t()) :: {:ok, ConnectionInfo.t()} | {:error, :not_found}
+  @spec get_connection(GenServer.server(), String.t()) ::
+          {:ok, ConnectionInfo.t()} | {:error, :not_found}
   def get_connection(manager, server_id) do
     GenServer.call(manager, {:get_connection, server_id})
   end
@@ -118,7 +141,8 @@ defmodule TheMaestro.MCP.ConnectionManager do
   @doc """
   Get health status for a specific server.
   """
-  @spec get_health_status(GenServer.server(), String.t()) :: {:ok, HealthStatus.t()} | {:error, :not_found}
+  @spec get_health_status(GenServer.server(), String.t()) ::
+          {:ok, HealthStatus.t()} | {:error, :not_found}
   def get_health_status(manager, server_id) do
     GenServer.call(manager, {:get_health_status, server_id})
   end
@@ -307,7 +331,7 @@ defmodule TheMaestro.MCP.ConnectionManager do
   @impl true
   def terminate(reason, state) do
     Logger.info("ConnectionManager terminating: #{inspect(reason)}")
-    
+
     # Clean up all timers
     Enum.each(state.heartbeat_timers, fn {_server_id, timer_ref} ->
       Process.cancel_timer(timer_ref)
@@ -330,7 +354,7 @@ defmodule TheMaestro.MCP.ConnectionManager do
       {:ok, connection_pid} ->
         # Monitor the connection process
         Process.monitor(connection_pid)
-        
+
         now = DateTime.utc_now()
         timestamp = System.system_time(:millisecond)
         heartbeat_interval = Map.get(server_config, :heartbeat_interval, 30_000)
@@ -338,7 +362,8 @@ defmodule TheMaestro.MCP.ConnectionManager do
         connection_info = %ConnectionInfo{
           server_id: server_id,
           connection_pid: connection_pid,
-          transport_pid: connection_pid, # For now, they're the same
+          # For now, they're the same
+          transport_pid: connection_pid,
           status: :connecting,
           started_at: now,
           last_heartbeat: timestamp,
@@ -357,10 +382,10 @@ defmodule TheMaestro.MCP.ConnectionManager do
         timer_ref = Process.send_after(self(), {:heartbeat, server_id}, heartbeat_interval)
 
         new_state = %{
-          state |
-          connections: Map.put(state.connections, server_id, connection_info),
-          health_status: Map.put(state.health_status, server_id, health_status),
-          heartbeat_timers: Map.put(state.heartbeat_timers, server_id, timer_ref)
+          state
+          | connections: Map.put(state.connections, server_id, connection_info),
+            health_status: Map.put(state.health_status, server_id, health_status),
+            heartbeat_timers: Map.put(state.heartbeat_timers, server_id, timer_ref)
         }
 
         Logger.info("Successfully started connection for server #{server_id}")
@@ -368,7 +393,7 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
       {:error, reason} ->
         Logger.error("Failed to start connection for server #{server_id}: #{inspect(reason)}")
-        
+
         # Update circuit breaker on failure
         new_state = record_failure(state, server_id, server_config)
         {:reply, {:error, reason}, new_state}
@@ -389,11 +414,11 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
     # Remove from state
     %{
-      state |
-      connections: Map.delete(state.connections, server_id),
-      tools: Map.delete(state.tools, server_id),
-      health_status: Map.delete(state.health_status, server_id),
-      heartbeat_timers: Map.delete(state.heartbeat_timers, server_id)
+      state
+      | connections: Map.delete(state.connections, server_id),
+        tools: Map.delete(state.tools, server_id),
+        health_status: Map.delete(state.health_status, server_id),
+        heartbeat_timers: Map.delete(state.heartbeat_timers, server_id)
     }
   end
 
@@ -405,23 +430,26 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
       _connection_info ->
         timestamp = System.system_time(:millisecond)
-        
+
         # Update health status
-        updated_health = Map.update!(state.health_status, server_id, fn health ->
-          %{health | last_heartbeat: timestamp, status: :connected}
-        end)
+        updated_health =
+          Map.update!(state.health_status, server_id, fn health ->
+            %{health | last_heartbeat: timestamp, status: :connected}
+          end)
 
         # Schedule next heartbeat using the server's configured interval
-        heartbeat_interval = case Map.get(state.connections, server_id) do
-          %ConnectionInfo{heartbeat_interval: interval} -> interval
-          _ -> 30_000
-        end
+        heartbeat_interval =
+          case Map.get(state.connections, server_id) do
+            %ConnectionInfo{heartbeat_interval: interval} -> interval
+            _ -> 30_000
+          end
+
         timer_ref = Process.send_after(self(), {:heartbeat, server_id}, heartbeat_interval)
-        
+
         %{
-          state |
-          health_status: updated_health,
-          heartbeat_timers: Map.put(state.heartbeat_timers, server_id, timer_ref)
+          state
+          | health_status: updated_health,
+            heartbeat_timers: Map.put(state.heartbeat_timers, server_id, timer_ref)
         }
     end
   end
@@ -435,17 +463,18 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
       {server_id, _connection_info} ->
         Logger.warning("Connection for server #{server_id} died: #{inspect(reason)}")
-        
+
         # Update health status to error
-        updated_health = Map.update(state.health_status, server_id, nil, fn health ->
-          %{health | status: :error, error_count: health.error_count + 1}
-        end)
+        updated_health =
+          Map.update(state.health_status, server_id, nil, fn health ->
+            %{health | status: :error, error_count: health.error_count + 1}
+          end)
 
         # Remove the connection but keep health status for monitoring
         %{
-          state |
-          connections: Map.delete(state.connections, server_id),
-          health_status: updated_health
+          state
+          | connections: Map.delete(state.connections, server_id),
+            health_status: updated_health
         }
     end
   end
@@ -464,7 +493,7 @@ defmodule TheMaestro.MCP.ConnectionManager do
     Enum.flat_map(tools_map, fn {server_id, tools} ->
       Enum.map(tools, fn tool ->
         tool_name = Map.get(tool, :name) || Map.get(tool, "name")
-        
+
         if tool_name in conflicts do
           # Prefix with server ID to avoid conflicts
           prefixed_name = "#{server_id}__#{tool_name}"
@@ -510,12 +539,12 @@ defmodule TheMaestro.MCP.ConnectionManager do
           failure_window_start: System.system_time(:millisecond),
           state: :open
         }
-        
+
         _new_state = %{
-          state |
-          circuit_breakers: Map.put(state.circuit_breakers, server_id, new_breaker)
+          state
+          | circuit_breakers: Map.put(state.circuit_breakers, server_id, new_breaker)
         }
-        
+
         {:error, :circuit_open}
 
       _breaker ->
@@ -527,26 +556,28 @@ defmodule TheMaestro.MCP.ConnectionManager do
     failure_window = Map.get(server_config, :failure_window, 60_000)
     current_time = System.system_time(:millisecond)
 
-    breaker = Map.get(state.circuit_breakers, server_id, %CircuitBreaker{
-      failures: 0,
-      failure_window_start: current_time,
-      state: :closed
-    })
-
-    # Reset if outside failure window
-    breaker = if current_time - breaker.failure_window_start > failure_window do
-      %CircuitBreaker{
-        failures: 1,
+    breaker =
+      Map.get(state.circuit_breakers, server_id, %CircuitBreaker{
+        failures: 0,
         failure_window_start: current_time,
         state: :closed
-      }
-    else
-      %{breaker | failures: breaker.failures + 1}
-    end
+      })
+
+    # Reset if outside failure window
+    breaker =
+      if current_time - breaker.failure_window_start > failure_window do
+        %CircuitBreaker{
+          failures: 1,
+          failure_window_start: current_time,
+          state: :closed
+        }
+      else
+        %{breaker | failures: breaker.failures + 1}
+      end
 
     %{
-      state |
-      circuit_breakers: Map.put(state.circuit_breakers, server_id, breaker)
+      state
+      | circuit_breakers: Map.put(state.circuit_breakers, server_id, breaker)
     }
   end
 
@@ -560,21 +591,23 @@ defmodule TheMaestro.MCP.ConnectionManager do
     to_remove = MapSet.difference(current_servers, new_servers)
 
     # Remove old servers
-    state_after_removal = Enum.reduce(to_remove, state, fn server_id, acc_state ->
-      case Map.get(acc_state.connections, server_id) do
-        nil -> acc_state
-        connection_info -> do_stop_connection(server_id, connection_info, acc_state)
-      end
-    end)
+    state_after_removal =
+      Enum.reduce(to_remove, state, fn server_id, acc_state ->
+        case Map.get(acc_state.connections, server_id) do
+          nil -> acc_state
+          connection_info -> do_stop_connection(server_id, connection_info, acc_state)
+        end
+      end)
 
     # Add new servers
-    _state_after_addition = Enum.reduce(to_add, state_after_removal, fn server_id, acc_state ->
-      server_config = Enum.find(server_configs, & &1.id == server_id)
-      
-      case do_start_connection(server_config, acc_state) do
-        {:reply, {:ok, _pid}, new_state} -> new_state
-        {:reply, {:error, _reason}, new_state} -> new_state
-      end
-    end)
+    _state_after_addition =
+      Enum.reduce(to_add, state_after_removal, fn server_id, acc_state ->
+        server_config = Enum.find(server_configs, &(&1.id == server_id))
+
+        case do_start_connection(server_config, acc_state) do
+          {:reply, {:ok, _pid}, new_state} -> new_state
+          {:reply, {:error, _reason}, new_state} -> new_state
+        end
+      end)
   end
 end
