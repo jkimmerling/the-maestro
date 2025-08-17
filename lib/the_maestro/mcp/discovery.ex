@@ -8,9 +8,9 @@ defmodule TheMaestro.MCP.Discovery do
 
   require Logger
 
-  alias TheMaestro.MCP.Transport.Stdio
-  alias TheMaestro.MCP.Transport.SSE
   alias TheMaestro.MCP.Transport.HTTP
+  alias TheMaestro.MCP.Transport.SSE
+  alias TheMaestro.MCP.Transport.Stdio
 
   @type server_config :: %{
           id: String.t(),
