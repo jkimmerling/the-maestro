@@ -40,6 +40,8 @@ defmodule TheMaestro.Application do
           {TheMaestro.Agents.DynamicSupervisor, []},
           # Start the Tooling registry GenServer
           TheMaestro.Tooling,
+          # Start the MCP Supervisor for MCP server management
+          TheMaestro.MCP.Supervisor,
           # Start a worker by calling: TheMaestro.Worker.start_link(arg)
           # {TheMaestro.Worker, arg},
           # Start to serve requests, typically the last entry
