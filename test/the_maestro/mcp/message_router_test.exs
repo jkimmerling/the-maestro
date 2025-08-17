@@ -124,10 +124,15 @@ defmodule TheMaestro.MCP.MessageRouterTest do
     test "returns count of pending requests" do
       {:ok, router} = MessageRouter.start_link([])
 
+      # Create a transport that can handle multiple messages
       transport_pid = spawn(fn ->
-        receive do
-          {:send_message, _} -> :ok
+        receive_loop = fn receive_loop ->
+          receive do
+            {:send_message, _} -> :ok
+          end
+          receive_loop.(receive_loop)
         end
+        receive_loop.(receive_loop)
       end)
 
       assert MessageRouter.pending_requests(router) == 0
