@@ -103,7 +103,8 @@ defmodule TheMaestro.MCP.Discovery do
 
     with {:ok, id, errors} <- validate_id(config, errors),
          {:ok, transport, errors} <- detect_transport(config, errors),
-         {:ok, validated_config, errors} <- validate_transport_specific(config, transport, errors),
+         {:ok, validated_config, errors} <-
+           validate_transport_specific(config, transport, errors),
          {:ok, final_config, errors} <- validate_common_fields(validated_config, errors) do
       if errors == [] do
         result = Map.merge(final_config, %{id: id, transport: transport})
