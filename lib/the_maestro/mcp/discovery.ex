@@ -7,7 +7,7 @@ defmodule TheMaestro.MCP.Discovery do
   """
 
   require Logger
-  
+
   alias TheMaestro.MCP.Transport.Stdio
   alias TheMaestro.MCP.Transport.SSE
   alias TheMaestro.MCP.Transport.HTTP
