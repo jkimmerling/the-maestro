@@ -566,7 +566,7 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
           details: %{uri: uri}
         }
 
-      is_suspicious_resource?(uri) ->
+      suspicious_resource?(uri) ->
         %SecurityError{
           type: :suspicious_resource,
           message: "Suspicious resource URI detected",
@@ -586,7 +586,7 @@ defmodule TheMaestro.MCP.Tools.ContentHandler do
       String.contains?(uri, "%2E%2E")
   end
 
-  defp is_suspicious_resource?(uri) do
+  defp suspicious_resource?(uri) do
     suspicious_paths = ["/etc/", "/proc/", "/sys/", "/root/", "/var/log/"]
     Enum.any?(suspicious_paths, &String.contains?(uri, &1))
   end

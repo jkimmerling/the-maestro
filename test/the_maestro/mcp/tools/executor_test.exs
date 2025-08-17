@@ -2,8 +2,8 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
   use ExUnit.Case, async: true
   doctest TheMaestro.MCP.Tools.Executor
 
-  alias TheMaestro.MCP.Tools.Executor
   alias TheMaestro.MCP.Protocol
+  alias TheMaestro.MCP.Tools.Executor
 
   # Mock connection module for testing
   defmodule MockConnection do

@@ -19,6 +19,8 @@ defmodule TheMaestro.MCP.Tools.Registry do
   use GenServer
   require Logger
 
+  alias TheMaestro.MCP.Tools.Executor
+
   # Tool metadata structure
   defmodule ToolMetadata do
     @moduledoc """
@@ -408,7 +410,7 @@ defmodule TheMaestro.MCP.Tools.Registry do
           name: tool_name,
           description: Map.get(raw_tool, "description"),
           parameters: process_parameters(Map.get(raw_tool, "inputSchema")),
-          executor: &TheMaestro.MCP.Tools.Executor.execute/3,
+          executor: &Executor.execute/3,
           metadata: metadata
         }
       end)

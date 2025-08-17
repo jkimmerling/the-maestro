@@ -341,19 +341,17 @@ defmodule TheMaestro.MCP.Tools.Executor do
   end
 
   defp send_mcp_request(connection_pid, request, timeout) do
-    try do
-      # Try to use the actual connection module's send_request function
-      case GenServer.call(connection_pid, {:send_request, request}, timeout) do
-        {:ok, response} -> {:ok, response}
-        {:error, reason} -> {:error, reason}
-      end
-    rescue
-      exit_reason ->
-        {:error, %{type: :execution_timeout, reason: exit_reason}}
-    catch
-      :exit, {:timeout, _} ->
-        {:error, %{type: :execution_timeout}}
+    # Try to use the actual connection module's send_request function
+    case GenServer.call(connection_pid, {:send_request, request}, timeout) do
+      {:ok, response} -> {:ok, response}
+      {:error, reason} -> {:error, reason}
     end
+  rescue
+    exit_reason ->
+      {:error, %{type: :execution_timeout, reason: exit_reason}}
+  catch
+    :exit, {:timeout, _} ->
+      {:error, %{type: :execution_timeout}}
   end
 
   defp generate_request_id do

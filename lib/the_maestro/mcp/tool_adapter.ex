@@ -25,8 +25,8 @@ defmodule TheMaestro.MCP.ToolAdapter do
 
   require Logger
 
-  alias TheMaestro.MCP.Tools.{Registry, Executor, ContentHandler}
   alias TheMaestro.MCP.ConnectionManager
+  alias TheMaestro.MCP.Tools.{ContentHandler, Executor, Registry}
 
   @behaviour TheMaestro.Tooling.Tool
 
@@ -43,21 +43,19 @@ defmodule TheMaestro.MCP.ToolAdapter do
   """
   @spec register_mcp_tools() :: :ok | {:error, term()}
   def register_mcp_tools do
-    try do
-      # Get all tools from the registry
-      all_tools = Registry.get_all_tools(Registry)
+    # Get all tools from the registry
+    all_tools = Registry.get_all_tools(Registry)
 
-      Logger.info("Registering #{length(all_tools)} MCP tools with agent system")
+    Logger.info("Registering #{length(all_tools)} MCP tools with agent system")
 
-      # Register each tool as an adapter
-      Enum.each(all_tools, &register_tool_adapter/1)
+    # Register each tool as an adapter
+    Enum.each(all_tools, &register_tool_adapter/1)
 
-      :ok
-    rescue
-      error ->
-        Logger.error("Failed to register MCP tools: #{inspect(error)}")
-        {:error, error}
-    end
+    :ok
+  rescue
+    error ->
+      Logger.error("Failed to register MCP tools: #{inspect(error)}")
+      {:error, error}
   end
 
   @doc """
@@ -130,6 +128,8 @@ defmodule TheMaestro.MCP.ToolAdapter do
       quote do
         use TheMaestro.Tooling.Tool
 
+        alias TheMaestro.MCP.ToolAdapter
+
         @tool_name unquote(tool_name)
         @server_id unquote(server_id)
         @tool_metadata unquote(Macro.escape(tool_metadata))
@@ -137,12 +137,12 @@ defmodule TheMaestro.MCP.ToolAdapter do
         @impl true
         def definition do
           # Convert MCP tool definition to agent tool format
-          TheMaestro.MCP.ToolAdapter.convert_mcp_definition(@tool_metadata)
+          ToolAdapter.convert_mcp_definition(@tool_metadata)
         end
 
         @impl true
         def execute(arguments) do
-          TheMaestro.MCP.ToolAdapter.execute_mcp_tool(@tool_name, arguments)
+          ToolAdapter.execute_mcp_tool(@tool_name, arguments)
         end
       end
 
@@ -205,8 +205,8 @@ defmodule TheMaestro.MCP.ToolAdapter do
 
   `true` if it's an MCP tool, `false` otherwise
   """
-  @spec is_mcp_tool?(String.t()) :: boolean()
-  def is_mcp_tool?(tool_name) do
+  @spec mcp_tool?(String.t()) :: boolean()
+  def mcp_tool?(tool_name) do
     case Registry.find_tool(Registry, tool_name) do
       {:ok, _} -> true
       {:error, :not_found} -> false
@@ -290,15 +290,13 @@ defmodule TheMaestro.MCP.ToolAdapter do
   end
 
   defp register_tool_adapter(tool_metadata) do
-    try do
-      _adapter_module = create_tool_adapter(tool_metadata)
-      Logger.debug("Created adapter for MCP tool: #{tool_metadata.tool_name}")
-    rescue
-      error ->
-        Logger.warning(
-          "Failed to create adapter for tool #{tool_metadata.tool_name}: #{inspect(error)}"
-        )
-    end
+    _adapter_module = create_tool_adapter(tool_metadata)
+    Logger.debug("Created adapter for MCP tool: #{tool_metadata.tool_name}")
+  rescue
+    error ->
+      Logger.warning(
+        "Failed to create adapter for tool #{tool_metadata.tool_name}: #{inspect(error)}"
+      )
   end
 
   defp convert_mcp_parameters(mcp_parameters) when is_list(mcp_parameters) do
