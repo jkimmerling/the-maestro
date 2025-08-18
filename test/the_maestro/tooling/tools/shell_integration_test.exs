@@ -83,11 +83,13 @@ defmodule TheMaestro.Tooling.Tools.ShellIntegrationTest do
 
       # Test that a command that would exceed timeout gets handled
       # We'll use a command that's likely to be slower than 1 second on busy systems
-      result = ExecuteCommand.execute(%{"command" => "find /usr -name '*.so' 2>/dev/null | head -1000"})
-      
+      result =
+        ExecuteCommand.execute(%{"command" => "find /usr -name '*.so' 2>/dev/null | head -1000"})
+
       # Should either succeed quickly or timeout - both are acceptable
       case result do
-        {:ok, _} -> assert true  # Command completed within timeout
+        # Command completed within timeout
+        {:ok, _} -> assert true
         {:error, reason} -> assert reason =~ "execution" or reason =~ "timeout"
       end
 
@@ -120,5 +122,4 @@ defmodule TheMaestro.Tooling.Tools.ShellIntegrationTest do
       Application.put_env(:the_maestro, :shell_tool, original_config)
     end
   end
-
 end
