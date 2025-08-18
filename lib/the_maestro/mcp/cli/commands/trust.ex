@@ -93,8 +93,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
         level ->
           # Update server configuration with new trust level
           updated_server = Map.put(server, :trust_level, level)
-          updated_servers = Map.put(config.servers, server_name, updated_server)
-          updated_config = %{config | servers: updated_servers}
+          mcp_servers = Map.get(config, "mcpServers", %{})
+          updated_servers = Map.put(mcp_servers, server_name, updated_server)
+          updated_config = Map.put(config, "mcpServers", updated_servers)
 
           # Save updated configuration
           case Config.save_configuration(updated_config) do
@@ -128,60 +129,63 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
     CLI.print_info("Server trust levels:")
 
     case Config.load_configuration() do
-      {:ok, config} when map_size(config.servers) == 0 ->
-        IO.puts("  No servers configured")
-        {:ok, []}
-
       {:ok, config} ->
-        # Display trust levels in formatted table
-        servers_with_trust =
-          config.servers
-          |> Enum.map(fn {name, server} ->
-            trust = Map.get(server, :trust_level, :medium)
-            status = get_server_connection_status(name)
-            {name, trust, status}
-          end)
-          |> Enum.sort_by(fn {name, _, _} -> name end)
+        mcp_servers = Map.get(config, "mcpServers", %{})
 
-        # Calculate column widths
-        name_width =
-          servers_with_trust
-          |> Enum.map(fn {name, _, _} -> String.length(name) end)
-          |> Enum.max()
-          |> max(6)
+        if map_size(mcp_servers) == 0 do
+          IO.puts("  No servers configured")
+          {:ok, []}
+        else
+          # Display trust levels in formatted table
+          servers_with_trust =
+            mcp_servers
+            |> Enum.map(fn {name, server} ->
+              trust = Map.get(server, :trust_level, :medium)
+              status = get_server_connection_status(name)
+              {name, trust, status}
+            end)
+            |> Enum.sort_by(fn {name, _, _} -> name end)
 
-        # Print header
-        IO.puts("")
-        IO.puts("  #{"Server" |> String.pad_trailing(name_width)} | Trust Level | Status")
-        IO.puts("  #{String.duplicate("-", name_width)} | ----------- | ------")
+          # Calculate column widths
+          name_width =
+            servers_with_trust
+            |> Enum.map(fn {name, _, _} -> String.length(name) end)
+            |> Enum.max()
+            |> max(6)
 
-        # Print server trust information
-        Enum.each(servers_with_trust, fn {name, trust, status} ->
-          trust_display = format_trust_level(trust)
-          status_display = format_connection_status(status)
-
-          IO.puts(
-            "  #{name |> String.pad_trailing(name_width)} | #{trust_display |> String.pad_trailing(11)} | #{status_display}"
-          )
-        end)
-
-        # Show summary
-        trust_summary =
-          servers_with_trust
-          |> Enum.group_by(fn {_, trust, _} -> trust end)
-          |> Enum.map(fn {trust, servers} -> {trust, length(servers)} end)
-          |> Enum.sort_by(fn {trust, _} -> trust_level_priority(trust) end)
-
-        unless Enum.empty?(trust_summary) do
+          # Print header
           IO.puts("")
-          IO.puts("  Summary:")
+          IO.puts("  #{"Server" |> String.pad_trailing(name_width)} | Trust Level | Status")
+          IO.puts("  #{String.duplicate("-", name_width)} | ----------- | ------")
 
-          Enum.each(trust_summary, fn {trust, count} ->
-            IO.puts("    #{format_trust_level(trust)}: #{count} server(s)")
+          # Print server trust information
+          Enum.each(servers_with_trust, fn {name, trust, status} ->
+            trust_display = format_trust_level(trust)
+            status_display = format_connection_status(status)
+
+            IO.puts(
+              "  #{name |> String.pad_trailing(name_width)} | #{trust_display |> String.pad_trailing(11)} | #{status_display}"
+            )
           end)
-        end
 
-        {:ok, servers_with_trust}
+          # Show summary
+          trust_summary =
+            servers_with_trust
+            |> Enum.group_by(fn {_, trust, _} -> trust end)
+            |> Enum.map(fn {trust, servers} -> {trust, length(servers)} end)
+            |> Enum.sort_by(fn {trust, _} -> trust_level_priority(trust) end)
+
+          unless Enum.empty?(trust_summary) do
+            IO.puts("")
+            IO.puts("  Summary:")
+
+            Enum.each(trust_summary, fn {trust, count} ->
+              IO.puts("    #{format_trust_level(trust)}: #{count} server(s)")
+            end)
+          end
+
+          {:ok, servers_with_trust}
+        end
 
       {:error, reason} ->
         CLI.print_error("Failed to load configuration: #{inspect(reason)}")
@@ -196,8 +200,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
          {:ok, server} <- find_server_config(config, server_name) do
       # Reset to default trust level (medium)
       updated_server = Map.put(server, :trust_level, :medium)
-      updated_servers = Map.put(config.servers, server_name, updated_server)
-      updated_config = %{config | servers: updated_servers}
+      mcp_servers = Map.get(config, "mcpServers", %{})
+      updated_servers = Map.put(mcp_servers, server_name, updated_server)
+      updated_config = Map.put(config, "mcpServers", updated_servers)
 
       case Config.save_configuration(updated_config) do
         :ok ->
@@ -228,7 +233,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
   # Helper functions for trust management
 
   defp find_server_config(config, server_name) do
-    case Map.get(config.servers, server_name) do
+    mcp_servers = Map.get(config, "mcpServers", %{})
+
+    case Map.get(mcp_servers, server_name) do
       nil -> {:error, :server_not_found}
       server -> {:ok, server}
     end

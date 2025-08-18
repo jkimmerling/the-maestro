@@ -21,7 +21,10 @@ defmodule TheMaestro.MCP.IntegrationTest do
     end
 
     # Start fresh MCP supervisor for tests
-    {:ok, _supervisor} = TheMaestro.MCP.Supervisor.start_link([])
+    case TheMaestro.MCP.Supervisor.start_link([]) do
+      {:ok, _supervisor} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+    end
 
     on_exit(fn ->
       # Clean up test files

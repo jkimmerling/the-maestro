@@ -3,6 +3,12 @@
     "defaultTimeout": 30000
   },
   "mcpServers": {
+    "newServer": {
+      "command": "python",
+      "description": "",
+      "timeout": 30000,
+      "trust": false
+    },
     "sseServer": {
       "description": "",
       "timeout": 30000,

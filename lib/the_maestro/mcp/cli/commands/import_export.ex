@@ -315,7 +315,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
     case Config.load_configuration() do
       {:ok, current_config} ->
         import_servers = Map.get(import_data, "servers", %{})
-        current_servers = current_config.servers
+        current_servers = Map.get(current_config, "mcpServers", %{})
 
         # Plan the merge operation
         merge_plan = %{
@@ -398,7 +398,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
         updated_servers =
           Enum.reduce(
             merge_plan.new_servers ++ merge_plan.updated_servers,
-            current_config.servers,
+            Map.get(current_config, "mcpServers", %{}),
             fn name, servers ->
               import_server = Map.get(merge_plan.import_servers, name)
 
@@ -414,7 +414,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
             end
           )
 
-        updated_config = %{current_config | servers: updated_servers}
+        updated_config = Map.put(current_config, "mcpServers", updated_servers)
 
         case Config.save_configuration(updated_config) do
           :ok ->
@@ -453,15 +453,18 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
       "servers" => %{}
     }
 
+    # Get servers from the configuration (using string key)
+    mcp_servers = Map.get(current_config, "mcpServers", %{})
+
     # Filter servers if specific ones requested
     servers_to_export =
       case Map.get(options, :servers) do
         nil ->
-          current_config.servers
+          mcp_servers
 
         server_names_str ->
           server_names = String.split(server_names_str, ",") |> Enum.map(&String.trim/1)
-          Map.take(current_config.servers, server_names)
+          Map.take(mcp_servers, server_names)
       end
 
     # Prepare server data (potentially sanitizing sensitive information)
