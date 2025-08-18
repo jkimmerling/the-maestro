@@ -579,7 +579,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
       baseline_cpu = Map.get(baseline, :avg_cpu_usage, 20)
 
       anomalies =
-        if cpu_usage > baseline_cpu * state.thresholds.cpu_usage_anomaly_threshold do
+        if cpu_usage > baseline_cpu * Map.get(state.thresholds, :cpu_usage_anomaly_threshold, 2.0) do
           [
             create_anomaly(
               :resource_pattern,
@@ -630,7 +630,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
     user_id = Map.get(event, :user_id)
     tool_name = Map.get(event, :tool_name)
 
-    if user_id and tool_name do
+    if is_binary(user_id) and is_binary(tool_name) do
       baseline = Map.get(state.baselines, user_id, %{})
       user_tools = Map.get(baseline, :common_tools, [])
 

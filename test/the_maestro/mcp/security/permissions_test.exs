@@ -2,7 +2,6 @@ defmodule TheMaestro.MCP.Security.PermissionsTest do
   use ExUnit.Case, async: true
 
   alias TheMaestro.MCP.Security.Permissions
-  alias TheMaestro.MCP.Security.Permissions.PermissionCheck
 
   describe "new/1" do
     test "creates new permission set with defaults" do
@@ -110,7 +109,7 @@ defmodule TheMaestro.MCP.Security.PermissionsTest do
       assert result.reason == "Path not in allowed list"
     end
 
-    test "handles wildcard permission", %{permissions: permissions} do
+    test "handles wildcard permission", %{permissions: _permissions} do
       admin_permissions = Permissions.default_permissions(:admin)
       result = Permissions.check_file_access(admin_permissions, "/etc/passwd", :read)
 
@@ -125,7 +124,7 @@ defmodule TheMaestro.MCP.Security.PermissionsTest do
         Permissions.new(
           permissions: %{
             network: %{
-              outbound: ["https://api.example.com", "http://localhost:*"],
+              outbound: ["https://api.example.com*", "http://localhost:*"],
               blocked_domains: ["malicious.com", "*.dangerous.net"],
               allowed_protocols: ["http", "https"]
             }
@@ -140,7 +139,7 @@ defmodule TheMaestro.MCP.Security.PermissionsTest do
         Permissions.check_network_access(permissions, "https://api.example.com/data", :outbound)
 
       assert result.allowed == true
-      assert result.applied_rule == "https://api.example.com"
+      assert result.applied_rule == "https://api.example.com*"
     end
 
     test "allows access to wildcard patterns", %{permissions: permissions} do

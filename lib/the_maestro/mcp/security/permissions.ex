@@ -235,7 +235,15 @@ defmodule TheMaestro.MCP.Security.Permissions do
 
       # Check allowed path prefixes
       path_allowed?(file_path, allowed_paths) ->
-        matching_path = Enum.find(allowed_paths, &String.starts_with?(file_path, &1))
+        matching_path =
+          Enum.find(allowed_paths, fn allowed_path ->
+            if String.ends_with?(allowed_path, "*") do
+              prefix = String.trim_trailing(allowed_path, "*")
+              String.starts_with?(file_path, prefix)
+            else
+              String.starts_with?(file_path, allowed_path)
+            end
+          end)
 
         %PermissionCheck{
           allowed: true,
@@ -563,7 +571,11 @@ defmodule TheMaestro.MCP.Security.Permissions do
         Regex.match?(~r/^#{regex_pattern}$/i, command)
 
       true ->
-        String.downcase(command) == String.downcase(pattern)
+        command_downcase = String.downcase(command)
+        pattern_downcase = String.downcase(pattern)
+
+        String.starts_with?(command_downcase, pattern_downcase <> " ") or
+          command_downcase == pattern_downcase
     end
   end
 
