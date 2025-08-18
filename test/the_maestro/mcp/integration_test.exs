@@ -7,7 +7,7 @@ defmodule TheMaestro.MCP.IntegrationTest do
   use ExUnit.Case, async: false
   require Logger
 
-  alias TheMaestro.MCP.{Discovery, ConnectionManager, Registry, Supervisor}
+  alias TheMaestro.MCP.{Discovery, ConnectionManager, Registry}
 
   @valid_config_path "/tmp/mcp_test_config.json"
   @invalid_config_path "/tmp/mcp_invalid_config.json"
@@ -121,7 +121,7 @@ defmodule TheMaestro.MCP.IntegrationTest do
       }
 
       # Start connection
-      {:ok, connection_pid} = ConnectionManager.start_connection(connection_manager, test_config)
+      {:ok, _connection_pid} = ConnectionManager.start_connection(connection_manager, test_config)
 
       # Verify it's tracked
       {:ok, connection_info} =
@@ -361,19 +361,23 @@ defmodule TheMaestro.MCP.IntegrationTest do
       # Force crash the connection manager
       GenServer.stop(original_manager, :crash)
 
-      # Wait for it to die
-      assert_receive {:DOWN, ^original_ref, :process, ^original_manager, :crash}, 1000
+      # Wait for it to die - named GenServers show differently in DOWN messages
+      receive do
+        {:DOWN, ^original_ref, :process, _, :crash} -> :ok
+      after
+        1000 -> flunk("Connection manager did not crash as expected")
+      end
 
       # Give supervisor time to restart
       :timer.sleep(100)
 
-      # New connection manager should be available
-      new_manager = TheMaestro.MCP.Supervisor.connection_manager()
-      assert is_pid(new_manager)
-      assert new_manager != original_manager
+      # New connection manager should be available (it's a named process)
+      new_manager_pid = GenServer.whereis(TheMaestro.MCP.ConnectionManager)
+      assert is_pid(new_manager_pid)
+      assert new_manager_pid != original_manager
 
       # Should be able to use it normally
-      connections = ConnectionManager.list_connections(new_manager)
+      connections = ConnectionManager.list_connections(TheMaestro.MCP.ConnectionManager)
       assert is_list(connections)
     end
 
@@ -507,7 +511,7 @@ defmodule TheMaestro.MCP.IntegrationTest do
     end
 
     # Clear registry
-    registry = TheMaestro.MCP.Supervisor.registry()
+    _registry = TheMaestro.MCP.Supervisor.registry()
 
     # We can't easily clear the registry, but individual tests should handle this
     :ok

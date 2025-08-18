@@ -119,7 +119,7 @@ defmodule TheMaestro.MCP.ConfigParserTest do
           "stdio_server" => %{
             "command" => "python",
             "args" => ["-m", "server"],
-            "cwd" => "/workspace",
+            "cwd" => "/tmp",
             "env" => %{"VAR" => "value"},
             "timeout" => 30_000,
             "trust" => false
@@ -215,7 +215,11 @@ defmodule TheMaestro.MCP.ConfigParserTest do
 
     test "validates global settings" do
       config = %{
-        "mcpServers" => %{},
+        "mcpServers" => %{
+          "test_server" => %{
+            "command" => "python"
+          }
+        },
         "globalSettings" => %{
           "defaultTimeout" => 30_000,
           "maxConcurrentConnections" => 10,
@@ -275,7 +279,7 @@ defmodule TheMaestro.MCP.ConfigParserTest do
       }
 
       assert {:error, errors} = ConfigValidator.validate(circular_config)
-      assert Enum.any?(errors, &String.contains?(&1, "circular"))
+      assert Enum.any?(errors, &String.contains?(&1, "Circular"))
     end
 
     test "validates URL formats" do
