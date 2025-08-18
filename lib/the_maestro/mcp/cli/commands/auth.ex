@@ -140,10 +140,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         end
 
         {:ok, :logged_out}
-
-      {:error, reason} ->
-        CLI.print_error("Failed to clear credentials: #{inspect(reason)}")
-        {:error, :clear_failed}
     end
   end
 
@@ -238,10 +234,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         end
 
         {:ok, :stored}
-
-      {:error, reason} ->
-        CLI.print_error("Failed to store API key: #{inspect(reason)}")
-        {:error, :store_failed}
     end
   end
 
@@ -315,10 +307,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         IO.puts("    Valid keys: #{valid_keys}")
 
         {:ok, api_keys}
-
-      {:error, reason} ->
-        CLI.print_error("Failed to list API keys: #{inspect(reason)}")
-        {:error, :list_failed}
     end
   end
 

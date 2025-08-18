@@ -140,10 +140,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
             CLI.print_error("Failed to save configuration: #{inspect(reason)}")
             {:error, :save_failed}
         end
-
-      {:error, reason} ->
-        CLI.print_error("Configuration creation failed: #{inspect(reason)}")
-        {:error, :config_failed}
     end
   end
 
@@ -277,10 +273,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
           CLI.print_info("Repair cancelled")
           {:ok, :cancelled}
         end
-
-      {:error, reason} ->
-        CLI.print_error("Failed to analyze configuration: #{inspect(reason)}")
-        {:error, :analysis_failed}
     end
   end
 
@@ -345,7 +337,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   end
 
   defp create_default_configuration do
-    %{
+    config = %{
       version: "1.0",
       servers: %{},
       global: %{
@@ -359,12 +351,14 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
         enable_logging: true
       }
     }
+
+    {:ok, config}
   end
 
-  defp create_interactive_configuration(options) do
+  defp create_interactive_configuration(_options) do
     CLI.print_info("Creating configuration...")
 
-    config = create_default_configuration()
+    {:ok, config} = create_default_configuration()
 
     # Ask about global settings
     IO.puts("")
@@ -461,7 +455,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
     IO.puts("")
 
     # System-level settings
-    config = create_default_configuration()
+    {:ok, config} = create_default_configuration()
 
     CLI.print_info("Configuring system defaults...")
 

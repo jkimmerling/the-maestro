@@ -1047,7 +1047,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   ## Ping Functions
 
   defp ping_specific_server(server_name, options) do
-    count = Map.get(options, :count, 3)
+    count = ensure_integer(Map.get(options, :count, 3))
     timeout = Map.get(options, :timeout, 5000)
     interval = Map.get(options, :interval, 1000)
 
@@ -1056,13 +1056,14 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
 
     results =
       1..count
-      |> Enum.map(fn i ->
+      |> Enum.with_index(1)
+      |> Enum.map(fn {_value, i} ->
         IO.write("Ping #{i}/#{count}: ")
 
         _start_time = System.monotonic_time(:millisecond)
 
         result =
-          case ConnectionManager.ping_server(ConnectionManager, server_name, timeout) do
+          case ConnectionManager.ping_server(server_name, timeout) do
             {:ok, response_time} ->
               IO.puts("Response time: #{response_time}ms")
               {:ok, response_time}
@@ -1077,7 +1078,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
           end
 
         # Wait interval before next ping (except for last one)
-        if i < count do
+        unless i == count do
           :timer.sleep(interval)
         end
 
@@ -1300,4 +1301,15 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
 
   defp format_timestamp(%DateTime{} = dt), do: DateTime.to_string(dt)
   defp format_timestamp(timestamp), do: to_string(timestamp)
+
+  defp ensure_integer(value) when is_integer(value) and value > 0, do: value
+
+  defp ensure_integer(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, _} when int > 0 -> int
+      _ -> 3
+    end
+  end
+
+  defp ensure_integer(_), do: 3
 end

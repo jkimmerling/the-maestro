@@ -263,7 +263,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
           {:ok, _} ->
             CLI.print_if_verbose("Cleaned up: #{path}", options)
 
-          {:error, reason} ->
+          {:error, reason, _file} ->
             CLI.print_if_verbose("Could not clean up #{path}: #{reason}", options)
         end
       end

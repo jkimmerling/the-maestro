@@ -83,7 +83,9 @@ defmodule TheMaestro.MCP.ConnectionManager do
     # %{server_id => CircuitBreaker.t()}
     :circuit_breakers,
     # %{server_id => timer_ref}
-    :heartbeat_timers
+    :heartbeat_timers,
+    # ETS table name for connection traces
+    :trace_table
   ]
 
   @type state :: %__MODULE__{
@@ -91,7 +93,8 @@ defmodule TheMaestro.MCP.ConnectionManager do
           tools: %{String.t() => [map()]},
           health_status: %{String.t() => HealthStatus.t()},
           circuit_breakers: %{String.t() => CircuitBreaker.t()},
-          heartbeat_timers: %{String.t() => reference()}
+          heartbeat_timers: %{String.t() => reference()},
+          trace_table: atom()
         }
 
   ## Client API
@@ -277,15 +280,20 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
   @impl true
   def init(_opts) do
+    # Initialize ETS table for connection traces with unique name per process
+    table_name = :"connection_traces_#{inspect(self())}"
+    :ets.new(table_name, [:set, :public, :named_table])
+
     state = %__MODULE__{
       connections: %{},
       tools: %{},
       health_status: %{},
       circuit_breakers: %{},
-      heartbeat_timers: %{}
+      heartbeat_timers: %{},
+      trace_table: table_name
     }
 
-    Logger.info("ConnectionManager started")
+    Logger.info("ConnectionManager started with trace table: #{table_name}")
     {:ok, state}
   end
 
@@ -489,7 +497,7 @@ defmodule TheMaestro.MCP.ConnectionManager do
       %ConnectionInfo{} = connection ->
         trace_id = generate_trace_id(server_id)
 
-        case start_connection_trace(connection, trace_id) do
+        case start_connection_trace(connection, trace_id, state.trace_table) do
           :ok ->
             {:reply, {:ok, trace_id}, state}
 
@@ -503,7 +511,7 @@ defmodule TheMaestro.MCP.ConnectionManager do
   end
 
   def handle_call({:stop_trace, trace_id}, _from, state) do
-    case stop_connection_trace(trace_id) do
+    case stop_connection_trace(trace_id, state.trace_table) do
       {:ok, trace_data} ->
         {:reply, {:ok, trace_data}, state}
 
@@ -834,14 +842,99 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
   defp validate_server_config(_), do: {:error, :invalid_config}
 
-  defp send_ping_to_connection(_connection) do
-    # Placeholder implementation - would send actual ping to MCP server
-    :ok
+  defp send_ping_to_connection(connection) do
+    alias TheMaestro.MCP.Protocol
+
+    case connection do
+      %ConnectionInfo{transport_pid: nil} ->
+        {:error, :no_transport}
+
+      %ConnectionInfo{transport_pid: transport_pid, status: :connected}
+      when is_pid(transport_pid) ->
+        if Process.alive?(transport_pid) do
+          # Use MCP tools/list as a ping mechanism since MCP doesn't have explicit ping
+          request_id = "ping_#{:rand.uniform(1_000_000)}"
+          ping_message = Protocol.list_tools(request_id)
+
+          case GenServer.call(transport_pid, {:send_message, ping_message}) do
+            :ok ->
+              # Wait for response with timeout
+              receive do
+                {:mcp_response, ^request_id, _result} ->
+                  :ok
+
+                {:mcp_error, ^request_id, _error} ->
+                  {:error, :server_error}
+              after
+                5000 ->
+                  {:error, :timeout}
+              end
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+        else
+          {:error, :transport_dead}
+        end
+
+      %ConnectionInfo{status: status} ->
+        {:error, {:invalid_status, status}}
+
+      _ ->
+        {:error, :invalid_connection}
+    end
   end
 
-  defp execute_tool_on_connection(_connection, _tool_name, _params) do
-    # Placeholder implementation - would execute tool on MCP server
-    {:ok, %{result: "placeholder_result"}}
+  defp execute_tool_on_connection(connection, tool_name, params) do
+    alias TheMaestro.MCP.Protocol
+
+    case {connection, tool_name, params} do
+      {_, nil, _} ->
+        {:error, :missing_tool_name}
+
+      {_, "", _} ->
+        {:error, :empty_tool_name}
+
+      {_, tool_name, _} when not is_binary(tool_name) ->
+        {:error, :invalid_tool_name}
+
+      {%ConnectionInfo{transport_pid: nil}, _, _} ->
+        {:error, :no_transport}
+
+      {%ConnectionInfo{transport_pid: transport_pid, status: :connected}, tool_name, params}
+      when is_pid(transport_pid) and is_binary(tool_name) ->
+        if Process.alive?(transport_pid) do
+          request_id = "tool_#{:rand.uniform(1_000_000)}"
+          tool_message = Protocol.call_tool(request_id, tool_name, params || %{})
+
+          case GenServer.call(transport_pid, {:send_message, tool_message}) do
+            :ok ->
+              # Wait for response with timeout
+              receive do
+                {:mcp_response, ^request_id, result} ->
+                  {:ok, result}
+
+                {:mcp_error, ^request_id, error} ->
+                  {:error, {:server_error, error}}
+              after
+                # Longer timeout for tool execution
+                30_000 ->
+                  {:error, :timeout}
+              end
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+        else
+          {:error, :transport_dead}
+        end
+
+      {%ConnectionInfo{status: status}, _, _} ->
+        {:error, {:invalid_status, status}}
+
+      _ ->
+        {:error, :invalid_connection}
+    end
   end
 
   defp gather_connection_metrics(connection) do
@@ -887,20 +980,98 @@ defmodule TheMaestro.MCP.ConnectionManager do
     "trace_#{server_id}_#{timestamp}"
   end
 
-  defp start_connection_trace(_connection, _trace_id) do
-    # Placeholder implementation - would start actual connection tracing
-    :ok
+  defp start_connection_trace(connection, trace_id, table_name) do
+    # Start connection debugging/monitoring trace
+    case {connection, trace_id} do
+      {%ConnectionInfo{transport_pid: nil}, _} ->
+        {:error, :no_transport}
+
+      {%ConnectionInfo{transport_pid: transport_pid}, trace_id}
+      when is_pid(transport_pid) and is_binary(trace_id) ->
+        if Process.alive?(transport_pid) do
+          # Initialize trace storage for this connection
+          trace_data = %{
+            trace_id: trace_id,
+            server_id: connection.server_id,
+            started_at: DateTime.utc_now(),
+            messages_sent: [],
+            messages_received: [],
+            errors: [],
+            metrics: %{
+              total_requests: 0,
+              total_responses: 0,
+              avg_response_time: 0,
+              errors_count: 0
+            }
+          }
+
+          # Store trace data in process state or ETS table
+          :ets.insert(table_name, {trace_id, trace_data})
+
+          # Enable tracing for this transport
+          case GenServer.call(transport_pid, {:enable_trace, trace_id}) do
+            :ok -> :ok
+            {:error, reason} -> {:error, reason}
+          end
+        else
+          {:error, :transport_dead}
+        end
+
+      {%ConnectionInfo{}, trace_id} when not is_binary(trace_id) ->
+        {:error, :invalid_trace_id}
+
+      _ ->
+        {:error, :invalid_connection}
+    end
+  rescue
+    error ->
+      {:error, {:trace_start_failed, error}}
   end
 
-  defp stop_connection_trace(trace_id) do
-    # Placeholder implementation - would stop tracing and return data
-    {:ok,
-     %{
-       trace_id: trace_id,
-       requests: [],
-       responses: [],
-       timing_data: %{}
-     }}
+  defp stop_connection_trace(trace_id, table_name) do
+    # Stop connection debugging/monitoring trace and return collected data
+    case :ets.lookup(table_name, trace_id) do
+      [{^trace_id, trace_data}] ->
+        # Remove from ETS table
+        :ets.delete(table_name, trace_id)
+
+        # Calculate final metrics
+        ended_at = DateTime.utc_now()
+        duration_seconds = DateTime.diff(ended_at, trace_data.started_at, :second)
+
+        final_trace_data = %{
+          trace_id: trace_id,
+          server_id: trace_data.server_id,
+          started_at: trace_data.started_at,
+          ended_at: ended_at,
+          duration_seconds: duration_seconds,
+          messages_sent: trace_data.messages_sent,
+          messages_received: trace_data.messages_received,
+          errors: trace_data.errors,
+          metrics: trace_data.metrics,
+          summary: %{
+            total_messages:
+              length(trace_data.messages_sent) + length(trace_data.messages_received),
+            success_rate: calculate_success_rate(trace_data.metrics),
+            avg_response_time_ms: trace_data.metrics.avg_response_time
+          }
+        }
+
+        {:ok, final_trace_data}
+
+      [] ->
+        {:error, :trace_not_found}
+    end
+  rescue
+    error ->
+      {:error, {:trace_stop_failed, error}}
+  end
+
+  defp calculate_success_rate(%{total_requests: 0}), do: 0.0
+
+  defp calculate_success_rate(%{total_requests: total, errors_count: errors}) do
+    successful = total - errors
+    successful / total * 100.0
   end
 
   defp calculate_uptime(started_at) when is_nil(started_at), do: 0

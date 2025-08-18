@@ -264,7 +264,7 @@ defmodule TheMaestro.MCP.CLI do
         "ping" ->
           Diagnostics.ping_server(args, options)
 
-        "trace" ->
+        "trace-conn" ->
           Diagnostics.trace_connection(args, options)
 
         # Audit and reporting commands

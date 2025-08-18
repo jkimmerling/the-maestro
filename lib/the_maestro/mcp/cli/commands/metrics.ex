@@ -588,7 +588,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     }
   end
 
-  defp display_performance_analysis(analysis, options) do
+  defp display_performance_analysis(analysis, _options) do
     IO.puts("Global Performance Analysis")
     IO.puts("#{String.duplicate("=", 35)}")
     IO.puts("")
@@ -638,7 +638,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     end
   end
 
-  defp display_server_performance_analysis(server_name, analysis, options) do
+  defp display_server_performance_analysis(server_name, analysis, _options) do
     IO.puts("")
     IO.puts("Performance Analysis: #{server_name}")
     IO.puts("#{String.duplicate("=", String.length("Performance Analysis: #{server_name}"))}")
@@ -937,7 +937,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
 
   defp truncate_text(text, _max_length), do: to_string(text)
 
-  defp export_metrics(metrics_data, filename, options) do
+  defp export_metrics(metrics_data, filename, _options) do
     format = Path.extname(filename) |> String.trim_leading(".") |> String.downcase()
 
     content =
@@ -1087,7 +1087,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     []
   end
 
-  defp generate_performance_recommendations(server_performances, options) do
+  defp generate_performance_recommendations(server_performances, _options) do
     recommendations = []
 
     # Add recommendations based on analysis
@@ -1134,7 +1134,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     recommendations
   end
 
-  defp generate_server_recommendations(metrics, options) do
+  defp generate_server_recommendations(metrics, _options) do
     recommendations = []
 
     recommendations =
@@ -1183,7 +1183,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     """
   end
 
-  defp format_server_details(servers, options) do
+  defp format_server_details(servers, _options) do
     servers
     |> Enum.map(fn {server_id, metrics} ->
       """
@@ -1197,7 +1197,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     |> Enum.join("\n")
   end
 
-  defp format_single_server_report(metrics, analysis, options) do
+  defp format_single_server_report(metrics, analysis, _options) do
     """
     Performance Metrics:
       Total Requests: #{metrics.performance.total_requests}

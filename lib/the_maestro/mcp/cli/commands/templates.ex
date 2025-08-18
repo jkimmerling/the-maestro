@@ -75,14 +75,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
 
   ## Private Functions
 
-  defp list_templates(options) do
+  defp list_templates(_options) do
     CLI.print_info("Available MCP server templates:")
 
     case get_available_templates() do
-      {:ok, []} ->
-        IO.puts("  No templates available")
-        {:ok, []}
-
       {:ok, templates} ->
         # Display templates in formatted table
         name_width =
@@ -138,10 +134,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         end
 
         {:ok, templates}
-
-      {:error, reason} ->
-        CLI.print_error("Failed to list templates: #{inspect(reason)}")
-        {:error, :list_failed}
     end
   end
 
@@ -273,7 +265,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
     end
   end
 
-  defp create_template(template_name, options) do
+  defp create_template(template_name, _options) do
     CLI.print_info("Creating new template: #{template_name}")
 
     # Interactive template creation
@@ -304,10 +296,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
             IO.puts("    maestro mcp templates apply #{template_name} <server-name>")
 
             {:ok, template}
-
-          {:error, reason} ->
-            CLI.print_error("Failed to save template: #{inspect(reason)}")
-            {:error, :save_failed}
         end
 
       {:error, reason} ->
@@ -345,10 +333,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
             :ok ->
               CLI.print_success("Template '#{template_name}' deleted")
               {:ok, :deleted}
-
-            {:error, reason} ->
-              CLI.print_error("Failed to delete template: #{inspect(reason)}")
-              {:error, :delete_failed}
           end
         else
           CLI.print_info("Template deletion cancelled")
@@ -365,7 +349,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
     end
   end
 
-  defp validate_template(template_name, options) do
+  defp validate_template(template_name, _options) do
     CLI.print_info("Validating template: #{template_name}")
 
     case get_template(template_name) do
@@ -563,7 +547,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
     end
   end
 
-  defp generate_stdio_config(template, server_name, variables) do
+  defp generate_stdio_config(_template, server_name, variables) do
     script_path = Map.get(variables, "script_path", "server.py")
     python_path = Map.get(variables, "python_path", "python3")
 
@@ -587,7 +571,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
     {:ok, config}
   end
 
-  defp generate_http_config(template, server_name, variables) do
+  defp generate_http_config(_template, server_name, variables) do
     api_key = Map.get(variables, "api_key")
     base_url = Map.get(variables, "base_url", "https://api.example.com")
 
@@ -616,7 +600,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
     {:ok, config}
   end
 
-  defp generate_sse_config(template, server_name, variables) do
+  defp generate_sse_config(_template, server_name, variables) do
     base_url = Map.get(variables, "base_url", "https://api.example.com")
 
     config = %{

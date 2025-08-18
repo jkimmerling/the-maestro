@@ -1,0 +1,21 @@
+{
+  "globalSettings": {
+    "defaultTimeout": 30000
+  },
+  "mcpServers": {
+    "sseServer": {
+      "description": "",
+      "timeout": 30000,
+      "trust": false,
+      "url": "https://example.com/sse"
+    },
+    "test_server": {
+      "args": [
+        "-m",
+        "test_server"
+      ],
+      "command": "python",
+      "trust": false
+    }
+  }
+}

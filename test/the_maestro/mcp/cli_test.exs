@@ -145,7 +145,7 @@ defmodule TheMaestro.MCP.CLITest do
     test "updates server timeout setting" do
       output =
         capture_io(fn ->
-          CLI.main(["mcp", "update", "fileSystem", "--timeout", "60_000"])
+          CLI.main(["mcp", "update", "fileSystem", "--timeout", "60000"])
         end)
 
       assert output =~ "Successfully updated server 'fileSystem'"

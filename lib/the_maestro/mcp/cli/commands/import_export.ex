@@ -5,7 +5,8 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
   Provides functionality to import and export MCP server configurations.
   """
 
-  alias TheMaestro.MCP.{Config, ConfigValidator}
+  alias TheMaestro.MCP.Config
+  alias TheMaestro.MCP.Config.ConfigValidator
   alias TheMaestro.MCP.CLI
 
   @doc """
@@ -514,7 +515,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
           end
 
         "yaml" ->
-          {:ok, YamlElixir.write_to_string!(export_data)}
+          {:ok, Ymlr.document!(export_data)}
 
         "toml" ->
           {:error, :toml_not_supported}

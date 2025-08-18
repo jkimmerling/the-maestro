@@ -21,10 +21,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
     case parse_list_args(args, options) do
       {:ok, server_filter} ->
         list_server_tools(server_filter, options)
-
-      {:error, reason} ->
-        CLI.print_error(reason)
-        {:error, reason}
     end
   end
 

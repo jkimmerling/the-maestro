@@ -174,10 +174,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
 
                 {:exit, _reason} ->
                   handle_exit(updated_state)
-
-                {:error, reason} ->
-                  CLI.print_error("Command failed: #{inspect(reason)}")
-                  interactive_loop(updated_state)
               end
 
             {:error, reason} ->

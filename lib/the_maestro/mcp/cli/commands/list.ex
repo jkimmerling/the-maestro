@@ -7,7 +7,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
   """
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
-  alias TheMaestro.MCP.CLI.Formatters.{TableFormatter, YamlFormatter}
+  alias TheMaestro.MCP.CLI.Formatters.YamlFormatter
   alias TheMaestro.MCP.CLI
 
   @doc """

@@ -6,8 +6,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
   scan for common server configurations, and set up servers with minimal manual configuration.
   """
 
-  alias TheMaestro.MCP.{Config, ConnectionManager}
-  alias TheMaestro.MCP.Config.ConfigValidator
+  alias TheMaestro.MCP.Config
   alias TheMaestro.MCP.CLI
 
   @doc """
@@ -812,7 +811,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     end
   end
 
-  defp analyze_config_file(content, file_path) do
+  defp analyze_config_file(_content, file_path) do
     # This would analyze configuration files that might define MCP servers
     {:ok,
      %{
@@ -1104,7 +1103,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     add_discovered_servers(high_confidence_servers, options)
   end
 
-  defp add_discovered_servers(servers, options) do
+  defp add_discovered_servers(servers, _options) do
     case Config.get_configuration() do
       {:ok, current_config} ->
         added_count = 0
@@ -1217,8 +1216,14 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
           end
       end
 
-    server_config = Map.merge(base_config, transport_config)
-    {:ok, server_name, server_config}
+    case transport_config do
+      {:error, reason} ->
+        {:error, reason}
+
+      config when is_map(config) ->
+        server_config = Map.merge(base_config, config)
+        {:ok, server_name, server_config}
+    end
   end
 
   defp generate_unique_server_name(base_name) do
@@ -1498,7 +1503,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     end
   end
 
-  defp create_template_server(server_name, template, options) do
+  defp create_template_server(server_name, template, _options) do
     server_config = %{
       "command" => template.command,
       "timeout" => 30_000,
