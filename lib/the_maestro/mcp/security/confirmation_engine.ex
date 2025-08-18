@@ -30,10 +30,10 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngine do
   require Logger
 
   alias TheMaestro.MCP.Security.{
-    TrustManager,
+    AuditLogger,
     RiskAssessor,
     RiskAssessment,
-    AuditLogger
+    TrustManager
   }
 
   @type confirmation_choice ::

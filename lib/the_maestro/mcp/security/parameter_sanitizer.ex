@@ -202,7 +202,7 @@ defmodule TheMaestro.MCP.Security.ParameterSanitizer do
             {:error, reason} -> {path, ["Path parameter '#{key}': #{reason}"]}
           end
 
-        # Command parameters  
+        # Command parameters
         {cmd_key, command} when cmd_key in ["command", "cmd", "script"] and is_binary(command) ->
           case sanitize_command(command, options) do
             {:ok, sanitized} -> {sanitized, []}

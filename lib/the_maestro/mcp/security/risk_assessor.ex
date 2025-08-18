@@ -261,7 +261,7 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
 
       path ->
         cond do
-          is_sensitive_path?(path) ->
+          sensitive_path?(path) ->
             factors = [:sensitive_path | factors]
 
             if has_path_traversal?(path) do
@@ -288,7 +288,7 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
         new_factors = []
 
         new_factors =
-          if is_dangerous_command?(command) do
+          if dangerous_command?(command) do
             [:destructive_command | new_factors]
           else
             new_factors
@@ -302,7 +302,7 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
           end
 
         new_factors =
-          if is_system_modification_command?(command) do
+          if system_modification_command?(command) do
             [:system_modification | new_factors]
           else
             new_factors
@@ -321,14 +321,14 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
         new_factors = [:network_access]
 
         new_factors =
-          if is_external_service?(url) do
+          if external_service?(url) do
             [:external_service | new_factors]
           else
             new_factors
           end
 
         new_factors =
-          if is_insecure_protocol?(url) do
+          if insecure_protocol?(url) do
             [:insecure_protocol | new_factors]
           else
             new_factors
@@ -364,11 +364,11 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
       parameters["host"] || parameters[:host]
   end
 
-  defp is_sensitive_path?(path) when is_binary(path) do
+  defp sensitive_path?(path) when is_binary(path) do
     Enum.any?(@sensitive_paths, &String.contains?(path, &1))
   end
 
-  defp is_sensitive_path?(_), do: false
+  defp sensitive_path?(_), do: false
 
   defp has_path_traversal?(path) when is_binary(path) do
     String.contains?(path, "../") or String.contains?(path, "..\\")
@@ -376,13 +376,13 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
 
   defp has_path_traversal?(_), do: false
 
-  defp is_dangerous_command?(command) when is_binary(command) do
+  defp dangerous_command?(command) when is_binary(command) do
     Enum.any?(@dangerous_commands, fn pattern ->
       String.contains?(String.downcase(command), String.downcase(pattern))
     end)
   end
 
-  defp is_dangerous_command?(_), do: false
+  defp dangerous_command?(_), do: false
 
   defp has_command_injection_risk?(command) when is_binary(command) do
     injection_patterns = [";", "&&", "||", "|", "`", "$(", "${"]
@@ -391,15 +391,15 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
 
   defp has_command_injection_risk?(_), do: false
 
-  defp is_system_modification_command?(command) when is_binary(command) do
+  defp system_modification_command?(command) when is_binary(command) do
     system_commands = ["chmod", "chown", "passwd", "sudo", "systemctl", "service"]
     command_lower = String.downcase(command)
     Enum.any?(system_commands, &String.contains?(command_lower, &1))
   end
 
-  defp is_system_modification_command?(_), do: false
+  defp system_modification_command?(_), do: false
 
-  defp is_external_service?(url) when is_binary(url) do
+  defp external_service?(url) when is_binary(url) do
     # Simple heuristic - not localhost or private networks
     not (String.contains?(url, "localhost") or
            String.contains?(url, "127.0.0.1") or
@@ -407,15 +407,15 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
            String.contains?(url, "10.0."))
   end
 
-  defp is_external_service?(_), do: false
+  defp external_service?(_), do: false
 
-  defp is_insecure_protocol?(url) when is_binary(url) do
+  defp insecure_protocol?(url) when is_binary(url) do
     insecure_protocols = ["http://", "ftp://", "telnet://", "ldap://"]
     url_lower = String.downcase(url)
     Enum.any?(insecure_protocols, &String.starts_with?(url_lower, &1))
   end
 
-  defp is_insecure_protocol?(_), do: false
+  defp insecure_protocol?(_), do: false
 
   defp contains_sensitive_data?(parameters) when is_map(parameters) do
     parameters

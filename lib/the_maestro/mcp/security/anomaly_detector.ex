@@ -145,7 +145,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
   Gets detection statistics.
   """
   @spec get_statistics() :: map()
-  def get_statistics() do
+  def get_statistics do
     GenServer.call(__MODULE__, :get_statistics)
   end
 
@@ -465,7 +465,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
     user_id = Map.get(event, :user_id)
 
     # Off-hours access detection
-    if is_off_hours?(timestamp) and user_id do
+    if off_hours?(timestamp) and user_id do
       baseline = Map.get(state.baselines, user_id, %{})
       normal_hours_activity = Map.get(baseline, :normal_hours_activity, 0.5)
 
@@ -777,7 +777,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
     |> Map.new()
   end
 
-  defp is_off_hours?(timestamp) do
+  defp off_hours?(timestamp) do
     hour = timestamp.hour
     # Consider 6 AM to 10 PM as normal hours
     hour < 6 or hour > 22
@@ -938,7 +938,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
           events
           |> Enum.count(fn event ->
             timestamp = Map.get(event, :timestamp, DateTime.utc_now())
-            not is_off_hours?(timestamp)
+            not off_hours?(timestamp)
           end)
 
         normal_hours_count / length(events)

@@ -54,7 +54,7 @@ defmodule TheMaestro.MCP.Security.SecureExecutorTest do
 
       response =
         if state.should_error do
-          {:error, %{code: -32603, message: "Internal error", data: %{}}}
+          {:error, %{code: -32_603, message: "Internal error", data: %{}}}
         else
           {:ok,
            state.call_response ||
