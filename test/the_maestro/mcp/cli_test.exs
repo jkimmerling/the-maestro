@@ -11,6 +11,7 @@ defmodule TheMaestro.MCP.CLITest do
 
   alias TheMaestro.MCP.CLI
   alias TheMaestro.MCP.CLI.Formatters.{TableFormatter, JsonFormatter}
+  alias TheMaestro.MCP.ConnectionManager
 
   @tmp_dir Path.join([System.tmp_dir!(), "maestro_cli_test"])
 
@@ -24,9 +25,8 @@ defmodule TheMaestro.MCP.CLITest do
     end
 
     # Start ConnectionManager if not already running
-    unless Process.whereis(TheMaestro.MCP.ConnectionManager) do
-      {:ok, _} =
-        TheMaestro.MCP.ConnectionManager.start_link(name: TheMaestro.MCP.ConnectionManager)
+    unless Process.whereis(ConnectionManager) do
+      {:ok, _} = ConnectionManager.start_link(name: ConnectionManager)
     end
 
     # Mock configuration for testing
