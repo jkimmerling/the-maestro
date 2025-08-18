@@ -18,6 +18,11 @@ defmodule TheMaestro.MCP.ConfigTest do
     # Create temp directory for test files
     File.mkdir_p!(@tmp_dir)
 
+    # Ensure PubSub is available for configuration reload operations
+    unless Process.whereis(TheMaestro.PubSub) do
+      {:ok, _} = Supervisor.start_link([{Phoenix.PubSub, name: TheMaestro.PubSub}], strategy: :one_for_one)
+    end
+
     on_exit(fn ->
       File.rm_rf(@tmp_dir)
     end)
