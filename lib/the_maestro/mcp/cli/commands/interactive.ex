@@ -5,6 +5,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   Provides an interactive shell mode for MCP server management.
   """
 
+  alias TheMaestro.MCP.{Config, ServerSupervisor}
+  alias TheMaestro.MCP.CLI
+
   @doc """
   Execute the interactive command.
   """
@@ -25,7 +28,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
         start_repl_mode(options)
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid interactive command. Use --help for usage.")
+        CLI.print_error("Invalid interactive command. Use --help for usage.")
     end
   end
 
@@ -73,7 +76,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   ## Private Functions
 
   defp start_interactive_mode(options) do
-    TheMaestro.MCP.CLI.print_info("Starting MCP Interactive Mode")
+    CLI.print_info("Starting MCP Interactive Mode")
 
     # Initialize interactive state
     state = %{
@@ -100,7 +103,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
               updated_state
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error(
+              CLI.print_error(
                 "Failed to connect to '#{server_name}': #{inspect(reason)}"
               )
 
@@ -113,7 +116,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   end
 
   defp start_shell_mode(options) do
-    TheMaestro.MCP.CLI.print_info("Starting MCP Shell Mode")
+    CLI.print_info("Starting MCP Shell Mode")
 
     # Shell mode with enhanced features
     state = %{
@@ -131,7 +134,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   end
 
   defp start_repl_mode(options) do
-    TheMaestro.MCP.CLI.print_info("Starting MCP REPL Mode")
+    CLI.print_info("Starting MCP REPL Mode")
 
     # REPL mode for advanced users
     state = %{
@@ -175,12 +178,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
                   handle_exit(updated_state)
 
                 {:error, reason} ->
-                  TheMaestro.MCP.CLI.print_error("Command failed: #{inspect(reason)}")
+                  CLI.print_error("Command failed: #{inspect(reason)}")
                   interactive_loop(updated_state)
               end
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error("Parse error: #{reason}")
+              CLI.print_error("Parse error: #{reason}")
               interactive_loop(updated_state)
           end
         else
@@ -218,7 +221,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
               handle_exit(updated_state)
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error("Error: #{reason}")
+              CLI.print_error("Error: #{reason}")
               repl_loop(updated_state)
           end
         else
@@ -312,7 +315,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
     case args do
       [] -> show_interactive_help()
       [topic] -> show_topic_help(topic)
-      _ -> TheMaestro.MCP.CLI.print_error("Usage: help [topic]")
+      _ -> CLI.print_error("Usage: help [topic]")
     end
 
     {:ok, state}
@@ -324,7 +327,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
       ["servers"] -> list_all_servers(state)
       ["connected"] -> list_connected_servers(state)
       [server_name] -> show_server_details(server_name, state)
-      _ -> TheMaestro.MCP.CLI.print_error("Usage: list [servers|connected|<server-name>]")
+      _ -> CLI.print_error("Usage: list [servers|connected|<server-name>]")
     end
 
     {:ok, state}
@@ -338,12 +341,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
             {:ok, new_state}
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error("Connection failed: #{inspect(reason)}")
+            CLI.print_error("Connection failed: #{inspect(reason)}")
             {:ok, state}
         end
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Usage: connect <server-name>")
+        CLI.print_error("Usage: connect <server-name>")
         {:ok, state}
     end
   end
@@ -353,7 +356,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
       [] ->
         case state.current_server do
           nil ->
-            TheMaestro.MCP.CLI.print_warning("No server currently connected")
+            CLI.print_warning("No server currently connected")
             {:ok, state}
 
           server_name ->
@@ -362,7 +365,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
                 {:ok, new_state}
 
               {:error, reason} ->
-                TheMaestro.MCP.CLI.print_error("Disconnect failed: #{inspect(reason)}")
+                CLI.print_error("Disconnect failed: #{inspect(reason)}")
                 {:ok, state}
             end
         end
@@ -373,12 +376,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
             {:ok, new_state}
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error("Disconnect failed: #{inspect(reason)}")
+            CLI.print_error("Disconnect failed: #{inspect(reason)}")
             {:ok, state}
         end
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Usage: disconnect [server-name]")
+        CLI.print_error("Usage: disconnect [server-name]")
         {:ok, state}
     end
   end
@@ -393,7 +396,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
       [] ->
         case state.current_server do
           nil ->
-            TheMaestro.MCP.CLI.print_error("No server connected. Use 'connect <server>' first")
+            CLI.print_error("No server connected. Use 'connect <server>' first")
 
           server_name ->
             list_server_tools(server_name, state)
@@ -403,7 +406,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
         list_server_tools(server_name, state)
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Usage: tools [server-name]")
+        CLI.print_error("Usage: tools [server-name]")
     end
 
     {:ok, state}
@@ -414,14 +417,14 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
       [tool_name | tool_args] ->
         case state.current_server do
           nil ->
-            TheMaestro.MCP.CLI.print_error("No server connected. Use 'connect <server>' first")
+            CLI.print_error("No server connected. Use 'connect <server>' first")
 
           server_name ->
             call_server_tool(server_name, tool_name, tool_args, state)
         end
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Usage: call <tool-name> [args...]")
+        CLI.print_error("Usage: call <tool-name> [args...]")
     end
 
     {:ok, state}
@@ -442,7 +445,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
     case args do
       [] -> show_current_config(state)
       ["reload"] -> reload_configuration(state)
-      _ -> TheMaestro.MCP.CLI.print_error("Usage: config [reload]")
+      _ -> CLI.print_error("Usage: config [reload]")
     end
 
     {:ok, state}
@@ -452,11 +455,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
     case args do
       [key, value] ->
         updated_state = set_session_variable(state, key, value)
-        TheMaestro.MCP.CLI.print_success("Set #{key} = #{value}")
+        CLI.print_success("Set #{key} = #{value}")
         {:ok, updated_state}
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Usage: set <key> <value>")
+        CLI.print_error("Usage: set <key> <value>")
         {:ok, state}
     end
   end
@@ -469,13 +472,13 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
         {:ok, state}
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Usage: get <key>")
+        CLI.print_error("Usage: get <key>")
         {:ok, state}
     end
   end
 
   defp handle_unknown_command(command, _args, state) do
-    TheMaestro.MCP.CLI.print_error("Unknown command: #{command}")
+    CLI.print_error("Unknown command: #{command}")
     IO.puts("Type 'help' for available commands")
     {:ok, state}
   end
@@ -538,16 +541,16 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   end
 
   defp connect_to_server(server_name, state) do
-    TheMaestro.MCP.CLI.print_info("Connecting to server '#{server_name}'...")
+    CLI.print_info("Connecting to server '#{server_name}'...")
 
     # Attempt to start/connect to server
-    case TheMaestro.MCP.ServerSupervisor.start_server(server_name) do
+    case ServerSupervisor.start_server(server_name) do
       {:ok, pid} ->
         # Update state with connection
         updated_connections = Map.put(state.connected_servers, server_name, pid)
         new_state = %{state | current_server: server_name, connected_servers: updated_connections}
 
-        TheMaestro.MCP.CLI.print_success("Connected to '#{server_name}'")
+        CLI.print_success("Connected to '#{server_name}'")
         {:ok, new_state}
 
       {:error, reason} ->
@@ -556,9 +559,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   end
 
   defp disconnect_from_server(server_name, state) do
-    TheMaestro.MCP.CLI.print_info("Disconnecting from server '#{server_name}'...")
+    CLI.print_info("Disconnecting from server '#{server_name}'...")
 
-    case TheMaestro.MCP.ServerSupervisor.stop_server(server_name) do
+    case ServerSupervisor.stop_server(server_name) do
       :ok ->
         # Update state
         updated_connections = Map.delete(state.connected_servers, server_name)
@@ -566,7 +569,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
 
         new_state = %{state | current_server: new_current, connected_servers: updated_connections}
 
-        TheMaestro.MCP.CLI.print_success("Disconnected from '#{server_name}'")
+        CLI.print_success("Disconnected from '#{server_name}'")
         {:ok, new_state}
 
       {:error, reason} ->
@@ -675,13 +678,13 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
         IO.puts("")
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Unknown help topic: #{topic}")
+        CLI.print_error("Unknown help topic: #{topic}")
         IO.puts("Available topics: servers, tools, config")
     end
   end
 
   defp list_all_servers(_state) do
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, config} ->
         if map_size(config.servers) == 0 do
           IO.puts("No servers configured")
@@ -697,7 +700,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to load configuration: #{inspect(reason)}")
     end
   end
 
@@ -717,11 +720,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   end
 
   defp show_server_details(server_name, _state) do
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, config} ->
         case Map.get(config.servers, server_name) do
           nil ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found")
+            CLI.print_error("Server '#{server_name}' not found")
 
           server ->
             IO.puts("")
@@ -738,7 +741,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to load configuration: #{inspect(reason)}")
     end
   end
 
@@ -775,7 +778,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   defp list_server_tools(server_name, state) do
     case Map.get(state.connected_servers, server_name) do
       nil ->
-        TheMaestro.MCP.CLI.print_error("Server '#{server_name}' is not connected")
+        CLI.print_error("Server '#{server_name}' is not connected")
 
       pid when is_pid(pid) ->
         if Process.alive?(pid) do
@@ -794,21 +797,21 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
               end
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error("Failed to list tools: #{inspect(reason)}")
+              CLI.print_error("Failed to list tools: #{inspect(reason)}")
           end
         else
-          TheMaestro.MCP.CLI.print_error("Server '#{server_name}' process is not alive")
+          CLI.print_error("Server '#{server_name}' process is not alive")
         end
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid server process for '#{server_name}'")
+        CLI.print_error("Invalid server process for '#{server_name}'")
     end
   end
 
   defp call_server_tool(server_name, tool_name, tool_args, state) do
     case Map.get(state.connected_servers, server_name) do
       nil ->
-        TheMaestro.MCP.CLI.print_error("Server '#{server_name}' is not connected")
+        CLI.print_error("Server '#{server_name}' is not connected")
 
       pid when is_pid(pid) ->
         if Process.alive?(pid) do
@@ -825,14 +828,14 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
               IO.puts(format_tool_result(result))
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error("Tool call failed: #{inspect(reason)}")
+              CLI.print_error("Tool call failed: #{inspect(reason)}")
           end
         else
-          TheMaestro.MCP.CLI.print_error("Server '#{server_name}' process is not alive")
+          CLI.print_error("Server '#{server_name}' process is not alive")
         end
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid server process for '#{server_name}'")
+        CLI.print_error("Invalid server process for '#{server_name}'")
     end
   end
 
@@ -854,7 +857,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   end
 
   defp show_current_config(_state) do
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, config} ->
         IO.puts("")
         IO.puts("Current Configuration:")
@@ -866,17 +869,17 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
         IO.puts("  Max retries: #{Map.get(global, :max_retries, "default")}")
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to load configuration: #{inspect(reason)}")
     end
   end
 
   defp reload_configuration(state) do
-    case TheMaestro.MCP.Config.reload_configuration() do
+    case Config.reload_configuration() do
       {:ok, _config} ->
-        TheMaestro.MCP.CLI.print_success("Configuration reloaded successfully")
+        CLI.print_success("Configuration reloaded successfully")
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to reload configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to reload configuration: #{inspect(reason)}")
     end
 
     state
@@ -951,10 +954,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
 
     # Disconnect all servers
     Enum.each(state.connected_servers, fn {name, _pid} ->
-      TheMaestro.MCP.ServerSupervisor.stop_server(name)
+      ServerSupervisor.stop_server(name)
     end)
 
-    TheMaestro.MCP.CLI.print_info("Goodbye! 👋")
+    CLI.print_info("Goodbye! 👋")
     {:ok, :exited}
   end
 

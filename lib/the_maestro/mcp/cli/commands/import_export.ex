@@ -5,6 +5,9 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
   Provides functionality to import and export MCP server configurations.
   """
 
+  alias TheMaestro.MCP.{Config, ConfigValidator}
+  alias TheMaestro.MCP.CLI
+
   @doc """
   Execute the import command.
   """
@@ -19,11 +22,11 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
         import_configuration(file_path, options)
 
       [] ->
-        TheMaestro.MCP.CLI.print_error("Missing import file path")
+        CLI.print_error("Missing import file path")
         {:error, :missing_path}
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid import command. Use --help for usage.")
+        CLI.print_error("Invalid import command. Use --help for usage.")
         {:error, :invalid_args}
     end
   end
@@ -46,7 +49,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
         export_configuration(:stdout, options)
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid export command. Use --help for usage.")
+        CLI.print_error("Invalid export command. Use --help for usage.")
         {:error, :invalid_args}
     end
   end
@@ -111,7 +114,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
     dry_run = Map.get(options, :dry_run, false)
     action = if dry_run, do: "Would import", else: "Importing"
 
-    TheMaestro.MCP.CLI.print_info("#{action} configuration from '#{file_path}'...")
+    CLI.print_info("#{action} configuration from '#{file_path}'...")
 
     # Create backup if requested
     if Map.get(options, :backup, false) && not dry_run do
@@ -129,15 +132,15 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
       end
     else
       {:error, :file_not_found} ->
-        TheMaestro.MCP.CLI.print_error("Import file not found: #{file_path}")
+        CLI.print_error("Import file not found: #{file_path}")
         {:error, :file_not_found}
 
       {:error, :invalid_format} ->
-        TheMaestro.MCP.CLI.print_error("Invalid configuration format in import file")
+        CLI.print_error("Invalid configuration format in import file")
         {:error, :invalid_format}
 
       {:error, :validation_failed, errors} ->
-        TheMaestro.MCP.CLI.print_error("Configuration validation failed:")
+        CLI.print_error("Configuration validation failed:")
 
         Enum.each(errors, fn error ->
           IO.puts("  ❌ #{error}")
@@ -146,7 +149,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
         {:error, :validation_failed}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Import failed: #{inspect(reason)}")
+        CLI.print_error("Import failed: #{inspect(reason)}")
         {:error, :import_failed}
     end
   end
@@ -155,9 +158,9 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
     format = Map.get(options, :format, "json")
 
     action = if destination == :stdout, do: "to stdout", else: "to '#{destination}'"
-    TheMaestro.MCP.CLI.print_info("Exporting configuration #{action}...")
+    CLI.print_info("Exporting configuration #{action}...")
 
-    with {:ok, current_config} <- TheMaestro.MCP.Config.load_configuration(),
+    with {:ok, current_config} <- Config.load_configuration(),
          {:ok, export_data} <- prepare_export_data(current_config, options),
          {:ok, formatted_data} <- format_export_data(export_data, format, options) do
       case destination do
@@ -172,7 +175,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
             :ok ->
               file_size = byte_size(formatted_data)
 
-              TheMaestro.MCP.CLI.print_success(
+              CLI.print_success(
                 "Configuration exported to '#{file_path}' (#{file_size} bytes)"
               )
 
@@ -182,13 +185,13 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
               {:ok, file_path}
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error("Failed to write export file: #{inspect(reason)}")
+              CLI.print_error("Failed to write export file: #{inspect(reason)}")
               {:error, :write_failed}
           end
       end
     else
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Export failed: #{inspect(reason)}")
+        CLI.print_error("Export failed: #{inspect(reason)}")
         {:error, :export_failed}
     end
   end
@@ -266,7 +269,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
 
       {errors, _warnings} =
         Enum.reduce(servers, {errors, []}, fn {name, server}, {errs, warns} ->
-          case TheMaestro.MCP.ConfigValidator.validate_server_config(name, server) do
+          case ConfigValidator.validate_server_config(name, server) do
             {:ok, _} -> {errs, warns}
             {:error, validation_errors} -> {validation_errors ++ errs, warns}
           end
@@ -310,7 +313,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
     merge_mode = if Map.get(options, :merge, false), do: :merge, else: :replace
     overwrite = Map.get(options, :overwrite, false)
 
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, current_config} ->
         import_servers = Map.get(import_data, "servers", %{})
         current_servers = current_config.servers
@@ -390,7 +393,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
   end
 
   defp apply_configuration_import(merge_plan, _options) do
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, current_config} ->
         # Apply the merge plan
         updated_servers =
@@ -414,13 +417,13 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
 
         updated_config = %{current_config | servers: updated_servers}
 
-        case TheMaestro.MCP.Config.save_configuration(updated_config) do
+        case Config.save_configuration(updated_config) do
           :ok ->
             new_count = length(merge_plan.new_servers)
             updated_count = length(merge_plan.updated_servers)
             skipped_count = length(merge_plan.conflicting_servers)
 
-            TheMaestro.MCP.CLI.print_success("Configuration imported successfully")
+            CLI.print_success("Configuration imported successfully")
             IO.puts("  New servers: #{new_count}")
             IO.puts("  Updated servers: #{updated_count}")
 
@@ -431,7 +434,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
             {:ok, updated_config}
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error(
+            CLI.print_error(
               "Failed to save imported configuration: #{inspect(reason)}"
             )
 
@@ -566,14 +569,14 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
     timestamp = DateTime.utc_now() |> DateTime.to_iso8601() |> String.replace(":", "-")
     backup_file = "mcp_config_backup_#{timestamp}.json"
 
-    TheMaestro.MCP.CLI.print_info("Creating backup: #{backup_file}")
+    CLI.print_info("Creating backup: #{backup_file}")
 
     case execute_export([backup_file], %{format: "json", pretty: true}) do
       {:ok, _} ->
-        TheMaestro.MCP.CLI.print_success("Backup created: #{backup_file}")
+        CLI.print_success("Backup created: #{backup_file}")
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_warning("Failed to create backup: #{inspect(reason)}")
+        CLI.print_warning("Failed to create backup: #{inspect(reason)}")
     end
   end
 

@@ -7,6 +7,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
   """
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
+  alias TheMaestro.MCP.CLI
 
   @doc """
   Show performance metrics for MCP servers.
@@ -115,7 +116,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
   ## Private Functions - Metrics Display
 
   defp show_all_metrics(options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Collecting metrics for all servers...", options)
+    CLI.print_if_verbose("Collecting metrics for all servers...", options)
 
     case Config.get_configuration() do
       {:ok, config} ->
@@ -125,16 +126,16 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
             display_metrics_overview(metrics_data, options)
 
           _ ->
-            TheMaestro.MCP.CLI.print_info("No MCP servers configured.")
+            CLI.print_info("No MCP servers configured.")
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
   defp show_server_metrics(server_name, options) do
-    TheMaestro.MCP.CLI.print_if_verbose(
+    CLI.print_if_verbose(
       "Collecting metrics for server '#{server_name}'...",
       options
     )
@@ -143,7 +144,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
       {:ok, config} ->
         case get_in(config, ["mcpServers", server_name]) do
           nil ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found.")
+            CLI.print_error("Server '#{server_name}' not found.")
 
           server_config ->
             metrics = collect_server_metrics(server_name, server_config, options)
@@ -151,7 +152,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -292,7 +293,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
   end
 
   defp display_metrics_overview(metrics_data, options) do
-    format = TheMaestro.MCP.CLI.get_output_format(options)
+    format = CLI.get_output_format(options)
 
     case format do
       "json" ->
@@ -300,7 +301,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
         IO.puts(output)
 
       "yaml" ->
-        output = TheMaestro.MCP.CLI.Formatters.YamlFormatter.format(metrics_data)
+        output = CLI.Formatters.YamlFormatter.format(metrics_data)
         IO.puts(output)
 
       _ ->
@@ -315,7 +316,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
 
   defp display_metrics_table(metrics_data, options) do
     if Enum.empty?(metrics_data) do
-      TheMaestro.MCP.CLI.print_info("No metrics data available.")
+      CLI.print_info("No metrics data available.")
       {:ok, :no_data}
     end
 
@@ -344,7 +345,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     # Show problematic servers if any
     show_performance_alerts(metrics_data, options)
 
-    unless TheMaestro.MCP.CLI.is_quiet?(options) do
+    unless CLI.is_quiet?(options) do
       show_metrics_summary(metrics_data)
     end
   end
@@ -420,7 +421,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
       end)
     end
 
-    if TheMaestro.MCP.CLI.is_verbose?(options) and not Enum.empty?(metrics.errors.recent_errors) do
+    if CLI.is_verbose?(options) and not Enum.empty?(metrics.errors.recent_errors) do
       IO.puts("  Recent Errors:")
 
       Enum.take(metrics.errors.recent_errors, 3)
@@ -510,7 +511,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
   ## Private Functions - Performance Analysis
 
   defp analyze_global_performance(options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Analyzing global performance patterns...", options)
+    CLI.print_if_verbose("Analyzing global performance patterns...", options)
 
     case Config.get_configuration() do
       {:ok, config} ->
@@ -520,16 +521,16 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
           analysis = perform_global_performance_analysis(servers, options)
           display_performance_analysis(analysis, options)
         else
-          TheMaestro.MCP.CLI.print_info("No servers configured for analysis.")
+          CLI.print_info("No servers configured for analysis.")
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
   defp analyze_server_performance(server_name, options) do
-    TheMaestro.MCP.CLI.print_if_verbose(
+    CLI.print_if_verbose(
       "Analyzing performance for server '#{server_name}'...",
       options
     )
@@ -538,7 +539,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
       {:ok, config} ->
         case get_in(config, ["mcpServers", server_name]) do
           nil ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found.")
+            CLI.print_error("Server '#{server_name}' not found.")
 
           server_config ->
             analysis = perform_server_performance_analysis(server_name, server_config, options)
@@ -546,7 +547,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -686,7 +687,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     IO.puts("#{String.duplicate("=", 25)}")
 
     # Implementation would collect audit events from all servers
-    TheMaestro.MCP.CLI.print_info("Audit trail functionality - collecting events...")
+    CLI.print_info("Audit trail functionality - collecting events...")
 
     # Placeholder for audit events
     events = []
@@ -703,7 +704,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     IO.puts("#{String.duplicate("=", String.length("Audit Trail: #{server_name}"))}")
 
     # Implementation would collect audit events for specific server
-    TheMaestro.MCP.CLI.print_info("Server audit trail functionality - collecting events...")
+    CLI.print_info("Server audit trail functionality - collecting events...")
 
     # Placeholder for server-specific audit events
     events = []
@@ -717,7 +718,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
 
   defp display_audit_events(events, options) do
     # Display audit events in table or detailed format
-    if TheMaestro.MCP.CLI.is_verbose?(options) do
+    if CLI.is_verbose?(options) do
       Enum.each(events, fn event ->
         display_detailed_audit_event(event)
       end)
@@ -753,7 +754,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
   ## Private Functions - Report Generation
 
   defp generate_global_report(format, output_file, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Generating global performance report...", options)
+    CLI.print_if_verbose("Generating global performance report...", options)
 
     case Config.get_configuration() do
       {:ok, config} ->
@@ -767,7 +768,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
               Jason.encode!(report_data, pretty: true)
 
             "yaml" ->
-              TheMaestro.MCP.CLI.Formatters.YamlFormatter.format(report_data)
+              CLI.Formatters.YamlFormatter.format(report_data)
 
             _ ->
               format_text_report(report_data, options)
@@ -776,22 +777,22 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
         if output_file do
           case File.write(output_file, content) do
             :ok ->
-              TheMaestro.MCP.CLI.print_success("Report saved to #{output_file}")
+              CLI.print_success("Report saved to #{output_file}")
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error("Failed to save report: #{reason}")
+              CLI.print_error("Failed to save report: #{reason}")
           end
         else
           IO.puts(content)
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to generate report: #{reason}")
+        CLI.print_error("Failed to generate report: #{reason}")
     end
   end
 
   defp generate_server_report(server_name, format, output_file, options) do
-    TheMaestro.MCP.CLI.print_if_verbose(
+    CLI.print_if_verbose(
       "Generating report for server '#{server_name}'...",
       options
     )
@@ -800,7 +801,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
       {:ok, config} ->
         case get_in(config, ["mcpServers", server_name]) do
           nil ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found.")
+            CLI.print_error("Server '#{server_name}' not found.")
 
           server_config ->
             report_data = compile_server_report_data(server_name, server_config, options)
@@ -811,7 +812,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
                   Jason.encode!(report_data, pretty: true)
 
                 "yaml" ->
-                  TheMaestro.MCP.CLI.Formatters.YamlFormatter.format(report_data)
+                  CLI.Formatters.YamlFormatter.format(report_data)
 
                 _ ->
                   format_server_text_report(report_data, options)
@@ -820,10 +821,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
             if output_file do
               case File.write(output_file, content) do
                 :ok ->
-                  TheMaestro.MCP.CLI.print_success("Report saved to #{output_file}")
+                  CLI.print_success("Report saved to #{output_file}")
 
                 {:error, reason} ->
-                  TheMaestro.MCP.CLI.print_error("Failed to save report: #{reason}")
+                  CLI.print_error("Failed to save report: #{reason}")
               end
             else
               IO.puts(content)
@@ -831,7 +832,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to generate report: #{reason}")
+        CLI.print_error("Failed to generate report: #{reason}")
     end
   end
 
@@ -944,7 +945,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
           Jason.encode!(metrics_data, pretty: true)
 
         "yaml" ->
-          TheMaestro.MCP.CLI.Formatters.YamlFormatter.format(metrics_data)
+          CLI.Formatters.YamlFormatter.format(metrics_data)
 
         _ ->
           # Default to JSON
@@ -953,10 +954,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
 
     case File.write(filename, content) do
       :ok ->
-        TheMaestro.MCP.CLI.print_success("Metrics exported to #{filename}")
+        CLI.print_success("Metrics exported to #{filename}")
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to export metrics: #{reason}")
+        CLI.print_error("Failed to export metrics: #{reason}")
     end
   end
 

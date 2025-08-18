@@ -5,6 +5,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   Provides guided setup and initialization of MCP system configuration.
   """
 
+  alias TheMaestro.MCP.Config
+  alias TheMaestro.MCP.CLI
+
   @doc """
   Execute the setup command.
   """
@@ -31,7 +34,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
         repair_configuration(options)
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid setup command. Use --help for usage.")
+        CLI.print_error("Invalid setup command. Use --help for usage.")
     end
   end
 
@@ -70,7 +73,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   ## Private Functions
 
   defp run_guided_setup(options) do
-    TheMaestro.MCP.CLI.print_info("Starting MCP system setup...")
+    CLI.print_info("Starting MCP system setup...")
 
     # Check if already configured
     existing_config = check_existing_configuration()
@@ -80,14 +83,14 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
         if Map.get(options, :force, false) do
           proceed_with_setup(options)
         else
-          TheMaestro.MCP.CLI.print_warning("MCP configuration already exists at: #{config_path}")
+          CLI.print_warning("MCP configuration already exists at: #{config_path}")
 
           case prompt_yes_no("Do you want to reconfigure? (y/n): ") do
             true ->
               proceed_with_setup(options)
 
             false ->
-              TheMaestro.MCP.CLI.print_info("Setup cancelled")
+              CLI.print_info("Setup cancelled")
               {:ok, :cancelled}
           end
         end
@@ -98,7 +101,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   end
 
   defp initialize_mcp_system(options) do
-    TheMaestro.MCP.CLI.print_info("Initializing MCP system...")
+    CLI.print_info("Initializing MCP system...")
 
     use_defaults = Map.get(options, :defaults, false)
     force = Map.get(options, :force, false)
@@ -109,7 +112,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
         :continue
 
       {:error, missing} ->
-        TheMaestro.MCP.CLI.print_error("Missing system requirements:")
+        CLI.print_error("Missing system requirements:")
         Enum.each(missing, fn req -> IO.puts("  ❌ #{req}") end)
         {:error, :missing_requirements}
     end
@@ -129,23 +132,23 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
 
         case save_initial_configuration(mcp_config, config_path, force) do
           :ok ->
-            TheMaestro.MCP.CLI.print_success("MCP system initialized successfully!")
+            CLI.print_success("MCP system initialized successfully!")
             show_next_steps(config_path)
             {:ok, mcp_config}
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error("Failed to save configuration: #{inspect(reason)}")
+            CLI.print_error("Failed to save configuration: #{inspect(reason)}")
             {:error, :save_failed}
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Configuration creation failed: #{inspect(reason)}")
+        CLI.print_error("Configuration creation failed: #{inspect(reason)}")
         {:error, :config_failed}
     end
   end
 
   defp run_setup_wizard(options) do
-    TheMaestro.MCP.CLI.print_info("🧙 MCP Setup Wizard")
+    CLI.print_info("🧙 MCP Setup Wizard")
     IO.puts("")
 
     # Welcome and overview
@@ -158,7 +161,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
     IO.puts("")
 
     unless prompt_yes_no("Ready to begin? (y/n): ") do
-      TheMaestro.MCP.CLI.print_info("Setup wizard cancelled")
+      CLI.print_info("Setup wizard cancelled")
       {:ok, :cancelled}
     end
 
@@ -167,13 +170,13 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
          {:ok, servers_config} <- wizard_step_2_servers_setup(system_config, options),
          {:ok, auth_config} <- wizard_step_3_authentication(servers_config, options),
          {:ok, final_config} <- wizard_step_4_finalization(auth_config, options) do
-      TheMaestro.MCP.CLI.print_success("🎉 Setup wizard completed successfully!")
+      CLI.print_success("🎉 Setup wizard completed successfully!")
       show_wizard_summary(final_config)
 
       {:ok, final_config}
     else
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Setup wizard failed: #{inspect(reason)}")
+        CLI.print_error("Setup wizard failed: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -181,7 +184,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   defp run_system_check(options) do
     verbose = Map.get(options, :verbose, false)
 
-    TheMaestro.MCP.CLI.print_info("Running MCP system check...")
+    CLI.print_info("Running MCP system check...")
     IO.puts("")
 
     checks = [
@@ -250,12 +253,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   end
 
   defp repair_configuration(options) do
-    TheMaestro.MCP.CLI.print_info("Repairing MCP configuration...")
+    CLI.print_info("Repairing MCP configuration...")
 
     # Identify issues
     case identify_configuration_issues() do
       {:ok, []} ->
-        TheMaestro.MCP.CLI.print_success("No configuration issues found")
+        CLI.print_success("No configuration issues found")
         {:ok, :no_issues}
 
       {:ok, issues} ->
@@ -271,12 +274,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
         if prompt_yes_no("Attempt to repair these issues? (y/n): ") do
           repair_issues(issues, options)
         else
-          TheMaestro.MCP.CLI.print_info("Repair cancelled")
+          CLI.print_info("Repair cancelled")
           {:ok, :cancelled}
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to analyze configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to analyze configuration: #{inspect(reason)}")
         {:error, :analysis_failed}
     end
   end
@@ -296,12 +299,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
     with :ok <- check_system_requirements(),
          {:ok, config} <- create_interactive_configuration(options),
          :ok <- save_configuration_with_backup(config, options) do
-      TheMaestro.MCP.CLI.print_success("Setup completed successfully!")
+      CLI.print_success("Setup completed successfully!")
       show_next_steps(get_default_config_path())
       {:ok, config}
     else
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Setup failed: #{inspect(reason)}")
+        CLI.print_error("Setup failed: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -359,7 +362,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   end
 
   defp create_interactive_configuration(options) do
-    TheMaestro.MCP.CLI.print_info("Creating configuration...")
+    CLI.print_info("Creating configuration...")
 
     config = create_default_configuration()
 
@@ -460,7 +463,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
     # System-level settings
     config = create_default_configuration()
 
-    TheMaestro.MCP.CLI.print_info("Configuring system defaults...")
+    CLI.print_info("Configuring system defaults...")
 
     timeout = prompt_for_integer("Global timeout (ms) [30000]: ", 30_000)
     log_level = prompt_for_choice("Log level", ["debug", "info", "warning", "error"], "info")
@@ -533,7 +536,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   # System check functions
 
   defp check_configuration_file(_verbose) do
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, _} -> :ok
       {:error, :file_not_found} -> {:error, "Configuration file not found"}
       {:error, reason} -> {:error, "Configuration error: #{inspect(reason)}"}
@@ -548,7 +551,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   end
 
   defp check_server_configurations(_verbose) do
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, config} ->
         if map_size(config.servers) == 0 do
           {:warning, "No servers configured"}
@@ -570,7 +573,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
 
   defp check_authentication_setup(_verbose) do
     # Check if any servers require authentication but lack credentials
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, config} ->
         servers_needing_auth =
           config.servers
@@ -711,7 +714,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
     if File.exists?(config_path) do
       backup_path = config_path <> ".backup"
       File.cp(config_path, backup_path)
-      TheMaestro.MCP.CLI.print_info("Backup created: #{backup_path}")
+      CLI.print_info("Backup created: #{backup_path}")
     end
 
     save_initial_configuration(config, config_path, true)
@@ -787,7 +790,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
 
     # Check configuration file
     issues =
-      case TheMaestro.MCP.Config.load_configuration() do
+      case Config.load_configuration() do
         {:ok, _} ->
           issues
 
@@ -802,17 +805,17 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
   end
 
   defp repair_issues(issues, _options) do
-    TheMaestro.MCP.CLI.print_info("Attempting to repair issues...")
+    CLI.print_info("Attempting to repair issues...")
 
     repaired =
       Enum.reduce(issues, 0, fn issue, count ->
         case repair_single_issue(issue) do
           :ok ->
-            TheMaestro.MCP.CLI.print_success("  ✅ Repaired: #{issue.description}")
+            CLI.print_success("  ✅ Repaired: #{issue.description}")
             count + 1
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error(
+            CLI.print_error(
               "  ❌ Failed to repair: #{issue.description} (#{reason})"
             )
 
@@ -821,7 +824,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
       end)
 
     total = length(issues)
-    TheMaestro.MCP.CLI.print_info("Repair completed: #{repaired}/#{total} issues fixed")
+    CLI.print_info("Repair completed: #{repaired}/#{total} issues fixed")
 
     if repaired == total do
       {:ok, :all_repaired}

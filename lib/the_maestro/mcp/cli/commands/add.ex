@@ -8,6 +8,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
   alias TheMaestro.MCP.Config.ConfigValidator
+  alias TheMaestro.MCP.CLI
 
   @doc """
   Execute the add command.
@@ -38,7 +39,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
         add_server(server_name, server_config, options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error(reason)
+        CLI.print_error(reason)
         {:error, reason}
     end
   end
@@ -353,7 +354,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
   end
 
   defp add_server(server_name, server_config, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Adding server '#{server_name}'...", options)
+    CLI.print_if_verbose("Adding server '#{server_name}'...", options)
 
     case Config.get_configuration() do
       {:ok, current_config} ->
@@ -362,16 +363,16 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
             save_and_start_server(updated_config, server_name, server_config, options)
 
           {:error, :server_exists} ->
-            TheMaestro.MCP.CLI.print_error(
+            CLI.print_error(
               "Server '#{server_name}' already exists. Use 'update' to modify it."
             )
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error("Failed to add server: #{reason}")
+            CLI.print_error("Failed to add server: #{reason}")
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -381,18 +382,18 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
 
     case Config.save_configuration(updated_config, config_path) do
       :ok ->
-        TheMaestro.MCP.CLI.print_if_verbose("Configuration saved to #{config_path}", options)
+        CLI.print_if_verbose("Configuration saved to #{config_path}", options)
 
         # Optionally start the server immediately
         if should_start_server?(options) do
           start_server_connection(server_name, server_config, options)
         else
-          TheMaestro.MCP.CLI.print_success("Successfully added server '#{server_name}'")
+          CLI.print_success("Successfully added server '#{server_name}'")
           print_server_summary(server_name, server_config, options)
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to save configuration: #{reason}")
+        CLI.print_error("Failed to save configuration: #{reason}")
     end
   end
 
@@ -402,7 +403,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
   end
 
   defp start_server_connection(server_name, server_config, options) do
-    TheMaestro.MCP.CLI.print_if_verbose(
+    CLI.print_if_verbose(
       "Starting connection to server '#{server_name}'...",
       options
     )
@@ -412,11 +413,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
 
     case ConnectionManager.start_connection(ConnectionManager, server_config_with_id) do
       {:ok, _pid} ->
-        TheMaestro.MCP.CLI.print_success("Successfully added and started server '#{server_name}'")
+        CLI.print_success("Successfully added and started server '#{server_name}'")
         print_server_summary(server_name, server_config, options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_warning(
+        CLI.print_warning(
           "Server '#{server_name}' was added but failed to start: #{reason}"
         )
 
@@ -425,7 +426,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
   end
 
   defp print_server_summary(server_name, server_config, options) do
-    unless TheMaestro.MCP.CLI.is_quiet?(options) do
+    unless CLI.is_quiet?(options) do
       IO.puts("")
       IO.puts("Server Details:")
       IO.puts("  Name: #{server_name}")

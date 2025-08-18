@@ -40,7 +40,7 @@ defmodule TheMaestro.MCP.Config do
 
   require Logger
 
-  alias TheMaestro.MCP.Config.{ConfigParser, ConfigValidator, EnvResolver}
+  alias TheMaestro.MCP.Config.{ConfigParser, ConfigValidator, EnvResolver, TemplateParser}
 
   @type config :: map()
   @type server_config :: map()
@@ -330,7 +330,7 @@ defmodule TheMaestro.MCP.Config do
   """
   @spec apply_template(map(), map()) :: map()
   def apply_template(template, variables) do
-    TheMaestro.MCP.Config.TemplateParser.apply_template(template, variables)
+    TemplateParser.apply_template(template, variables)
   end
 
   @doc """

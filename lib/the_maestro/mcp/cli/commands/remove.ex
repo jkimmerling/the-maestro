@@ -7,6 +7,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
   """
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
+  alias TheMaestro.MCP.CLI
 
   @doc """
   Execute the remove command.
@@ -31,7 +32,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
         remove_server(server_name, options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error(reason)
+        CLI.print_error(reason)
         {:error, reason}
     end
   end
@@ -83,7 +84,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
   end
 
   defp remove_server(server_name, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Removing server '#{server_name}'...", options)
+    CLI.print_if_verbose("Removing server '#{server_name}'...", options)
 
     case Config.get_configuration() do
       {:ok, current_config} ->
@@ -92,18 +93,18 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
             if should_proceed_with_removal?(server_name, server_config, options) do
               perform_removal(current_config, server_name, server_config, options)
             else
-              TheMaestro.MCP.CLI.print_info("Server removal cancelled.")
+              CLI.print_info("Server removal cancelled.")
             end
 
           {:error, :not_found} ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found in configuration.")
+            CLI.print_error("Server '#{server_name}' not found in configuration.")
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error("Failed to check server: #{reason}")
+            CLI.print_error("Failed to check server: #{reason}")
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -186,31 +187,31 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
 
   defp perform_removal(current_config, server_name, server_config, options) do
     # Step 1: Stop active connection if exists
-    TheMaestro.MCP.CLI.print_if_verbose("Stopping server connection...", options)
+    CLI.print_if_verbose("Stopping server connection...", options)
     stop_server_connection(server_name, options)
 
     # Step 2: Remove from configuration
-    TheMaestro.MCP.CLI.print_if_verbose("Updating configuration...", options)
+    CLI.print_if_verbose("Updating configuration...", options)
 
     case remove_from_config(current_config, server_name) do
       {:ok, updated_config} ->
         save_updated_config(updated_config, server_name, server_config, options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to update configuration: #{reason}")
+        CLI.print_error("Failed to update configuration: #{reason}")
     end
   end
 
   defp stop_server_connection(server_name, options) do
     case ConnectionManager.stop_connection(ConnectionManager, server_name) do
       :ok ->
-        TheMaestro.MCP.CLI.print_if_verbose("Server connection stopped.", options)
+        CLI.print_if_verbose("Server connection stopped.", options)
 
       {:error, :not_found} ->
-        TheMaestro.MCP.CLI.print_if_verbose("Server was not connected.", options)
+        CLI.print_if_verbose("Server was not connected.", options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_warning("Warning: Failed to stop server connection: #{reason}")
+        CLI.print_warning("Warning: Failed to stop server connection: #{reason}")
     end
   end
 
@@ -231,7 +232,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
 
     case Config.save_configuration(updated_config, config_path) do
       :ok ->
-        TheMaestro.MCP.CLI.print_success("Successfully removed server '#{server_name}'")
+        CLI.print_success("Successfully removed server '#{server_name}'")
 
         unless Map.get(options, :preserve_data, false) do
           cleanup_server_data(server_name, options)
@@ -240,12 +241,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
         print_removal_summary(server_name, server_config, options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to save configuration: #{reason}")
+        CLI.print_error("Failed to save configuration: #{reason}")
     end
   end
 
   defp cleanup_server_data(server_name, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Cleaning up server data...", options)
+    CLI.print_if_verbose("Cleaning up server data...", options)
 
     # Clean up any server-specific data, logs, or cache files
     # This is a placeholder - actual implementation would depend on
@@ -260,17 +261,17 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
       if File.exists?(path) do
         case File.rm_rf(path) do
           {:ok, _} ->
-            TheMaestro.MCP.CLI.print_if_verbose("Cleaned up: #{path}", options)
+            CLI.print_if_verbose("Cleaned up: #{path}", options)
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_if_verbose("Could not clean up #{path}: #{reason}", options)
+            CLI.print_if_verbose("Could not clean up #{path}: #{reason}", options)
         end
       end
     end)
   end
 
   defp print_removal_summary(server_name, server_config, options) do
-    unless TheMaestro.MCP.CLI.is_quiet?(options) do
+    unless CLI.is_quiet?(options) do
       IO.puts("")
       IO.puts("Removal Summary:")
       IO.puts("  ✓ Server '#{server_name}' removed from configuration")

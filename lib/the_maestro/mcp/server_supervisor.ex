@@ -7,7 +7,7 @@ defmodule TheMaestro.MCP.ServerSupervisor do
   that expect this interface.
   """
 
-  alias TheMaestro.MCP.ConnectionManager
+  alias TheMaestro.MCP.{Config, ConnectionManager}
 
   @doc """
   Start an MCP server.
@@ -71,7 +71,7 @@ defmodule TheMaestro.MCP.ServerSupervisor do
   ## Private Functions
 
   defp get_server_config(server_name) do
-    case TheMaestro.MCP.Config.get_configuration() do
+    case Config.get_configuration() do
       {:ok, config} ->
         case get_in(config, ["mcpServers", server_name]) do
           nil ->

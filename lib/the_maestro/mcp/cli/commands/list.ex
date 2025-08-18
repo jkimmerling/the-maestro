@@ -8,6 +8,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
   alias TheMaestro.MCP.CLI.Formatters.TableFormatter
+  alias TheMaestro.MCP.CLI
 
   @doc """
   Execute the list command.
@@ -31,7 +32,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
         {:ok, :success}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load servers: #{reason}")
+        CLI.print_error("Failed to load servers: #{reason}")
         {:error, reason}
     end
   end
@@ -168,7 +169,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
   end
 
   defp add_detailed_info(server_info, server_config, options) do
-    if TheMaestro.MCP.CLI.is_verbose?(options) do
+    if CLI.is_verbose?(options) do
       details = %{
         command: Map.get(server_config, "command"),
         args: Map.get(server_config, "args", []),
@@ -196,7 +197,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
   end
 
   defp format_and_display(servers, options) do
-    format = TheMaestro.MCP.CLI.get_output_format(options)
+    format = CLI.get_output_format(options)
 
     case format do
       "json" ->
@@ -204,7 +205,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
         IO.puts(output)
 
       "yaml" ->
-        output = TheMaestro.MCP.CLI.Formatters.YamlFormatter.format(%{servers: servers})
+        output = CLI.Formatters.YamlFormatter.format(%{servers: servers})
         IO.puts(output)
 
       _ ->
@@ -214,7 +215,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
 
   defp display_table(servers, options) do
     if Enum.empty?(servers) do
-      TheMaestro.MCP.CLI.print_info("No MCP servers configured.")
+      CLI.print_info("No MCP servers configured.")
       :ok
     else
       headers = build_table_headers(options)
@@ -232,7 +233,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
     |> maybe_add_header("Status", Map.get(options, :status))
     |> maybe_add_header("Uptime", Map.get(options, :status))
     |> maybe_add_header("Tools", Map.get(options, :tools))
-    |> maybe_add_header("Description", TheMaestro.MCP.CLI.is_verbose?(options))
+    |> maybe_add_header("Description", CLI.is_verbose?(options))
   end
 
   defp maybe_add_header(headers, header, condition) do
@@ -252,7 +253,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
     |> maybe_add_cell(format_tools_count(Map.get(server, :tools, [])), Map.get(options, :tools))
     |> maybe_add_cell(
       truncate_text(server.description, 40),
-      TheMaestro.MCP.CLI.is_verbose?(options)
+      CLI.is_verbose?(options)
     )
   end
 

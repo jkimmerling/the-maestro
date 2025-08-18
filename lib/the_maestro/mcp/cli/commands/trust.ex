@@ -5,6 +5,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
   Provides functionality to manage trust levels and permissions for MCP servers.
   """
 
+  alias TheMaestro.MCP.{Config, ServerSupervisor}
+  alias TheMaestro.MCP.CLI
+
   @doc """
   Execute the trust command.
   """
@@ -28,7 +31,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
         reset_trust_level(server_name, options)
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid trust command. Use --help for usage.")
+        CLI.print_error("Invalid trust command. Use --help for usage.")
     end
   end
 
@@ -64,10 +67,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
 
   defp set_trust_level(server_name, trusted, options) do
     action = if trusted, do: "trusted", else: "untrusted"
-    TheMaestro.MCP.CLI.print_info("Setting server '#{server_name}' as #{action}...")
+    CLI.print_info("Setting server '#{server_name}' as #{action}...")
 
     # Load current configuration
-    with {:ok, config} <- TheMaestro.MCP.Config.load_configuration(),
+    with {:ok, config} <- Config.load_configuration(),
          {:ok, server} <- find_server_config(config, server_name) do
       # Determine trust level from options or default
       trust_level =
@@ -84,7 +87,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
 
       case trust_level do
         {:error, reason} ->
-          TheMaestro.MCP.CLI.print_error("Invalid trust level: #{reason}")
+          CLI.print_error("Invalid trust level: #{reason}")
           {:error, :invalid_level}
 
         level ->
@@ -94,9 +97,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
           updated_config = %{config | servers: updated_servers}
 
           # Save updated configuration
-          case TheMaestro.MCP.Config.save_configuration(updated_config) do
+          case Config.save_configuration(updated_config) do
             :ok ->
-              TheMaestro.MCP.CLI.print_success(
+              CLI.print_success(
                 "Server '#{server_name}' is now #{action} (level: #{level})"
               )
 
@@ -108,25 +111,25 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
               {:ok, level}
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error("Failed to save configuration: #{inspect(reason)}")
+              CLI.print_error("Failed to save configuration: #{inspect(reason)}")
               {:error, :save_failed}
           end
       end
     else
       {:error, :server_not_found} ->
-        TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found in configuration")
+        CLI.print_error("Server '#{server_name}' not found in configuration")
         {:error, :server_not_found}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to load configuration: #{inspect(reason)}")
         {:error, :config_load_failed}
     end
   end
 
   defp list_trust_levels(options) do
-    TheMaestro.MCP.CLI.print_info("Server trust levels:")
+    CLI.print_info("Server trust levels:")
 
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, config} when map_size(config.servers) == 0 ->
         IO.puts("  No servers configured")
         {:ok, []}
@@ -183,24 +186,24 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
         {:ok, servers_with_trust}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to load configuration: #{inspect(reason)}")
         {:error, :config_load_failed}
     end
   end
 
   defp reset_trust_level(server_name, options) do
-    TheMaestro.MCP.CLI.print_info("Resetting trust level for server '#{server_name}'...")
+    CLI.print_info("Resetting trust level for server '#{server_name}'...")
 
-    with {:ok, config} <- TheMaestro.MCP.Config.load_configuration(),
+    with {:ok, config} <- Config.load_configuration(),
          {:ok, server} <- find_server_config(config, server_name) do
       # Reset to default trust level (medium)
       updated_server = Map.put(server, :trust_level, :medium)
       updated_servers = Map.put(config.servers, server_name, updated_server)
       updated_config = %{config | servers: updated_servers}
 
-      case TheMaestro.MCP.Config.save_configuration(updated_config) do
+      case Config.save_configuration(updated_config) do
         :ok ->
-          TheMaestro.MCP.CLI.print_success("Trust level reset for '#{server_name}' (now: medium)")
+          CLI.print_success("Trust level reset for '#{server_name}' (now: medium)")
 
           # Optionally restart server connection
           if Map.get(options, :restart, true) do
@@ -210,16 +213,16 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
           {:ok, :medium}
 
         {:error, reason} ->
-          TheMaestro.MCP.CLI.print_error("Failed to save configuration: #{inspect(reason)}")
+          CLI.print_error("Failed to save configuration: #{inspect(reason)}")
           {:error, :save_failed}
       end
     else
       {:error, :server_not_found} ->
-        TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found in configuration")
+        CLI.print_error("Server '#{server_name}' not found in configuration")
         {:error, :server_not_found}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to load configuration: #{inspect(reason)}")
         {:error, :config_load_failed}
     end
   end
@@ -264,7 +267,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
 
   defp get_server_connection_status(server_name) do
     # Check if server process is running and connected
-    case TheMaestro.MCP.ServerSupervisor.get_server_pid(server_name) do
+    case ServerSupervisor.get_server_pid(server_name) do
       {:ok, pid} when is_pid(pid) ->
         if Process.alive?(pid) do
           # Try to get server info to check connection health
@@ -293,16 +296,16 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
   defp format_connection_status(:unknown), do: "Unknown"
 
   defp restart_server_connection(server_name) do
-    TheMaestro.MCP.CLI.print_info(
+    CLI.print_info(
       "Restarting connection for '#{server_name}' to apply trust changes..."
     )
 
-    case TheMaestro.MCP.ServerSupervisor.restart_server(server_name) do
+    case ServerSupervisor.restart_server(server_name) do
       :ok ->
-        TheMaestro.MCP.CLI.print_success("Connection restarted successfully")
+        CLI.print_success("Connection restarted successfully")
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_warning("Failed to restart connection: #{inspect(reason)}")
+        CLI.print_warning("Failed to restart connection: #{inspect(reason)}")
     end
   end
 end

@@ -7,6 +7,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
   """
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
+  alias TheMaestro.MCP.Config.ConfigValidator
+  alias TheMaestro.MCP.CLI
 
   @doc """
   Execute the status command.
@@ -40,7 +42,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
   def test_connection(args, options) do
     case args do
       [] ->
-        TheMaestro.MCP.CLI.print_error("Server name is required for connection test.")
+        CLI.print_error("Server name is required for connection test.")
 
       [server_name | _] ->
         perform_connection_test(server_name, options)
@@ -119,7 +121,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
   end
 
   defp show_all_servers_status(options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Checking status for all servers...", options)
+    CLI.print_if_verbose("Checking status for all servers...", options)
 
     case Config.get_configuration() do
       {:ok, config} ->
@@ -135,22 +137,22 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
             display_server_statuses(server_statuses, options)
 
           _ ->
-            TheMaestro.MCP.CLI.print_info("No MCP servers configured.")
+            CLI.print_info("No MCP servers configured.")
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
   defp show_single_server_status(server_name, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Checking status for server '#{server_name}'...", options)
+    CLI.print_if_verbose("Checking status for server '#{server_name}'...", options)
 
     case Config.get_configuration() do
       {:ok, config} ->
         case get_in(config, ["mcpServers", server_name]) do
           nil ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found in configuration.")
+            CLI.print_error("Server '#{server_name}' not found in configuration.")
 
           server_config ->
             status_info = get_server_status_info(server_name, server_config, options)
@@ -158,7 +160,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -176,7 +178,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
 
     # Get tools information if verbose
     tools_info =
-      if TheMaestro.MCP.CLI.is_verbose?(options) do
+      if CLI.is_verbose?(options) do
         get_server_tools_info(server_id)
       else
         %{}
@@ -237,7 +239,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
   end
 
   defp display_server_statuses(server_statuses, options) do
-    format = TheMaestro.MCP.CLI.get_output_format(options)
+    format = CLI.get_output_format(options)
 
     case format do
       "json" ->
@@ -245,7 +247,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
         IO.puts(output)
 
       "yaml" ->
-        output = TheMaestro.MCP.CLI.Formatters.YamlFormatter.format(%{servers: server_statuses})
+        output = CLI.Formatters.YamlFormatter.format(%{servers: server_statuses})
         IO.puts(output)
 
       _ ->
@@ -254,7 +256,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
   end
 
   defp display_single_server_status(status_info, options) do
-    format = TheMaestro.MCP.CLI.get_output_format(options)
+    format = CLI.get_output_format(options)
 
     case format do
       "json" ->
@@ -262,7 +264,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
         IO.puts(output)
 
       "yaml" ->
-        output = TheMaestro.MCP.CLI.Formatters.YamlFormatter.format(status_info)
+        output = CLI.Formatters.YamlFormatter.format(status_info)
         IO.puts(output)
 
       _ ->
@@ -272,7 +274,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
 
   defp display_status_table(server_statuses, options) do
     if Enum.empty?(server_statuses) do
-      TheMaestro.MCP.CLI.print_info("No servers to display.")
+      CLI.print_info("No servers to display.")
       :ok
     else
       headers = build_status_table_headers(options)
@@ -281,7 +283,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
       display_simple_table(headers, rows)
 
       # Show summary
-      unless TheMaestro.MCP.CLI.is_quiet?(options) do
+      unless CLI.is_quiet?(options) do
         show_status_summary(server_statuses)
       end
     end
@@ -327,7 +329,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
       IO.puts("Tools:")
       IO.puts("  Available Tools: #{status_info.tools_count}")
 
-      if TheMaestro.MCP.CLI.is_verbose?(options) and length(status_info.tools) > 0 do
+      if CLI.is_verbose?(options) and length(status_info.tools) > 0 do
         IO.puts("  Tool List:")
 
         Enum.each(status_info.tools, fn tool ->
@@ -350,9 +352,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
     base_headers = ["Name", "Status", "Transport", "Trust"]
 
     base_headers
-    |> maybe_add_header("Uptime", not TheMaestro.MCP.CLI.is_quiet?(options))
-    |> maybe_add_header("Tools", TheMaestro.MCP.CLI.is_verbose?(options))
-    |> maybe_add_header("Errors", TheMaestro.MCP.CLI.is_verbose?(options))
+    |> maybe_add_header("Uptime", not CLI.is_quiet?(options))
+    |> maybe_add_header("Tools", CLI.is_verbose?(options))
+    |> maybe_add_header("Errors", CLI.is_verbose?(options))
   end
 
   defp build_status_table_row(status, options) do
@@ -364,9 +366,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
     ]
 
     base_row
-    |> maybe_add_cell(status.uptime || "", not TheMaestro.MCP.CLI.is_quiet?(options))
-    |> maybe_add_cell(Map.get(status, :tools_count, ""), TheMaestro.MCP.CLI.is_verbose?(options))
-    |> maybe_add_cell(status.error_count || 0, TheMaestro.MCP.CLI.is_verbose?(options))
+    |> maybe_add_cell(status.uptime || "", not CLI.is_quiet?(options))
+    |> maybe_add_cell(Map.get(status, :tools_count, ""), CLI.is_verbose?(options))
+    |> maybe_add_cell(status.error_count || 0, CLI.is_verbose?(options))
   end
 
   defp show_status_summary(server_statuses) do
@@ -406,20 +408,20 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
   end
 
   defp perform_connection_test(server_name, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Testing connection to '#{server_name}'...", options)
+    CLI.print_if_verbose("Testing connection to '#{server_name}'...", options)
 
     case Config.get_configuration() do
       {:ok, config} ->
         case get_in(config, ["mcpServers", server_name]) do
           nil ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found.")
+            CLI.print_error("Server '#{server_name}' not found.")
 
           server_config ->
             run_connection_test(server_name, server_config, options)
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -439,7 +441,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
 
         IO.puts("✓ Connection test passed (#{duration}ms)")
 
-        if TheMaestro.MCP.CLI.is_verbose?(options) and test_results do
+        if CLI.is_verbose?(options) and test_results do
           display_test_results(test_results)
         end
 
@@ -448,19 +450,19 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
         duration = end_time - start_time
 
         IO.puts("✗ Connection test failed (#{duration}ms)")
-        TheMaestro.MCP.CLI.print_error("Error: #{reason}")
+        CLI.print_error("Error: #{reason}")
     end
   end
 
   defp perform_global_health_check(options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Performing global health check...", options)
+    CLI.print_if_verbose("Performing global health check...", options)
 
     case Config.get_configuration() do
       {:ok, config} ->
         servers = get_in(config, ["mcpServers"]) || %{}
 
         if map_size(servers) == 0 do
-          TheMaestro.MCP.CLI.print_info("No servers configured for health check.")
+          CLI.print_info("No servers configured for health check.")
         else
           results =
             servers
@@ -472,12 +474,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
   defp perform_server_health_check(server_name, options) do
-    TheMaestro.MCP.CLI.print_if_verbose(
+    CLI.print_if_verbose(
       "Performing health check for '#{server_name}'...",
       options
     )
@@ -486,7 +488,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
       {:ok, config} ->
         case get_in(config, ["mcpServers", server_name]) do
           nil ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found.")
+            CLI.print_error("Server '#{server_name}' not found.")
 
           server_config ->
             result = perform_server_health_test(server_name, server_config)
@@ -494,7 +496,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -561,7 +563,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
   end
 
   defp test_server_configuration(server_config) do
-    case TheMaestro.MCP.Config.ConfigValidator.validate_server_config(
+    case ConfigValidator.validate_server_config(
            "health_check",
            server_config
          ) do
@@ -600,7 +602,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
 
     IO.puts("#{status_icon} #{server_id}: #{result.health_score}% healthy")
 
-    if TheMaestro.MCP.CLI.is_verbose?(options) do
+    if CLI.is_verbose?(options) do
       Enum.each(result.checks, fn {check_name, check_result} ->
         check_icon =
           case check_result.status do

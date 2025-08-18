@@ -5,6 +5,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
   Provides functionality to manage authentication and API keys for MCP servers.
   """
 
+  alias TheMaestro.MCP.{Config, ServerSupervisor}
+  alias TheMaestro.MCP.CLI
+
   @doc """
   Execute the auth command.
   """
@@ -25,7 +28,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         show_auth_status(options)
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid auth command. Use --help for usage.")
+        CLI.print_error("Invalid auth command. Use --help for usage.")
     end
   end
 
@@ -44,7 +47,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         list_api_keys(options)
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid apikey command. Use --help for usage.")
+        CLI.print_error("Invalid apikey command. Use --help for usage.")
     end
   end
 
@@ -84,9 +87,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
   ## Private Functions
 
   defp login_to_server(server_name, options) do
-    TheMaestro.MCP.CLI.print_info("Logging in to server '#{server_name}'...")
+    CLI.print_info("Logging in to server '#{server_name}'...")
 
-    with {:ok, config} <- TheMaestro.MCP.Config.load_configuration(),
+    with {:ok, config} <- Config.load_configuration(),
          {:ok, server} <- find_server_config(config, server_name) do
       # Determine authentication method based on server configuration
       auth_method = Map.get(server, :auth_method, :interactive)
@@ -105,31 +108,31 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
           handle_interactive_login(server_name, server, options)
 
         :none ->
-          TheMaestro.MCP.CLI.print_success("No authentication required for '#{server_name}'")
+          CLI.print_success("No authentication required for '#{server_name}'")
           {:ok, :no_auth}
 
         _ ->
-          TheMaestro.MCP.CLI.print_error("Unsupported authentication method: #{auth_method}")
+          CLI.print_error("Unsupported authentication method: #{auth_method}")
           {:error, :unsupported_auth}
       end
     else
       {:error, :server_not_found} ->
-        TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found in configuration")
+        CLI.print_error("Server '#{server_name}' not found in configuration")
         {:error, :server_not_found}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to load configuration: #{inspect(reason)}")
         {:error, :config_load_failed}
     end
   end
 
   defp logout_from_server(server_name, options) do
-    TheMaestro.MCP.CLI.print_info("Logging out from server '#{server_name}'...")
+    CLI.print_info("Logging out from server '#{server_name}'...")
 
     # Clear stored credentials for the server
     case clear_stored_credentials(server_name) do
       :ok ->
-        TheMaestro.MCP.CLI.print_success("Successfully logged out from '#{server_name}'")
+        CLI.print_success("Successfully logged out from '#{server_name}'")
 
         # Optionally disconnect active connections
         if Map.get(options, :disconnect, true) do
@@ -139,15 +142,15 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         {:ok, :logged_out}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to clear credentials: #{inspect(reason)}")
+        CLI.print_error("Failed to clear credentials: #{inspect(reason)}")
         {:error, :clear_failed}
     end
   end
 
   defp show_auth_status(options) do
-    TheMaestro.MCP.CLI.print_info("Authentication status:")
+    CLI.print_info("Authentication status:")
 
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, config} when map_size(config.servers) == 0 ->
         IO.puts("  No servers configured")
         {:ok, []}
@@ -207,17 +210,17 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         {:ok, auth_status}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to load configuration: #{inspect(reason)}")
         {:error, :config_load_failed}
     end
   end
 
   defp set_api_key(server_name, key, options) do
-    TheMaestro.MCP.CLI.print_info("Setting API key for server '#{server_name}'...")
+    CLI.print_info("Setting API key for server '#{server_name}'...")
 
     # Basic API key validation
     if String.length(key) < 8 do
-      TheMaestro.MCP.CLI.print_error("API key too short (minimum 8 characters)")
+      CLI.print_error("API key too short (minimum 8 characters)")
       {:error, :invalid_key}
     end
 
@@ -226,28 +229,28 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
       :ok ->
         # Mask key for display (show first 6 and last 4 characters)
         masked_key = mask_api_key(key)
-        TheMaestro.MCP.CLI.print_success("API key set for '#{server_name}' (#{masked_key})")
+        CLI.print_success("API key set for '#{server_name}' (#{masked_key})")
 
         # Test connection if requested
         if Map.get(options, :test, false) do
-          TheMaestro.MCP.CLI.print_info("Testing API key connection...")
+          CLI.print_info("Testing API key connection...")
           # Would test connection in real implementation
         end
 
         {:ok, :stored}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to store API key: #{inspect(reason)}")
+        CLI.print_error("Failed to store API key: #{inspect(reason)}")
         {:error, :store_failed}
     end
   end
 
   defp remove_api_key(server_name, options) do
-    TheMaestro.MCP.CLI.print_info("Removing API key for server '#{server_name}'...")
+    CLI.print_info("Removing API key for server '#{server_name}'...")
 
     case remove_stored_api_key(server_name) do
       :ok ->
-        TheMaestro.MCP.CLI.print_success("API key removed for '#{server_name}'")
+        CLI.print_success("API key removed for '#{server_name}'")
 
         # Disconnect if currently connected using the API key
         if Map.get(options, :disconnect, true) do
@@ -257,17 +260,17 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         {:ok, :removed}
 
       {:error, :not_found} ->
-        TheMaestro.MCP.CLI.print_warning("No API key found for '#{server_name}'")
+        CLI.print_warning("No API key found for '#{server_name}'")
         {:ok, :not_found}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to remove API key: #{inspect(reason)}")
+        CLI.print_error("Failed to remove API key: #{inspect(reason)}")
         {:error, :remove_failed}
     end
   end
 
   defp list_api_keys(options) do
-    TheMaestro.MCP.CLI.print_info("Configured API keys:")
+    CLI.print_info("Configured API keys:")
 
     case get_stored_api_keys() do
       {:ok, []} ->
@@ -314,7 +317,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         {:ok, api_keys}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to list API keys: #{inspect(reason)}")
+        CLI.print_error("Failed to list API keys: #{inspect(reason)}")
         {:error, :list_failed}
     end
   end
@@ -335,7 +338,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
       store_api_key(server_name, key, options)
     else
       # Prompt for API key interactively
-      TheMaestro.MCP.CLI.print_info("Please enter the API key for '#{server_name}':")
+      CLI.print_info("Please enter the API key for '#{server_name}':")
 
       case IO.gets("API Key: ") do
         key when is_binary(key) ->
@@ -344,12 +347,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
           if String.length(key) > 0 do
             store_api_key(server_name, key, options)
           else
-            TheMaestro.MCP.CLI.print_error("Empty API key provided")
+            CLI.print_error("Empty API key provided")
             {:error, :empty_key}
           end
 
         _ ->
-          TheMaestro.MCP.CLI.print_error("Failed to read API key")
+          CLI.print_error("Failed to read API key")
           {:error, :read_failed}
       end
     end
@@ -360,16 +363,16 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
     auth_url = Map.get(oauth_config, :auth_url)
 
     if auth_url do
-      TheMaestro.MCP.CLI.print_info("Opening OAuth authorization URL...")
-      TheMaestro.MCP.CLI.print_info("URL: #{auth_url}")
+      CLI.print_info("Opening OAuth authorization URL...")
+      CLI.print_info("URL: #{auth_url}")
 
       # Attempt to open URL in browser
       case System.cmd("open", [auth_url]) do
         {_, 0} -> :ok
-        _ -> TheMaestro.MCP.CLI.print_warning("Could not open browser automatically")
+        _ -> CLI.print_warning("Could not open browser automatically")
       end
 
-      TheMaestro.MCP.CLI.print_info(
+      CLI.print_info(
         "Please complete OAuth flow and enter the authorization code:"
       )
 
@@ -377,15 +380,15 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         code when is_binary(code) ->
           code = String.trim(code)
           # In real implementation, would exchange code for token
-          TheMaestro.MCP.CLI.print_success("OAuth authentication completed")
+          CLI.print_success("OAuth authentication completed")
           {:ok, :oauth}
 
         _ ->
-          TheMaestro.MCP.CLI.print_error("Failed to read authorization code")
+          CLI.print_error("Failed to read authorization code")
           {:error, :read_failed}
       end
     else
-      TheMaestro.MCP.CLI.print_error("No OAuth authorization URL configured for server")
+      CLI.print_error("No OAuth authorization URL configured for server")
       {:error, :no_auth_url}
     end
   end
@@ -394,7 +397,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
     if token = Map.get(options, :token) do
       store_bearer_token(server_name, token, options)
     else
-      TheMaestro.MCP.CLI.print_info("Please enter the bearer token for '#{server_name}':")
+      CLI.print_info("Please enter the bearer token for '#{server_name}':")
 
       case IO.gets("Bearer Token: ") do
         token when is_binary(token) ->
@@ -403,29 +406,29 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
           if String.length(token) > 0 do
             store_bearer_token(server_name, token, options)
           else
-            TheMaestro.MCP.CLI.print_error("Empty bearer token provided")
+            CLI.print_error("Empty bearer token provided")
             {:error, :empty_token}
           end
 
         _ ->
-          TheMaestro.MCP.CLI.print_error("Failed to read bearer token")
+          CLI.print_error("Failed to read bearer token")
           {:error, :read_failed}
       end
     end
   end
 
   defp handle_interactive_login(server_name, server, options) do
-    TheMaestro.MCP.CLI.print_info("Interactive authentication for '#{server_name}'")
-    TheMaestro.MCP.CLI.print_info("Please follow the prompts from the MCP server...")
+    CLI.print_info("Interactive authentication for '#{server_name}'")
+    CLI.print_info("Please follow the prompts from the MCP server...")
 
     # Start server connection and handle interactive authentication
-    case TheMaestro.MCP.ServerSupervisor.start_server(server_name, %{interactive_auth: true}) do
+    case ServerSupervisor.start_server(server_name, %{interactive_auth: true}) do
       {:ok, _pid} ->
-        TheMaestro.MCP.CLI.print_success("Interactive authentication completed")
+        CLI.print_success("Interactive authentication completed")
         {:ok, :interactive}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Interactive authentication failed: #{inspect(reason)}")
+        CLI.print_error("Interactive authentication failed: #{inspect(reason)}")
         {:error, :interactive_failed}
     end
   end
@@ -504,7 +507,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
   # Status and validation functions
 
   defp get_connection_auth_status(server_name) do
-    case TheMaestro.MCP.ServerSupervisor.get_server_pid(server_name) do
+    case ServerSupervisor.get_server_pid(server_name) do
       {:ok, pid} when is_pid(pid) ->
         if Process.alive?(pid) do
           case GenServer.call(pid, :get_auth_status, 1000) do
@@ -560,12 +563,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
   defp mask_api_key(key), do: "#{String.slice(key, 0, 2)}...***"
 
   defp disconnect_server(server_name) do
-    case TheMaestro.MCP.ServerSupervisor.stop_server(server_name) do
+    case ServerSupervisor.stop_server(server_name) do
       :ok ->
-        TheMaestro.MCP.CLI.print_info("Disconnected from '#{server_name}'")
+        CLI.print_info("Disconnected from '#{server_name}'")
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_warning("Failed to disconnect: #{inspect(reason)}")
+        CLI.print_warning("Failed to disconnect: #{inspect(reason)}")
     end
   end
 end

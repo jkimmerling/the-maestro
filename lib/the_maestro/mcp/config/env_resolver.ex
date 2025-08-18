@@ -13,6 +13,8 @@ defmodule TheMaestro.MCP.Config.EnvResolver do
 
   require Logger
 
+  alias TheMaestro.MCP.Config
+
   @doc """
   Resolve environment variables in a single string value.
 
@@ -304,7 +306,7 @@ defmodule TheMaestro.MCP.Config.EnvResolver do
             :persistent_term.put({__MODULE__, :watched_vars}, new_values)
 
             # Trigger configuration reload
-            TheMaestro.MCP.Config.reload_configuration()
+            Config.reload_configuration()
 
             :changed
         end

@@ -6,6 +6,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
   """
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
+  alias TheMaestro.MCP.CLI
 
   @doc """
   List available tools from MCP servers.
@@ -21,7 +22,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
         list_server_tools(server_filter, options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error(reason)
+        CLI.print_error(reason)
         {:error, reason}
     end
   end
@@ -35,7 +36,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
         run_tool(tool_name, server_name, params, options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error(reason)
+        CLI.print_error(reason)
         {:error, reason}
     end
   end
@@ -137,7 +138,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -184,11 +185,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
 
   defp display_tools_list(tools_info, options) do
     if Enum.empty?(tools_info) do
-      TheMaestro.MCP.CLI.print_info("No tools found.")
+      CLI.print_info("No tools found.")
       :ok
     end
 
-    format = TheMaestro.MCP.CLI.get_output_format(options)
+    format = CLI.get_output_format(options)
 
     case format do
       "json" ->
@@ -196,7 +197,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
         IO.puts(output)
 
       "yaml" ->
-        output = TheMaestro.MCP.CLI.Formatters.YamlFormatter.format(%{tools: tools_info})
+        output = CLI.Formatters.YamlFormatter.format(%{tools: tools_info})
         IO.puts(output)
 
       _ ->
@@ -218,7 +219,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
 
     display_simple_table(headers, rows)
 
-    unless TheMaestro.MCP.CLI.is_quiet?(options) do
+    unless CLI.is_quiet?(options) do
       IO.puts("")
 
       IO.puts(
@@ -232,7 +233,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
            (Map.get(tool, :name) || Map.get(tool, "name")) == tool_name
          end) do
       nil ->
-        TheMaestro.MCP.CLI.print_error("Tool '#{tool_name}' not found.")
+        CLI.print_error("Tool '#{tool_name}' not found.")
 
       tool ->
         display_tool_details(tool, options)
@@ -260,7 +261,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
       IO.puts("")
       IO.puts("Input Schema:")
 
-      if TheMaestro.MCP.CLI.is_verbose?(options) do
+      if CLI.is_verbose?(options) do
         IO.puts(Jason.encode!(input_schema, pretty: true))
       else
         display_schema_summary(input_schema)
@@ -298,20 +299,20 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
   end
 
   defp run_tool(tool_name, server_name, params, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Executing tool '#{tool_name}'...", options)
+    CLI.print_if_verbose("Executing tool '#{tool_name}'...", options)
 
     # Find server if not specified
     server_name = server_name || find_server_for_tool(tool_name, options)
 
     unless server_name do
-      TheMaestro.MCP.CLI.print_error("Tool '#{tool_name}' not found or server not specified.")
+      CLI.print_error("Tool '#{tool_name}' not found or server not specified.")
       :ok
     end
 
     # Confirm execution unless --no-confirm is specified
     unless Map.get(options, :no_confirm, false) or should_skip_confirmation?(tool_name, params) do
       unless confirm_tool_execution(tool_name, server_name, params) do
-        TheMaestro.MCP.CLI.print_info("Tool execution cancelled.")
+        CLI.print_info("Tool execution cancelled.")
         :ok
       end
     end
@@ -324,7 +325,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
         display_tool_result(tool_name, result, options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Tool execution failed: #{reason}")
+        CLI.print_error("Tool execution failed: #{reason}")
     end
   end
 
@@ -398,7 +399,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
 
   defp execute_tool_on_server(server_name, tool_name, params, timeout, options) do
     if Map.get(options, :debug) or Map.get(options, :trace) do
-      TheMaestro.MCP.CLI.print_if_verbose(
+      CLI.print_if_verbose(
         "Debug mode: Tool execution details will be shown",
         options
       )
@@ -413,14 +414,14 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
     execution_time = end_time - start_time
 
     if Map.get(options, :debug) or Map.get(options, :trace) do
-      TheMaestro.MCP.CLI.print_if_verbose("Execution time: #{execution_time}ms", options)
+      CLI.print_if_verbose("Execution time: #{execution_time}ms", options)
     end
 
     result
   end
 
   defp display_tool_result(tool_name, result, options) do
-    format = TheMaestro.MCP.CLI.get_output_format(options)
+    format = CLI.get_output_format(options)
 
     case format do
       "json" ->
@@ -429,7 +430,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
 
       "yaml" ->
         output =
-          TheMaestro.MCP.CLI.Formatters.YamlFormatter.format(%{tool: tool_name, result: result})
+          CLI.Formatters.YamlFormatter.format(%{tool: tool_name, result: result})
 
         IO.puts(output)
 
@@ -457,7 +458,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
         IO.puts(text)
 
       data ->
-        if TheMaestro.MCP.CLI.is_verbose?(options) do
+        if CLI.is_verbose?(options) do
           IO.puts(Jason.encode!(data, pretty: true))
         else
           IO.puts(inspect(data))
@@ -472,7 +473,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
   end
 
   defp display_content_item(item, options) do
-    if TheMaestro.MCP.CLI.is_verbose?(options) do
+    if CLI.is_verbose?(options) do
       IO.puts(Jason.encode!(item, pretty: true))
     else
       IO.puts(inspect(item))

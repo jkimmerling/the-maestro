@@ -7,6 +7,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   """
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
+  alias TheMaestro.MCP.Config.ConfigValidator
+  alias TheMaestro.MCP.CLI
 
   @doc """
   Diagnose system issues and connectivity problems.
@@ -32,7 +34,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   def show_logs(args, options) do
     case args do
       [] ->
-        TheMaestro.MCP.CLI.print_error("Server name is required for log viewing.")
+        CLI.print_error("Server name is required for log viewing.")
 
       [server_name | _] ->
         show_server_logs(server_name, options)
@@ -45,7 +47,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   def ping_server(args, options) do
     case args do
       [] ->
-        TheMaestro.MCP.CLI.print_error("Server name is required for ping.")
+        CLI.print_error("Server name is required for ping.")
 
       [server_name | _] ->
         ping_specific_server(server_name, options)
@@ -58,7 +60,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   def trace_connection(args, options) do
     case args do
       [] ->
-        TheMaestro.MCP.CLI.print_error("Server name is required for tracing.")
+        CLI.print_error("Server name is required for tracing.")
 
       [server_name | _] ->
         trace_server_connection(server_name, options)
@@ -119,7 +121,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     IO.puts("#{String.duplicate("=", 25)}")
     IO.puts("")
 
-    TheMaestro.MCP.CLI.print_if_verbose("Running comprehensive system diagnosis...", options)
+    CLI.print_if_verbose("Running comprehensive system diagnosis...", options)
 
     # Run multiple diagnostic checks
     results = %{
@@ -158,13 +160,13 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     IO.puts("#{String.duplicate("=", String.length("Server Diagnosis: #{server_name}"))}")
     IO.puts("")
 
-    TheMaestro.MCP.CLI.print_if_verbose("Diagnosing server '#{server_name}'...", options)
+    CLI.print_if_verbose("Diagnosing server '#{server_name}'...", options)
 
     case Config.get_configuration() do
       {:ok, config} ->
         case get_in(config, ["mcpServers", server_name]) do
           nil ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found in configuration.")
+            CLI.print_error("Server '#{server_name}' not found in configuration.")
 
           server_config ->
             results = run_server_diagnosis(server_name, server_config, options)
@@ -172,7 +174,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -420,7 +422,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   defp check_config_schema do
     case Config.get_configuration() do
       {:ok, config} ->
-        case TheMaestro.MCP.Config.ConfigValidator.validate(config) do
+        case ConfigValidator.validate(config) do
           {:ok, _validated_config} ->
             %{status: :pass, message: "Configuration schema is valid"}
 
@@ -443,7 +445,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
             servers
             |> Enum.filter(fn {server_id, server_config} ->
               errors =
-                TheMaestro.MCP.Config.ConfigValidator.validate_server_config(
+                ConfigValidator.validate_server_config(
                   server_id,
                   server_config
                 )
@@ -473,7 +475,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   ## Server-Specific Checks
 
   defp validate_server_configuration(server_id, server_config) do
-    case TheMaestro.MCP.Config.ConfigValidator.validate_server_config(server_id, server_config) do
+    case ConfigValidator.validate_server_config(server_id, server_config) do
       [] ->
         %{status: :pass, message: "Server configuration is valid"}
 
@@ -938,7 +940,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
         show_static_logs(log_file, options)
       end
     else
-      TheMaestro.MCP.CLI.print_error(
+      CLI.print_error(
         "Log file not found for server '#{server_name}': #{log_file}"
       )
 
@@ -976,7 +978,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Cannot read log file: #{reason}")
+        CLI.print_error("Cannot read log file: #{reason}")
     end
   end
 
@@ -1142,11 +1144,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
             end
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error("Failed to stop trace: #{reason}")
+            CLI.print_error("Failed to stop trace: #{reason}")
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to start trace: #{reason}")
+        CLI.print_error("Failed to start trace: #{reason}")
     end
   end
 
@@ -1190,7 +1192,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
       timestamp = format_timestamp(entry.timestamp)
       IO.puts("#{timestamp} - #{entry.event_type}")
 
-      if TheMaestro.MCP.CLI.is_verbose?(options) do
+      if CLI.is_verbose?(options) do
         IO.puts("  Details: #{entry.details}")
 
         if entry.data do
@@ -1213,10 +1215,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
 
     case File.write(filename, content) do
       :ok ->
-        TheMaestro.MCP.CLI.print_success("Trace saved to #{filename}")
+        CLI.print_success("Trace saved to #{filename}")
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to save trace: #{reason}")
+        CLI.print_error("Failed to save trace: #{reason}")
     end
   end
 

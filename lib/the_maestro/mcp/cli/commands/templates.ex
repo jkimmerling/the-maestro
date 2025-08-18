@@ -5,6 +5,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
   Provides functionality to manage and apply MCP server configuration templates.
   """
 
+  alias TheMaestro.MCP.Config
+  alias TheMaestro.MCP.CLI
+
   @doc """
   Execute the templates command.
   """
@@ -34,7 +37,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         validate_template(template_name, options)
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid templates command. Use --help for usage.")
+        CLI.print_error("Invalid templates command. Use --help for usage.")
     end
   end
 
@@ -73,7 +76,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
   ## Private Functions
 
   defp list_templates(options) do
-    TheMaestro.MCP.CLI.print_info("Available MCP server templates:")
+    CLI.print_info("Available MCP server templates:")
 
     case get_available_templates() do
       {:ok, []} ->
@@ -137,13 +140,13 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         {:ok, templates}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to list templates: #{inspect(reason)}")
+        CLI.print_error("Failed to list templates: #{inspect(reason)}")
         {:error, :list_failed}
     end
   end
 
   defp show_template(template_name, options) do
-    TheMaestro.MCP.CLI.print_info("Template details: #{template_name}")
+    CLI.print_info("Template details: #{template_name}")
 
     case get_template(template_name) do
       {:ok, template} ->
@@ -202,11 +205,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         {:ok, template}
 
       {:error, :not_found} ->
-        TheMaestro.MCP.CLI.print_error("Template '#{template_name}' not found")
+        CLI.print_error("Template '#{template_name}' not found")
         {:error, :not_found}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to show template: #{inspect(reason)}")
+        CLI.print_error("Failed to show template: #{inspect(reason)}")
         {:error, :show_failed}
     end
   end
@@ -215,7 +218,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
     dry_run = Map.get(options, :dry_run, false)
     action = if dry_run, do: "Would apply", else: "Applying"
 
-    TheMaestro.MCP.CLI.print_info(
+    CLI.print_info(
       "#{action} template '#{template_name}' to create server '#{server_name}'..."
     )
 
@@ -241,7 +244,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         # Apply template for real
         case save_server_configuration(server_name, config) do
           :ok ->
-            TheMaestro.MCP.CLI.print_success(
+            CLI.print_success(
               "Server '#{server_name}' created from template '#{template_name}'"
             )
 
@@ -255,27 +258,27 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
             {:ok, config}
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error("Failed to save configuration: #{inspect(reason)}")
+            CLI.print_error("Failed to save configuration: #{inspect(reason)}")
             {:error, :save_failed}
         end
       end
     else
       {:error, :template_not_found} ->
-        TheMaestro.MCP.CLI.print_error("Template '#{template_name}' not found")
+        CLI.print_error("Template '#{template_name}' not found")
         {:error, :template_not_found}
 
       {:error, :invalid_variables} ->
-        TheMaestro.MCP.CLI.print_error("Invalid template variables provided")
+        CLI.print_error("Invalid template variables provided")
         {:error, :invalid_variables}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to apply template: #{inspect(reason)}")
+        CLI.print_error("Failed to apply template: #{inspect(reason)}")
         {:error, :apply_failed}
     end
   end
 
   defp create_template(template_name, options) do
-    TheMaestro.MCP.CLI.print_info("Creating new template: #{template_name}")
+    CLI.print_info("Creating new template: #{template_name}")
 
     # Interactive template creation
     IO.puts("")
@@ -297,7 +300,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         # Save template
         case save_template(template) do
           :ok ->
-            TheMaestro.MCP.CLI.print_success("Template '#{template_name}' created successfully")
+            CLI.print_success("Template '#{template_name}' created successfully")
 
             IO.puts("")
             IO.puts("  Usage:")
@@ -307,12 +310,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
             {:ok, template}
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error("Failed to save template: #{inspect(reason)}")
+            CLI.print_error("Failed to save template: #{inspect(reason)}")
             {:error, :save_failed}
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to create template: #{inspect(reason)}")
+        CLI.print_error("Failed to create template: #{inspect(reason)}")
         {:error, :create_failed}
     end
   end
@@ -320,7 +323,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
   defp delete_template(template_name, options) do
     force = Map.get(options, :force, false)
 
-    TheMaestro.MCP.CLI.print_info("Deleting template: #{template_name}")
+    CLI.print_info("Deleting template: #{template_name}")
 
     # Check if template exists
     case get_template(template_name) do
@@ -330,7 +333,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
           if force do
             true
           else
-            TheMaestro.MCP.CLI.print_warning(
+            CLI.print_warning(
               "This will permanently delete the template '#{template_name}'"
             )
 
@@ -346,30 +349,30 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         if proceed do
           case remove_template(template_name) do
             :ok ->
-              TheMaestro.MCP.CLI.print_success("Template '#{template_name}' deleted")
+              CLI.print_success("Template '#{template_name}' deleted")
               {:ok, :deleted}
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error("Failed to delete template: #{inspect(reason)}")
+              CLI.print_error("Failed to delete template: #{inspect(reason)}")
               {:error, :delete_failed}
           end
         else
-          TheMaestro.MCP.CLI.print_info("Template deletion cancelled")
+          CLI.print_info("Template deletion cancelled")
           {:ok, :cancelled}
         end
 
       {:error, :not_found} ->
-        TheMaestro.MCP.CLI.print_error("Template '#{template_name}' not found")
+        CLI.print_error("Template '#{template_name}' not found")
         {:error, :not_found}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to check template: #{inspect(reason)}")
+        CLI.print_error("Failed to check template: #{inspect(reason)}")
         {:error, :check_failed}
     end
   end
 
   defp validate_template(template_name, options) do
-    TheMaestro.MCP.CLI.print_info("Validating template: #{template_name}")
+    CLI.print_info("Validating template: #{template_name}")
 
     case get_template(template_name) do
       {:ok, template} ->
@@ -390,7 +393,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         IO.puts("")
 
         if length(errors) == 0 && length(warnings) == 0 do
-          TheMaestro.MCP.CLI.print_success("Template '#{template_name}' is valid")
+          CLI.print_success("Template '#{template_name}' is valid")
         else
           if length(errors) > 0 do
             IO.puts("  Errors:")
@@ -416,11 +419,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         end
 
       {:error, :not_found} ->
-        TheMaestro.MCP.CLI.print_error("Template '#{template_name}' not found")
+        CLI.print_error("Template '#{template_name}' not found")
         {:error, :not_found}
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load template: #{inspect(reason)}")
+        CLI.print_error("Failed to load template: #{inspect(reason)}")
         {:error, :load_failed}
     end
   end
@@ -549,7 +552,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
     missing_vars = required_vars -- Map.keys(variables)
 
     if length(missing_vars) > 0 do
-      TheMaestro.MCP.CLI.print_error(
+      CLI.print_error(
         "Missing required variables: #{Enum.join(missing_vars, ", ")}"
       )
 
@@ -646,17 +649,17 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
 
   defp save_server_configuration(server_name, config) do
     # Load current configuration
-    case TheMaestro.MCP.Config.load_configuration() do
+    case Config.load_configuration() do
       {:ok, current_config} ->
         # Add new server to configuration
         updated_servers = Map.put(current_config.servers, server_name, config)
         updated_config = %{current_config | servers: updated_servers}
 
         # Save updated configuration
-        TheMaestro.MCP.Config.save_configuration(updated_config)
+        Config.save_configuration(updated_config)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load current configuration: #{inspect(reason)}")
+        CLI.print_error("Failed to load current configuration: #{inspect(reason)}")
         {:error, :load_failed}
     end
   end

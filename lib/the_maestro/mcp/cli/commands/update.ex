@@ -8,6 +8,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
   alias TheMaestro.MCP.Config.ConfigValidator
+  alias TheMaestro.MCP.CLI
 
   @doc """
   Execute the update command.
@@ -38,7 +39,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
         update_server(server_name, updates, options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error(reason)
+        CLI.print_error(reason)
         {:error, reason}
     end
   end
@@ -276,20 +277,20 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
   end
 
   defp update_server(server_name, updates, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Updating server '#{server_name}'...", options)
+    CLI.print_if_verbose("Updating server '#{server_name}'...", options)
 
     case Config.get_configuration() do
       {:ok, current_config} ->
         case get_in(current_config, ["mcpServers", server_name]) do
           nil ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' not found.")
+            CLI.print_error("Server '#{server_name}' not found.")
 
           current_server_config ->
             apply_updates(current_config, server_name, current_server_config, updates, options)
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 
@@ -310,10 +311,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
         )
 
       errors ->
-        TheMaestro.MCP.CLI.print_error("Configuration validation failed:")
+        CLI.print_error("Configuration validation failed:")
 
         Enum.each(errors, fn error ->
-          TheMaestro.MCP.CLI.print_error("  - #{error}")
+          CLI.print_error("  - #{error}")
         end)
     end
   end
@@ -338,7 +339,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
 
     case Config.save_configuration(updated_full_config, config_path) do
       :ok ->
-        TheMaestro.MCP.CLI.print_success("Successfully updated server '#{server_name}'")
+        CLI.print_success("Successfully updated server '#{server_name}'")
         print_update_summary(server_name, original_config, updated_config, updates, options)
 
         # Restart connection if requested
@@ -347,12 +348,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to save configuration: #{reason}")
+        CLI.print_error("Failed to save configuration: #{reason}")
     end
   end
 
   defp print_update_summary(server_name, original_config, updated_config, updates, options) do
-    unless TheMaestro.MCP.CLI.is_quiet?(options) do
+    unless CLI.is_quiet?(options) do
       IO.puts("")
       IO.puts("Update Summary for '#{server_name}':")
 
@@ -407,18 +408,18 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
   defp format_tool_list(other), do: inspect(other)
 
   defp restart_server_connection(server_name, server_config, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Restarting server connection...", options)
+    CLI.print_if_verbose("Restarting server connection...", options)
 
     # Stop existing connection
     case ConnectionManager.stop_connection(ConnectionManager, server_name) do
       :ok ->
-        TheMaestro.MCP.CLI.print_if_verbose("Stopped existing connection.", options)
+        CLI.print_if_verbose("Stopped existing connection.", options)
 
       {:error, :not_found} ->
-        TheMaestro.MCP.CLI.print_if_verbose("No existing connection to stop.", options)
+        CLI.print_if_verbose("No existing connection to stop.", options)
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_warning("Warning: Could not stop existing connection: #{reason}")
+        CLI.print_warning("Warning: Could not stop existing connection: #{reason}")
     end
 
     # Start new connection
@@ -426,10 +427,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
 
     case ConnectionManager.start_connection(ConnectionManager, server_config_with_id) do
       {:ok, _pid} ->
-        TheMaestro.MCP.CLI.print_success("Server connection restarted successfully.")
+        CLI.print_success("Server connection restarted successfully.")
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to restart connection: #{reason}")
+        CLI.print_error("Failed to restart connection: #{reason}")
     end
   end
 

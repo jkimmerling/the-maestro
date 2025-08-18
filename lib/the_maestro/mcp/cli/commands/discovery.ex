@@ -8,6 +8,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
   alias TheMaestro.MCP.Config.ConfigValidator
+  alias TheMaestro.MCP.CLI
 
   @doc """
   Execute the discovery command.
@@ -35,7 +36,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
         create_from_template(template_name, options)
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Invalid discovery command. Use --help for usage.")
+        CLI.print_error("Invalid discovery command. Use --help for usage.")
     end
   end
 
@@ -95,19 +96,19 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     IO.puts("#{String.duplicate("=", 25)}")
     IO.puts("")
 
-    TheMaestro.MCP.CLI.print_if_verbose("Starting comprehensive server discovery...", options)
+    CLI.print_if_verbose("Starting comprehensive server discovery...", options)
 
     discovered_servers = []
 
     # Local discovery
-    TheMaestro.MCP.CLI.print_if_verbose("Discovering local servers...", options)
+    CLI.print_if_verbose("Discovering local servers...", options)
     local_servers = discover_local_servers_internal(options)
     discovered_servers = discovered_servers ++ local_servers
 
     # Network discovery (if enabled)
     network_servers =
       if Map.get(options, :network) do
-        TheMaestro.MCP.CLI.print_if_verbose("Discovering network servers...", options)
+        CLI.print_if_verbose("Discovering network servers...", options)
         discover_network_servers_internal(options)
       else
         []
@@ -124,12 +125,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     IO.puts("#{String.duplicate("=", 30)}")
     IO.puts("")
 
-    TheMaestro.MCP.CLI.print_if_verbose("Scanning network for MCP servers...", options)
+    CLI.print_if_verbose("Scanning network for MCP servers...", options)
 
     network_servers = discover_network_servers_internal(options)
 
     if Enum.empty?(network_servers) do
-      TheMaestro.MCP.CLI.print_info("No MCP servers found on the network.")
+      CLI.print_info("No MCP servers found on the network.")
     else
       display_discovered_servers(network_servers, options)
 
@@ -144,12 +145,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     IO.puts("#{String.duplicate("=", 35)}")
     IO.puts("")
 
-    TheMaestro.MCP.CLI.print_if_verbose("Searching for local MCP servers...", options)
+    CLI.print_if_verbose("Searching for local MCP servers...", options)
 
     local_servers = discover_local_servers_internal(options)
 
     if Enum.empty?(local_servers) do
-      TheMaestro.MCP.CLI.print_info("No local MCP servers found.")
+      CLI.print_info("No local MCP servers found.")
       IO.puts("")
       IO.puts("Try:")
       IO.puts("  - Use --paths to specify additional search directories")
@@ -445,7 +446,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     protocols = get_scan_protocols(options)
     timeout = Map.get(options, :timeout, 3000)
 
-    TheMaestro.MCP.CLI.print_if_verbose(
+    CLI.print_if_verbose(
       "Scanning #{length(hosts)} hosts on ports #{Enum.join(ports, ", ")}",
       options
     )
@@ -542,7 +543,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
   end
 
   defp scan_host_for_mcp_servers(host, ports, protocols, timeout, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Scanning #{host}...", options)
+    CLI.print_if_verbose("Scanning #{host}...", options)
 
     ports
     |> Enum.flat_map(fn port ->
@@ -979,7 +980,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
   defp process_discovery_results(discovered_servers, options) do
     if Enum.empty?(discovered_servers) do
-      TheMaestro.MCP.CLI.print_info("No MCP servers discovered.")
+      CLI.print_info("No MCP servers discovered.")
       show_discovery_suggestions()
     else
       IO.puts("Discovery Results:")
@@ -1001,7 +1002,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     # Sort by confidence
     sorted_servers = Enum.sort_by(servers, & &1.confidence, :desc)
 
-    if TheMaestro.MCP.CLI.is_verbose?(options) do
+    if CLI.is_verbose?(options) do
       # Detailed view
       Enum.each(sorted_servers, fn server ->
         display_detailed_server_info(server)
@@ -1073,7 +1074,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
   end
 
   defp offer_to_add_servers(servers, options) do
-    unless TheMaestro.MCP.CLI.is_quiet?(options) do
+    unless CLI.is_quiet?(options) do
       IO.puts("")
       IO.write("Add discovered servers to configuration? [y/N]: ")
 
@@ -1092,7 +1093,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
   end
 
   defp auto_add_servers(servers, options) do
-    TheMaestro.MCP.CLI.print_if_verbose("Auto-adding discovered servers...", options)
+    CLI.print_if_verbose("Auto-adding discovered servers...", options)
 
     # Only add high-confidence servers in auto-add mode
     high_confidence_servers =
@@ -1114,20 +1115,20 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
               {:ok, server_name, server_config} ->
                 case Config.add_server_config(config, server_name, server_config) do
                   updated_config when is_map(updated_config) ->
-                    TheMaestro.MCP.CLI.print_success("Added: #{server_name}")
+                    CLI.print_success("Added: #{server_name}")
                     {updated_config, count + 1}
 
                   {:error, :server_exists} ->
-                    TheMaestro.MCP.CLI.print_warning("Skipped: #{server_name} (already exists)")
+                    CLI.print_warning("Skipped: #{server_name} (already exists)")
                     {config, count}
 
                   {:error, reason} ->
-                    TheMaestro.MCP.CLI.print_error("Failed to add #{server_name}: #{reason}")
+                    CLI.print_error("Failed to add #{server_name}: #{reason}")
                     {config, count}
                 end
 
               {:error, reason} ->
-                TheMaestro.MCP.CLI.print_error("Cannot convert server #{server.name}: #{reason}")
+                CLI.print_error("Cannot convert server #{server.name}: #{reason}")
                 {config, count}
             end
           end)
@@ -1138,7 +1139,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
           case Config.save_configuration(updated_config, config_path) do
             :ok ->
-              TheMaestro.MCP.CLI.print_success(
+              CLI.print_success(
                 "Configuration updated with #{final_count} new servers"
               )
 
@@ -1147,14 +1148,14 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
               IO.puts("Use 'maestro mcp status' to check server health")
 
             {:error, reason} ->
-              TheMaestro.MCP.CLI.print_error("Failed to save configuration: #{reason}")
+              CLI.print_error("Failed to save configuration: #{reason}")
           end
         else
-          TheMaestro.MCP.CLI.print_info("No servers were added")
+          CLI.print_info("No servers were added")
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load current configuration: #{reason}")
+        CLI.print_error("Failed to load current configuration: #{reason}")
     end
   end
 
@@ -1282,7 +1283,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
     case find_template_by_name(templates, template_name) do
       nil ->
-        TheMaestro.MCP.CLI.print_error("Template '#{template_name}' not found.")
+        CLI.print_error("Template '#{template_name}' not found.")
         IO.puts("")
         IO.puts("Available templates:")
         list_template_names(templates)
@@ -1491,11 +1492,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
         if String.length(server_name) > 0 do
           create_template_server(server_name, template, options)
         else
-          TheMaestro.MCP.CLI.print_error("Server name is required.")
+          CLI.print_error("Server name is required.")
         end
 
       _ ->
-        TheMaestro.MCP.CLI.print_error("Failed to read server name.")
+        CLI.print_error("Failed to read server name.")
     end
   end
 
@@ -1530,7 +1531,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
             case Config.save_configuration(updated_config, config_path) do
               :ok ->
-                TheMaestro.MCP.CLI.print_success("Server '#{server_name}' created from template")
+                CLI.print_success("Server '#{server_name}' created from template")
                 IO.puts("")
                 IO.puts("Setup Instructions:")
                 IO.puts("  #{template.setup_instructions}")
@@ -1540,18 +1541,18 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
                 IO.puts("  maestro mcp test #{server_name}")
 
               {:error, reason} ->
-                TheMaestro.MCP.CLI.print_error("Failed to save configuration: #{reason}")
+                CLI.print_error("Failed to save configuration: #{reason}")
             end
 
           {:error, :server_exists} ->
-            TheMaestro.MCP.CLI.print_error("Server '#{server_name}' already exists.")
+            CLI.print_error("Server '#{server_name}' already exists.")
 
           {:error, reason} ->
-            TheMaestro.MCP.CLI.print_error("Failed to create server: #{reason}")
+            CLI.print_error("Failed to create server: #{reason}")
         end
 
       {:error, reason} ->
-        TheMaestro.MCP.CLI.print_error("Failed to load configuration: #{reason}")
+        CLI.print_error("Failed to load configuration: #{reason}")
     end
   end
 end
