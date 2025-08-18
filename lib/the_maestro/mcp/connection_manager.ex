@@ -197,6 +197,82 @@ defmodule TheMaestro.MCP.ConnectionManager do
     GenServer.call(manager, {:reload_configuration, config_path}, 30_000)
   end
 
+  @doc """
+  Test connection to a server.
+  """
+  @spec test_connection(GenServer.server(), map()) :: {:ok, term()} | {:error, term()}
+  def test_connection(manager, server_config) do
+    GenServer.call(manager, {:test_connection, server_config}, 30_000)
+  end
+
+  @doc """
+  Ping a server to check connectivity.
+  """
+  @spec ping_server(GenServer.server(), String.t()) :: {:ok, integer()} | {:error, term()}
+  def ping_server(manager, server_id) do
+    GenServer.call(manager, {:ping_server, server_id}, 10_000)
+  end
+
+  @doc """
+  Execute a tool on a specific server.
+  """
+  @spec execute_tool(GenServer.server(), String.t(), String.t(), map(), integer()) ::
+          {:ok, term()} | {:error, term()}
+  def execute_tool(manager, server_id, tool_name, params, timeout \\ 30_000) do
+    GenServer.call(manager, {:execute_tool, server_id, tool_name, params}, timeout)
+  end
+
+  @doc """
+  Get connection metrics for a server.
+  """
+  @spec get_connection_metrics(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_connection_metrics(manager, server_id) do
+    GenServer.call(manager, {:get_connection_metrics, server_id})
+  end
+
+  @doc """
+  Get performance metrics for a server over a time period.
+  """
+  @spec get_performance_metrics(GenServer.server(), String.t(), integer()) ::
+          {:ok, map()} | {:error, term()}
+  def get_performance_metrics(manager, server_id, timeframe_hours) do
+    GenServer.call(manager, {:get_performance_metrics, server_id, timeframe_hours})
+  end
+
+  @doc """
+  Get tool usage metrics for a server.
+  """
+  @spec get_tool_usage_metrics(GenServer.server(), String.t(), integer()) ::
+          {:ok, map()} | {:error, term()}
+  def get_tool_usage_metrics(manager, server_id, timeframe_hours) do
+    GenServer.call(manager, {:get_tool_usage_metrics, server_id, timeframe_hours})
+  end
+
+  @doc """
+  Get error metrics for a server.
+  """
+  @spec get_error_metrics(GenServer.server(), String.t(), integer()) ::
+          {:ok, map()} | {:error, term()}
+  def get_error_metrics(manager, server_id, timeframe_hours) do
+    GenServer.call(manager, {:get_error_metrics, server_id, timeframe_hours})
+  end
+
+  @doc """
+  Start a trace for server connection debugging.
+  """
+  @spec start_trace(GenServer.server(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def start_trace(manager, server_id) do
+    GenServer.call(manager, {:start_trace, server_id})
+  end
+
+  @doc """
+  Stop a trace and return results.
+  """
+  @spec stop_trace(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()}
+  def stop_trace(manager, trace_id) do
+    GenServer.call(manager, {:stop_trace, trace_id})
+  end
+
   ## GenServer Callbacks
 
   @impl true
@@ -307,6 +383,131 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
       {:error, reason} ->
         Logger.error("Failed to reload configuration: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:test_connection, server_config}, _from, state) do
+    # Basic connectivity test without permanent connection
+    case start_connection_internal(server_config) do
+      {:ok, _connection_pid} ->
+        {:reply, {:ok, :connected}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:ping_server, server_id}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{status: :connected} = connection ->
+        # Send ping and measure response time
+        start_time = System.monotonic_time(:millisecond)
+
+        case send_ping_to_connection(connection) do
+          :ok ->
+            response_time = System.monotonic_time(:millisecond) - start_time
+            {:reply, {:ok, response_time}, state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+
+      nil ->
+        {:reply, {:error, :not_connected}, state}
+
+      %ConnectionInfo{status: status} ->
+        {:reply, {:error, {:invalid_status, status}}, state}
+    end
+  end
+
+  def handle_call({:execute_tool, server_id, tool_name, params}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{status: :connected} = connection ->
+        case execute_tool_on_connection(connection, tool_name, params) do
+          {:ok, result} ->
+            {:reply, {:ok, result}, state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+
+      nil ->
+        {:reply, {:error, :not_connected}, state}
+
+      %ConnectionInfo{status: status} ->
+        {:reply, {:error, {:invalid_status, status}}, state}
+    end
+  end
+
+  def handle_call({:get_connection_metrics, server_id}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = connection ->
+        metrics = gather_connection_metrics(connection)
+        {:reply, {:ok, metrics}, state}
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:get_performance_metrics, server_id, timeframe_hours}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = connection ->
+        metrics = gather_performance_metrics(connection, timeframe_hours)
+        {:reply, {:ok, metrics}, state}
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:get_tool_usage_metrics, server_id, timeframe_hours}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = _connection ->
+        metrics = gather_tool_usage_metrics(server_id, timeframe_hours)
+        {:reply, {:ok, metrics}, state}
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:get_error_metrics, server_id, timeframe_hours}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = _connection ->
+        metrics = gather_error_metrics(server_id, timeframe_hours)
+        {:reply, {:ok, metrics}, state}
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:start_trace, server_id}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = connection ->
+        trace_id = generate_trace_id(server_id)
+
+        case start_connection_trace(connection, trace_id) do
+          :ok ->
+            {:reply, {:ok, trace_id}, state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:stop_trace, trace_id}, _from, state) do
+    case stop_connection_trace(trace_id) do
+      {:ok, trace_data} ->
+        {:reply, {:ok, trace_data}, state}
+
+      {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
   end
@@ -609,5 +810,102 @@ defmodule TheMaestro.MCP.ConnectionManager do
           {:reply, {:error, _reason}, new_state} -> new_state
         end
       end)
+  end
+
+  ## Helper Functions for New API Methods
+
+  defp start_connection_internal(server_config) do
+    # Placeholder implementation - would start actual MCP connection
+    case validate_server_config(server_config) do
+      :ok -> {:ok, :test_connection}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp validate_server_config(config) when is_map(config) do
+    required_keys = ["command", "url", "httpUrl"]
+
+    if Enum.any?(required_keys, fn key -> Map.has_key?(config, key) end) do
+      :ok
+    else
+      {:error, :invalid_config}
+    end
+  end
+
+  defp validate_server_config(_), do: {:error, :invalid_config}
+
+  defp send_ping_to_connection(_connection) do
+    # Placeholder implementation - would send actual ping to MCP server
+    :ok
+  end
+
+  defp execute_tool_on_connection(_connection, _tool_name, _params) do
+    # Placeholder implementation - would execute tool on MCP server
+    {:ok, %{result: "placeholder_result"}}
+  end
+
+  defp gather_connection_metrics(connection) do
+    %{
+      server_id: connection.server_id,
+      status: connection.status,
+      uptime: calculate_uptime(connection.started_at),
+      last_heartbeat: connection.last_heartbeat,
+      heartbeat_interval: connection.heartbeat_interval
+    }
+  end
+
+  defp gather_performance_metrics(_connection, _timeframe_hours) do
+    # Placeholder implementation - would gather actual performance metrics
+    %{
+      response_time_avg: 150,
+      response_time_max: 500,
+      request_count: 100,
+      error_rate: 0.02
+    }
+  end
+
+  defp gather_tool_usage_metrics(_server_id, _timeframe_hours) do
+    # Placeholder implementation - would gather actual tool usage metrics
+    %{
+      total_executions: 50,
+      most_used_tool: "read_file",
+      average_execution_time: 200
+    }
+  end
+
+  defp gather_error_metrics(_server_id, _timeframe_hours) do
+    # Placeholder implementation - would gather actual error metrics
+    %{
+      total_errors: 2,
+      error_rate: 0.02,
+      common_errors: ["connection_timeout", "invalid_params"]
+    }
+  end
+
+  defp generate_trace_id(server_id) do
+    timestamp = System.system_time(:millisecond)
+    "trace_#{server_id}_#{timestamp}"
+  end
+
+  defp start_connection_trace(_connection, _trace_id) do
+    # Placeholder implementation - would start actual connection tracing
+    :ok
+  end
+
+  defp stop_connection_trace(_trace_id) do
+    # Placeholder implementation - would stop tracing and return data
+    {:ok,
+     %{
+       trace_id: _trace_id,
+       requests: [],
+       responses: [],
+       timing_data: %{}
+     }}
+  end
+
+  defp calculate_uptime(started_at) when is_nil(started_at), do: 0
+
+  defp calculate_uptime(started_at) do
+    DateTime.diff(DateTime.utc_now(), started_at, :second)
   end
 end
