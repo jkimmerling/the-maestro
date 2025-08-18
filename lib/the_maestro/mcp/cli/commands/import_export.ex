@@ -268,9 +268,12 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
 
       {errors, _warnings} =
         Enum.reduce(servers, {errors, []}, fn {name, server}, {errs, warns} ->
-          case ConfigValidator.validate_server_config(name, server) do
-            {:ok, _} -> {errs, warns}
-            {:error, validation_errors} -> {validation_errors ++ errs, warns}
+          validation_errors = ConfigValidator.validate_server_config(name, server)
+          
+          if Enum.empty?(validation_errors) do
+            {errs, warns}
+          else
+            {validation_errors ++ errs, warns}
           end
         end)
 

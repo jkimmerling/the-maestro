@@ -3,11 +3,24 @@
     "defaultTimeout": 30000
   },
   "mcpServers": {
+    "importedServer": {
+      "args": [
+        "server.js"
+      ],
+      "command": "node",
+      "trust": false
+    },
     "newServer": {
       "command": "python",
       "description": "",
       "timeout": 30000,
       "trust": false
+    },
+    "test": {
+      "args": [
+        "test.js"
+      ],
+      "command": "node"
     },
     "test_server": {
       "args": [

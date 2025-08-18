@@ -207,7 +207,7 @@ defmodule TheMaestro.MCP.CLI do
 
   defp execute_command(:mcp, subcommand, %{options: options, args: args}) do
     try do
-      case subcommand do
+      result = case subcommand do
         # Server management commands
         "list" ->
           List.execute(args, options)
@@ -318,6 +318,16 @@ defmodule TheMaestro.MCP.CLI do
           print_error("Unknown MCP command: #{unknown}")
           print_info("Use 'maestro mcp --help' for available commands")
           System.halt(1)
+      end
+
+      # Handle command return values
+      case result do
+        {:ok, :help} -> :ok
+        {:ok, :dry_run} -> :ok
+        {:ok, _} -> :ok
+        {:error, _} -> System.halt(1)
+        :ok -> :ok
+        _ -> :ok
       end
     rescue
       error ->

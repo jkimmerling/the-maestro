@@ -152,7 +152,7 @@ defmodule TheMaestro.MCP.CLITest do
           CLI.main(["mcp", "import", config_file])
         end)
 
-      assert output =~ "Imported configuration from"
+      assert output =~ "Configuration imported successfully"
     end
   end
 
