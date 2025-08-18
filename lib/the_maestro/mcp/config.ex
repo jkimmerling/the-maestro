@@ -428,14 +428,14 @@ defmodule TheMaestro.MCP.Config do
       "python-stdio" => %{
         "command" => "python",
         "args" => ["-m", "{module_name}"],
-        "timeout" => 30000,
+        "timeout" => 30_000,
         "trust" => false,
         "description" => "Python STDIO MCP server template"
       },
       "node-stdio" => %{
         "command" => "node",
         "args" => ["{script_path}"],
-        "timeout" => 30000,
+        "timeout" => 30_000,
         "trust" => false,
         "description" => "Node.js STDIO MCP server template"
       },
@@ -445,7 +445,7 @@ defmodule TheMaestro.MCP.Config do
           "Authorization" => "Bearer {api_token}",
           "Content-Type" => "application/json"
         },
-        "timeout" => 15000,
+        "timeout" => 15_000,
         "trust" => false,
         "description" => "HTTP API MCP server template"
       },
@@ -455,7 +455,7 @@ defmodule TheMaestro.MCP.Config do
           "Authorization" => "Bearer {api_token}",
           "User-Agent" => "TheMaestro/1.0"
         },
-        "timeout" => 10000,
+        "timeout" => 10_000,
         "trust" => true,
         "description" => "Server-Sent Events MCP server template"
       }

@@ -121,7 +121,7 @@ defmodule TheMaestro.MCP.ConfigParserTest do
             "args" => ["-m", "server"],
             "cwd" => "/workspace",
             "env" => %{"VAR" => "value"},
-            "timeout" => 30000,
+            "timeout" => 30_000,
             "trust" => false
           }
         }
@@ -138,7 +138,7 @@ defmodule TheMaestro.MCP.ConfigParserTest do
             "headers" => %{
               "Authorization" => "Bearer token"
             },
-            "timeout" => 15000,
+            "timeout" => 15_000,
             "trust" => true
           }
         }
@@ -156,7 +156,7 @@ defmodule TheMaestro.MCP.ConfigParserTest do
               "Content-Type" => "application/json",
               "Authorization" => "Bearer token"
             },
-            "timeout" => 10000,
+            "timeout" => 10_000,
             "trust" => false
           }
         }
@@ -217,12 +217,12 @@ defmodule TheMaestro.MCP.ConfigParserTest do
       config = %{
         "mcpServers" => %{},
         "globalSettings" => %{
-          "defaultTimeout" => 30000,
+          "defaultTimeout" => 30_000,
           "maxConcurrentConnections" => 10,
           "confirmationLevel" => "medium",
           "auditLogging" => true,
           "autoReconnect" => true,
-          "healthCheckInterval" => 60000
+          "healthCheckInterval" => 60_000
         }
       }
 
@@ -477,11 +477,11 @@ defmodule TheMaestro.MCP.ConfigParserTest do
           "server1" => %{
             "command" => "base-command",
             "trust" => false,
-            "timeout" => 30000
+            "timeout" => 30_000
           }
         },
         "globalSettings" => %{
-          "defaultTimeout" => 30000
+          "defaultTimeout" => 30_000
         }
       }
 
@@ -508,7 +508,7 @@ defmodule TheMaestro.MCP.ConfigParserTest do
       # Overridden
       assert server1["trust"] == true
       # Preserved
-      assert server1["timeout"] == 30000
+      assert server1["timeout"] == 30_000
       # Added
       assert "new_tool" in server1["includeTools"]
 

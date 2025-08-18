@@ -129,7 +129,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
 
   defp build_server_config(server_name, options) do
     base_config = %{
-      "timeout" => Map.get(options, :timeout, 30000),
+      "timeout" => Map.get(options, :timeout, 30_000),
       "trust" => parse_trust_option(Map.get(options, :trust, "false")),
       "description" => Map.get(options, :description, "")
     }

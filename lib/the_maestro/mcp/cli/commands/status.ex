@@ -668,8 +668,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
     cond do
       diff < 60 -> "#{diff}s"
       diff < 3600 -> "#{div(diff, 60)}m"
-      diff < 86400 -> "#{div(diff, 3600)}h #{div(rem(diff, 3600), 60)}m"
-      true -> "#{div(diff, 86400)}d #{div(rem(diff, 86400), 3600)}h"
+      diff < 86_400 -> "#{div(diff, 3600)}h #{div(rem(diff, 3600), 60)}m"
+      true -> "#{div(diff, 86_400)}d #{div(rem(diff, 86_400), 3600)}h"
     end
   end
 

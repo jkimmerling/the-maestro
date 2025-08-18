@@ -384,7 +384,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
         IO.puts("  Trust: #{old_value || false} → #{new_value}")
 
       "description" ->
-        IO.puts("  Description: \"#{old_value || ""}\" → \"#{new_value}\"")
+        IO.puts(~s|  Description: "#{old_value || ""}" → "#{new_value}"|)
 
       "includeTools" ->
         IO.puts(

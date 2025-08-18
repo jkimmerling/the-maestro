@@ -442,7 +442,7 @@ defmodule TheMaestro.MCP.Config.ConfigValidator do
   defp validate_rate_limiting_values(errors, server_id, config) do
     errors
     |> validate_boolean_setting_server(server_id, config, "enabled")
-    |> validate_integer_setting_server(server_id, config, "requestsPerMinute", 1, 10000)
+    |> validate_integer_setting_server(server_id, config, "requestsPerMinute", 1, 10_000)
     |> validate_integer_setting_server(server_id, config, "burstSize", 1, 1000)
   end
 
@@ -512,7 +512,7 @@ defmodule TheMaestro.MCP.Config.ConfigValidator do
       config when is_map(config) ->
         errors
         |> validate_integer_setting_server(server_id, config, "maxAttempts", 0, 10)
-        |> validate_integer_setting_server(server_id, config, "backoffMs", 100, 30000)
+        |> validate_integer_setting_server(server_id, config, "backoffMs", 100, 30_000)
 
       _ ->
         ["Server '#{server_id}': retry configuration must be a map" | errors]

@@ -284,25 +284,25 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
 
   defp validate_import_structure(import_data, errors) do
     errors =
-      unless is_map(import_data) do
-        ["Import data must be a JSON/YAML object" | errors]
-      else
+      if is_map(import_data) do
         errors
+      else
+        ["Import data must be a JSON/YAML object" | errors]
       end
 
     errors =
-      unless Map.has_key?(import_data, "servers") do
-        ["Import data must contain 'servers' section" | errors]
-      else
+      if Map.has_key?(import_data, "servers") do
         errors
+      else
+        ["Import data must contain 'servers' section" | errors]
       end
 
     servers = Map.get(import_data, "servers", %{})
 
-    unless is_map(servers) do
-      ["Servers section must be an object" | errors]
-    else
+    if is_map(servers) do
       errors
+    else
+      ["Servers section must be an object" | errors]
     end
   end
 

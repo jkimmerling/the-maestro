@@ -43,7 +43,7 @@ defmodule TheMaestro.MCP.ConfigTest do
           }
         },
         "globalSettings" => %{
-          "defaultTimeout" => 30000,
+          "defaultTimeout" => 30_000,
           "confirmationLevel" => "medium"
         }
       }
@@ -52,7 +52,7 @@ defmodule TheMaestro.MCP.ConfigTest do
 
       assert {:ok, loaded_config} = Config.load_configuration(config_path)
       assert loaded_config["mcpServers"]["fileSystem"]["command"] == "python"
-      assert loaded_config["globalSettings"]["defaultTimeout"] == 30000
+      assert loaded_config["globalSettings"]["defaultTimeout"] == 30_000
     end
 
     test "returns error for non-existent file" do
@@ -78,7 +78,7 @@ defmodule TheMaestro.MCP.ConfigTest do
           }
         },
         "globalSettings" => %{
-          "defaultTimeout" => 30000
+          "defaultTimeout" => 30_000
         }
       }
 
@@ -124,7 +124,7 @@ defmodule TheMaestro.MCP.ConfigTest do
           }
         },
         "globalSettings" => %{
-          "defaultTimeout" => 30000
+          "defaultTimeout" => 30_000
         }
       }
 
@@ -152,7 +152,7 @@ defmodule TheMaestro.MCP.ConfigTest do
             "command" => "python",
             "args" => ["-m", "server"],
             "cwd" => "/tmp",
-            "timeout" => 30000
+            "timeout" => 30_000
           }
         }
       }
@@ -291,11 +291,11 @@ defmodule TheMaestro.MCP.ConfigTest do
           "server1" => %{
             "command" => "base-command",
             "trust" => false,
-            "timeout" => 30000
+            "timeout" => 30_000
           }
         },
         "globalSettings" => %{
-          "defaultTimeout" => 30000,
+          "defaultTimeout" => 30_000,
           "confirmationLevel" => "low"
         }
       }
@@ -327,7 +327,7 @@ defmodule TheMaestro.MCP.ConfigTest do
       # Overridden
       assert server1["trust"] == true
       # Preserved
-      assert server1["timeout"] == 30000
+      assert server1["timeout"] == 30_000
       # Added
       assert "new_tool" in server1["includeTools"]
 
@@ -371,14 +371,14 @@ defmodule TheMaestro.MCP.ConfigTest do
 
       updates = %{
         "command" => "new-command",
-        "timeout" => 60000
+        "timeout" => 60_000
       }
 
       updated_config = Config.update_server_config(config, "server1", updates)
       server = updated_config["mcpServers"]["server1"]
 
       assert server["command"] == "new-command"
-      assert server["timeout"] == 60000
+      assert server["timeout"] == 60_000
       # Preserved
       assert server["trust"] == false
     end
@@ -416,7 +416,7 @@ defmodule TheMaestro.MCP.ConfigTest do
           }
         },
         "globalSettings" => %{
-          "defaultTimeout" => 30000
+          "defaultTimeout" => 30_000
         }
       }
 
@@ -451,7 +451,7 @@ defmodule TheMaestro.MCP.ConfigTest do
       template = %{
         "command" => "{command}",
         "args" => ["-m", "{module}"],
-        "timeout" => 30000,
+        "timeout" => 30_000,
         "trust" => false
       }
 
@@ -464,7 +464,7 @@ defmodule TheMaestro.MCP.ConfigTest do
 
       assert applied["command"] == "python"
       assert applied["args"] == ["-m", "my_server"]
-      assert applied["timeout"] == 30000
+      assert applied["timeout"] == 30_000
     end
   end
 end

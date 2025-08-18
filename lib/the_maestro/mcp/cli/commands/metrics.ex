@@ -908,8 +908,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     cond do
       seconds < 60 -> "#{seconds}s"
       seconds < 3600 -> "#{div(seconds, 60)}m"
-      seconds < 86400 -> "#{div(seconds, 3600)}h #{div(rem(seconds, 3600), 60)}m"
-      true -> "#{div(seconds, 86400)}d #{div(rem(seconds, 86400), 3600)}h"
+      seconds < 86_400 -> "#{div(seconds, 3600)}h #{div(rem(seconds, 3600), 60)}m"
+      true -> "#{div(seconds, 86_400)}d #{div(rem(seconds, 86_400), 3600)}h"
     end
   end
 

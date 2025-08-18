@@ -48,7 +48,7 @@ defmodule TheMaestro.MCP.CLITest do
         }
       },
       "globalSettings" => %{
-        "defaultTimeout" => 30000,
+        "defaultTimeout" => 30_000,
         "confirmationLevel" => "medium"
       }
     }
@@ -145,7 +145,7 @@ defmodule TheMaestro.MCP.CLITest do
     test "updates server timeout setting" do
       output =
         capture_io(fn ->
-          CLI.main(["mcp", "update", "fileSystem", "--timeout", "60000"])
+          CLI.main(["mcp", "update", "fileSystem", "--timeout", "60_000"])
         end)
 
       assert output =~ "Successfully updated server 'fileSystem'"

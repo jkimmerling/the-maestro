@@ -240,7 +240,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
             recursive and File.dir?(file_path) ->
               find_executables_in_path(file_path, extensions, recursive)
 
-            File.regular?(file_path) and is_potential_mcp_server?(file, file_path, extensions) ->
+            File.regular?(file_path) and potential_mcp_server?(file, file_path, extensions) ->
               case analyze_potential_server(file_path) do
                 {:ok, server_info} -> [server_info]
                 {:error, _reason} -> []
@@ -256,7 +256,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     end
   end
 
-  defp is_potential_mcp_server?(filename, file_path, extensions) do
+  defp potential_mcp_server?(filename, file_path, extensions) do
     # Check file extension
     extension_match =
       case Path.extname(filename) do
@@ -664,7 +664,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, package_info} ->
-            if is_mcp_nodejs_package?(package_info) do
+            if mcp_nodejs_package?(package_info) do
               server_info = %{
                 identifier: "nodejs-#{Map.get(package_info, "name", "unknown")}",
                 name: Map.get(package_info, "name", "Unknown"),
@@ -938,7 +938,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     }
   end
 
-  defp is_mcp_nodejs_package?(package_info) do
+  defp mcp_nodejs_package?(package_info) do
     name = Map.get(package_info, "name", "")
     description = Map.get(package_info, "description", "")
     keywords = Map.get(package_info, "keywords", [])
@@ -1162,7 +1162,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     server_name = generate_unique_server_name(server.name)
 
     base_config = %{
-      "timeout" => 30000,
+      "timeout" => 30_000,
       "trust" => false,
       "description" => server.description
     }
@@ -1502,7 +1502,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
   defp create_template_server(server_name, template, options) do
     server_config = %{
       "command" => template.command,
-      "timeout" => 30000,
+      "timeout" => 30_000,
       "trust" => false,
       "description" => template.description
     }
@@ -1515,7 +1515,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
           server_config
 
         "sse" ->
-          # For SSE servers, we'd need a URL - this is a simplified example 
+          # For SSE servers, we'd need a URL - this is a simplified example
           server_config
 
         _ ->
