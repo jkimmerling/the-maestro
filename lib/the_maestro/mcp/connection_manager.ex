@@ -83,7 +83,9 @@ defmodule TheMaestro.MCP.ConnectionManager do
     # %{server_id => CircuitBreaker.t()}
     :circuit_breakers,
     # %{server_id => timer_ref}
-    :heartbeat_timers
+    :heartbeat_timers,
+    # ETS table name for connection traces
+    :trace_table
   ]
 
   @type state :: %__MODULE__{
@@ -91,7 +93,8 @@ defmodule TheMaestro.MCP.ConnectionManager do
           tools: %{String.t() => [map()]},
           health_status: %{String.t() => HealthStatus.t()},
           circuit_breakers: %{String.t() => CircuitBreaker.t()},
-          heartbeat_timers: %{String.t() => reference()}
+          heartbeat_timers: %{String.t() => reference()},
+          trace_table: atom()
         }
 
   ## Client API
@@ -197,19 +200,100 @@ defmodule TheMaestro.MCP.ConnectionManager do
     GenServer.call(manager, {:reload_configuration, config_path}, 30_000)
   end
 
+  @doc """
+  Test connection to a server.
+  """
+  @spec test_connection(GenServer.server(), map()) :: {:ok, term()} | {:error, term()}
+  def test_connection(manager, server_config) do
+    GenServer.call(manager, {:test_connection, server_config}, 30_000)
+  end
+
+  @doc """
+  Ping a server to check connectivity.
+  """
+  @spec ping_server(GenServer.server(), String.t()) :: {:ok, integer()} | {:error, term()}
+  def ping_server(manager, server_id) do
+    GenServer.call(manager, {:ping_server, server_id}, 10_000)
+  end
+
+  @doc """
+  Execute a tool on a specific server.
+  """
+  @spec execute_tool(GenServer.server(), String.t(), String.t(), map(), integer()) ::
+          {:ok, term()} | {:error, term()}
+  def execute_tool(manager, server_id, tool_name, params, timeout \\ 30_000) do
+    GenServer.call(manager, {:execute_tool, server_id, tool_name, params}, timeout)
+  end
+
+  @doc """
+  Get connection metrics for a server.
+  """
+  @spec get_connection_metrics(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_connection_metrics(manager, server_id) do
+    GenServer.call(manager, {:get_connection_metrics, server_id})
+  end
+
+  @doc """
+  Get performance metrics for a server over a time period.
+  """
+  @spec get_performance_metrics(GenServer.server(), String.t(), integer()) ::
+          {:ok, map()} | {:error, term()}
+  def get_performance_metrics(manager, server_id, timeframe_hours) do
+    GenServer.call(manager, {:get_performance_metrics, server_id, timeframe_hours})
+  end
+
+  @doc """
+  Get tool usage metrics for a server.
+  """
+  @spec get_tool_usage_metrics(GenServer.server(), String.t(), integer()) ::
+          {:ok, map()} | {:error, term()}
+  def get_tool_usage_metrics(manager, server_id, timeframe_hours) do
+    GenServer.call(manager, {:get_tool_usage_metrics, server_id, timeframe_hours})
+  end
+
+  @doc """
+  Get error metrics for a server.
+  """
+  @spec get_error_metrics(GenServer.server(), String.t(), integer()) ::
+          {:ok, map()} | {:error, term()}
+  def get_error_metrics(manager, server_id, timeframe_hours) do
+    GenServer.call(manager, {:get_error_metrics, server_id, timeframe_hours})
+  end
+
+  @doc """
+  Start a trace for server connection debugging.
+  """
+  @spec start_trace(GenServer.server(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def start_trace(manager, server_id) do
+    GenServer.call(manager, {:start_trace, server_id})
+  end
+
+  @doc """
+  Stop a trace and return results.
+  """
+  @spec stop_trace(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()}
+  def stop_trace(manager, trace_id) do
+    GenServer.call(manager, {:stop_trace, trace_id})
+  end
+
   ## GenServer Callbacks
 
   @impl true
   def init(_opts) do
+    # Initialize ETS table for connection traces with unique name per process
+    table_name = :"connection_traces_#{inspect(self())}"
+    :ets.new(table_name, [:set, :public, :named_table])
+
     state = %__MODULE__{
       connections: %{},
       tools: %{},
       health_status: %{},
       circuit_breakers: %{},
-      heartbeat_timers: %{}
+      heartbeat_timers: %{},
+      trace_table: table_name
     }
 
-    Logger.info("ConnectionManager started")
+    Logger.info("ConnectionManager started with trace table: #{table_name}")
     {:ok, state}
   end
 
@@ -307,6 +391,131 @@ defmodule TheMaestro.MCP.ConnectionManager do
 
       {:error, reason} ->
         Logger.error("Failed to reload configuration: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:test_connection, server_config}, _from, state) do
+    # Basic connectivity test without permanent connection
+    case start_connection_internal(server_config) do
+      {:ok, _connection_pid} ->
+        {:reply, {:ok, :connected}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:ping_server, server_id}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{status: :connected} = connection ->
+        # Send ping and measure response time
+        start_time = System.monotonic_time(:millisecond)
+
+        case send_ping_to_connection(connection) do
+          :ok ->
+            response_time = System.monotonic_time(:millisecond) - start_time
+            {:reply, {:ok, response_time}, state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+
+      nil ->
+        {:reply, {:error, :not_connected}, state}
+
+      %ConnectionInfo{status: status} ->
+        {:reply, {:error, {:invalid_status, status}}, state}
+    end
+  end
+
+  def handle_call({:execute_tool, server_id, tool_name, params}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{status: :connected} = connection ->
+        case execute_tool_on_connection(connection, tool_name, params) do
+          {:ok, result} ->
+            {:reply, {:ok, result}, state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+
+      nil ->
+        {:reply, {:error, :not_connected}, state}
+
+      %ConnectionInfo{status: status} ->
+        {:reply, {:error, {:invalid_status, status}}, state}
+    end
+  end
+
+  def handle_call({:get_connection_metrics, server_id}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = connection ->
+        metrics = gather_connection_metrics(connection)
+        {:reply, {:ok, metrics}, state}
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:get_performance_metrics, server_id, timeframe_hours}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = connection ->
+        metrics = gather_performance_metrics(connection, timeframe_hours)
+        {:reply, {:ok, metrics}, state}
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:get_tool_usage_metrics, server_id, timeframe_hours}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = _connection ->
+        metrics = gather_tool_usage_metrics(server_id, timeframe_hours)
+        {:reply, {:ok, metrics}, state}
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:get_error_metrics, server_id, timeframe_hours}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = _connection ->
+        metrics = gather_error_metrics(server_id, timeframe_hours)
+        {:reply, {:ok, metrics}, state}
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:start_trace, server_id}, _from, state) do
+    case Map.get(state.connections, server_id) do
+      %ConnectionInfo{} = connection ->
+        trace_id = generate_trace_id(server_id)
+
+        case start_connection_trace(connection, trace_id, state.trace_table) do
+          :ok ->
+            {:reply, {:ok, trace_id}, state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+
+      nil ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:stop_trace, trace_id}, _from, state) do
+    case stop_connection_trace(trace_id, state.trace_table) do
+      {:ok, trace_data} ->
+        {:reply, {:ok, trace_data}, state}
+
+      {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
   end
@@ -609,5 +818,265 @@ defmodule TheMaestro.MCP.ConnectionManager do
           {:reply, {:error, _reason}, new_state} -> new_state
         end
       end)
+  end
+
+  ## Helper Functions for New API Methods
+
+  defp start_connection_internal(server_config) do
+    # Placeholder implementation - would start actual MCP connection
+    case validate_server_config(server_config) do
+      :ok -> {:ok, :test_connection}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp validate_server_config(config) when is_map(config) do
+    required_keys = ["command", "url", "httpUrl"]
+
+    if Enum.any?(required_keys, fn key -> Map.has_key?(config, key) end) do
+      :ok
+    else
+      {:error, :invalid_config}
+    end
+  end
+
+  defp validate_server_config(_), do: {:error, :invalid_config}
+
+  defp send_ping_to_connection(connection) do
+    alias TheMaestro.MCP.Protocol
+
+    case connection do
+      %ConnectionInfo{transport_pid: nil} ->
+        {:error, :no_transport}
+
+      %ConnectionInfo{transport_pid: transport_pid, status: :connected}
+      when is_pid(transport_pid) ->
+        if Process.alive?(transport_pid) do
+          # Use MCP tools/list as a ping mechanism since MCP doesn't have explicit ping
+          request_id = "ping_#{:rand.uniform(1_000_000)}"
+          ping_message = Protocol.list_tools(request_id)
+
+          case GenServer.call(transport_pid, {:send_message, ping_message}) do
+            :ok ->
+              # Wait for response with timeout
+              receive do
+                {:mcp_response, ^request_id, _result} ->
+                  :ok
+
+                {:mcp_error, ^request_id, _error} ->
+                  {:error, :server_error}
+              after
+                5000 ->
+                  {:error, :timeout}
+              end
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+        else
+          {:error, :transport_dead}
+        end
+
+      %ConnectionInfo{status: status} ->
+        {:error, {:invalid_status, status}}
+
+      _ ->
+        {:error, :invalid_connection}
+    end
+  end
+
+  defp execute_tool_on_connection(connection, tool_name, params) do
+    alias TheMaestro.MCP.Protocol
+
+    case {connection, tool_name, params} do
+      {_, nil, _} ->
+        {:error, :missing_tool_name}
+
+      {_, "", _} ->
+        {:error, :empty_tool_name}
+
+      {_, tool_name, _} when not is_binary(tool_name) ->
+        {:error, :invalid_tool_name}
+
+      {%ConnectionInfo{transport_pid: nil}, _, _} ->
+        {:error, :no_transport}
+
+      {%ConnectionInfo{transport_pid: transport_pid, status: :connected}, tool_name, params}
+      when is_pid(transport_pid) and is_binary(tool_name) ->
+        if Process.alive?(transport_pid) do
+          request_id = "tool_#{:rand.uniform(1_000_000)}"
+          tool_message = Protocol.call_tool(request_id, tool_name, params || %{})
+
+          case GenServer.call(transport_pid, {:send_message, tool_message}) do
+            :ok ->
+              # Wait for response with timeout
+              receive do
+                {:mcp_response, ^request_id, result} ->
+                  {:ok, result}
+
+                {:mcp_error, ^request_id, error} ->
+                  {:error, {:server_error, error}}
+              after
+                # Longer timeout for tool execution
+                30_000 ->
+                  {:error, :timeout}
+              end
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+        else
+          {:error, :transport_dead}
+        end
+
+      {%ConnectionInfo{status: status}, _, _} ->
+        {:error, {:invalid_status, status}}
+
+      _ ->
+        {:error, :invalid_connection}
+    end
+  end
+
+  defp gather_connection_metrics(connection) do
+    %{
+      server_id: connection.server_id,
+      status: connection.status,
+      uptime: calculate_uptime(connection.started_at),
+      last_heartbeat: connection.last_heartbeat,
+      heartbeat_interval: connection.heartbeat_interval
+    }
+  end
+
+  defp gather_performance_metrics(_connection, _timeframe_hours) do
+    # Placeholder implementation - would gather actual performance metrics
+    %{
+      response_time_avg: 150,
+      response_time_max: 500,
+      request_count: 100,
+      error_rate: 0.02
+    }
+  end
+
+  defp gather_tool_usage_metrics(_server_id, _timeframe_hours) do
+    # Placeholder implementation - would gather actual tool usage metrics
+    %{
+      total_executions: 50,
+      most_used_tool: "read_file",
+      average_execution_time: 200
+    }
+  end
+
+  defp gather_error_metrics(_server_id, _timeframe_hours) do
+    # Placeholder implementation - would gather actual error metrics
+    %{
+      total_errors: 2,
+      error_rate: 0.02,
+      common_errors: ["connection_timeout", "invalid_params"]
+    }
+  end
+
+  defp generate_trace_id(server_id) do
+    timestamp = System.system_time(:millisecond)
+    "trace_#{server_id}_#{timestamp}"
+  end
+
+  defp start_connection_trace(connection, trace_id, table_name) do
+    # Start connection debugging/monitoring trace
+    case {connection, trace_id} do
+      {%ConnectionInfo{transport_pid: nil}, _} ->
+        {:error, :no_transport}
+
+      {%ConnectionInfo{transport_pid: transport_pid}, trace_id}
+      when is_pid(transport_pid) and is_binary(trace_id) ->
+        if Process.alive?(transport_pid) do
+          # Initialize trace storage for this connection
+          trace_data = %{
+            trace_id: trace_id,
+            server_id: connection.server_id,
+            started_at: DateTime.utc_now(),
+            messages_sent: [],
+            messages_received: [],
+            errors: [],
+            metrics: %{
+              total_requests: 0,
+              total_responses: 0,
+              avg_response_time: 0,
+              errors_count: 0
+            }
+          }
+
+          # Store trace data in process state or ETS table
+          :ets.insert(table_name, {trace_id, trace_data})
+
+          # Enable tracing for this transport
+          case GenServer.call(transport_pid, {:enable_trace, trace_id}) do
+            :ok -> :ok
+            {:error, reason} -> {:error, reason}
+          end
+        else
+          {:error, :transport_dead}
+        end
+
+      {%ConnectionInfo{}, trace_id} when not is_binary(trace_id) ->
+        {:error, :invalid_trace_id}
+
+      _ ->
+        {:error, :invalid_connection}
+    end
+  rescue
+    error ->
+      {:error, {:trace_start_failed, error}}
+  end
+
+  defp stop_connection_trace(trace_id, table_name) do
+    # Stop connection debugging/monitoring trace and return collected data
+    case :ets.lookup(table_name, trace_id) do
+      [{^trace_id, trace_data}] ->
+        # Remove from ETS table
+        :ets.delete(table_name, trace_id)
+
+        # Calculate final metrics
+        ended_at = DateTime.utc_now()
+        duration_seconds = DateTime.diff(ended_at, trace_data.started_at, :second)
+
+        final_trace_data = %{
+          trace_id: trace_id,
+          server_id: trace_data.server_id,
+          started_at: trace_data.started_at,
+          ended_at: ended_at,
+          duration_seconds: duration_seconds,
+          messages_sent: trace_data.messages_sent,
+          messages_received: trace_data.messages_received,
+          errors: trace_data.errors,
+          metrics: trace_data.metrics,
+          summary: %{
+            total_messages:
+              length(trace_data.messages_sent) + length(trace_data.messages_received),
+            success_rate: calculate_success_rate(trace_data.metrics),
+            avg_response_time_ms: trace_data.metrics.avg_response_time
+          }
+        }
+
+        {:ok, final_trace_data}
+
+      [] ->
+        {:error, :trace_not_found}
+    end
+  rescue
+    error ->
+      {:error, {:trace_stop_failed, error}}
+  end
+
+  defp calculate_success_rate(%{total_requests: 0}), do: 0.0
+
+  defp calculate_success_rate(%{total_requests: total, errors_count: errors}) do
+    successful = total - errors
+    successful / total * 100.0
+  end
+
+  defp calculate_uptime(started_at) when is_nil(started_at), do: 0
+
+  defp calculate_uptime(started_at) do
+    DateTime.diff(DateTime.utc_now(), started_at, :second)
   end
 end

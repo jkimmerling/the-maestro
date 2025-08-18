@@ -5,12 +5,9 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
   alias TheMaestro.MCP.Security.ConfirmationEngine.{ConfirmationRequest, ConfirmationResult}
 
   setup do
-    # Handle case where TrustManager is already started
-    trust_pid =
-      case TrustManager.start_link([]) do
-        {:ok, pid} -> pid
-        {:error, {:already_started, pid}} -> pid
-      end
+    # Create unique TrustManager name for each test
+    unique_name = :"trust_manager_#{System.unique_integer([:positive])}"
+    {:ok, trust_pid} = TrustManager.start_link(name: unique_name)
 
     %{trust_manager: trust_pid}
   end
@@ -31,13 +28,14 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
       assert String.contains?(request.reason, "Risk level: critical")
     end
 
-    test "does not require confirmation for low-risk trusted operations" do
+    test "does not require confirmation for low-risk trusted operations", %{
+      trust_manager: trust_pid
+    } do
       tool = %{name: "read_file", server_id: "filesystem_server"}
       params = %{"path" => "/tmp/safe.txt"}
       context = %{user_id: "user123", server_id: "filesystem_server"}
 
       # First trust the server and whitelist the tool
-      trust_pid = get_trust_manager_pid()
       GenServer.call(trust_pid, {:grant_server_trust, "filesystem_server", :trusted, "user123"})
       GenServer.call(trust_pid, {:whitelist_tool, "filesystem_server", "read_file", "user123"})
 
@@ -79,7 +77,7 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
              } = result
     end
 
-    test "always_allow_tool whitelists tool and allows execution" do
+    test "always_allow_tool whitelists tool and allows execution", %{trust_manager: trust_pid} do
       request = build_test_request()
       context = %{user_id: "user123", session_id: "sess1", interface: :web}
 
@@ -94,12 +92,11 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
              } = result
 
       # Verify tool was whitelisted
-      trust_pid = get_trust_manager_pid()
       trust = GenServer.call(trust_pid, {:get_server_trust, "test_server"})
       assert "test_tool" in trust.whitelist_tools
     end
 
-    test "always_trust_server trusts server and allows execution" do
+    test "always_trust_server trusts server and allows execution", %{trust_manager: trust_pid} do
       request = build_test_request()
       context = %{user_id: "user123", session_id: "sess1", interface: :web}
 
@@ -114,12 +111,11 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
              } = result
 
       # Verify server was trusted
-      trust_pid = get_trust_manager_pid()
       trust_level = GenServer.call(trust_pid, {:server_trust_level, "test_server"})
       assert trust_level == :trusted
     end
 
-    test "block_tool blacklists tool and denies execution" do
+    test "block_tool blacklists tool and denies execution", %{trust_manager: trust_pid} do
       request = build_test_request()
       context = %{user_id: "user123", session_id: "sess1", interface: :web}
 
@@ -133,7 +129,6 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
              } = result
 
       # Verify tool was blacklisted
-      trust_pid = get_trust_manager_pid()
       trust = GenServer.call(trust_pid, {:get_server_trust, "test_server"})
       assert "test_tool" in trust.blacklist_tools
     end
@@ -216,16 +211,5 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
       requires_confirmation: true,
       reason: "Test confirmation"
     }
-  end
-
-  defp get_trust_manager_pid do
-    case Process.whereis(TrustManager) do
-      nil ->
-        {:ok, pid} = TrustManager.start_link([])
-        pid
-
-      pid ->
-        pid
-    end
   end
 end

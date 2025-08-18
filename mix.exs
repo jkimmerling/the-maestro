@@ -91,8 +91,9 @@ defmodule TheMaestro.MixProject do
       {:httpoison, "~> 2.0"},
       {:openai_ex, "~> 0.6"},
       {:anthropix, "~> 0.3"},
-      # YAML parsing for OpenAPI specs
+      # YAML parsing for OpenAPI specs and config files
       {:yaml_elixir, "~> 2.9"},
+      {:ymlr, "~> 5.0"},
       # Testing Dependencies
       {:mock, "~> 0.3", only: :test},
       # TUI Dependencies - simple terminal interface without native deps

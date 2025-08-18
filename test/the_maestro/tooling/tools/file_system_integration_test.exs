@@ -19,6 +19,10 @@ defmodule TheMaestro.Tooling.Tools.FileSystemIntegrationTest do
       max_file_size: 10 * 1024 * 1024
     )
 
+    # Register FileSystem tools for testing
+    alias TheMaestro.Tooling.Tools.FileSystem
+    FileSystem.register_tools()
+
     on_exit(fn ->
       if File.exists?(@test_sandbox_dir), do: File.rm_rf!(@test_sandbox_dir)
     end)
