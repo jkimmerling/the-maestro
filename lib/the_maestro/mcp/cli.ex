@@ -207,118 +207,119 @@ defmodule TheMaestro.MCP.CLI do
 
   defp execute_command(:mcp, subcommand, %{options: options, args: args}) do
     try do
-      result = case subcommand do
-        # Server management commands
-        "list" ->
-          List.execute(args, options)
+      result =
+        case subcommand do
+          # Server management commands
+          "list" ->
+            List.execute(args, options)
 
-        "add" ->
-          Add.execute(args, options)
+          "add" ->
+            Add.execute(args, options)
 
-        "update" ->
-          Update.execute(args, options)
+          "update" ->
+            Update.execute(args, options)
 
-        "remove" ->
-          Remove.execute(args, options)
+          "remove" ->
+            Remove.execute(args, options)
 
-        # Status and monitoring commands
-        "status" ->
-          Status.execute(args, options)
+          # Status and monitoring commands
+          "status" ->
+            Status.execute(args, options)
 
-        "test" ->
-          Status.test_connection(args, options)
+          "test" ->
+            Status.test_connection(args, options)
 
-        "health" ->
-          Status.health_check(args, options)
+          "health" ->
+            Status.health_check(args, options)
 
-        # Tool management commands
-        "tools" ->
-          Tools.list_tools(args, options)
+          # Tool management commands
+          "tools" ->
+            Tools.list_tools(args, options)
 
-        "run" ->
-          Tools.execute_tool(args, options)
+          "run" ->
+            Tools.execute_tool(args, options)
 
-        "debug" ->
-          Tools.debug_tool(args, options)
+          "debug" ->
+            Tools.debug_tool(args, options)
 
-        "trace" ->
-          Tools.trace_tool(args, options)
+          "trace" ->
+            Tools.trace_tool(args, options)
 
-        # Authentication commands
-        "auth" ->
-          Auth.execute(args, options)
+          # Authentication commands
+          "auth" ->
+            Auth.execute(args, options)
 
-        "apikey" ->
-          Auth.manage_apikey(args, options)
+          "apikey" ->
+            Auth.manage_apikey(args, options)
 
-        "trust" ->
-          Trust.execute(args, options)
+          "trust" ->
+            Trust.execute(args, options)
 
-        # Monitoring and diagnostics commands
-        "metrics" ->
-          Metrics.show_metrics(args, options)
+          # Monitoring and diagnostics commands
+          "metrics" ->
+            Metrics.show_metrics(args, options)
 
-        "analyze" ->
-          Metrics.analyze_performance(args, options)
+          "analyze" ->
+            Metrics.analyze_performance(args, options)
 
-        "diagnose" ->
-          Diagnostics.diagnose(args, options)
+          "diagnose" ->
+            Diagnostics.diagnose(args, options)
 
-        "logs" ->
-          Diagnostics.show_logs(args, options)
+          "logs" ->
+            Diagnostics.show_logs(args, options)
 
-        "ping" ->
-          Diagnostics.ping_server(args, options)
+          "ping" ->
+            Diagnostics.ping_server(args, options)
 
-        "trace-conn" ->
-          Diagnostics.trace_connection(args, options)
+          "trace-conn" ->
+            Diagnostics.trace_connection(args, options)
 
-        # Audit and reporting commands
-        "audit" ->
-          Metrics.show_audit(args, options)
+          # Audit and reporting commands
+          "audit" ->
+            Metrics.show_audit(args, options)
 
-        "report" ->
-          Metrics.generate_report(args, options)
+          "report" ->
+            Metrics.generate_report(args, options)
 
-        # Configuration management commands
-        "discover" ->
-          Discovery.execute(args, options)
+          # Configuration management commands
+          "discover" ->
+            Discovery.execute(args, options)
 
-        "template" ->
-          Templates.execute(args, options)
+          "template" ->
+            Templates.execute(args, options)
 
-        # Alternative name
-        "templates" ->
-          Templates.execute(args, options)
+          # Alternative name
+          "templates" ->
+            Templates.execute(args, options)
 
-        "export" ->
-          ImportExport.execute_export(args, options)
+          "export" ->
+            ImportExport.execute_export(args, options)
 
-        "import" ->
-          ImportExport.execute_import(args, options)
+          "import" ->
+            ImportExport.execute_import(args, options)
 
-        # Interactive commands
-        "setup" ->
-          Setup.execute(args, options)
+          # Interactive commands
+          "setup" ->
+            Setup.execute(args, options)
 
-        "interactive" ->
-          Interactive.execute(args, options)
+          "interactive" ->
+            Interactive.execute(args, options)
 
-        "configure" ->
-          Interactive.execute(args, options)
+          "configure" ->
+            Interactive.execute(args, options)
 
-        # Help for specific commands
-        command when command in ["help"] ->
-          case args do
-            [] -> show_mcp_help()
-            [cmd] -> show_command_help(cmd)
-          end
+          # Help for specific commands
+          command when command in ["help"] ->
+            case args do
+              [] -> show_mcp_help()
+              [cmd] -> show_command_help(cmd)
+            end
 
-        unknown ->
-          print_error("Unknown MCP command: #{unknown}")
-          print_info("Use 'maestro mcp --help' for available commands")
-          System.halt(1)
-      end
+          unknown ->
+            print_error("Unknown MCP command: #{unknown}")
+            print_info("Use 'maestro mcp --help' for available commands")
+            System.halt(1)
+        end
 
       # Handle command return values
       case result do
