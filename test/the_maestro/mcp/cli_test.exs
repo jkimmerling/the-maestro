@@ -104,7 +104,7 @@ defmodule TheMaestro.MCP.CLITest do
           CLI.main(["mcp", "export", output_file])
         end)
 
-      assert output =~ "Exported configuration"
+      assert output =~ "Configuration exported to"
       assert File.exists?(output_file)
     end
 
@@ -124,7 +124,7 @@ defmodule TheMaestro.MCP.CLITest do
       config_file = Path.join(tmp_dir, "test_config.json")
 
       test_import_config = %{
-        "mcpServers" => %{
+        "servers" => %{
           "importedServer" => %{
             "command" => "node",
             "args" => ["server.js"],
