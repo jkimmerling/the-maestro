@@ -9,6 +9,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
   alias TheMaestro.MCP.{Config, ConnectionManager}
   alias TheMaestro.MCP.Config.ConfigValidator
   alias TheMaestro.MCP.CLI
+  alias TheMaestro.MCP.CLI.Formatters.YamlFormatter
 
   @doc """
   Execute the status command.
@@ -247,7 +248,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
         IO.puts(output)
 
       "yaml" ->
-        output = CLI.Formatters.YamlFormatter.format(%{servers: server_statuses})
+        output = YamlFormatter.format(%{servers: server_statuses})
         IO.puts(output)
 
       _ ->
@@ -264,7 +265,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
         IO.puts(output)
 
       "yaml" ->
-        output = CLI.Formatters.YamlFormatter.format(status_info)
+        output = YamlFormatter.format(status_info)
         IO.puts(output)
 
       _ ->

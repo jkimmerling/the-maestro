@@ -7,7 +7,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
   """
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
-  alias TheMaestro.MCP.CLI.Formatters.TableFormatter
+  alias TheMaestro.MCP.CLI.Formatters.{TableFormatter, YamlFormatter}
   alias TheMaestro.MCP.CLI
 
   @doc """
@@ -205,7 +205,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
         IO.puts(output)
 
       "yaml" ->
-        output = CLI.Formatters.YamlFormatter.format(%{servers: servers})
+        output = YamlFormatter.format(%{servers: servers})
         IO.puts(output)
 
       _ ->

@@ -7,6 +7,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
   alias TheMaestro.MCP.CLI
+  alias TheMaestro.MCP.CLI.Formatters.YamlFormatter
 
   @doc """
   List available tools from MCP servers.
@@ -197,7 +198,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
         IO.puts(output)
 
       "yaml" ->
-        output = CLI.Formatters.YamlFormatter.format(%{tools: tools_info})
+        output = YamlFormatter.format(%{tools: tools_info})
         IO.puts(output)
 
       _ ->
@@ -430,7 +431,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
 
       "yaml" ->
         output =
-          CLI.Formatters.YamlFormatter.format(%{tool: tool_name, result: result})
+          YamlFormatter.format(%{tool: tool_name, result: result})
 
         IO.puts(output)
 

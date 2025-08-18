@@ -8,6 +8,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
 
   alias TheMaestro.MCP.{Config, ConnectionManager}
   alias TheMaestro.MCP.CLI
+  alias TheMaestro.MCP.CLI.Formatters.YamlFormatter
 
   @doc """
   Show performance metrics for MCP servers.
@@ -301,7 +302,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
         IO.puts(output)
 
       "yaml" ->
-        output = CLI.Formatters.YamlFormatter.format(metrics_data)
+        output = YamlFormatter.format(metrics_data)
         IO.puts(output)
 
       _ ->
@@ -768,7 +769,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
               Jason.encode!(report_data, pretty: true)
 
             "yaml" ->
-              CLI.Formatters.YamlFormatter.format(report_data)
+              YamlFormatter.format(report_data)
 
             _ ->
               format_text_report(report_data, options)
@@ -812,7 +813,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
                   Jason.encode!(report_data, pretty: true)
 
                 "yaml" ->
-                  CLI.Formatters.YamlFormatter.format(report_data)
+                  YamlFormatter.format(report_data)
 
                 _ ->
                   format_server_text_report(report_data, options)
@@ -945,7 +946,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
           Jason.encode!(metrics_data, pretty: true)
 
         "yaml" ->
-          CLI.Formatters.YamlFormatter.format(metrics_data)
+          YamlFormatter.format(metrics_data)
 
         _ ->
           # Default to JSON
