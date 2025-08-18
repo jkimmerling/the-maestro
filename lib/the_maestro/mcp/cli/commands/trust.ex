@@ -99,9 +99,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
           # Save updated configuration
           case Config.save_configuration(updated_config) do
             :ok ->
-              CLI.print_success(
-                "Server '#{server_name}' is now #{action} (level: #{level})"
-              )
+              CLI.print_success("Server '#{server_name}' is now #{action} (level: #{level})")
 
               # Optionally restart server connection to apply new trust level
               if Map.get(options, :restart, true) do
@@ -296,9 +294,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
   defp format_connection_status(:unknown), do: "Unknown"
 
   defp restart_server_connection(server_name) do
-    CLI.print_info(
-      "Restarting connection for '#{server_name}' to apply trust changes..."
-    )
+    CLI.print_info("Restarting connection for '#{server_name}' to apply trust changes...")
 
     case ServerSupervisor.restart_server(server_name) do
       :ok ->

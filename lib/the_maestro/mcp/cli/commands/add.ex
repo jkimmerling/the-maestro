@@ -363,9 +363,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
             save_and_start_server(updated_config, server_name, server_config, options)
 
           {:error, :server_exists} ->
-            CLI.print_error(
-              "Server '#{server_name}' already exists. Use 'update' to modify it."
-            )
+            CLI.print_error("Server '#{server_name}' already exists. Use 'update' to modify it.")
 
           {:error, reason} ->
             CLI.print_error("Failed to add server: #{reason}")
@@ -417,9 +415,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
         print_server_summary(server_name, server_config, options)
 
       {:error, reason} ->
-        CLI.print_warning(
-          "Server '#{server_name}' was added but failed to start: #{reason}"
-        )
+        CLI.print_warning("Server '#{server_name}' was added but failed to start: #{reason}")
 
         print_server_summary(server_name, server_config, options)
     end

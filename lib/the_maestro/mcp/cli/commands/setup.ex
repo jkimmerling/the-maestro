@@ -815,9 +815,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Setup do
             count + 1
 
           {:error, reason} ->
-            CLI.print_error(
-              "  ❌ Failed to repair: #{issue.description} (#{reason})"
-            )
+            CLI.print_error("  ❌ Failed to repair: #{issue.description} (#{reason})")
 
             count
         end

@@ -1139,9 +1139,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
           case Config.save_configuration(updated_config, config_path) do
             :ok ->
-              CLI.print_success(
-                "Configuration updated with #{final_count} new servers"
-              )
+              CLI.print_success("Configuration updated with #{final_count} new servers")
 
               IO.puts("")
               IO.puts("Use 'maestro mcp list' to see all configured servers")

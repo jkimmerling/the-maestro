@@ -940,9 +940,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
         show_static_logs(log_file, options)
       end
     else
-      CLI.print_error(
-        "Log file not found for server '#{server_name}': #{log_file}"
-      )
+      CLI.print_error("Log file not found for server '#{server_name}': #{log_file}")
 
       # Suggest checking if server has been started
       IO.puts("")

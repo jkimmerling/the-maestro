@@ -218,9 +218,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
     dry_run = Map.get(options, :dry_run, false)
     action = if dry_run, do: "Would apply", else: "Applying"
 
-    CLI.print_info(
-      "#{action} template '#{template_name}' to create server '#{server_name}'..."
-    )
+    CLI.print_info("#{action} template '#{template_name}' to create server '#{server_name}'...")
 
     with {:ok, template} <- get_template(template_name),
          {:ok, variables} <- parse_template_variables(options),
@@ -244,9 +242,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
         # Apply template for real
         case save_server_configuration(server_name, config) do
           :ok ->
-            CLI.print_success(
-              "Server '#{server_name}' created from template '#{template_name}'"
-            )
+            CLI.print_success("Server '#{server_name}' created from template '#{template_name}'")
 
             # Show next steps
             IO.puts("")
@@ -333,9 +329,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
           if force do
             true
           else
-            CLI.print_warning(
-              "This will permanently delete the template '#{template_name}'"
-            )
+            CLI.print_warning("This will permanently delete the template '#{template_name}'")
 
             case IO.gets("Continue? (yes/no): ") do
               input when is_binary(input) ->
@@ -552,9 +546,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Templates do
     missing_vars = required_vars -- Map.keys(variables)
 
     if length(missing_vars) > 0 do
-      CLI.print_error(
-        "Missing required variables: #{Enum.join(missing_vars, ", ")}"
-      )
+      CLI.print_error("Missing required variables: #{Enum.join(missing_vars, ", ")}")
 
       {:error, :missing_variables}
     else

@@ -372,9 +372,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
         _ -> CLI.print_warning("Could not open browser automatically")
       end
 
-      CLI.print_info(
-        "Please complete OAuth flow and enter the authorization code:"
-      )
+      CLI.print_info("Please complete OAuth flow and enter the authorization code:")
 
       case IO.gets("Authorization Code: ") do
         code when is_binary(code) ->

@@ -175,9 +175,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
             :ok ->
               file_size = byte_size(formatted_data)
 
-              CLI.print_success(
-                "Configuration exported to '#{file_path}' (#{file_size} bytes)"
-              )
+              CLI.print_success("Configuration exported to '#{file_path}' (#{file_size} bytes)")
 
               # Show export summary
               show_export_summary(export_data, options)
@@ -434,9 +432,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
             {:ok, updated_config}
 
           {:error, reason} ->
-            CLI.print_error(
-              "Failed to save imported configuration: #{inspect(reason)}"
-            )
+            CLI.print_error("Failed to save imported configuration: #{inspect(reason)}")
 
             {:error, :save_failed}
         end

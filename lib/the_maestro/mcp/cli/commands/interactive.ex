@@ -103,9 +103,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
               updated_state
 
             {:error, reason} ->
-              CLI.print_error(
-                "Failed to connect to '#{server_name}': #{inspect(reason)}"
-              )
+              CLI.print_error("Failed to connect to '#{server_name}': #{inspect(reason)}")
 
               state
           end
