@@ -61,7 +61,8 @@ defmodule TheMaestro.MCP.Security.TrustLevel do
   """
   @spec valid_tool_level?(term()) :: boolean()
   def valid_tool_level?(level)
-      when level in [:always_allow, :confirm_once, :confirm_always, :blocked], do: true
+      when level in [:always_allow, :confirm_once, :confirm_always, :blocked],
+      do: true
 
   def valid_tool_level?(_), do: false
 
