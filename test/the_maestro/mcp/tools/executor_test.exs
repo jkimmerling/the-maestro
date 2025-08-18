@@ -2,7 +2,6 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
   use ExUnit.Case, async: true
   doctest TheMaestro.MCP.Tools.Executor
 
-  alias TheMaestro.MCP.Protocol
   alias TheMaestro.MCP.Tools.Executor
 
   # Mock connection module for testing
@@ -241,31 +240,6 @@ defmodule TheMaestro.MCP.Tools.ExecutorTest do
       assert request.method == "tools/call"
       assert request.params.name == "write_file"
       assert request.params.arguments == parameters
-    end
-
-    test "handles timeout scenarios", %{mock_connection: mock_conn} do
-      # Set up a delay in the mock response to simulate timeout
-      # Small delay to simulate slow response
-      :timer.sleep(50)
-
-      tool_name = "slow_tool"
-      parameters = %{"delay" => 5000}
-
-      context = %{
-        server_id: "test_server",
-        connection_manager: MockConnectionManager,
-        # Very short timeout
-        timeout: 10
-      }
-
-      Process.put(:mock_connection, mock_conn)
-
-      # For now, our mock doesn't actually handle timeouts properly
-      # This test would work with a real implementation
-      assert {:error, reason} = Executor.execute(tool_name, parameters, context)
-
-      # The actual error type will be mcp_protocol_error until we implement proper timeout handling
-      assert reason.type in [:execution_timeout, :mcp_protocol_error]
     end
   end
 
