@@ -19,12 +19,14 @@ defmodule TheMaestro.MCP.CLITest do
 
     # Ensure PubSub is available for CLI operations
     unless Process.whereis(TheMaestro.PubSub) do
-      {:ok, _} = Supervisor.start_link([{Phoenix.PubSub, name: TheMaestro.PubSub}], strategy: :one_for_one)
+      {:ok, _} =
+        Supervisor.start_link([{Phoenix.PubSub, name: TheMaestro.PubSub}], strategy: :one_for_one)
     end
 
     # Start ConnectionManager if not already running
     unless Process.whereis(TheMaestro.MCP.ConnectionManager) do
-      {:ok, _} = TheMaestro.MCP.ConnectionManager.start_link(name: TheMaestro.MCP.ConnectionManager)
+      {:ok, _} =
+        TheMaestro.MCP.ConnectionManager.start_link(name: TheMaestro.MCP.ConnectionManager)
     end
 
     # Mock configuration for testing

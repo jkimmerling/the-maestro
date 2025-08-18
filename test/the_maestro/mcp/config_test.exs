@@ -20,7 +20,8 @@ defmodule TheMaestro.MCP.ConfigTest do
 
     # Ensure PubSub is available for configuration reload operations
     unless Process.whereis(TheMaestro.PubSub) do
-      {:ok, _} = Supervisor.start_link([{Phoenix.PubSub, name: TheMaestro.PubSub}], strategy: :one_for_one)
+      {:ok, _} =
+        Supervisor.start_link([{Phoenix.PubSub, name: TheMaestro.PubSub}], strategy: :one_for_one)
     end
 
     on_exit(fn ->
