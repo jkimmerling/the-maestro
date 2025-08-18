@@ -7,7 +7,7 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
   setup do
     # Handle case where TrustManager is already started
     trust_pid =
-      case TrustManager.start_link([]) do
+      case TrustManager.start_link(name: TrustManager) do
         {:ok, pid} -> pid
         {:error, {:already_started, pid}} -> pid
       end

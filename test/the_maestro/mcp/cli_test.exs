@@ -9,22 +9,8 @@ defmodule TheMaestro.MCP.CLITest do
 
   use ExUnit.Case
   import ExUnit.CaptureIO
-  import ExUnit.CaptureLog
 
   alias TheMaestro.MCP.CLI
-
-  alias TheMaestro.MCP.CLI.Commands.{
-    List,
-    Add,
-    Remove,
-    Status,
-    Tools,
-    Auth,
-    Trust,
-    Config,
-    Diagnostics
-  }
-
   alias TheMaestro.MCP.CLI.Formatters.{TableFormatter, JsonFormatter}
 
   @tmp_dir Path.join([System.tmp_dir!(), "maestro_cli_test"])
@@ -61,7 +47,7 @@ defmodule TheMaestro.MCP.CLITest do
   end
 
   describe "maestro mcp list" do
-    test "lists all configured servers", %{config: config} do
+    test "lists all configured servers", %{config: _config} do
       output =
         capture_io(fn ->
           CLI.main(["mcp", "list"])
@@ -72,7 +58,7 @@ defmodule TheMaestro.MCP.CLITest do
       assert output =~ "python"
     end
 
-    test "lists servers with status information", %{config: config} do
+    test "lists servers with status information", %{config: _config} do
       output =
         capture_io(fn ->
           CLI.main(["mcp", "list", "--status"])
@@ -82,7 +68,7 @@ defmodule TheMaestro.MCP.CLITest do
       assert output =~ "disconnected"
     end
 
-    test "lists servers with available tools", %{config: config} do
+    test "lists servers with available tools", %{config: _config} do
       output =
         capture_io(fn ->
           CLI.main(["mcp", "list", "--tools"])
@@ -271,8 +257,8 @@ defmodule TheMaestro.MCP.CLITest do
           CLI.main(["mcp", "health"])
         end)
 
-      assert output =~ "MCP System Health"
-      assert output =~ "Overall Status:"
+      assert output =~ "Health Check Results:"
+      assert output =~ "Overall Health:"
     end
 
     test "provides continuous health monitoring" do
@@ -559,7 +545,7 @@ defmodule TheMaestro.MCP.CLITest do
           CLI.main(["mcp", "diagnose", "fileSystem"])
         end)
 
-      assert output =~ "Diagnosis for server 'fileSystem'"
+      assert output =~ "Server Diagnosis: fileSystem"
     end
   end
 

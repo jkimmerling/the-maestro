@@ -11,7 +11,6 @@ defmodule TheMaestro.MCP.ConfigTest do
   import ExUnit.CaptureLog
 
   alias TheMaestro.MCP.Config
-  alias TheMaestro.MCP.Config.{ConfigValidator, EnvResolver, ConfigParser}
 
   @tmp_dir Path.join([System.tmp_dir!(), "maestro_config_test"])
 
