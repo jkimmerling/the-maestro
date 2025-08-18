@@ -85,12 +85,12 @@ defmodule TheMaestro.MCP.CLI do
 
       {:error, reason} ->
         print_error(reason)
-        System.halt(1)
+        unless test_mode?(), do: System.halt(1)
     end
   rescue
     error ->
       print_error("Unexpected error: #{Exception.message(error)}")
-      System.halt(1)
+      unless test_mode?(), do: System.halt(1)
   end
 
   @doc """
@@ -318,7 +318,7 @@ defmodule TheMaestro.MCP.CLI do
           unknown ->
             print_error("Unknown MCP command: #{unknown}")
             print_info("Use 'maestro mcp --help' for available commands")
-            System.halt(1)
+            unless test_mode?(), do: System.halt(1)
         end
 
       # Handle command return values
@@ -326,7 +326,7 @@ defmodule TheMaestro.MCP.CLI do
         {:ok, :help} -> :ok
         {:ok, :dry_run} -> :ok
         {:ok, _} -> :ok
-        {:error, _} -> System.halt(1)
+        {:error, _} -> unless test_mode?(), do: System.halt(1)
         :ok -> :ok
         _ -> :ok
       end
@@ -346,7 +346,7 @@ defmodule TheMaestro.MCP.CLI do
 
       _ ->
         print_error("Unknown command")
-        System.halt(1)
+        unless test_mode?(), do: System.halt(1)
     end
   end
 
@@ -363,7 +363,7 @@ defmodule TheMaestro.MCP.CLI do
         print_error("Unexpected error in '#{command}': #{inspect(error)}")
     end
 
-    System.halt(1)
+    unless test_mode?(), do: System.halt(1)
   end
 
   # Help and informational functions
@@ -574,5 +574,9 @@ defmodule TheMaestro.MCP.CLI do
     unless quiet?(options) do
       IO.puts(message)
     end
+  end
+
+  defp test_mode?() do
+    Mix.env() == :test
   end
 end

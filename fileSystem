@@ -1,11 +1,20 @@
 ---
-exported_at: 2025-08-18T20:50:11.298129Z
+exported_at: 2025-08-18T20:56:44.643531Z
 servers:
+  importedServer:
+    args:
+      - server.js
+    command: node
+    trust: false
   newServer:
     command: python
     description: ''
     timeout: 30000
     trust: false
+  test:
+    args:
+      - test.js
+    command: node
   test_server:
     args:
       - -m
