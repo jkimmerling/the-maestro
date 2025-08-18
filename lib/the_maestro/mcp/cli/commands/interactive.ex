@@ -269,7 +269,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
     cond do
       String.starts_with?(expression, ":") ->
         # REPL command
-        command_part = String.slice(expression, 1..-1)
+        command_part = String.slice(expression, 1..-1//1)
 
         case parse_interactive_command(command_part) do
           {:command, command, args} ->
@@ -612,7 +612,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
     IO.puts("")
   end
 
-  defp show_repl_welcome(state) do
+  defp show_repl_welcome(_state) do
     IO.puts("")
     IO.puts("🔄 MCP REPL Mode - Read-Eval-Print Loop")
     IO.puts("")
@@ -901,7 +901,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
     Enum.map(args, fn arg ->
       cond do
         String.starts_with?(arg, "\"") && String.ends_with?(arg, "\"") ->
-          String.slice(arg, 1..-2)
+          String.slice(arg, 1..-2//1)
 
         arg in ["true", "false"] ->
           String.to_atom(arg)

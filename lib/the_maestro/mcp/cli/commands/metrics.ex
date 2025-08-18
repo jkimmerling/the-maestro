@@ -346,7 +346,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
     # Show problematic servers if any
     show_performance_alerts(metrics_data, options)
 
-    unless CLI.is_quiet?(options) do
+    unless CLI.quiet?(options) do
       show_metrics_summary(metrics_data)
     end
   end
@@ -422,7 +422,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
       end)
     end
 
-    if CLI.is_verbose?(options) and not Enum.empty?(metrics.errors.recent_errors) do
+    if CLI.verbose?(options) and not Enum.empty?(metrics.errors.recent_errors) do
       IO.puts("  Recent Errors:")
 
       Enum.take(metrics.errors.recent_errors, 3)
@@ -719,7 +719,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Metrics do
 
   defp display_audit_events(events, options) do
     # Display audit events in table or detailed format
-    if CLI.is_verbose?(options) do
+    if CLI.verbose?(options) do
       Enum.each(events, fn event ->
         display_detailed_audit_event(event)
       end)

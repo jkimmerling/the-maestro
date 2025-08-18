@@ -147,7 +147,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
     end
   end
 
-  defp show_auth_status(options) do
+  defp show_auth_status(_options) do
     CLI.print_info("Authentication status:")
 
     case Config.load_configuration() do
@@ -269,7 +269,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
     end
   end
 
-  defp list_api_keys(options) do
+  defp list_api_keys(_options) do
     CLI.print_info("Configured API keys:")
 
     case get_stored_api_keys() do
@@ -331,7 +331,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
     end
   end
 
-  defp prompt_and_store_api_key(server_name, server, options) do
+  defp prompt_and_store_api_key(server_name, _server, options) do
     if Map.get(options, :key) do
       # Key provided via command line option
       key = Map.get(options, :key)
@@ -358,7 +358,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
     end
   end
 
-  defp handle_oauth_login(server_name, server, options) do
+  defp handle_oauth_login(_server_name, server, _options) do
     oauth_config = Map.get(server, :oauth_config, %{})
     auth_url = Map.get(oauth_config, :auth_url)
 
@@ -376,7 +376,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
 
       case IO.gets("Authorization Code: ") do
         code when is_binary(code) ->
-          code = String.trim(code)
+          _trimmed_code = String.trim(code)
           # In real implementation, would exchange code for token
           CLI.print_success("OAuth authentication completed")
           {:ok, :oauth}
@@ -391,7 +391,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
     end
   end
 
-  defp handle_bearer_token(server_name, server, options) do
+  defp handle_bearer_token(server_name, _server, options) do
     if token = Map.get(options, :token) do
       store_bearer_token(server_name, token, options)
     else
@@ -415,7 +415,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
     end
   end
 
-  defp handle_interactive_login(server_name, server, options) do
+  defp handle_interactive_login(server_name, _server, _options) do
     CLI.print_info("Interactive authentication for '#{server_name}'")
     CLI.print_info("Please follow the prompts from the MCP server...")
 
@@ -524,7 +524,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Auth do
     _, _ -> :unknown
   end
 
-  defp test_api_key_status(server_name, key) do
+  defp test_api_key_status(_server_name, key) do
     # In real implementation, this would test the API key against the server
     # For now, return a mock status based on key format
     cond do

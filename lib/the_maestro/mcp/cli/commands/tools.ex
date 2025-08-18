@@ -101,7 +101,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
 
   ## Private Functions
 
-  defp parse_list_args(args, options) do
+  defp parse_list_args(_args, options) do
     server_filter = Map.get(options, :server)
     {:ok, server_filter}
   end
@@ -220,7 +220,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
 
     display_simple_table(headers, rows)
 
-    unless CLI.is_quiet?(options) do
+    unless CLI.quiet?(options) do
       IO.puts("")
 
       IO.puts(
@@ -262,7 +262,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
       IO.puts("")
       IO.puts("Input Schema:")
 
-      if CLI.is_verbose?(options) do
+      if CLI.verbose?(options) do
         IO.puts(Jason.encode!(input_schema, pretty: true))
       else
         display_schema_summary(input_schema)
@@ -459,7 +459,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
         IO.puts(text)
 
       data ->
-        if CLI.is_verbose?(options) do
+        if CLI.verbose?(options) do
           IO.puts(Jason.encode!(data, pretty: true))
         else
           IO.puts(inspect(data))
@@ -474,7 +474,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Tools do
   end
 
   defp display_content_item(item, options) do
-    if CLI.is_verbose?(options) do
+    if CLI.verbose?(options) do
       IO.puts(Jason.encode!(item, pretty: true))
     else
       IO.puts(inspect(item))

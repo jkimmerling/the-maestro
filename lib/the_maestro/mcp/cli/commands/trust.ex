@@ -124,7 +124,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Trust do
     end
   end
 
-  defp list_trust_levels(options) do
+  defp list_trust_levels(_options) do
     CLI.print_info("Server trust levels:")
 
     case Config.load_configuration() do

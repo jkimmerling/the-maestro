@@ -892,11 +892,11 @@ defmodule TheMaestro.MCP.ConnectionManager do
     :ok
   end
 
-  defp stop_connection_trace(_trace_id) do
+  defp stop_connection_trace(trace_id) do
     # Placeholder implementation - would stop tracing and return data
     {:ok,
      %{
-       trace_id: _trace_id,
+       trace_id: trace_id,
        requests: [],
        responses: [],
        timing_data: %{}

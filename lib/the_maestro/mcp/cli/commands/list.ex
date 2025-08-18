@@ -20,7 +20,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
   - `--format` - Output format (table, json, yaml)
   - `--verbose` - Show detailed information
   """
-  def execute(args, options) do
+  def execute(_args, options) do
     if Map.get(options, :help) do
       show_help()
       {:ok, :help}
@@ -169,7 +169,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
   end
 
   defp add_detailed_info(server_info, server_config, options) do
-    if CLI.is_verbose?(options) do
+    if CLI.verbose?(options) do
       details = %{
         command: Map.get(server_config, "command"),
         args: Map.get(server_config, "args", []),
@@ -233,7 +233,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
     |> maybe_add_header("Status", Map.get(options, :status))
     |> maybe_add_header("Uptime", Map.get(options, :status))
     |> maybe_add_header("Tools", Map.get(options, :tools))
-    |> maybe_add_header("Description", CLI.is_verbose?(options))
+    |> maybe_add_header("Description", CLI.verbose?(options))
   end
 
   defp maybe_add_header(headers, header, condition) do
@@ -253,7 +253,7 @@ defmodule TheMaestro.MCP.CLI.Commands.List do
     |> maybe_add_cell(format_tools_count(Map.get(server, :tools, [])), Map.get(options, :tools))
     |> maybe_add_cell(
       truncate_text(server.description, 40),
-      CLI.is_verbose?(options)
+      CLI.verbose?(options)
     )
   end
 

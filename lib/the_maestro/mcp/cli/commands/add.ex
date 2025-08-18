@@ -305,7 +305,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
     |> maybe_add_tool_list("excludeTools", Map.get(options, :exclude_tool))
   end
 
-  defp maybe_add_tool_list(config, key, nil), do: config
+  defp maybe_add_tool_list(config, _key, nil), do: config
 
   defp maybe_add_tool_list(config, key, tools) when is_list(tools) do
     Map.put(config, key, tools)
@@ -422,7 +422,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Add do
   end
 
   defp print_server_summary(server_name, server_config, options) do
-    unless CLI.is_quiet?(options) do
+    unless CLI.quiet?(options) do
       IO.puts("")
       IO.puts("Server Details:")
       IO.puts("  Name: #{server_name}")

@@ -329,7 +329,7 @@ defmodule TheMaestro.MCP.CLI.Commands.ImportExport do
 
         # Analyze server conflicts and updates
         final_plan =
-          Enum.reduce(import_servers, merge_plan, fn {name, server}, plan ->
+          Enum.reduce(import_servers, merge_plan, fn {name, _server}, plan ->
             cond do
               not Map.has_key?(current_servers, name) ->
                 # New server

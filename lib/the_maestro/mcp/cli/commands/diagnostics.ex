@@ -178,7 +178,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     end
   end
 
-  defp diagnose_system_health(options) do
+  defp diagnose_system_health(_options) do
     checks = %{
       process_status: check_process_status(),
       memory_usage: check_memory_usage(),
@@ -196,7 +196,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     }
   end
 
-  defp diagnose_configuration(options) do
+  defp diagnose_configuration(_options) do
     checks = %{
       config_file_exists: check_config_file_exists(),
       config_file_valid: check_config_file_valid(),
@@ -214,7 +214,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     }
   end
 
-  defp diagnose_all_servers(options) do
+  defp diagnose_all_servers(_options) do
     case Config.get_configuration() do
       {:ok, config} ->
         servers = get_in(config, ["mcpServers"]) || %{}
@@ -249,7 +249,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     end
   end
 
-  defp diagnose_network(options) do
+  defp diagnose_network(_options) do
     checks = %{
       internet_connectivity: check_internet_connectivity(),
       dns_resolution: check_dns_resolution(),
@@ -262,7 +262,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     }
   end
 
-  defp diagnose_permissions(options) do
+  defp diagnose_permissions(_options) do
     checks = %{
       config_directory_writable: check_config_directory_writable(),
       log_directory_writable: check_log_directory_writable(),
@@ -275,7 +275,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     }
   end
 
-  defp diagnose_dependencies(options) do
+  defp diagnose_dependencies(_options) do
     checks = %{
       elixir_version: check_elixir_version(),
       required_applications: check_required_applications(),
@@ -288,7 +288,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     }
   end
 
-  defp run_server_diagnosis(server_id, server_config, options) do
+  defp run_server_diagnosis(server_id, server_config, _options) do
     checks = %{
       configuration_valid: validate_server_configuration(server_id, server_config),
       connectivity: test_server_connectivity(server_id, server_config),
@@ -781,7 +781,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
 
   ## Display Functions
 
-  defp display_diagnosis_results(results, options) do
+  defp display_diagnosis_results(results, _options) do
     # System Health
     display_diagnosis_section("System Health", results.system)
 
@@ -873,7 +873,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     IO.puts("")
   end
 
-  defp display_server_diagnosis_results(server_name, results, options) do
+  defp display_server_diagnosis_results(_server_name, results, _options) do
     IO.puts(
       "Overall Status: #{format_diagnosis_status(results.status)} (#{Float.round(results.score, 1)}%)"
     )
@@ -1059,7 +1059,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
       |> Enum.map(fn i ->
         IO.write("Ping #{i}/#{count}: ")
 
-        start_time = System.monotonic_time(:millisecond)
+        _start_time = System.monotonic_time(:millisecond)
 
         result =
           case ConnectionManager.ping_server(ConnectionManager, server_name, timeout) do
@@ -1190,7 +1190,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
       timestamp = format_timestamp(entry.timestamp)
       IO.puts("#{timestamp} - #{entry.event_type}")
 
-      if CLI.is_verbose?(options) do
+      if CLI.verbose?(options) do
         IO.puts("  Details: #{entry.details}")
 
         if entry.data do
@@ -1221,51 +1221,56 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   end
 
   defp generate_diagnosis_recommendations(results) do
-    recommendations = []
-
-    # System health recommendations
-    if results.system.score < 80 do
-      recommendations = [
-        %{
-          title: "System Health Issues",
-          description:
-            "System health score is #{Float.round(results.system.score, 1)}%. Check memory usage and disk space.",
-          priority: "medium"
-        }
-        | recommendations
-      ]
-    end
-
-    # Configuration recommendations
-    if results.configuration.score < 90 do
-      recommendations = [
-        %{
-          title: "Configuration Issues",
-          description:
-            "Configuration has issues. Review server configurations and fix validation errors.",
-          priority: "high"
-        }
-        | recommendations
-      ]
-    end
-
-    # Server recommendations
-    if results.servers.healthy_servers < results.servers.total_servers do
-      unhealthy_count = results.servers.total_servers - results.servers.healthy_servers
-
-      recommendations = [
-        %{
-          title: "Server Health Issues",
-          description:
-            "#{unhealthy_count} servers have health issues. Check connectivity and configuration.",
-          priority: "high"
-        }
-        | recommendations
-      ]
-    end
-
-    recommendations
+    []
+    |> add_system_health_recommendations(results.system.score)
+    |> add_configuration_recommendations(results.configuration.score)
+    |> add_server_health_recommendations(results.servers)
   end
+
+  defp add_system_health_recommendations(recommendations, system_score) when system_score < 80 do
+    [
+      %{
+        title: "System Health Issues",
+        description:
+          "System health score is #{Float.round(system_score, 1)}%. Check memory usage and disk space.",
+        priority: "medium"
+      }
+      | recommendations
+    ]
+  end
+
+  defp add_system_health_recommendations(recommendations, _system_score), do: recommendations
+
+  defp add_configuration_recommendations(recommendations, config_score) when config_score < 90 do
+    [
+      %{
+        title: "Configuration Issues",
+        description:
+          "Configuration has issues. Review server configurations and fix validation errors.",
+        priority: "high"
+      }
+      | recommendations
+    ]
+  end
+
+  defp add_configuration_recommendations(recommendations, _config_score), do: recommendations
+
+  defp add_server_health_recommendations(recommendations, servers)
+       when servers.healthy_servers < servers.total_servers do
+    unhealthy_count = servers.total_servers - servers.healthy_servers
+
+    [
+      %{
+        title: "Server Health Issues",
+        description:
+          "#{unhealthy_count} servers have health issues. Check connectivity and configuration.",
+        priority: "high"
+      }
+      | recommendations
+    ]
+  end
+
+  defp add_server_health_recommendations(recommendations, _servers), do: recommendations
 
   defp format_check_name(check_name) do
     check_name

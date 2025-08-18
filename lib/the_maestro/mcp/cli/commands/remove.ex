@@ -142,7 +142,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
 
     # Check if server is currently connected
     case check_server_status(server_name) do
-      {:connected, info} ->
+      {:connected, _info} ->
         IO.puts("  Status: 🟢 Currently Connected")
         IO.puts("  Connection will be stopped before removal.")
 
@@ -270,8 +270,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Remove do
     end)
   end
 
-  defp print_removal_summary(server_name, server_config, options) do
-    unless CLI.is_quiet?(options) do
+  defp print_removal_summary(server_name, _server_config, options) do
+    unless CLI.quiet?(options) do
       IO.puts("")
       IO.puts("Removal Summary:")
       IO.puts("  ✓ Server '#{server_name}' removed from configuration")

@@ -352,8 +352,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Update do
     end
   end
 
-  defp print_update_summary(server_name, original_config, updated_config, updates, options) do
-    unless CLI.is_quiet?(options) do
+  defp print_update_summary(server_name, original_config, _updated_config, updates, options) do
+    unless CLI.quiet?(options) do
       IO.puts("")
       IO.puts("Update Summary for '#{server_name}':")
 

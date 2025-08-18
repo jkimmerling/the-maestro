@@ -179,7 +179,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
 
     # Get tools information if verbose
     tools_info =
-      if CLI.is_verbose?(options) do
+      if CLI.verbose?(options) do
         get_server_tools_info(server_id)
       else
         %{}
@@ -284,7 +284,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
       display_simple_table(headers, rows)
 
       # Show summary
-      unless CLI.is_quiet?(options) do
+      unless CLI.quiet?(options) do
         show_status_summary(server_statuses)
       end
     end
@@ -330,7 +330,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
       IO.puts("Tools:")
       IO.puts("  Available Tools: #{status_info.tools_count}")
 
-      if CLI.is_verbose?(options) and length(status_info.tools) > 0 do
+      if CLI.verbose?(options) and length(status_info.tools) > 0 do
         IO.puts("  Tool List:")
 
         Enum.each(status_info.tools, fn tool ->
@@ -353,9 +353,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
     base_headers = ["Name", "Status", "Transport", "Trust"]
 
     base_headers
-    |> maybe_add_header("Uptime", not CLI.is_quiet?(options))
-    |> maybe_add_header("Tools", CLI.is_verbose?(options))
-    |> maybe_add_header("Errors", CLI.is_verbose?(options))
+    |> maybe_add_header("Uptime", not CLI.quiet?(options))
+    |> maybe_add_header("Tools", CLI.verbose?(options))
+    |> maybe_add_header("Errors", CLI.verbose?(options))
   end
 
   defp build_status_table_row(status, options) do
@@ -367,9 +367,9 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
     ]
 
     base_row
-    |> maybe_add_cell(status.uptime || "", not CLI.is_quiet?(options))
-    |> maybe_add_cell(Map.get(status, :tools_count, ""), CLI.is_verbose?(options))
-    |> maybe_add_cell(status.error_count || 0, CLI.is_verbose?(options))
+    |> maybe_add_cell(status.uptime || "", not CLI.quiet?(options))
+    |> maybe_add_cell(Map.get(status, :tools_count, ""), CLI.verbose?(options))
+    |> maybe_add_cell(status.error_count || 0, CLI.verbose?(options))
   end
 
   defp show_status_summary(server_statuses) do
@@ -442,7 +442,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
 
         IO.puts("✓ Connection test passed (#{duration}ms)")
 
-        if CLI.is_verbose?(options) and test_results do
+        if CLI.verbose?(options) and test_results do
           display_test_results(test_results)
         end
 
@@ -603,7 +603,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Status do
 
     IO.puts("#{status_icon} #{server_id}: #{result.health_score}% healthy")
 
-    if CLI.is_verbose?(options) do
+    if CLI.verbose?(options) do
       Enum.each(result.checks, fn {check_name, check_result} ->
         check_icon =
           case check_result.status do

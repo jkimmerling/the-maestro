@@ -1002,7 +1002,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     # Sort by confidence
     sorted_servers = Enum.sort_by(servers, & &1.confidence, :desc)
 
-    if CLI.is_verbose?(options) do
+    if CLI.verbose?(options) do
       # Detailed view
       Enum.each(sorted_servers, fn server ->
         display_detailed_server_info(server)
@@ -1074,7 +1074,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
   end
 
   defp offer_to_add_servers(servers, options) do
-    unless CLI.is_quiet?(options) do
+    unless CLI.quiet?(options) do
       IO.puts("")
       IO.write("Add discovered servers to configuration? [y/N]: ")
 
