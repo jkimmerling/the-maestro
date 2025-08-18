@@ -5,7 +5,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
   Provides real-time anomaly detection for:
   - Unusual tool usage patterns
   - Multiple failed confirmations
-  - Suspicious parameter patterns  
+  - Suspicious parameter patterns
   - Resource usage anomalies
   - Time-based access patterns
   - Behavioral deviation detection
@@ -584,7 +584,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
         ]
       end
 
-      # Memory usage anomaly  
+      # Memory usage anomaly
       memory_usage = Map.get(resource_usage, :memory_mb, 0)
       baseline_memory = Map.get(baseline, :avg_memory_usage, 100)
 

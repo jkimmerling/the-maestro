@@ -227,7 +227,7 @@ defmodule TheMaestro.MCP.Security.PolicyEngineTest do
 
       {:ok, effective_policy} = PolicyEngine.get_effective_policy(context)
 
-      # User policy should override global threshold setting  
+      # User policy should override global threshold setting
       assert effective_policy.require_confirmation_threshold == :low
 
       # Server policy setting should be included

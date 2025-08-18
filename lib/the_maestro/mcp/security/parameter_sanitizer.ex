@@ -7,7 +7,7 @@ defmodule TheMaestro.MCP.Security.ParameterSanitizer do
 
   - Path traversal attacks
   - Command injection
-  - SQL injection  
+  - SQL injection
   - Script injection
   - Buffer overflow attempts
   - Malformed data attacks
@@ -67,7 +67,7 @@ defmodule TheMaestro.MCP.Security.ParameterSanitizer do
   ## Parameters
 
   - `parameters` - Tool parameters to sanitize
-  - `tool_name` - Name of the tool (affects sanitization strategy)  
+  - `tool_name` - Name of the tool (affects sanitization strategy)
   - `options` - Sanitization options
 
   ## Options

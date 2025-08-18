@@ -365,7 +365,7 @@ defmodule TheMaestro.MCP.Security.SecureExecutorTest do
     # Set it to error mode
     MockConnection.set_should_error(mock_conn, true)
 
-    # Store the mock connection 
+    # Store the mock connection
     Process.put(:mock_connection, mock_conn)
   end
 end

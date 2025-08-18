@@ -33,7 +33,7 @@ defmodule TheMaestro.MCP.Security.SecureExecutor do
         session_id: "sess_456",
         interface: :web
       }
-      
+
       {:ok, result} = SecureExecutor.execute_secure("read_file", %{"path" => "/tmp/file"}, context)
   """
 
@@ -347,7 +347,7 @@ defmodule TheMaestro.MCP.Security.SecureExecutor do
     # Check file system permissions
     permission_checks = permission_checks ++ check_file_permissions(parameters, permissions)
 
-    # Check network permissions  
+    # Check network permissions
     permission_checks = permission_checks ++ check_network_permissions(parameters, permissions)
 
     # Check command permissions

@@ -4,7 +4,7 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngine do
 
   Orchestrates the complete security confirmation flow including:
   - Risk assessment
-  - Trust evaluation  
+  - Trust evaluation
   - User confirmation dialog presentation
   - Decision processing and persistence
   - Security event logging
@@ -21,7 +21,7 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngine do
   ## User Choices
 
   - `:execute_once` - Allow this execution only
-  - `:always_allow_tool` - Add tool to whitelist 
+  - `:always_allow_tool` - Add tool to whitelist
   - `:always_trust_server` - Trust entire server
   - `:block_tool` - Add tool to blacklist
   - `:cancel` - Abort execution
@@ -99,7 +99,7 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngine do
   ## Parameters
 
   - `tool` - Tool information map
-  - `parameters` - Tool parameters 
+  - `parameters` - Tool parameters
   - `context` - Security context
 
   ## Returns

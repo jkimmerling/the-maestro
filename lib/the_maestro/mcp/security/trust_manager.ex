@@ -2,7 +2,7 @@ defmodule TheMaestro.MCP.Security.TrustManager do
   @moduledoc """
   Manages trust relationships for MCP servers and tools.
 
-  This GenServer maintains the state of trust relationships between users, 
+  This GenServer maintains the state of trust relationships between users,
   MCP servers, and individual tools. It provides the core logic for determining
   whether tool executions require user confirmation.
 

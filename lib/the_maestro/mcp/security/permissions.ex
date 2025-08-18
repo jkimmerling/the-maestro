@@ -4,7 +4,7 @@ defmodule TheMaestro.MCP.Security.Permissions do
 
   Provides comprehensive permission management for:
   - File system access controls
-  - Network access restrictions  
+  - Network access restrictions
   - System command permissions
   - Environment variable access
   - Resource limitation enforcement
@@ -21,7 +21,7 @@ defmodule TheMaestro.MCP.Security.Permissions do
   Permissions are evaluated in order of precedence:
   1. User-specific permissions (highest priority)
   2. Server-specific permissions
-  3. Tool-specific permissions  
+  3. Tool-specific permissions
   4. Global default permissions (lowest priority)
   """
 

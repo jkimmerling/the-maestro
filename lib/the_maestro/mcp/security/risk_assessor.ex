@@ -7,7 +7,7 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
 
   - Tool type and capabilities
   - Parameter values and patterns
-  - File system access patterns  
+  - File system access patterns
   - Network access requirements
   - Command injection potential
   - Sensitive data exposure
@@ -53,7 +53,7 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
     "/sys/",
     "/dev/",
     "/boot/",
-    # User sensitive paths  
+    # User sensitive paths
     "/home/",
     "~/.ssh/",
     "~/.aws/",
@@ -110,7 +110,7 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
     "format"
   ]
 
-  # Sensitive data patterns  
+  # Sensitive data patterns
   @sensitive_patterns [
     "password",
     "passwd",
@@ -140,14 +140,14 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
   ## Examples
 
       iex> tool = %{name: "read_file", server_id: "fs"}
-      iex> params = %{"path" => "/tmp/safe.txt"}  
+      iex> params = %{"path" => "/tmp/safe.txt"}
       iex> assessment = RiskAssessor.assess_risk(tool, params)
       iex> assessment.risk_level
       :low
-      
+
       iex> tool = %{name: "execute_command", server_id: "shell"}
       iex> params = %{"command" => "rm -rf /"}
-      iex> assessment = RiskAssessor.assess_risk(tool, params)  
+      iex> assessment = RiskAssessor.assess_risk(tool, params)
       iex> assessment.risk_level
       :critical
   """
@@ -184,7 +184,7 @@ defmodule TheMaestro.MCP.Security.RiskAssessor do
       has_high_risk_factors?(factors) ->
         :high
 
-      # Score-based classification for other cases  
+      # Score-based classification for other cases
       score > @high_threshold ->
         :high
 

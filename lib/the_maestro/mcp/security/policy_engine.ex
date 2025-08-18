@@ -4,7 +4,7 @@ defmodule TheMaestro.MCP.Security.PolicyEngine do
 
   Provides centralized policy management with support for:
   - Global security policies
-  - Per-user policy overrides  
+  - Per-user policy overrides
   - Per-server policy settings
   - Time-based policy changes
   - Emergency policy activation
