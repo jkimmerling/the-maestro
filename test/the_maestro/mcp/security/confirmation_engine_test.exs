@@ -5,12 +5,9 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
   alias TheMaestro.MCP.Security.ConfirmationEngine.{ConfirmationRequest, ConfirmationResult}
 
   setup do
-    # Handle case where TrustManager is already started
-    trust_pid =
-      case TrustManager.start_link(name: TrustManager) do
-        {:ok, pid} -> pid
-        {:error, {:already_started, pid}} -> pid
-      end
+    # Create unique TrustManager name for each test
+    unique_name = :"trust_manager_#{System.unique_integer([:positive])}"
+    {:ok, trust_pid} = TrustManager.start_link(name: unique_name)
 
     %{trust_manager: trust_pid}
   end
