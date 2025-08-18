@@ -33,7 +33,7 @@ defmodule TheMaestro.MCP.Security.PolicyEngine do
   use GenServer
   require Logger
 
-  alias TheMaestro.MCP.Security.{Permissions, AuditLogger}
+  alias TheMaestro.MCP.Security.AuditLogger
 
   @type policy_level :: :emergency | :user | :tool | :server | :time_based | :global
   @type policy_status :: :active | :inactive | :suspended | :expired
@@ -250,7 +250,7 @@ defmodule TheMaestro.MCP.Security.PolicyEngine do
       nil ->
         {:reply, {:error, "Policy not found"}, state}
 
-      policy ->
+      _policy ->
         new_policies = Map.delete(state.policies, policy_id)
 
         new_state = %{
@@ -334,7 +334,7 @@ defmodule TheMaestro.MCP.Security.PolicyEngine do
   end
 
   @impl GenServer
-  def handle_call({:get_policy_history, context_id, _opts}, _from, state) do
+  def handle_call({:get_policy_history, _context_id, _opts}, _from, state) do
     # In a full implementation, this would query a persistent audit log
     # For now, return empty list
     {:reply, [], state}
@@ -352,7 +352,7 @@ defmodule TheMaestro.MCP.Security.PolicyEngine do
     if length(expired_policies) > 0 do
       Logger.info("Cleaning up #{length(expired_policies)} expired policies")
 
-      Enum.each(expired_policies, fn {policy_id, policy} ->
+      Enum.each(expired_policies, fn {policy_id, _policy} ->
         # Use the actual AuditLogger method for policy violations
         AuditLogger.log_policy_violation(
           "system",

@@ -51,7 +51,7 @@ defmodule TheMaestro.MCP.Security.SecureExecutor do
   }
 
   alias TheMaestro.MCP.Security.ParameterSanitizer.SanitizationResult
-  alias TheMaestro.MCP.Security.ConfirmationEngine.{ConfirmationRequest, ConfirmationResult}
+  alias TheMaestro.MCP.Security.ConfirmationEngine.ConfirmationResult
 
   defmodule SecureExecutionResult do
     @moduledoc """
@@ -299,7 +299,7 @@ defmodule TheMaestro.MCP.Security.SecureExecutor do
 
         {:error, error}
 
-      {:error, :sanitization_blocked, reason, warnings} ->
+      {:error, :sanitization_blocked, reason, _warnings} ->
         error = %SecureExecutionError{
           type: :sanitization_blocked,
           message: "Parameter sanitization blocked execution",
@@ -399,7 +399,7 @@ defmodule TheMaestro.MCP.Security.SecureExecutor do
         end
 
       {:error, reason} ->
-        Logger.warn("Anomaly detection failed", reason: reason, context: context)
+        Logger.warning("Anomaly detection failed", reason: reason, context: context)
         # Continue with empty anomaly list if detection fails
         {:ok, []}
     end

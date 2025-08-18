@@ -61,7 +61,6 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
 
   defmodule DetectorState do
     @moduledoc false
-    alias TheMaestro.MCP.Security.AnomalyDetector
 
     @type t :: %__MODULE__{
             baselines: %{String.t() => map()},
@@ -215,7 +214,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
   end
 
   @impl GenServer
-  def handle_call({:update_anomaly_status, anomaly_id, new_status, updated_by}, _from, state) do
+  def handle_call({:update_anomaly_status, anomaly_id, new_status, _updated_by}, _from, state) do
     case Map.get(state.active_anomalies, anomaly_id) do
       nil ->
         {:reply, {:error, "Anomaly not found"}, state}
@@ -397,38 +396,37 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
     user_id = Map.get(event, :user_id)
 
     # Check for rapid tool usage
-    if user_id do
+    anomalies = if user_id do
       # last minute
       recent_user_events = get_recent_user_events(state, user_id, 60)
 
       tool_count =
         recent_user_events |> Enum.map(&Map.get(&1, :tool_name)) |> Enum.uniq() |> length()
 
-      anomalies =
-        if tool_count > state.thresholds.max_tools_per_minute do
-          [
-            create_anomaly(
-              :usage_pattern,
-              :medium,
-              "Excessive tool usage rate",
-              %{
-                tool_count: tool_count,
-                threshold: state.thresholds.max_tools_per_minute,
-                user_id: user_id
-              },
-              event
-            )
-            | anomalies
-          ]
-        else
-          anomalies
-        end
+      if tool_count > state.thresholds.max_tools_per_minute do
+        [
+          create_anomaly(
+            :usage_pattern,
+            :medium,
+            "Excessive tool usage rate",
+            %{
+              tool_count: tool_count,
+              threshold: state.thresholds.max_tools_per_minute,
+              user_id: user_id
+            },
+            event
+          )
+          | anomalies
+        ]
+      else
+        anomalies
+      end
+    else
+      anomalies
     end
 
     # Check for unusual tool combinations
-    anomalies = anomalies ++ detect_unusual_tool_combinations(event, state)
-
-    anomalies
+    anomalies ++ detect_unusual_tool_combinations(event, state)
   end
 
   defp detect_parameter_pattern_anomalies(event, state) do
@@ -465,12 +463,12 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
     user_id = Map.get(event, :user_id)
 
     # Off-hours access detection
-    if off_hours?(timestamp) and user_id do
+    anomalies = if off_hours?(timestamp) and user_id do
       baseline = Map.get(state.baselines, user_id, %{})
       normal_hours_activity = Map.get(baseline, :normal_hours_activity, 0.5)
 
       if normal_hours_activity > state.thresholds.off_hours_score_threshold do
-        anomalies = [
+        [
           create_anomaly(
             :temporal_pattern,
             :medium,
@@ -484,7 +482,11 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
           )
           | anomalies
         ]
+      else
+        anomalies
       end
+    else
+      anomalies
     end
 
     # Burst activity detection
@@ -497,7 +499,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
       baseline_rate = get_user_baseline_rate(state, user_id)
 
       if event_rate > baseline_rate * state.thresholds.burst_activity_threshold do
-        anomalies = [
+        [
           create_anomaly(
             :temporal_pattern,
             :high,
@@ -512,10 +514,12 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
           )
           | anomalies
         ]
+      else
+        anomalies
       end
+    else
+      anomalies
     end
-
-    anomalies
   end
 
   defp detect_access_pattern_anomalies(event, state) do
@@ -524,12 +528,12 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
     # Sensitive file access detection
     file_path = get_in(event, [:parameters, :path]) || get_in(event, [:parameters, "path"])
 
-    if file_path do
+    anomalies = if file_path do
       sensitive_patterns = get_sensitive_file_patterns(state)
       matches = find_pattern_matches(%{path: file_path}, sensitive_patterns)
 
       if length(matches) > 0 do
-        anomalies = [
+        [
           create_anomaly(
             :access_pattern,
             :high,
@@ -542,17 +546,21 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
           )
           | anomalies
         ]
+      else
+        anomalies
       end
+    else
+      anomalies
     end
 
     # Network access pattern analysis
     url = get_in(event, [:parameters, :url]) || get_in(event, [:parameters, "url"])
 
     if url do
-      anomalies = anomalies ++ analyze_network_access_patterns(url, event, state)
+      anomalies ++ analyze_network_access_patterns(url, event, state)
+    else
+      anomalies
     end
-
-    anomalies
   end
 
   defp detect_resource_pattern_anomalies(event, state) do
@@ -567,8 +575,8 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
       cpu_usage = Map.get(resource_usage, :cpu_percent, 0)
       baseline_cpu = Map.get(baseline, :avg_cpu_usage, 20)
 
-      if cpu_usage > baseline_cpu * state.thresholds.cpu_usage_anomaly_threshold do
-        anomalies = [
+      anomalies = if cpu_usage > baseline_cpu * state.thresholds.cpu_usage_anomaly_threshold do
+        [
           create_anomaly(
             :resource_pattern,
             :medium,
@@ -582,6 +590,8 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
           )
           | anomalies
         ]
+      else
+        anomalies
       end
 
       # Memory usage anomaly
@@ -589,7 +599,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
       baseline_memory = Map.get(baseline, :avg_memory_usage, 100)
 
       if memory_usage > baseline_memory * state.thresholds.memory_usage_anomaly_threshold do
-        anomalies = [
+        [
           create_anomaly(
             :resource_pattern,
             :medium,
@@ -603,10 +613,12 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
           )
           | anomalies
         ]
+      else
+        anomalies
       end
+    else
+      anomalies
     end
-
-    anomalies
   end
 
   defp detect_behavioral_pattern_anomalies(event, state) do
@@ -619,11 +631,11 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
       user_tools = Map.get(baseline, :common_tools, [])
 
       # New tool usage detection
-      if tool_name not in user_tools do
+      anomalies = if tool_name not in user_tools do
         tool_novelty_score = calculate_tool_novelty_score(tool_name, user_tools)
 
         if tool_novelty_score > state.thresholds.new_tool_usage_threshold do
-          anomalies = [
+          [
             create_anomaly(
               :behavioral_pattern,
               :low,
@@ -637,14 +649,18 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
             )
             | anomalies
           ]
+        else
+          anomalies
         end
+      else
+        anomalies
       end
 
       # Behavioral deviation analysis
       deviation_score = calculate_behavioral_deviation(event, baseline)
 
       if deviation_score > state.thresholds.user_behavior_deviation_threshold do
-        anomalies = [
+        [
           create_anomaly(
             :behavioral_pattern,
             :medium,
@@ -657,10 +673,12 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
           )
           | anomalies
         ]
+      else
+        anomalies
       end
+    else
+      anomalies
     end
-
-    anomalies
   end
 
   defp analyze_context_for_anomalies(context, state) do
@@ -742,7 +760,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
     end)
   end
 
-  defp detect_unusual_tool_combinations(event, state) do
+  defp detect_unusual_tool_combinations(_event, _state) do
     # Simplified tool combination analysis
     # In a full implementation, this would use statistical models
     []
