@@ -157,11 +157,24 @@
            [files: %{excluded: ["lib/the_maestro/tui/"]}]},
           {Credo.Check.Refactor.Nesting, [files: %{excluded: ["lib/the_maestro/tui/"]}]},
           # Temporarily disable for security module - these are style preferences, not critical issues
-          {Credo.Check.Readability.AliasOrder, [files: %{excluded: ["lib/the_maestro/mcp/security/", "test/the_maestro/mcp/security/"]}]},
-          {Credo.Check.Readability.ParenthesesOnZeroArityDefs, [files: %{excluded: ["lib/the_maestro/mcp/security/"]}]},
-          {Credo.Check.Readability.PreferImplicitTry, [files: %{excluded: ["lib/the_maestro/mcp/security/"]}]},
-          {Credo.Check.Refactor.NegatedConditionsWithElse, [files: %{excluded: ["lib/the_maestro/mcp/security/"]}]},
-          {Credo.Check.Warning.ExpensiveEmptyEnumCheck, [files: %{excluded: ["lib/the_maestro/mcp/security/", "test/the_maestro/mcp/security/"]}]}
+          {Credo.Check.Readability.AliasOrder,
+           [
+             files: %{
+               excluded: ["lib/the_maestro/mcp/security/", "test/the_maestro/mcp/security/"]
+             }
+           ]},
+          {Credo.Check.Readability.ParenthesesOnZeroArityDefs,
+           [files: %{excluded: ["lib/the_maestro/mcp/security/"]}]},
+          {Credo.Check.Readability.PreferImplicitTry,
+           [files: %{excluded: ["lib/the_maestro/mcp/security/"]}]},
+          {Credo.Check.Refactor.NegatedConditionsWithElse,
+           [files: %{excluded: ["lib/the_maestro/mcp/security/"]}]},
+          {Credo.Check.Warning.ExpensiveEmptyEnumCheck,
+           [
+             files: %{
+               excluded: ["lib/the_maestro/mcp/security/", "test/the_maestro/mcp/security/"]
+             }
+           ]}
         ]
       }
     }
