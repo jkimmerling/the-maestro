@@ -62,6 +62,7 @@ fi
 echo ""
 echo "🧪 Running tests (matching CI/CD)..."
 # Run tests without capturing output to avoid timeout issues
+export MIX_ENV=test
 if ! mix test; then
     echo "❌ Tests failed!"
     echo "💡 Fix failing tests before pushing"
