@@ -175,7 +175,7 @@ defmodule TheMaestro.MCP.Security.AnomalyDetector do
 
     # Schedule anomaly cleanup
     # 1 hour
-    :timer.send_interval(3600_000, self(), :cleanup_resolved_anomalies)
+    :timer.send_interval(3_600_000, self(), :cleanup_resolved_anomalies)
 
     {:ok, state}
   end

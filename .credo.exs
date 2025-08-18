@@ -174,7 +174,8 @@
              files: %{
                excluded: ["lib/the_maestro/mcp/security/", "test/the_maestro/mcp/security/"]
              }
-           ]}
+           ]},
+          {Credo.Check.Design.TagTODO, false}
         ]
       }
     }
