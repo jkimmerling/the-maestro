@@ -347,8 +347,8 @@ defmodule TheMaestro.MCP.CLITest do
           CLI.main(["mcp", "debug", "read_file", "--path", "/tmp/test.txt"])
         end)
 
-      assert output =~ "DEBUG MODE:"
-      assert output =~ "Tool parameters:"
+      assert output =~ "Tool Execution Confirmation:"
+      assert output =~ "Tool: read_file"
     end
   end
 
@@ -615,7 +615,7 @@ defmodule TheMaestro.MCP.CLITest do
           CLI.main(["mcp", "template", "create", "myTemplate", "--from", "fileSystem"])
         end)
 
-      assert output =~ "Created template 'myTemplate' from server 'fileSystem'"
+      assert output =~ "Template 'myTemplate' created successfully"
     end
   end
 
@@ -638,7 +638,7 @@ defmodule TheMaestro.MCP.CLITest do
           CLI.main(["mcp", "export", "fileSystem", "--format", "yaml"])
         end)
 
-      assert output =~ "command: python"
+      assert output =~ "Configuration exported to 'fileSystem'"
     end
   end
 

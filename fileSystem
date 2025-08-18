@@ -1,0 +1,15 @@
+---
+exported_at: 2025-08-18T20:14:48.230098Z
+servers:
+  newServer:
+    command: python
+    description: ''
+    timeout: 30000
+    trust: false
+  test_server:
+    args:
+      - -m
+      - test_server
+    command: python
+    trust: false
+version: '1.0'
