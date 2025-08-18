@@ -24,12 +24,12 @@ defmodule TheMaestro.MCP.CLITest do
           "command" => "python",
           "args" => ["-m", "filesystem_mcp_server"],
           "trust" => false,
-          "timeout" => 30000
+          "timeout" => 30_000
         },
         "sseServer" => %{
           "url" => "https://example.com/sse",
           "trust" => false,
-          "timeout" => 30000,
+          "timeout" => 30_000,
           "description" => ""
         },
         "test_server" => %{
