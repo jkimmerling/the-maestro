@@ -6,7 +6,6 @@ defmodule TheMaestro.Tooling.Tools.FileSystemWriteTest do
 
   # Setup test directory structure
   @test_sandbox_dir "/tmp/maestro_test_sandbox_write"
-  @test_file_content "Hello, World!\nThis is a test file.\n"
 
   setup do
     # Clean up and create test sandbox
