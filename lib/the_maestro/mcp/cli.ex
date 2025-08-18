@@ -77,6 +77,12 @@ defmodule TheMaestro.MCP.CLI do
       {command, subcommand, options} ->
         execute_command(command, subcommand, options)
 
+      {:ok, :help} ->
+        :ok
+
+      {:ok, :version} ->
+        :ok
+
       {:error, reason} ->
         print_error(reason)
         System.halt(1)
