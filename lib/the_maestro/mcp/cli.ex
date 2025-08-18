@@ -539,22 +539,22 @@ defmodule TheMaestro.MCP.CLI do
     Map.get(options, :format, "table")
   end
 
-  def is_verbose?(options) do
+  def verbose?(options) do
     Map.get(options, :verbose, false)
   end
 
-  def is_quiet?(options) do
+  def quiet?(options) do
     Map.get(options, :quiet, false)
   end
 
   def print_if_verbose(message, options) do
-    if is_verbose?(options) and not is_quiet?(options) do
+    if verbose?(options) and not quiet?(options) do
       print_info(message)
     end
   end
 
   def print_unless_quiet(message, options) do
-    unless is_quiet?(options) do
+    unless quiet?(options) do
       IO.puts(message)
     end
   end

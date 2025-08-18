@@ -88,9 +88,7 @@ defmodule TheMaestro.MCP.Config do
     # For single file, we require it to exist
     expanded_path = expand_path(path)
 
-    unless File.exists?(expanded_path) do
-      {:error, :file_not_found}
-    else
+    if File.exists?(expanded_path) do
       case load_single_config(expanded_path) do
         {:ok, config} ->
           resolved_config = resolve_environment_variables(config)
@@ -106,6 +104,8 @@ defmodule TheMaestro.MCP.Config do
         error ->
           error
       end
+    else
+      {:error, :file_not_found}
     end
   end
 
