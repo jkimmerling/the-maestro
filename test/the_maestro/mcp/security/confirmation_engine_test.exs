@@ -31,7 +31,9 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
       assert String.contains?(request.reason, "Risk level: critical")
     end
 
-    test "does not require confirmation for low-risk trusted operations", %{trust_manager: trust_pid} do
+    test "does not require confirmation for low-risk trusted operations", %{
+      trust_manager: trust_pid
+    } do
       tool = %{name: "read_file", server_id: "filesystem_server"}
       params = %{"path" => "/tmp/safe.txt"}
       context = %{user_id: "user123", server_id: "filesystem_server"}
@@ -213,5 +215,4 @@ defmodule TheMaestro.MCP.Security.ConfirmationEngineTest do
       reason: "Test confirmation"
     }
   end
-
 end
