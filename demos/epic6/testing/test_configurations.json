@@ -1,0 +1,101 @@
+{
+  "mcpServers": {
+    "context7_stdio": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "transportType": "stdio",
+      "trust": true,
+      "description": "Context7 documentation server via stdio",
+      "env": {
+        "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+      },
+      "timeout": 30000
+    },
+    "context7_sse": {
+      "httpUrl": "https://mcp.context7.dev/sse",
+      "transportType": "sse", 
+      "trust": true,
+      "timeout": 30000,
+      "description": "Context7 documentation server via SSE",
+      "headers": {
+        "Authorization": "Bearer ${CONTEXT7_API_KEY}"
+      }
+    },
+    "tavily_http": {
+      "httpUrl": "https://mcp.tavily.com/mcp",
+      "transportType": "http",
+      "trust": false,
+      "timeout": 15000,
+      "description": "Tavily web search and research server",
+      "env": {
+        "TAVILY_API_KEY": "${TAVILY_API_KEY}"
+      }
+    },
+    "filesystem_server": {
+      "command": "python3",
+      "args": ["demos/epic6/demo_servers/filesystem_server.py"],
+      "transportType": "stdio",
+      "trust": false,
+      "description": "Demo filesystem operations server",
+      "timeout": 10000
+    },
+    "calculator_server": {
+      "command": "node",
+      "args": ["demos/epic6/demo_servers/calculator_server.js"],
+      "transportType": "stdio", 
+      "trust": true,
+      "description": "Demo mathematical operations server",
+      "timeout": 5000
+    }
+  },
+  "globalSettings": {
+    "defaultTimeout": 30000,
+    "confirmationLevel": "medium",
+    "auditLogging": true,
+    "apiKeyManagement": {
+      "requireEncryption": true,
+      "rotationEnabled": true
+    }
+  },
+  "testScenarios": [
+    {
+      "name": "context7_documentation_lookup",
+      "description": "Test Context7 documentation retrieval",
+      "server": "context7_stdio",
+      "tool": "resolve-library-id",
+      "parameters": {
+        "libraryName": "FastAPI"
+      }
+    },
+    {
+      "name": "tavily_web_search",
+      "description": "Test Tavily web search capabilities",
+      "server": "tavily_http", 
+      "tool": "search",
+      "parameters": {
+        "query": "MCP protocol specifications",
+        "max_results": 5
+      }
+    },
+    {
+      "name": "filesystem_security_demo",
+      "description": "Demonstrate filesystem security confirmation",
+      "server": "filesystem_server",
+      "tool": "read_file",
+      "parameters": {
+        "path": "/etc/passwd"
+      },
+      "expected_confirmation": true
+    },
+    {
+      "name": "calculator_trusted_operation",
+      "description": "Trusted calculator operation without confirmation",
+      "server": "calculator_server",
+      "tool": "calculate",
+      "parameters": {
+        "expression": "2 + 2 * 3"
+      },
+      "expected_confirmation": false
+    }
+  ]
+}
