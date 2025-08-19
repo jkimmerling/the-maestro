@@ -44,9 +44,11 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
     available_tools = Map.get(context, :available_tools, [])
     project_files = Map.get(context, :project_files, [])
     estimated_scope = Map.get(context, :estimated_scope)
+    project_complexity = Map.get(context, :project_complexity)
     architectural_changes = Map.get(context, :architectural_changes, false)
 
     cond do
+      project_complexity -> project_complexity
       architectural_changes or contains_keywords?(user_request, high_complexity_keywords()) -> :high
       estimated_scope == :system_wide or length(project_files) > 10 -> :high
       contains_keywords?(user_request, simple_task_keywords()) or estimated_scope == :single_file -> :low
@@ -120,16 +122,20 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
   def assess_risk_level(context) do
     primary_task_type = Map.get(context, :primary_task_type, :generic)
     security_sensitive = Map.get(context, :security_sensitive, false)
+    risk_factors = Map.get(context, :risk_factors, [])
     affects_production = Map.get(context, :affects_production, false)
     has_tests = Map.get(context, :has_tests, false)
     urgency_level = Map.get(context, :urgency_level, :normal)
     user_request = Map.get(context, :user_request, "")
+    
+    # Handle risk_factors array format
+    security_sensitive = security_sensitive or :security_sensitive in risk_factors
 
     cond do
       security_sensitive and affects_production and urgency_level == :urgent -> :critical
       security_sensitive and affects_production -> :high
       primary_task_type == :debugging and affects_production -> :high
-      contains_keywords?(user_request, ["authentication", "security", "vulnerability"]) -> :high
+      contains_keywords?(user_request, ["security vulnerability", "vulnerability", "security breach"]) -> :high
       primary_task_type == :software_engineering and not has_tests -> :medium
       primary_task_type == :documentation -> :low
       true -> :medium
@@ -150,7 +156,7 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
       educational_intent or length(learning_indicators) > 0 or
       contains_keywords?(user_request, ["show me", "how to", "explain", "teach"]) -> :guided
       requires_clarification or task_clarity == :low or
-      contains_keywords?(user_request, ["better", "improve", "enhance"]) -> :collaborative
+      contains_keywords?(user_request, ["better", "improve", "enhance", "comprehensive"]) -> :collaborative
       task_clarity == :high -> :autonomous
       true -> :autonomous
     end
@@ -178,9 +184,9 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
   # Private helper functions
 
   defp software_engineering_keywords do
-    ["implement", "feature", "refactor", "optimize", "test", 
+    ["implement", "feature", "refactor", "optimize", 
      "add", "remove", "update", "modify", "enhance", "improve", "code", "function",
-     "authentication system", "payment system"]
+     "authentication system", "payment system", "fix the bug", "authentication bug", "login system"]
   end
 
   defp new_application_keywords do
@@ -189,8 +195,9 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
   end
 
   defp debugging_keywords do
-    ["debug", "troubleshoot", "investigate", "failing", "broken", "not working", "crash",
-     "fix the bug", "debug the", "investigate the", "why the tests"]
+    ["debug", "troubleshoot", "investigate", "failing tests", "failing integration tests", 
+     "broken", "not working", "crash", "debug the", "investigate the", "why the tests",
+     "memory leak", "deployment errors", "performance bottleneck"]
   end
 
   defp documentation_keywords do

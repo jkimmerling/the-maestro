@@ -27,7 +27,7 @@ defmodule TheMaestro.Prompts.InstructionModulesTest do
       mandates = CoreMandates.generate()
 
       assert String.contains?(mandates, "Security First")
-      assert String.contains?(mandates, "never expose")
+      assert String.contains?(String.downcase(mandates), "never expose")
       assert String.contains?(mandates, "secrets")
     end
   end

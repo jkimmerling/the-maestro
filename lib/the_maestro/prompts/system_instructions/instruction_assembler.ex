@@ -109,7 +109,7 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
     ]
 
     Enum.reduce(required_sections, [], fn {section, error}, errors ->
-      if String.contains?(instructions, section) do
+      if String.contains?(instructions, section) or String.contains?(instructions, "# #{section}") do
         errors
       else
         [error | errors]

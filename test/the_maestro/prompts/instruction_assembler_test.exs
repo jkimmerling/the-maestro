@@ -57,7 +57,7 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
   describe "assemble_instructions/1" do
     setup do
       context = %AssemblyContext{
-        base_instructions: "Base instructions",
+        base_instructions: TheMaestro.Prompts.SystemInstructions.Modules.CoreMandates.generate(),
         available_tools: [
           %{name: "read_file", description: "Read file contents"},
           %{name: "write_file", description: "Write file contents"}
@@ -96,7 +96,7 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
       assert is_binary(instructions)
       
       # Check for presence of all expected sections
-      assert String.contains?(instructions, "Base instructions")
+      assert String.contains?(instructions, "Core Mandates")
       assert String.contains?(instructions, "Available Tools")
       assert String.contains?(instructions, "read_file")
       assert String.contains?(instructions, "write_file")
@@ -264,6 +264,9 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
     test "validates presence of required sections" do
       complete_instructions = """
       You are an interactive CLI agent specializing in software engineering tasks.
+      
+      # Core Mandates
+      Essential operational guidelines.
       
       ## Available Tools
       You have access to the following tools.
