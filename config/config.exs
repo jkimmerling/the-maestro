@@ -107,6 +107,30 @@ config :the_maestro, :providers,
     api_key: {:system, "GEMINI_API_KEY"}
   }
 
+# Provider-specific prompt optimization configuration
+config :the_maestro, :prompt_optimization,
+  anthropic: %{
+    max_context_utilization: 0.9,
+    reasoning_enhancement: true,
+    structured_thinking: true,
+    safety_optimization: true,
+    context_navigation: true
+  },
+  google: %{
+    multimodal_optimization: true,
+    function_calling_enhancement: true,
+    large_context_utilization: 0.85,
+    integration_optimization: true,
+    visual_reasoning: true
+  },
+  openai: %{
+    consistency_optimization: true,
+    structured_output_enhancement: true,
+    token_efficiency_priority: :high,
+    reliability_optimization: true,
+    format_specification: true
+  }
+
 # Multi-provider authentication configuration
 config :the_maestro, :multi_provider_auth,
   # Encryption key for credential storage (change in production!)

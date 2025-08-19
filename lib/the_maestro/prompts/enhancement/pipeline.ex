@@ -71,12 +71,31 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
   """
   @spec enhance_prompt(String.t(), map()) :: EnhancedPrompt.t()
   def enhance_prompt(original_prompt, context) do
+    enhance_prompt_with_provider(original_prompt, context, nil)
+  end
+
+  @doc """
+  Enhances a user prompt with contextual information and provider-specific optimization.
+
+  ## Parameters
+
+  - `original_prompt` - The user's original prompt string
+  - `context` - User and environmental context map
+  - `provider_info` - Optional provider information for optimization (%{provider: :anthropic, model: "claude-3-5-sonnet"})
+
+  ## Returns
+
+  An `EnhancedPrompt` struct with the original prompt, contextual enhancements,
+  provider-specific optimizations, metadata about the enhancement process, and quality metrics.
+  """
+  @spec enhance_prompt_with_provider(String.t(), map(), map() | nil) :: EnhancedPrompt.t()
+  def enhance_prompt_with_provider(original_prompt, context, provider_info) do
     start_time = System.monotonic_time(:millisecond)
 
     %EnhancementContext{
       original_prompt: original_prompt,
       user_context: context,
-      enhancement_config: get_enhancement_config(context),
+      enhancement_config: get_enhancement_config(context, provider_info),
       pipeline_state: %{}
     }
     |> run_enhancement_pipeline(@pipeline_stages)
@@ -96,8 +115,8 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
 
   # Private functions
 
-  defp get_enhancement_config(context) do
-    %{
+  defp get_enhancement_config(context, provider_info) do
+    base_config = %{
       max_context_items: Map.get(context, :max_context_items, 20),
       token_budget: Map.get(context, :token_budget, 4000),
       quality_threshold: Map.get(context, :quality_threshold, 0.75),
@@ -105,6 +124,14 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
       enable_caching: Map.get(context, :enable_caching, true),
       provider_optimization: Map.get(context, :provider_optimization, true)
     }
+
+    if provider_info do
+      base_config
+      |> Map.put(:provider_info, provider_info)
+      |> Map.put(:optimization_config, Map.get(context, :optimization_config, %{}))
+    else
+      base_config
+    end
   end
 
   defp execute_pipeline_stage(stage, context) do
@@ -225,7 +252,7 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
   end
 
   defp build_metadata(context, validation) do
-    %{
+    base_metadata = %{
       # Will be set by add_performance_metadata/2
       processing_time: 0,
       context_items_used: count_context_items(context),
@@ -234,6 +261,15 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
       pipeline_errors: Map.get(context.pipeline_state, :errors, []),
       enhancement_config: context.enhancement_config
     }
+
+    # Include optimization metadata if available
+    optimization_result = context.pipeline_state[:optimization]
+    if optimization_result && is_map(optimization_result) do
+      optimization_metadata = Map.get(optimization_result, :metadata, %{})
+      Map.merge(base_metadata, optimization_metadata)
+    else
+      base_metadata
+    end
   end
 
   defp count_context_items(context) do
