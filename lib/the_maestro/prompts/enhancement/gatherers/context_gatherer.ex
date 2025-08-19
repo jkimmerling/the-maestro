@@ -1,4 +1,4 @@
-defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
+defmodule TheMaestro.Prompts.Enhancement.Gatherers.ContextGatherer do
   @moduledoc """
   Multi-source context collection system that gathers relevant environmental,
   project, and situational context for prompt enhancement.
@@ -15,16 +15,26 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
   require Logger
 
   @context_sources [
-    :environmental,          # OS, date, directory, etc.
-    :project_structure,      # Files, directories, project type
-    :session_history,        # Previous interactions, context
-    :tool_availability,      # Available tools and capabilities
-    :mcp_integration,        # Connected MCP servers and tools
-    :user_preferences,       # User settings and preferences
-    :code_analysis,          # Existing code patterns, dependencies
-    :documentation,          # Available documentation and examples
-    :security_context,       # Permissions, trust levels, sandboxing
-    :performance_context     # System resources, constraints
+    # OS, date, directory, etc.
+    :environmental,
+    # Files, directories, project type
+    :project_structure,
+    # Previous interactions, context
+    :session_history,
+    # Available tools and capabilities
+    :tool_availability,
+    # Connected MCP servers and tools
+    :mcp_integration,
+    # User settings and preferences
+    :user_preferences,
+    # Existing code patterns, dependencies
+    :code_analysis,
+    # Available documentation and examples
+    :documentation,
+    # Permissions, trust levels, sandboxing
+    :security_context,
+    # System resources, constraints
+    :performance_context
   ]
 
   @doc """
@@ -43,7 +53,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
   @spec gather_context(ContextAnalysis.t(), IntentResult.t(), map()) :: map()
   def gather_context(%ContextAnalysis{} = analysis, %IntentResult{} = intent, user_context) do
     context_requirements = determine_context_requirements(analysis, intent)
-    
+
     @context_sources
     |> Enum.filter(&required_for_prompt?(&1, context_requirements))
     |> Enum.map(&gather_source_context(&1, user_context, analysis, intent))
@@ -60,7 +70,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
       timezone: get_user_timezone(user_context),
       operating_system: detect_operating_system(user_context),
       working_directory: get_current_working_directory(user_context),
-      directory_contents: get_directory_listing(user_context, [limit: 200]),
+      directory_contents: get_directory_listing(user_context, limit: 200),
       system_resources: get_system_resource_info(user_context),
       network_status: check_network_connectivity(user_context),
       shell_environment: get_relevant_env_vars(user_context),
@@ -93,10 +103,11 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
   @doc """
   Gathers code analysis context for relevant files.
   """
-  @spec gather_code_analysis_context(String.t(), map(), ContextAnalysis.t()) :: CodeAnalysisContext.t()
+  @spec gather_code_analysis_context(String.t(), map(), ContextAnalysis.t()) ::
+          CodeAnalysisContext.t()
   def gather_code_analysis_context(prompt, user_context, analysis) do
     relevant_files = identify_relevant_files(prompt, user_context, analysis)
-    
+
     %CodeAnalysisContext{
       relevant_files: relevant_files,
       code_patterns: analyze_code_patterns(relevant_files, user_context),
@@ -116,29 +127,31 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
   # Private implementation functions
 
   defp determine_context_requirements(analysis, intent) do
-    base_requirements = intent.context_requirements
-    
+    base_requirements = [:current_directory, :operating_system] ++ intent.context_requirements
+
     # Add requirements based on analysis
-    analysis_requirements = case analysis.prompt_type do
-      :software_engineering -> [:project_structure, :code_analysis, :dependencies]
-      :file_operations -> [:current_directory, :file_permissions, :directory_structure]
-      :system_operations -> [:operating_system, :available_commands, :permissions]
-      :information_seeking -> [:knowledge_base, :documentation, :examples]
-      _ -> []
-    end
-    
-    # Add domain-specific requirements
-    domain_requirements = analysis.domain_indicators
-    |> Enum.flat_map(fn domain ->
-      case domain do
-        :software_development -> [:project_structure, :code_analysis]
-        :web_development -> [:project_structure, :dependencies, :configuration]
-        :devops -> [:system_resources, :deployment_context]
-        :database -> [:configuration, :schema_analysis]
+    analysis_requirements =
+      case analysis.prompt_type do
+        :software_engineering -> [:project_structure, :code_analysis, :dependencies]
+        :file_operations -> [:current_directory, :file_permissions, :directory_structure]
+        :system_operations -> [:operating_system, :available_commands, :permissions]
+        :information_seeking -> [:knowledge_base, :documentation, :examples]
         _ -> []
       end
-    end)
-    
+
+    # Add domain-specific requirements
+    domain_requirements =
+      analysis.domain_indicators
+      |> Enum.flat_map(fn domain ->
+        case domain do
+          :software_development -> [:project_structure, :code_analysis]
+          :web_development -> [:project_structure, :dependencies, :configuration]
+          :devops -> [:system_resources, :deployment_context]
+          :database -> [:configuration, :schema_analysis]
+          _ -> []
+        end
+      end)
+
     (base_requirements ++ analysis_requirements ++ domain_requirements)
     |> Enum.uniq()
   end
@@ -153,7 +166,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
       security_context: [:permissions, :security_analysis],
       performance_context: [:system_resources]
     }
-    
+
     required = Map.get(source_requirements, source, [])
     Enum.any?(required, &(&1 in requirements))
   end
@@ -163,36 +176,36 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
       case source do
         :environmental ->
           {source, gather_environmental_context(user_context)}
-          
+
         :project_structure ->
           working_dir = get_current_working_directory(user_context)
           {source, gather_project_structure_context(working_dir, user_context)}
-          
+
         :code_analysis ->
           prompt = Map.get(analysis, :original_prompt, "")
           {source, gather_code_analysis_context(prompt, user_context, analysis)}
-          
+
         :tool_availability ->
           {source, gather_tool_availability_context(user_context)}
-          
+
         :mcp_integration ->
           {source, gather_mcp_integration_context(user_context)}
-          
+
         :session_history ->
           {source, gather_session_history_context(user_context)}
-          
+
         :user_preferences ->
           {source, gather_user_preferences_context(user_context)}
-          
+
         :documentation ->
           {source, gather_documentation_context(user_context, analysis)}
-          
+
         :security_context ->
           {source, gather_security_context(user_context)}
-          
+
         :performance_context ->
           {source, gather_performance_context(user_context)}
-          
+
         _ ->
           Logger.warning("Unknown context source: #{source}")
           {source, %{}}
@@ -208,19 +221,24 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
     Map.put(acc, source, data)
   end
 
-
   # Context gathering helper functions
 
   defp get_context_timestamp(user_context) do
     case get_in(user_context, [:environment, :current_date]) do
-      nil -> DateTime.utc_now()
+      nil ->
+        DateTime.utc_now()
+
       date_string when is_binary(date_string) ->
         case Date.from_iso8601(date_string) do
           {:ok, date} -> DateTime.new!(date, ~T[12:00:00], "Etc/UTC")
           _ -> DateTime.utc_now()
         end
-      %DateTime{} = dt -> dt
-      _ -> DateTime.utc_now()
+
+      %DateTime{} = dt ->
+        dt
+
+      _ ->
+        DateTime.utc_now()
     end
   end
 
@@ -230,7 +248,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
 
   defp detect_operating_system(user_context) do
     Map.get(user_context, :operating_system) ||
-    Map.get(user_context, :environment, %{}) |> Map.get(:operating_system, "Unknown")
+      Map.get(user_context, :environment, %{}) |> Map.get(:operating_system, "Unknown")
   end
 
   defp get_current_working_directory(user_context) do
@@ -240,7 +258,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
   defp get_directory_listing(user_context, opts) do
     limit = Keyword.get(opts, :limit, 100)
     working_dir = get_current_working_directory(user_context)
-    
+
     case File.ls(working_dir) do
       {:ok, files} -> Enum.take(files, limit)
       {:error, _} -> []
@@ -262,20 +280,28 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
 
   defp get_relevant_env_vars(user_context) do
     env_vars = Map.get(user_context, :environment_variables, %{})
-    
+
     # Filter to only relevant environment variables
     relevant_keys = [
-      "PATH", "HOME", "USER", "SHELL", "PWD", "TERM",
-      "NODE_ENV", "RAILS_ENV", "MIX_ENV", "PYTHON_ENV"
+      "PATH",
+      "HOME",
+      "USER",
+      "SHELL",
+      "PWD",
+      "TERM",
+      "NODE_ENV",
+      "RAILS_ENV",
+      "MIX_ENV",
+      "PYTHON_ENV"
     ]
-    
+
     Map.take(env_vars, relevant_keys)
   end
 
   defp get_git_repository_status(user_context) do
     working_dir = get_current_working_directory(user_context)
     git_dir = Path.join(working_dir, ".git")
-    
+
     if File.exists?(git_dir) do
       %{
         is_git_repo: true,
@@ -295,7 +321,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
 
   defp detect_project_type_from_files(user_context) do
     working_dir = get_current_working_directory(user_context)
-    
+
     cond do
       File.exists?(Path.join(working_dir, "mix.exs")) -> "elixir_phoenix"
       File.exists?(Path.join(working_dir, "package.json")) -> "node_js"
@@ -312,7 +338,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
 
   defp detect_programming_languages(user_context) do
     project_type = detect_project_type(user_context)
-    
+
     case project_type do
       "elixir_phoenix" -> ["elixir"]
       "node_js" -> ["javascript", "typescript"]
@@ -326,7 +352,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
 
   defp detect_frameworks_and_libraries(user_context) do
     project_type = detect_project_type(user_context)
-    
+
     case project_type do
       "elixir_phoenix" -> ["phoenix", "ecto"]
       "node_js" -> ["express", "react", "vue"]
@@ -336,12 +362,18 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
 
   defp find_configuration_files(user_context) do
     working_dir = get_current_working_directory(user_context)
-    
+
     config_patterns = [
-      "config.*", "*.config.*", ".env*", "docker-compose.*",
-      "mix.exs", "package.json", "Cargo.toml", "go.mod"
+      "config.*",
+      "*.config.*",
+      ".env*",
+      "docker-compose.*",
+      "mix.exs",
+      "package.json",
+      "Cargo.toml",
+      "go.mod"
     ]
-    
+
     config_patterns
     |> Enum.flat_map(fn pattern ->
       Path.wildcard(Path.join(working_dir, pattern))
@@ -351,12 +383,18 @@ defmodule TheMaestro.Prompts.Enhancement.ContextGatherer do
 
   defp find_dependency_files(user_context) do
     working_dir = get_current_working_directory(user_context)
-    
+
     dependency_files = [
-      "mix.lock", "package-lock.json", "yarn.lock", "Cargo.lock",
-      "go.sum", "requirements.txt", "Pipfile.lock", "Gemfile.lock"
+      "mix.lock",
+      "package-lock.json",
+      "yarn.lock",
+      "Cargo.lock",
+      "go.sum",
+      "requirements.txt",
+      "Pipfile.lock",
+      "Gemfile.lock"
     ]
-    
+
     dependency_files
     |> Enum.filter(fn file ->
       File.exists?(Path.join(working_dir, file))

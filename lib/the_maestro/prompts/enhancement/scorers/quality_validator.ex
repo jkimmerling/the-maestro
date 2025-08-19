@@ -1,4 +1,4 @@
-defmodule TheMaestro.Prompts.Enhancement.QualityValidator do
+defmodule TheMaestro.Prompts.Enhancement.Scorers.QualityValidator do
   @moduledoc """
   Quality validation system for enhanced prompts.
   """
@@ -17,9 +17,9 @@ defmodule TheMaestro.Prompts.Enhancement.QualityValidator do
       token_efficiency: validate_token_efficiency(enhanced_prompt),
       coherence_preservation: validate_coherence_preservation(enhanced_prompt)
     }
-    
+
     overall_quality = calculate_overall_quality(validations)
-    
+
     %ValidationResult{
       quality_score: overall_quality,
       validations: validations,

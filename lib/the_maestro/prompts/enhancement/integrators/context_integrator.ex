@@ -1,7 +1,7 @@
-defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
+defmodule TheMaestro.Prompts.Enhancement.Integrators.ContextIntegrator do
   @moduledoc """
   Context integration engine that seamlessly weaves contextual information into prompts.
-  
+
   This module implements sophisticated context integration strategies to enhance
   user prompts with relevant environmental, project, and situational information.
   """
@@ -33,7 +33,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
       post_context: build_post_prompt_context(scored_context, integration_config),
       metadata: build_context_metadata(scored_context)
     }
-    
+
     %{
       pre_context: context_sections.pre_context,
       enhanced_prompt: merge_inline_context(original_prompt, context_sections.inline_context),
@@ -53,41 +53,44 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
     project_info = extract_context_by_type(scored_context, :project_structure)
     tool_info = extract_context_by_type(scored_context, :tool_availability)
     mcp_info = extract_context_by_type(scored_context, :mcp_integration)
-    
+
     max_lines = Map.get(config, :max_context_lines, 30)
-    
+
     sections = []
-    
+
     # Add environment section if available
-    sections = if environmental_info do
-      env_section = format_environmental_section(environmental_info)
-      [env_section | sections]
-    else
-      sections
-    end
-    
+    sections =
+      if environmental_info do
+        env_section = format_environmental_section(environmental_info)
+        [env_section | sections]
+      else
+        sections
+      end
+
     # Add project section if available
-    sections = if project_info do
-      project_section = format_project_section(project_info, max_lines)
-      [project_section | sections]
-    else
-      sections
-    end
-    
+    sections =
+      if project_info do
+        project_section = format_project_section(project_info, max_lines)
+        [project_section | sections]
+      else
+        sections
+      end
+
     # Add capabilities section if tools or MCP available
-    sections = if tool_info || mcp_info do
-      capabilities_section = format_capabilities_section(tool_info, mcp_info)
-      [capabilities_section | sections]
-    else
-      sections
-    end
-    
+    sections =
+      if tool_info || mcp_info do
+        capabilities_section = format_capabilities_section(tool_info, mcp_info)
+        [capabilities_section | sections]
+      else
+        sections
+      end
+
     if Enum.empty?(sections) do
       ""
     else
       header = "This is The Maestro AI assistant. Context for current interaction:\n\n"
       footer = "\n---\n"
-      
+
       header <> Enum.join(sections, "\n\n") <> footer
     end
   end
@@ -100,11 +103,12 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
     entity_context = build_entity_context(original_prompt, scored_context)
     reference_context = build_reference_context(original_prompt, scored_context)
     dependency_context = build_dependency_context(original_prompt, scored_context)
-    
-    inline_additions = [entity_context, reference_context, dependency_context]
-    |> Enum.filter(&(&1 != ""))
-    |> Enum.join(" ")
-    
+
+    inline_additions =
+      [entity_context, reference_context, dependency_context]
+      |> Enum.filter(&(&1 != ""))
+      |> Enum.join(" ")
+
     if inline_additions == "" do
       ""
     else
@@ -119,23 +123,25 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
   def build_post_prompt_context(scored_context, _config) do
     security_context = extract_context_by_type(scored_context, :security_context)
     performance_context = extract_context_by_type(scored_context, :performance_context)
-    
+
     sections = []
-    
-    sections = if security_context do
-      security_section = format_security_section(security_context)
-      [security_section | sections]
-    else
-      sections
-    end
-    
-    sections = if performance_context do
-      performance_section = format_performance_section(performance_context)
-      [performance_section | sections]
-    else
-      sections
-    end
-    
+
+    sections =
+      if security_context do
+        security_section = format_security_section(security_context)
+        [security_section | sections]
+      else
+        sections
+      end
+
+    sections =
+      if performance_context do
+        performance_section = format_performance_section(performance_context)
+        [performance_section | sections]
+      else
+        sections
+      end
+
     if Enum.empty?(sections) do
       ""
     else
@@ -163,13 +169,14 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
   end
 
   defp estimate_token_count(context_sections) do
-    content = [
-      Map.get(context_sections, :pre_context, ""),
-      Map.get(context_sections, :inline_context, ""),
-      Map.get(context_sections, :post_context, "")
-    ]
-    |> Enum.join(" ")
-    
+    content =
+      [
+        Map.get(context_sections, :pre_context, ""),
+        Map.get(context_sections, :inline_context, ""),
+        Map.get(context_sections, :post_context, "")
+      ]
+      |> Enum.join(" ")
+
     # Rough token estimation: ~4 characters per token
     round(String.length(content) / 4)
   end
@@ -196,6 +203,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
         - OS: #{os}
         - Working Directory: #{wd}
         """
+
       _ ->
         "## Environment\n- Basic environment information available"
     end
@@ -204,17 +212,19 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
   defp format_project_section(project_info, _max_lines) do
     case project_info do
       %{project_type: project_type, language_detection: languages} ->
-        lang_str = if is_list(languages) and length(languages) > 0 do
-          Enum.join(languages, ", ")
-        else
-          "Unknown"
-        end
-        
+        lang_str =
+          if is_list(languages) and length(languages) > 0 do
+            Enum.join(languages, ", ")
+          else
+            "Unknown"
+          end
+
         """
         ## Project Context
         - Project Type: #{project_type || "Unknown"}
         - Languages: #{lang_str}
         """
+
       _ ->
         "## Project Context\n- Project information available"
     end
@@ -222,23 +232,25 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
 
   defp format_capabilities_section(tool_info, mcp_info) do
     sections = []
-    
-    sections = if tool_info && Map.has_key?(tool_info, :available_tools) do
-      tools = Map.get(tool_info, :available_tools, [])
-      tool_section = "- Tools: #{format_tool_list(tools)}"
-      [tool_section | sections]
-    else
-      sections
-    end
-    
-    sections = if mcp_info && Map.has_key?(mcp_info, :connected_servers) do
-      servers = Map.get(mcp_info, :connected_servers, [])
-      mcp_section = "- MCP Servers: #{format_mcp_servers(servers)}"
-      [mcp_section | sections]
-    else
-      sections
-    end
-    
+
+    sections =
+      if tool_info && Map.has_key?(tool_info, :available_tools) do
+        tools = Map.get(tool_info, :available_tools, [])
+        tool_section = "- Tools: #{format_tool_list(tools)}"
+        [tool_section | sections]
+      else
+        sections
+      end
+
+    sections =
+      if mcp_info && Map.has_key?(mcp_info, :connected_servers) do
+        servers = Map.get(mcp_info, :connected_servers, [])
+        mcp_section = "- MCP Servers: #{format_mcp_servers(servers)}"
+        [mcp_section | sections]
+      else
+        sections
+      end
+
     if Enum.empty?(sections) do
       "## Available Capabilities\n- Standard capabilities available"
     else
@@ -257,9 +269,10 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
   defp build_entity_context(_original_prompt, scored_context) do
     # Find entities in the prompt that have corresponding context
     code_context = extract_context_by_type(scored_context, :code_analysis)
-    
+
     if code_context && Map.has_key?(code_context, :relevant_files) do
       files = Map.get(code_context, :relevant_files, [])
+
       if length(files) > 0 do
         "files: #{Enum.join(Enum.take(files, 3), ", ")}"
       else
@@ -277,9 +290,10 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
 
   defp build_dependency_context(_original_prompt, scored_context) do
     project_context = extract_context_by_type(scored_context, :project_structure)
-    
+
     if project_context && Map.has_key?(project_context, :framework_detection) do
       frameworks = Map.get(project_context, :framework_detection, [])
+
       if length(frameworks) > 0 do
         "frameworks: #{Enum.join(frameworks, ", ")}"
       else
@@ -306,19 +320,24 @@ defmodule TheMaestro.Prompts.Enhancement.ContextIntegrator do
   defp format_datetime(%DateTime{} = dt) do
     DateTime.to_iso8601(dt)
   end
+
   defp format_datetime(_), do: "Unknown"
 
   defp format_tool_list(tools) when is_list(tools) do
     tools
-    |> Enum.take(5)  # Limit to first 5 tools
+    # Limit to first 5 tools
+    |> Enum.take(5)
     |> Enum.join(", ")
   end
+
   defp format_tool_list(_), do: "Available"
 
   defp format_mcp_servers(servers) when is_list(servers) do
     servers
-    |> Enum.take(3)  # Limit to first 3 servers  
+    # Limit to first 3 servers
+    |> Enum.take(3)
     |> Enum.join(", ")
   end
+
   defp format_mcp_servers(_), do: "Connected"
 end

@@ -14,7 +14,7 @@ defmodule TheMaestro.Prompts.Enhancement.PromptFormatter do
       post_context: format_post_context(optimized_prompt),
       metadata: build_formatting_metadata(optimized_prompt, validation_result)
     }
-    
+
     if Map.get(enhancement_config, :provider_optimization, false) do
       apply_provider_formatting(formatted, enhancement_config)
     else

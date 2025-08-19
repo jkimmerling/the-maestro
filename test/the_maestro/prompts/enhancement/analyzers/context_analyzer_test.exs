@@ -1,7 +1,8 @@
-defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzerTest do
+defmodule TheMaestro.Prompts.Enhancement.Analyzers.ContextAnalyzerTest do
   use ExUnit.Case, async: true
 
-  alias TheMaestro.Prompts.Enhancement.ContextAnalyzer
+  alias TheMaestro.Prompts.Enhancement.Analyzers.ContextAnalyzer
+
   alias TheMaestro.Prompts.Enhancement.Structs.{
     EnhancementContext,
     ContextAnalysis
@@ -23,15 +24,15 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzerTest do
       analysis = result.pipeline_state.context_analysis
 
       assert %ContextAnalysis{
-        prompt_type: prompt_type,
-        user_intent: user_intent,
-        mentioned_entities: entities,
-        implicit_requirements: requirements,
-        complexity_level: complexity,
-        domain_indicators: domains,
-        urgency_level: urgency,
-        collaboration_mode: collab
-      } = analysis
+               prompt_type: prompt_type,
+               user_intent: user_intent,
+               mentioned_entities: entities,
+               implicit_requirements: requirements,
+               complexity_level: complexity,
+               domain_indicators: domains,
+               urgency_level: urgency,
+               collaboration_mode: collab
+             } = analysis
 
       assert prompt_type == :software_engineering
       assert user_intent in [:bug_fix, :debugging, :troubleshooting]
@@ -83,7 +84,8 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzerTest do
 
     test "handles complex multi-domain prompt" do
       context = %EnhancementContext{
-        original_prompt: "Deploy the new user authentication service to production and monitor its performance",
+        original_prompt:
+          "Deploy the new user authentication service to production and monitor its performance",
         user_context: %{},
         enhancement_config: %{},
         pipeline_state: %{}

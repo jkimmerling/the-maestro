@@ -10,27 +10,38 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
   alias TheMaestro.Prompts.Enhancement.{
     Structs.EnhancementContext,
     Structs.EnhancedPrompt,
-    ContextAnalyzer,
-    IntentDetector,
-    ContextGatherer,
-    RelevanceScorer,
-    ContextIntegrator,
-    EnhancementOptimizer,
-    QualityValidator,
     PromptFormatter
   }
+
+  alias TheMaestro.Prompts.Enhancement.Analyzers.{
+    ContextAnalyzer,
+    IntentDetector
+  }
+
+  alias TheMaestro.Prompts.Enhancement.Gatherers.ContextGatherer
+  alias TheMaestro.Prompts.Enhancement.Scorers.{RelevanceScorer, QualityValidator}
+  alias TheMaestro.Prompts.Enhancement.Integrators.ContextIntegrator
+  alias TheMaestro.Prompts.Enhancement.Optimizers.EnhancementOptimizer
 
   require Logger
 
   @pipeline_stages [
-    :context_analysis,        # Analyze prompt and context
-    :intent_detection,        # Detect user intent and goals
-    :context_gathering,       # Gather relevant contextual information
-    :relevance_scoring,       # Score and prioritize context elements
-    :context_integration,     # Integrate context into prompt
-    :optimization,            # Optimize enhanced prompt
-    :validation,             # Validate enhanced prompt quality
-    :formatting              # Format for provider delivery
+    # Analyze prompt and context
+    :context_analysis,
+    # Detect user intent and goals
+    :intent_detection,
+    # Gather relevant contextual information
+    :context_gathering,
+    # Score and prioritize context elements
+    :relevance_scoring,
+    # Integrate context into prompt
+    :context_integration,
+    # Optimize enhanced prompt
+    :optimization,
+    # Validate enhanced prompt quality
+    :validation,
+    # Format for provider delivery
+    :formatting
   ]
 
   @doc """
@@ -101,55 +112,67 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
       case stage do
         :context_analysis ->
           ContextAnalyzer.analyze_context(context)
-        
+
         :intent_detection ->
           intent_result = IntentDetector.detect_intent(context.original_prompt)
           put_in(context.pipeline_state[:intent_detection], intent_result)
-        
+
         :context_gathering ->
           analysis = context.pipeline_state[:context_analysis]
           intent = context.pipeline_state[:intent_detection]
-          gathered_context = ContextGatherer.gather_context(analysis, intent, context.user_context)
+
+          gathered_context =
+            ContextGatherer.gather_context(analysis, intent, context.user_context)
+
           put_in(context.pipeline_state[:context_gathering], gathered_context)
-        
+
         :relevance_scoring ->
           analysis = context.pipeline_state[:context_analysis]
           gathered_context = context.pipeline_state[:context_gathering]
           scored_context = RelevanceScorer.score_context_relevance(gathered_context, analysis)
           put_in(context.pipeline_state[:relevance_scoring], scored_context)
-        
+
         :context_integration ->
           scored_context = context.pipeline_state[:relevance_scoring]
-          integrated_prompt = ContextIntegrator.integrate_context_into_prompt(
-            context.original_prompt,
-            scored_context,
-            context.enhancement_config
-          )
+
+          integrated_prompt =
+            ContextIntegrator.integrate_context_into_prompt(
+              context.original_prompt,
+              scored_context,
+              context.enhancement_config
+            )
+
           put_in(context.pipeline_state[:context_integration], integrated_prompt)
-        
+
         :optimization ->
           integrated_prompt = context.pipeline_state[:context_integration]
-          optimized_prompt = EnhancementOptimizer.optimize_enhanced_prompt(
-            integrated_prompt,
-            context.enhancement_config
-          )
+
+          optimized_prompt =
+            EnhancementOptimizer.optimize_enhanced_prompt(
+              integrated_prompt,
+              context.enhancement_config
+            )
+
           put_in(context.pipeline_state[:optimization], optimized_prompt)
-        
+
         :validation ->
           optimized_prompt = context.pipeline_state[:optimization]
           validation_result = QualityValidator.validate_enhancement_quality(optimized_prompt)
           put_in(context.pipeline_state[:validation], validation_result)
-        
+
         :formatting ->
           optimized_prompt = context.pipeline_state[:optimization]
           validation = context.pipeline_state[:validation]
-          formatted_prompt = PromptFormatter.format_enhanced_prompt(
-            optimized_prompt,
-            validation,
-            context.enhancement_config
-          )
+
+          formatted_prompt =
+            PromptFormatter.format_enhanced_prompt(
+              optimized_prompt,
+              validation,
+              context.enhancement_config
+            )
+
           put_in(context.pipeline_state[:formatting], formatted_prompt)
-        
+
         _ ->
           Logger.warning("Unknown pipeline stage: #{stage}")
           context
@@ -170,19 +193,25 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
     validation = context.pipeline_state[:validation] || %{quality_score: 0.5}
 
     # Handle case where final_prompt is nil (formatting stage failed)
-    formatted_result = case final_prompt do
-      nil -> %{
-        pre_context: "",
-        enhanced_prompt: context.original_prompt,
-        post_context: ""
-      }
-      result when is_map(result) -> result
-      _ -> %{
-        pre_context: "",
-        enhanced_prompt: context.original_prompt,
-        post_context: ""
-      }
-    end
+    formatted_result =
+      case final_prompt do
+        nil ->
+          %{
+            pre_context: "",
+            enhanced_prompt: context.original_prompt,
+            post_context: ""
+          }
+
+        result when is_map(result) ->
+          result
+
+        _ ->
+          %{
+            pre_context: "",
+            enhanced_prompt: context.original_prompt,
+            post_context: ""
+          }
+      end
 
     %EnhancedPrompt{
       original: context.original_prompt,
@@ -197,7 +226,8 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
 
   defp build_metadata(context, validation) do
     %{
-      processing_time: 0, # Will be set by add_performance_metadata/2
+      # Will be set by add_performance_metadata/2
+      processing_time: 0,
       context_items_used: count_context_items(context),
       average_relevance_score: calculate_average_relevance(context),
       quality_score: Map.get(validation, :quality_score, 0.5),
@@ -213,11 +243,13 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
 
   defp calculate_average_relevance(context) do
     scored_context = context.pipeline_state[:relevance_scoring] || []
-    
+
     if is_list(scored_context) and length(scored_context) > 0 do
-      scores = Enum.map(scored_context, fn item -> 
-        Map.get(item, :relevance_score, 0.0)
-      end)
+      scores =
+        Enum.map(scored_context, fn item ->
+          Map.get(item, :relevance_score, 0.0)
+        end)
+
       Enum.sum(scores) / length(scores)
     else
       0.0
@@ -225,13 +257,14 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
   end
 
   defp estimate_token_count(prompt_parts) when is_map(prompt_parts) do
-    content = [
-      Map.get(prompt_parts, :pre_context, ""),
-      Map.get(prompt_parts, :enhanced_prompt, ""),
-      Map.get(prompt_parts, :post_context, "")
-    ]
-    |> Enum.join(" ")
-    
+    content =
+      [
+        Map.get(prompt_parts, :pre_context, ""),
+        Map.get(prompt_parts, :enhanced_prompt, ""),
+        Map.get(prompt_parts, :post_context, "")
+      ]
+      |> Enum.join(" ")
+
     # Rough token estimation: ~4 characters per token
     round(String.length(content) / 4)
   end
@@ -248,9 +281,9 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
 
   defp add_performance_metadata(enhanced_prompt, start_time) do
     processing_time = System.monotonic_time(:millisecond) - start_time
-    
+
     updated_metadata = Map.put(enhanced_prompt.metadata, :processing_time, processing_time)
-    
+
     %{enhanced_prompt | metadata: updated_metadata}
   end
 end

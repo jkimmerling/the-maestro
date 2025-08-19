@@ -1,7 +1,7 @@
-defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
+defmodule TheMaestro.Prompts.Enhancement.Analyzers.ContextAnalyzer do
   @moduledoc """
   Analyzes prompts and context to understand user intent, complexity, and requirements.
-  
+
   This module performs sophisticated analysis of user prompts and context to determine:
   - Prompt type classification
   - User intent detection
@@ -26,21 +26,18 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
         ~r/(?:bug|error|exception|crash|fail).+(?:in|with|on).+(?:service|module|component|function)/i,
         ~r/(?:authentication|authorization|security|validation|encryption)/i
       ],
-      
       file_operations: [
         ~r/(?:read|write|create|delete|modify|edit).+(?:file|directory|\.json|\.yml|\.xml|\.txt|\.md)/i,
         ~r/(?:list|show|display).+(?:files|directories|contents|folder)/i,
         ~r/(?:find|search|locate).+(?:in|within).+(?:files|directory|folder)/i,
         ~r/(?:copy|move|rename).+(?:file|folder|directory)/i
       ],
-      
       system_operations: [
         ~r/(?:run|execute|start|stop).+(?:command|script|process|server|test suite|tests)/i,
         ~r/(?:install|configure|setup).+(?:package|software|system|environment|dependencies)/i,
         ~r/(?:restart|reload|kill).+(?:server|service|process)/i,
         ~r/(?:shell|terminal|command line|bash|zsh|powershell)/i
       ],
-      
       information_seeking: [
         ~r/^(?:what|how|why|when|where|which)/i,
         ~r/(?:explain|describe|tell me about|show me).+(?:how|what|concept|idea|pattern|example|programming|implementation)/i,
@@ -68,9 +65,12 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
         ~r/(?:user|interface|ui|form)/i
       ],
       low: [
-        ~r/^\w+\s*\??\s*$/,  # Single word questions
-        ~r/^(?:hello|hi|thanks|yes|no)\b/i,  # Greetings
-        ~r/^.{1,20}$/  # Very short prompts
+        # Single word questions
+        ~r/^\w+\s*\??\s*$/,
+        # Greetings
+        ~r/^(?:hello|hi|thanks|yes|no)\b/i,
+        # Very short prompts
+        ~r/^.{1,20}$/
       ]
     }
   end
@@ -81,7 +81,8 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
         ~r/(?:urgent|emergency|critical|asap|immediately)/i,
         ~r/(?:down|broken|failing|error|crash)/i,
         ~r/(?:production|live|customer|user impact)/i,
-        ~r/[!]{2,}/  # Multiple exclamation marks
+        # Multiple exclamation marks
+        ~r/[!]{2,}/
       ],
       medium: [
         ~r/(?:soon|quick|fast|priority)/i,
@@ -101,7 +102,9 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
       software_development: [
         ~r/(?:code|programming|development|software)/i,
         ~r/(?:function|method|class|object|variable)/i,
-        ~r/(?:bug|debug|test|refactor)/i
+        ~r/(?:bug|debug|test|refactor)/i,
+        ~r/(?:service|module|component|system|application)/i,
+        ~r/(?:authentication|authorization|security)/i
       ],
       web_development: [
         ~r/(?:html|css|javascript|react|vue|angular|phoenix|rails|django|flask|express)/i,
@@ -156,7 +159,7 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
       urgency_level: assess_urgency(context),
       collaboration_mode: determine_collaboration_needs(context)
     }
-    
+
     put_in(context.pipeline_state[:context_analysis], analysis)
   end
 
@@ -187,7 +190,6 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
       Regex.match?(~r/^(?:how do i|how to|how can i)/i, prompt) -> :learning
       Regex.match?(~r/^(?:what|how|why|when|where|which)/i, prompt) -> :information_seeking
       Regex.match?(~r/(?:learn|understand|teach|explain)/i, prompt) -> :learning
-      
       # Implementation and action intents
       Regex.match?(~r/(?:fix|debug|resolve)/i, prompt) -> :bug_fix
       Regex.match?(~r/(?:troubleshoot|investigate|analyze)/i, prompt) -> :troubleshooting
@@ -209,50 +211,87 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
   @spec extract_entities(String.t()) :: [String.t()]
   def extract_entities(prompt) do
     entities = []
-    
+
     # Extract file names and extensions
-    entities = entities ++ Regex.scan(~r/\b\w+\.\w+\b/, prompt) |> List.flatten()
-    
+    entities = (entities ++ Regex.scan(~r/\b\w+\.\w+\b/, prompt)) |> List.flatten()
+
     # Extract quoted strings (often file names or service names)
-    entities = entities ++ Regex.scan(~r/"([^"]+)"/, prompt, capture: :all_but_first) |> List.flatten()
-    entities = entities ++ Regex.scan(~r/'([^']+)'/, prompt, capture: :all_but_first) |> List.flatten()
-    
+    entities =
+      (entities ++ Regex.scan(~r/"([^"]+)"/, prompt, capture: :all_but_first)) |> List.flatten()
+
+    entities =
+      (entities ++ Regex.scan(~r/'([^']+)'/, prompt, capture: :all_but_first)) |> List.flatten()
+
     # Extract CamelCase identifiers (likely class/service names)
-    entities = entities ++ Regex.scan(~r/\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b/, prompt) |> List.flatten()
-    
+    entities =
+      (entities ++ Regex.scan(~r/\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b/, prompt)) |> List.flatten()
+
     # Extract service and module names (e.g., "user service", "auth module", "payment system")
     service_patterns = [
       ~r/\b(\w+\s+(?:service|module|system|component|api|endpoint|controller|model))\b/i,
       ~r/\b(\w+(?:Service|Module|System|Component|API|Controller|Model))\b/,
       ~r/\b((?:user|auth|payment|order|product|inventory|notification|email|sms)\s+\w+)\b/i
     ]
-    
-    service_entities = service_patterns
-    |> Enum.flat_map(fn pattern ->
-      Regex.scan(pattern, prompt, capture: :all_but_first) |> List.flatten()
-    end)
-    
+
+    service_entities =
+      service_patterns
+      |> Enum.flat_map(fn pattern ->
+        Regex.scan(pattern, prompt, capture: :all_but_first) |> List.flatten()
+      end)
+
     entities = entities ++ service_entities
-    
+
     # Extract common tech terms
     tech_terms = [
-      "authentication", "auth", "OAuth", "OAuth2", "JWT", "API", "REST", "GraphQL",
-      "database", "PostgreSQL", "MySQL", "MongoDB", "Redis", "SQL",
-      "Docker", "Kubernetes", "AWS", "Azure", "GCP",
-      "React", "Vue", "Angular", "Phoenix", "Django", "Rails",
-      "JavaScript", "TypeScript", "Python", "Elixir", "Go", "Rust",
-      "config", "configuration", "environment", "production", "staging"
+      "authentication",
+      "auth",
+      "OAuth",
+      "OAuth2",
+      "JWT",
+      "API",
+      "REST",
+      "GraphQL",
+      "database",
+      "PostgreSQL",
+      "MySQL",
+      "MongoDB",
+      "Redis",
+      "SQL",
+      "Docker",
+      "Kubernetes",
+      "AWS",
+      "Azure",
+      "GCP",
+      "React",
+      "Vue",
+      "Angular",
+      "Phoenix",
+      "Django",
+      "Rails",
+      "JavaScript",
+      "TypeScript",
+      "Python",
+      "Elixir",
+      "Go",
+      "Rust",
+      "config",
+      "configuration",
+      "environment",
+      "production",
+      "staging"
     ]
-    
-    found_terms = Enum.filter(tech_terms, fn term ->
-      String.contains?(String.downcase(prompt), String.downcase(term))
-    end)
-    
+
+    found_terms =
+      Enum.filter(tech_terms, fn term ->
+        String.contains?(String.downcase(prompt), String.downcase(term))
+      end)
+
     entities = entities ++ found_terms
-    
-    # Extract directory paths
-    entities = entities ++ Regex.scan(~r/(?:\/[\w.-]+)+/, prompt) |> List.flatten()
-    
+
+    # Extract directory paths (both absolute and relative)
+    entities = (entities ++ Regex.scan(~r/(?:\/[\w.-]+)+/, prompt)) |> List.flatten()
+    entities = (entities ++ Regex.scan(~r/\b[\w-]+(?:\/[\w.-]+)+\b/, prompt)) |> List.flatten()
+
     # Remove duplicates and empty strings
     entities
     |> Enum.uniq()
@@ -266,42 +305,47 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
   def infer_implicit_requirements(context) do
     requirements = []
     prompt = context.original_prompt
-    
+
     # File system access needed
-    requirements = if Regex.match?(~r/(?:file|directory|read|write|create|delete)/i, prompt) do
-      [:file_access, :current_directory | requirements]
-    else
-      requirements
-    end
-    
+    requirements =
+      if Regex.match?(~r/(?:file|directory|read|write|create|delete)/i, prompt) do
+        [:file_access, :current_directory | requirements]
+      else
+        requirements
+      end
+
     # Code analysis needed
-    requirements = if Regex.match?(~r/(?:code|function|class|module|bug|debug)/i, prompt) do
-      [:code_analysis, :project_structure, :existing_code | requirements]
-    else
-      requirements
-    end
-    
+    requirements =
+      if Regex.match?(~r/(?:code|function|class|module|bug|debug)/i, prompt) do
+        [:code_analysis, :project_structure, :existing_code | requirements]
+      else
+        requirements
+      end
+
     # System operations needed
-    requirements = if Regex.match?(~r/(?:install|run|execute|command|system)/i, prompt) do
-      [:system_access, :available_commands, :permissions | requirements]
-    else
-      requirements
-    end
-    
+    requirements =
+      if Regex.match?(~r/(?:install|run|execute|command|system)/i, prompt) do
+        [:system_access, :available_commands, :permissions | requirements]
+      else
+        requirements
+      end
+
     # Documentation needed
-    requirements = if Regex.match?(~r/(?:what|how|explain|documentation|help)/i, prompt) do
-      [:documentation, :knowledge_base, :examples | requirements]
-    else
-      requirements
-    end
-    
+    requirements =
+      if Regex.match?(~r/(?:what|how|explain|documentation|help)/i, prompt) do
+        [:documentation, :knowledge_base, :examples | requirements]
+      else
+        requirements
+      end
+
     # Project context needed
-    requirements = if Regex.match?(~r/(?:build|deploy|test|configure|setup)/i, prompt) do
-      [:project_structure, :dependencies, :build_tools | requirements]
-    else
-      requirements
-    end
-    
+    requirements =
+      if Regex.match?(~r/(?:build|deploy|test|configure|setup)/i, prompt) do
+        [:project_structure, :dependencies, :build_tools | requirements]
+      else
+        requirements
+      end
+
     Enum.uniq(requirements)
   end
 
@@ -312,17 +356,18 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
   def assess_prompt_complexity(prompt) do
     # Count words as a basic complexity indicator
     word_count = String.split(prompt) |> length()
-    
+
     # Check for high complexity indicators
     indicators = complexity_indicators()
     high_matches = count_pattern_matches(indicators.high, prompt)
     medium_matches = count_pattern_matches(indicators.medium, prompt)
     low_matches = count_pattern_matches(indicators.low, prompt)
-    
+
     cond do
       high_matches > 0 or word_count > 20 -> :high
+      # Check low first for very short prompts
+      low_matches > 0 or word_count <= 3 -> :low
       medium_matches > 0 or word_count > 10 -> :medium
-      low_matches > 0 or word_count <= 5 -> :low
       true -> :medium
     end
   end
@@ -346,11 +391,11 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
   def assess_urgency(context) do
     prompt = context.original_prompt
     indicators = urgency_indicators()
-    
+
     high_matches = count_pattern_matches(indicators.high, prompt)
     medium_matches = count_pattern_matches(indicators.medium, prompt)
     low_matches = count_pattern_matches(indicators.low, prompt)
-    
+
     cond do
       high_matches > 0 -> :high
       low_matches > 0 -> :low
@@ -366,20 +411,20 @@ defmodule TheMaestro.Prompts.Enhancement.ContextAnalyzer do
   def determine_collaboration_needs(context) do
     user_context = context.user_context
     prompt = context.original_prompt
-    
+
     cond do
       # Enterprise indicators
       String.contains?(String.downcase(prompt), "production") or
-      String.contains?(String.downcase(prompt), "deployment") or
-      Map.get(user_context, :enterprise_mode, false) ->
+        String.contains?(String.downcase(prompt), "deployment") or
+          Map.get(user_context, :enterprise_mode, false) ->
         :enterprise
-      
+
       # Team indicators
       String.contains?(String.downcase(prompt), "team") or
-      String.contains?(String.downcase(prompt), "review") or
-      String.contains?(String.downcase(prompt), "collaborate") ->
+        String.contains?(String.downcase(prompt), "review") or
+          String.contains?(String.downcase(prompt), "collaborate") ->
         :team
-      
+
       true ->
         :individual
     end

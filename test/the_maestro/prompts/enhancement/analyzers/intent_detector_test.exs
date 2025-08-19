@@ -1,7 +1,7 @@
-defmodule TheMaestro.Prompts.Enhancement.IntentDetectorTest do
+defmodule TheMaestro.Prompts.Enhancement.Analyzers.IntentDetectorTest do
   use ExUnit.Case, async: true
 
-  alias TheMaestro.Prompts.Enhancement.IntentDetector
+  alias TheMaestro.Prompts.Enhancement.Analyzers.IntentDetector
 
   describe "detect_intent/1" do
     test "detects software engineering intent" do
@@ -79,9 +79,9 @@ defmodule TheMaestro.Prompts.Enhancement.IntentDetectorTest do
     test "returns highest confidence intent for ambiguous prompts" do
       # This prompt could be both file operations and software engineering
       ambiguous_prompt = "Create a new module file for user authentication"
-      
+
       result = IntentDetector.detect_intent(ambiguous_prompt)
-      
+
       assert result.category in [:software_engineering, :file_operations]
       assert result.confidence > 0.3
       assert is_list(result.context_requirements)
@@ -90,9 +90,9 @@ defmodule TheMaestro.Prompts.Enhancement.IntentDetectorTest do
 
     test "handles prompts with multiple intents" do
       multi_intent_prompt = "Read the config file, fix the authentication bug, and run the tests"
-      
+
       result = IntentDetector.detect_intent(multi_intent_prompt)
-      
+
       # Should detect the strongest intent
       assert result.category in [:software_engineering, :file_operations, :system_operations]
       assert result.confidence > 0.3
@@ -104,7 +104,7 @@ defmodule TheMaestro.Prompts.Enhancement.IntentDetectorTest do
       result = IntentDetector.detect_intent(high_confidence_prompt)
       assert result.confidence > 0.7
 
-      # Medium confidence case  
+      # Medium confidence case
       medium_confidence_prompt = "Update the user information"
       result = IntentDetector.detect_intent(medium_confidence_prompt)
       assert result.confidence > 0.3 and result.confidence < 0.8
@@ -119,14 +119,17 @@ defmodule TheMaestro.Prompts.Enhancement.IntentDetectorTest do
   describe "score_intent_category/2" do
     test "scores software engineering patterns correctly" do
       prompt = "Fix the authentication bug in the user service"
-      category = {:software_engineering, %{
-        patterns: [
-          ~r/(?:fix|debug|refactor|optimize|improve)\s+(?:code|function|class|module)/i,
-          ~r/(?:authentication|auth)/i
-        ],
-        confidence_boost: 0.3,
-        context_requirements: [:project_structure, :existing_code]
-      }}
+
+      category =
+        {:software_engineering,
+         %{
+           patterns: [
+             ~r/(?:fix|debug|refactor|optimize|improve)\s+(?:code|function|class|module)/i,
+             ~r/(?:authentication|auth)/i
+           ],
+           confidence_boost: 0.3,
+           context_requirements: [:project_structure, :existing_code]
+         }}
 
       result = IntentDetector.score_intent_category(category, prompt)
 
@@ -137,16 +140,20 @@ defmodule TheMaestro.Prompts.Enhancement.IntentDetectorTest do
 
     test "handles patterns that don't match" do
       prompt = "What's the weather like?"
-      category = {:software_engineering, %{
-        patterns: [~r/(?:fix|debug|refactor)/i],
-        confidence_boost: 0.3,
-        context_requirements: [:project_structure]
-      }}
+
+      category =
+        {:software_engineering,
+         %{
+           patterns: [~r/(?:fix|debug|refactor)/i],
+           confidence_boost: 0.3,
+           context_requirements: [:project_structure]
+         }}
 
       result = IntentDetector.score_intent_category(category, prompt)
 
       assert result.category == :software_engineering
-      assert result.confidence < 0.2  # Should be low since no patterns match
+      # Should be low since no patterns match
+      assert result.confidence < 0.2
     end
   end
 
@@ -162,12 +169,12 @@ defmodule TheMaestro.Prompts.Enhancement.IntentDetectorTest do
       # Test that we can detect all expected categories
       test_prompts = %{
         software_engineering: "Fix the authentication bug",
-        file_operations: "Read the config file", 
+        file_operations: "Read the config file",
         system_operations: "Install the dependencies",
         information_seeking: "What is Phoenix LiveView?"
       }
 
-      detected_categories = 
+      detected_categories =
         test_prompts
         |> Enum.map(fn {_expected, prompt} ->
           IntentDetector.detect_intent(prompt).category
@@ -181,18 +188,20 @@ defmodule TheMaestro.Prompts.Enhancement.IntentDetectorTest do
 
     test "each category has required configuration" do
       test_prompt = "test prompt"
-      
+
       [:software_engineering, :file_operations, :system_operations, :information_seeking]
       |> Enum.each(fn category ->
         # Test by trying to create a category config
-        category_config = {category, %{
-          patterns: [~r/test/i],
-          confidence_boost: 0.1,
-          context_requirements: [:test_requirement]
-        }}
+        category_config =
+          {category,
+           %{
+             patterns: [~r/test/i],
+             confidence_boost: 0.1,
+             context_requirements: [:test_requirement]
+           }}
 
         result = IntentDetector.score_intent_category(category_config, test_prompt)
-        
+
         assert result.category == category
         assert is_float(result.confidence)
         assert is_list(result.context_requirements)

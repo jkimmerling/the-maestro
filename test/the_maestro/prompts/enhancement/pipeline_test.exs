@@ -7,7 +7,7 @@ defmodule TheMaestro.Prompts.Enhancement.PipelineTest do
   describe "enhance_prompt/2" do
     setup do
       original_prompt = "Fix the authentication bug in the user service"
-      
+
       user_context = %{
         user_id: "test-user",
         session_id: "test-session",
@@ -34,14 +34,14 @@ defmodule TheMaestro.Prompts.Enhancement.PipelineTest do
       result = Pipeline.enhance_prompt(prompt, context)
 
       assert %{
-        original: ^prompt,
-        pre_context: pre_context,
-        enhanced_prompt: enhanced_prompt,
-        post_context: post_context,
-        metadata: metadata,
-        total_tokens: token_count,
-        relevance_scores: scores
-      } = result
+               original: ^prompt,
+               pre_context: pre_context,
+               enhanced_prompt: enhanced_prompt,
+               post_context: post_context,
+               metadata: metadata,
+               total_tokens: token_count,
+               relevance_scores: scores
+             } = result
 
       assert is_binary(pre_context)
       assert is_binary(enhanced_prompt)
@@ -51,39 +51,48 @@ defmodule TheMaestro.Prompts.Enhancement.PipelineTest do
       assert is_list(scores)
     end
 
-    test "includes environmental information in pre-context", %{original_prompt: prompt, user_context: context} do
+    test "includes environmental information in pre-context", %{
+      original_prompt: prompt,
+      user_context: context
+    } do
       result = Pipeline.enhance_prompt(prompt, context)
-      
+
       assert String.contains?(result.pre_context, "Darwin")
       assert String.contains?(result.pre_context, "2025-01-19")
       assert String.contains?(result.pre_context, "/Users/test/project")
     end
 
-    test "includes project information in context", %{original_prompt: prompt, user_context: context} do
+    test "includes project information in context", %{
+      original_prompt: prompt,
+      user_context: context
+    } do
       result = Pipeline.enhance_prompt(prompt, context)
-      
+
       assert String.contains?(result.pre_context, "elixir_phoenix") or
-             String.contains?(result.pre_context, "Phoenix") or
-             String.contains?(result.pre_context, "Elixir")
+               String.contains?(result.pre_context, "Phoenix") or
+               String.contains?(result.pre_context, "Elixir")
     end
 
     test "enhances prompt based on context", %{original_prompt: prompt, user_context: context} do
       result = Pipeline.enhance_prompt(prompt, context)
-      
+
       # The enhanced prompt should contain the original but be expanded
       assert String.contains?(result.enhanced_prompt, prompt)
       assert String.length(result.enhanced_prompt) > String.length(prompt)
     end
 
-    test "provides metadata about enhancement process", %{original_prompt: prompt, user_context: context} do
+    test "provides metadata about enhancement process", %{
+      original_prompt: prompt,
+      user_context: context
+    } do
       result = Pipeline.enhance_prompt(prompt, context)
-      
+
       assert %{
-        processing_time: time,
-        context_items_used: items_count,
-        average_relevance_score: avg_score,
-        quality_score: quality
-      } = result.metadata
+               processing_time: time,
+               context_items_used: items_count,
+               average_relevance_score: avg_score,
+               quality_score: quality
+             } = result.metadata
 
       assert is_integer(time) and time > 0
       assert is_integer(items_count) and items_count > 0
@@ -94,9 +103,9 @@ defmodule TheMaestro.Prompts.Enhancement.PipelineTest do
     test "handles minimal context gracefully" do
       minimal_context = %{user_id: "test"}
       prompt = "Hello world"
-      
+
       result = Pipeline.enhance_prompt(prompt, minimal_context)
-      
+
       assert result.original == prompt
       assert is_binary(result.enhanced_prompt)
       assert String.contains?(result.enhanced_prompt, prompt)

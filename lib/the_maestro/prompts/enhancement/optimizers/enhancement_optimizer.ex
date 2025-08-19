@@ -1,4 +1,4 @@
-defmodule TheMaestro.Prompts.Enhancement.EnhancementOptimizer do
+defmodule TheMaestro.Prompts.Enhancement.Optimizers.EnhancementOptimizer do
   @moduledoc """
   Optimization engine for enhanced prompts focusing on token efficiency and quality.
   """
@@ -17,7 +17,7 @@ defmodule TheMaestro.Prompts.Enhancement.EnhancementOptimizer do
   defp optimize_for_token_budget(prompt, config) do
     max_tokens = Map.get(config, :token_budget, 4000)
     current_tokens = Map.get(prompt, :total_tokens, 0)
-    
+
     if current_tokens > max_tokens do
       # Simple truncation optimization
       truncate_context_sections(prompt, max_tokens)
@@ -38,9 +38,10 @@ defmodule TheMaestro.Prompts.Enhancement.EnhancementOptimizer do
 
   defp truncate_context_sections(prompt, _max_tokens) do
     # Simple truncation by reducing context sections
-    %{prompt | 
-      pre_context: String.slice(Map.get(prompt, :pre_context, ""), 0, 500),
-      post_context: String.slice(Map.get(prompt, :post_context, ""), 0, 200)
+    %{
+      prompt
+      | pre_context: String.slice(Map.get(prompt, :pre_context, ""), 0, 500),
+        post_context: String.slice(Map.get(prompt, :post_context, ""), 0, 200)
     }
   end
 end
