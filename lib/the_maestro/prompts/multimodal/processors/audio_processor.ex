@@ -2,16 +2,16 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   @moduledoc """
   Specialized processor for audio content including voice recordings, music, podcasts,
   and sound effects.
-  
+
   Provides transcription, speaker analysis, sentiment detection, content classification,
   and accessibility enhancements for audio content.
   """
 
   @doc """
   Processes audio content with comprehensive analysis.
-  
+
   ## Features
-  
+
   - Speech-to-text transcription
   - Speaker identification and analysis
   - Sentiment and emotion detection
@@ -40,24 +40,28 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
     duration = Map.get(metadata, :duration, 60)
     format = Map.get(metadata, :format, "wav")
     context = Map.get(metadata, :context, :general)
-    
-    {transcript_text, confidence} = case context do
-      :voice_command ->
-        {"Set timer for 5 minutes and start the presentation", 0.95}
-      
-      :meeting ->
-        {"Good morning everyone. Let's start today's standup meeting. Alice, would you like to go first?", 0.92}
-      
-      :interview ->
-        {"Thank you for joining us today. Can you tell us about your experience with Elixir development?", 0.88}
-      
-      :podcast ->
-        {"Welcome to Tech Talk Tuesday. Today we're discussing the future of functional programming.", 0.90}
-      
-      _ ->
-        {"This is a sample audio transcription showing the spoken content.", 0.85}
-    end
-    
+
+    {transcript_text, confidence} =
+      case context do
+        :voice_command ->
+          {"Set timer for 5 minutes and start the presentation", 0.95}
+
+        :meeting ->
+          {"Good morning everyone. Let's start today's standup meeting. Alice, would you like to go first?",
+           0.92}
+
+        :interview ->
+          {"Thank you for joining us today. Can you tell us about your experience with Elixir development?",
+           0.88}
+
+        :podcast ->
+          {"Welcome to Tech Talk Tuesday. Today we're discussing the future of functional programming.",
+           0.90}
+
+        _ ->
+          {"This is a sample audio transcription showing the spoken content.", 0.85}
+      end
+
     %{
       text: transcript_text,
       confidence_score: confidence,
@@ -71,13 +75,13 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   defp generate_word_timestamps(text, duration) do
     words = String.split(text, " ")
     time_per_word = duration / length(words)
-    
+
     words
     |> Enum.with_index()
     |> Enum.map(fn {word, index} ->
       start_time = index * time_per_word
       end_time = (index + 1) * time_per_word
-      
+
       %{
         word: word,
         start: Float.round(start_time, 2),
@@ -90,36 +94,66 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   defp analyze_speakers(metadata) do
     context = Map.get(metadata, :context, :general)
     duration = Map.get(metadata, :duration, 60)
-    
+
     case context do
       :meeting ->
         %{
           speaker_count: 3,
           speakers: [
-            %{id: 1, name: "Alice", segments: [{0.0, 15.0}, {35.0, 50.0}], voice_characteristics: %{gender: :female, age_estimate: 30}},
-            %{id: 2, name: "Bob", segments: [{15.0, 35.0}], voice_characteristics: %{gender: :male, age_estimate: 28}},
-            %{id: 3, name: "Charlie", segments: [{50.0, duration}], voice_characteristics: %{gender: :male, age_estimate: 45}}
+            %{
+              id: 1,
+              name: "Alice",
+              segments: [{0.0, 15.0}, {35.0, 50.0}],
+              voice_characteristics: %{gender: :female, age_estimate: 30}
+            },
+            %{
+              id: 2,
+              name: "Bob",
+              segments: [{15.0, 35.0}],
+              voice_characteristics: %{gender: :male, age_estimate: 28}
+            },
+            %{
+              id: 3,
+              name: "Charlie",
+              segments: [{50.0, duration}],
+              voice_characteristics: %{gender: :male, age_estimate: 45}
+            }
           ],
           speaker_changes: 4,
           dominant_speaker: %{id: 1, percentage: 45.0}
         }
-      
+
       :interview ->
         %{
           speaker_count: 2,
           speakers: [
-            %{id: 1, name: "Interviewer", segments: [{0.0, 20.0}, {40.0, duration}], voice_characteristics: %{gender: :female, age_estimate: 35}},
-            %{id: 2, name: "Candidate", segments: [{20.0, 40.0}], voice_characteristics: %{gender: :male, age_estimate: 26}}
+            %{
+              id: 1,
+              name: "Interviewer",
+              segments: [{0.0, 20.0}, {40.0, duration}],
+              voice_characteristics: %{gender: :female, age_estimate: 35}
+            },
+            %{
+              id: 2,
+              name: "Candidate",
+              segments: [{20.0, 40.0}],
+              voice_characteristics: %{gender: :male, age_estimate: 26}
+            }
           ],
           speaker_changes: 3,
           dominant_speaker: %{id: 1, percentage: 60.0}
         }
-      
+
       _ ->
         %{
           speaker_count: 1,
           speakers: [
-            %{id: 1, name: "Primary Speaker", segments: [{0.0, duration}], voice_characteristics: %{gender: :unknown, age_estimate: :unknown}}
+            %{
+              id: 1,
+              name: "Primary Speaker",
+              segments: [{0.0, duration}],
+              voice_characteristics: %{gender: :unknown, age_estimate: :unknown}
+            }
           ],
           speaker_changes: 0,
           dominant_speaker: %{id: 1, percentage: 100.0}
@@ -129,7 +163,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
 
   defp analyze_audio_content(metadata) do
     context = Map.get(metadata, :context, :general)
-    
+
     %{
       sentiment: %{
         overall_sentiment: determine_sentiment(context),
@@ -156,7 +190,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   defp classify_audio_content(metadata) do
     context = Map.get(metadata, :context, :general)
     duration = Map.get(metadata, :duration, 60)
-    
+
     %{
       category: classify_by_context(context),
       subcategory: determine_subcategory(context, duration),
@@ -169,7 +203,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
 
   defp enhance_audio_accessibility(metadata) do
     context = Map.get(metadata, :context, :general)
-    
+
     %{
       transcript_enhanced: generate_enhanced_transcript(context),
       speaker_labels_clear: true,
@@ -200,7 +234,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
           confidence: 0.95,
           execution_ready: true
         }
-      
+
       _ ->
         %{
           is_command: false,
@@ -215,7 +249,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   defp assess_audio_quality(metadata) do
     format = Map.get(metadata, :format, "wav")
     duration = Map.get(metadata, :duration, 60)
-    
+
     %{
       overall_quality: determine_overall_quality(format),
       signal_to_noise_ratio: calculate_snr(format),
@@ -233,7 +267,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   defp analyze_temporal_structure(metadata) do
     duration = Map.get(metadata, :duration, 60)
     context = Map.get(metadata, :context, :general)
-    
+
     %{
       total_duration: duration,
       speech_segments: generate_speech_segments(duration, context),
@@ -269,21 +303,26 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
 
   defp generate_sentiment_timeline(context) do
     case context do
-      :meeting -> [
-        %{time_range: {0, 20}, sentiment: :positive, intensity: 0.7},
-        %{time_range: {20, 40}, sentiment: :neutral, intensity: 0.5},
-        %{time_range: {40, 60}, sentiment: :positive, intensity: 0.8}
-      ]
-      _ -> [%{time_range: {0, 60}, sentiment: :neutral, intensity: 0.5}]
+      :meeting ->
+        [
+          %{time_range: {0, 20}, sentiment: :positive, intensity: 0.7},
+          %{time_range: {20, 40}, sentiment: :neutral, intensity: 0.5},
+          %{time_range: {40, 60}, sentiment: :positive, intensity: 0.8}
+        ]
+
+      _ ->
+        [%{time_range: {0, 60}, sentiment: :neutral, intensity: 0.5}]
     end
   end
 
   defp identify_emotional_peaks(:interview) do
     [%{time: 25.0, emotion: :nervousness, intensity: 0.6}]
   end
+
   defp identify_emotional_peaks(_), do: []
 
-  defp determine_speaking_rate(:meeting), do: 150  # words per minute
+  # words per minute
+  defp determine_speaking_rate(:meeting), do: 150
   defp determine_speaking_rate(:interview), do: 120
   defp determine_speaking_rate(:podcast), do: 160
   defp determine_speaking_rate(_), do: 140
@@ -324,6 +363,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   defp generate_enhanced_transcript(:meeting) do
     "Good morning everyone. [Speaker: Alice] Let's start today's standup meeting. [Pause 2s] Alice, would you like to go first? [Background: keyboard typing sounds]"
   end
+
   defp generate_enhanced_transcript(context) do
     "Enhanced transcript with speaker labels and contextual information for #{context} audio."
   end
@@ -331,9 +371,11 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   defp add_sound_descriptions(:meeting) do
     ["Keyboard typing in background", "Coffee cup placed on table", "Door closing softly"]
   end
+
   defp add_sound_descriptions(:podcast) do
     ["Intro music fades", "Microphone adjustment", "Outro music begins"]
   end
+
   defp add_sound_descriptions(_), do: []
 
   defp determine_overall_quality("flac"), do: :lossless
@@ -341,7 +383,8 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   defp determine_overall_quality("mp3"), do: :compressed_good
   defp determine_overall_quality(_), do: :standard
 
-  defp calculate_snr("flac"), do: 85.0  # dB
+  # dB
+  defp calculate_snr("flac"), do: 85.0
   defp calculate_snr("wav"), do: 80.0
   defp calculate_snr("mp3"), do: 70.0
   defp calculate_snr(_), do: 65.0
@@ -349,6 +392,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   defp suggest_enhancements("mp3", duration) when duration > 1800 do
     ["Consider noise reduction", "Apply dynamic range compression"]
   end
+
   defp suggest_enhancements(_, _), do: ["Audio quality is adequate"]
 
   defp generate_speech_segments(duration, :meeting) do
@@ -358,6 +402,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
       %{speaker: "Charlie", start: 35.0, end: duration, content: "Next steps discussion"}
     ]
   end
+
   defp generate_speech_segments(duration, _) do
     [%{speaker: "Primary", start: 0.0, end: duration, content: "Continuous speech"}]
   end
@@ -375,6 +420,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
       %{time: 35.0, from: :status_updates, to: :planning}
     ]
   end
+
   defp identify_topic_transitions(_), do: []
 
   defp calculate_wpm(:meeting), do: 145

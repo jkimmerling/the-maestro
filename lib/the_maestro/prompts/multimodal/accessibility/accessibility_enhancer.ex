@@ -1,7 +1,7 @@
 defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
   @moduledoc """
   Accessibility enhancement engine for multi-modal content.
-  
+
   Provides comprehensive accessibility features including alt-text generation,
   audio descriptions, transcript enhancement, structure clarification,
   and WCAG compliance validation.
@@ -17,32 +17,36 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
     enhancements = %{}
 
     # Generate alt-text for images
-    enhancements = if :alt_text in requirements do
-      Map.put(enhancements, :alt_text, generate_alt_texts(content))
-    else
-      enhancements
-    end
+    enhancements =
+      if :alt_text in requirements do
+        Map.put(enhancements, :alt_text, generate_alt_texts(content))
+      else
+        enhancements
+      end
 
     # Generate audio descriptions for videos
-    enhancements = if :audio_descriptions in requirements do
-      Map.put(enhancements, :audio_descriptions, generate_audio_descriptions(content))
-    else
-      enhancements
-    end
+    enhancements =
+      if :audio_descriptions in requirements do
+        Map.put(enhancements, :audio_descriptions, generate_audio_descriptions(content))
+      else
+        enhancements
+      end
 
     # Generate transcripts for audio
-    enhancements = if :transcripts in requirements do
-      Map.put(enhancements, :transcripts, generate_transcripts(content))
-    else
-      enhancements
-    end
+    enhancements =
+      if :transcripts in requirements do
+        Map.put(enhancements, :transcripts, generate_transcripts(content))
+      else
+        enhancements
+      end
 
     # Add structure enhancements for documents
-    enhancements = if :structure_tags in requirements do
-      Map.put(enhancements, :structure_enhancements, generate_structure_enhancements(content))
-    else
-      enhancements
-    end
+    enhancements =
+      if :structure_tags in requirements do
+        Map.put(enhancements, :structure_enhancements, generate_structure_enhancements(content))
+      else
+        enhancements
+      end
 
     %{enhancements: enhancements}
   end
@@ -52,9 +56,10 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
   """
   @spec validate_wcag_compliance(list(map()), atom()) :: map()
   def validate_wcag_compliance(content, wcag_level) do
-    compliance_results = Enum.map(content, fn item ->
-      validate_item_compliance(item, wcag_level)
-    end)
+    compliance_results =
+      Enum.map(content, fn item ->
+        validate_item_compliance(item, wcag_level)
+      end)
 
     %{compliance_results: compliance_results}
   end
@@ -65,7 +70,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
   @spec generate_cognitive_accessibility_aids(list(map())) :: map()
   def generate_cognitive_accessibility_aids(content) do
     cognitive_aids = Enum.map(content, &generate_cognitive_aid/1)
-    
+
     %{
       cognitive_aids: cognitive_aids,
       structure_clarifications: generate_structure_clarifications(content),
@@ -80,7 +85,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
   def enhance_motor_accessibility(content) do
     motor_aids = Enum.map(content, &generate_motor_accessibility_aid/1)
     voice_aids = Enum.map(content, &generate_voice_control_aid/1)
-    
+
     %{
       motor_accessibility_aids: motor_aids,
       voice_control_aids: voice_aids
@@ -94,25 +99,26 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
   def generate_accessibility_report(content, wcag_level) do
     # Count compliant vs non-compliant items
     compliance_results = Enum.map(content, &check_compliance(&1, wcag_level))
-    
+
     compliant_items = Enum.count(compliance_results, & &1.compliant)
     non_compliant_items = Enum.count(compliance_results, &(not &1.compliant))
-    
-    overall_score = if length(compliance_results) > 0 do
-      compliant_items / length(compliance_results)
-    else
-      0.0
-    end
+
+    overall_score =
+      if length(compliance_results) > 0 do
+        compliant_items / length(compliance_results)
+      else
+        0.0
+      end
 
     # Generate compliance breakdown by content type
     compliance_breakdown = generate_compliance_breakdown(content, compliance_results)
-    
+
     # Identify priority issues
     priority_issues = identify_priority_issues(content, compliance_results)
-    
+
     # Generate improvement recommendations
     improvement_recommendations = generate_improvement_recommendations(priority_issues)
-    
+
     # Create remediation plan
     remediation_plan = create_remediation_plan(priority_issues)
 
@@ -138,7 +144,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
       issues_detected: [],
       start_time: System.monotonic_time(:millisecond)
     }
-    
+
     {:ok, spawn(fn -> accessibility_monitoring_loop(initial_state) end)}
   end
 
@@ -157,7 +163,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
   @spec get_monitoring_status(pid()) :: map()
   def get_monitoring_status(monitor_pid) do
     send(monitor_pid, {:get_status, self()})
-    
+
     receive do
       {:status_result, status} -> status
     after
@@ -180,7 +186,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
   @spec get_progressive_suggestions(pid()) :: map()
   def get_progressive_suggestions(monitor_pid) do
     send(monitor_pid, {:get_suggestions, self()})
-    
+
     receive do
       {:suggestions_result, suggestions} -> suggestions
     after
@@ -195,12 +201,13 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
   def process_with_priority_queue(content, requirements) do
     # Sort by priority
     sorted_content = Enum.sort_by(content, &get_priority_score/1, :desc)
-    
+
     # Process in priority order
-    processed_results = Enum.map(sorted_content, fn item ->
-      enhance_content_accessibility([item], requirements)
-    end)
-    
+    processed_results =
+      Enum.map(sorted_content, fn item ->
+        enhance_content_accessibility([item], requirements)
+      end)
+
     %{
       processing_order: sorted_content,
       results: processed_results,
@@ -271,8 +278,11 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
 
   defp generate_formatted_transcript(audio_item) do
     case get_in(audio_item, [:metadata, :context]) do
-      :meeting -> "Alice: Good morning everyone. Let's start the standup.\nBob: I'll go first with my updates."
-      _ -> "Speaker: This is a sample transcript with speaker identification."
+      :meeting ->
+        "Alice: Good morning everyone. Let's start the standup.\nBob: I'll go first with my updates."
+
+      _ ->
+        "Speaker: This is a sample transcript with speaker identification."
     end
   end
 
@@ -296,12 +306,14 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
 
   defp validate_item_compliance(item, wcag_level) do
     accessibility = Map.get(item, :accessibility_enhancements, %{})
-    
+
     case item.type do
       :image ->
-        alt_text_present = Map.get(accessibility, :alt_text) != nil && Map.get(accessibility, :alt_text) != ""
+        alt_text_present =
+          Map.get(accessibility, :alt_text) != nil && Map.get(accessibility, :alt_text) != ""
+
         color_contrast_ok = get_in(accessibility, [:color_contrast, :passes_aa]) == true
-        
+
         %{
           wcag_level: wcag_level,
           passes_compliance: alt_text_present && color_contrast_ok,
@@ -310,16 +322,19 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
             color_contrast_sufficient: color_contrast_ok
           },
           violations: generate_violations(alt_text_present, color_contrast_ok),
-          remediation_suggestions: generate_remediation_suggestions(alt_text_present, color_contrast_ok)
+          remediation_suggestions:
+            generate_remediation_suggestions(alt_text_present, color_contrast_ok)
         }
-        
+
       :video ->
         captions_present = get_in(accessibility, [:captions, :synchronized]) == true
         audio_desc_present = get_in(accessibility, [:audio_descriptions, :comprehensive]) == true
         sign_language = get_in(accessibility, [:sign_language, :provided]) == true
-        
-        passes = captions_present && (wcag_level == :aa || (wcag_level == :aaa && audio_desc_present && sign_language))
-        
+
+        passes =
+          captions_present &&
+            (wcag_level == :aa || (wcag_level == :aaa && audio_desc_present && sign_language))
+
         %{
           wcag_level: wcag_level,
           passes_compliance: passes,
@@ -328,7 +343,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
           },
           overall_score: if(passes, do: 0.95, else: 0.5)
         }
-        
+
       _ ->
         %{
           wcag_level: wcag_level,
@@ -342,37 +357,41 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
 
   defp generate_violations(alt_text_present, color_contrast_ok) do
     violations = []
-    
-    violations = if not alt_text_present do
-      [%{criterion: :alt_text_missing, severity: :high} | violations]
-    else
-      violations
-    end
-    
-    violations = if not color_contrast_ok do
-      [%{criterion: :color_contrast_insufficient, severity: :medium} | violations]
-    else
-      violations
-    end
-    
+
+    violations =
+      if not alt_text_present do
+        [%{criterion: :alt_text_missing, severity: :high} | violations]
+      else
+        violations
+      end
+
+    violations =
+      if not color_contrast_ok do
+        [%{criterion: :color_contrast_insufficient, severity: :medium} | violations]
+      else
+        violations
+      end
+
     violations
   end
 
   defp generate_remediation_suggestions(alt_text_present, color_contrast_ok) do
     suggestions = []
-    
-    suggestions = if not alt_text_present do
-      ["Add descriptive alt-text for all images" | suggestions]
-    else
-      suggestions
-    end
-    
-    suggestions = if not color_contrast_ok do
-      ["Improve color contrast to meet WCAG AA standards" | suggestions]
-    else
-      suggestions
-    end
-    
+
+    suggestions =
+      if not alt_text_present do
+        ["Add descriptive alt-text for all images" | suggestions]
+      else
+        suggestions
+      end
+
+    suggestions =
+      if not color_contrast_ok do
+        ["Improve color contrast to meet WCAG AA standards" | suggestions]
+      else
+        suggestions
+      end
+
     suggestions
   end
 
@@ -385,6 +404,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
           complexity_reduction_score: 0.6,
           key_concepts: ["login", "authentication", "security"]
         }
+
       _ ->
         %{simplified_language: "", reading_level: :unchanged}
     end
@@ -399,19 +419,21 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
 
   defp generate_structure_clarifications(content) do
     document_content = Enum.find(content, &(&1.type == :document))
-    
+
     if document_content do
-      [%{
-        content_outline: ["Introduction", "Methods", "Results", "Conclusion"],
-        section_summaries: %{
-          intro: "Overview of the topic",
-          methods: "How the work was done",
-          results: "What was found",
-          conclusion: "Summary and implications"
-        },
-        reading_path: %{recommended_order: [1, 2, 3, 4]},
-        estimated_reading_time: 15
-      }]
+      [
+        %{
+          content_outline: ["Introduction", "Methods", "Results", "Conclusion"],
+          section_summaries: %{
+            intro: "Overview of the topic",
+            methods: "How the work was done",
+            results: "What was found",
+            conclusion: "Summary and implications"
+          },
+          reading_path: %{recommended_order: [1, 2, 3, 4]},
+          estimated_reading_time: 15
+        }
+      ]
     else
       []
     end
@@ -419,10 +441,12 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
 
   defp generate_memory_aids(content) do
     %{
-      progress_indicators: Enum.with_index(content, 1) |> Enum.map(fn {_item, index} ->
-        %{step: index, total: length(content), completed: false}
-      end),
-      content_index: %{sections: Enum.map(content, &(&1.type))},
+      progress_indicators:
+        Enum.with_index(content, 1)
+        |> Enum.map(fn {_item, index} ->
+          %{step: index, total: length(content), completed: false}
+        end),
+      content_index: %{sections: Enum.map(content, & &1.type)},
       quick_reference: %{key_points: ["Point 1", "Point 2", "Point 3"]},
       navigation_breadcrumbs: ["Home", "Section 1", "Current Item"]
     }
@@ -433,13 +457,13 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
       :image ->
         processed = Map.get(content_item, :processed_content, %{})
         ui_elements = get_in(processed, [:screenshot_analysis, :ui_elements])
-        
+
         if ui_elements do
           button_count = length(Map.get(ui_elements, :buttons, []))
           link_count = length(Map.get(ui_elements, :links, []))
           field_count = length(Map.get(ui_elements, :form_fields, []))
           total_interactive = button_count + link_count + field_count
-          
+
           %{
             keyboard_alternatives: %{
               tab_order: Enum.to_list(1..total_interactive),
@@ -451,7 +475,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
         else
           %{keyboard_alternatives: %{tab_order: []}}
         end
-        
+
       _ ->
         %{keyboard_alternatives: %{tab_order: []}}
     end
@@ -462,10 +486,10 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
       :image ->
         processed = Map.get(content_item, :processed_content, %{})
         ui_elements = get_in(processed, [:screenshot_analysis, :ui_elements])
-        
+
         if ui_elements && Map.get(ui_elements, :interactive_count, 0) > 10 do
           %{
-            voice_commands: Enum.map(1..15, &("Click button #{&1}")),
+            voice_commands: Enum.map(1..15, &"Click button #{&1}"),
             command_patterns: %{
               navigation: ["Go to login", "Open menu", "Show settings"],
               actions: ["Submit form", "Cancel operation", "Save changes"]
@@ -475,7 +499,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
         else
           %{voice_commands: []}
         end
-        
+
       _ ->
         %{voice_commands: []}
     end
@@ -483,20 +507,24 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
 
   defp check_compliance(item, wcag_level) do
     accessibility = Map.get(item, :accessibility_enhancements, %{})
-    
+
     case item.type do
       :image ->
-        alt_text_ok = Map.get(accessibility, :alt_text) != nil && Map.get(accessibility, :alt_text) != ""
+        alt_text_ok =
+          Map.get(accessibility, :alt_text) != nil && Map.get(accessibility, :alt_text) != ""
+
         %{compliant: alt_text_ok, type: :image}
-        
+
       :video ->
         captions_ok = get_in(accessibility, [:captions]) != nil
         %{compliant: captions_ok, type: :video}
-        
+
       :audio ->
-        transcript_ok = Map.get(accessibility, :transcript) != nil && Map.get(accessibility, :transcript) != ""
+        transcript_ok =
+          Map.get(accessibility, :transcript) != nil && Map.get(accessibility, :transcript) != ""
+
         %{compliant: transcript_ok, type: :audio}
-        
+
       _ ->
         %{compliant: true, type: item.type}
     end
@@ -504,11 +532,12 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
 
   defp generate_compliance_breakdown(content, compliance_results) do
     # Group by content type
-    type_groups = Enum.group_by(Enum.zip(content, compliance_results), fn {item, _result} -> item.type end)
-    
+    type_groups =
+      Enum.group_by(Enum.zip(content, compliance_results), fn {item, _result} -> item.type end)
+
     Enum.reduce(type_groups, %{}, fn {type, items}, acc ->
       compliant_count = Enum.count(items, fn {_item, result} -> result.compliant end)
-      
+
       Map.put(acc, type, %{
         compliant: compliant_count,
         total: length(items)
@@ -546,7 +575,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
             resources: %{tools: ["NVDA screen reader", "WAVE accessibility checker"]},
             estimated_impact: :high
           }
-        
+
         :missing_captions ->
           %{
             category: :captions,
@@ -555,7 +584,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
             resources: %{tools: ["YouTube auto-captions", "Rev.com"]},
             estimated_impact: :high
           }
-        
+
         _ ->
           %{
             category: :general,
@@ -570,8 +599,9 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
 
   defp create_remediation_plan(priority_issues) do
     immediate_actions = Enum.filter(priority_issues, &(&1.severity == :high))
-    estimated_hours = length(priority_issues) * 2  # 2 hours per issue estimate
-    
+    # 2 hours per issue estimate
+    estimated_hours = length(priority_issues) * 2
+
     %{
       immediate_actions: immediate_actions,
       estimated_effort_hours: estimated_hours
@@ -593,34 +623,41 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
       {:monitor_content, content} ->
         # Detect accessibility issues in the content
         issues = detect_accessibility_issues(content)
+
         new_state = %{
-          state |
-          items_monitored: state.items_monitored + 1,
-          issues_detected: state.issues_detected ++ issues
+          state
+          | items_monitored: state.items_monitored + 1,
+            issues_detected: state.issues_detected ++ issues
         }
+
         accessibility_monitoring_loop(new_state)
-      
+
       {:get_status, requester_pid} ->
         status = %{
           items_monitored: state.items_monitored,
           accessibility_issues_detected: length(state.issues_detected),
           real_time_suggestions: generate_real_time_suggestions(state.issues_detected)
         }
+
         send(requester_pid, {:status_result, status})
         accessibility_monitoring_loop(state)
-      
+
       {:get_suggestions, requester_pid} ->
         suggestions = %{
           priority_enhancements: get_priority_enhancements(state.issues_detected),
           quick_wins: get_quick_wins(state.issues_detected),
-          long_term_improvements: ["Implement comprehensive accessibility testing", "Train team on accessibility standards"]
+          long_term_improvements: [
+            "Implement comprehensive accessibility testing",
+            "Train team on accessibility standards"
+          ]
         }
+
         send(requester_pid, {:suggestions_result, suggestions})
         accessibility_monitoring_loop(state)
-      
+
       :stop ->
         :ok
-        
+
       _ ->
         accessibility_monitoring_loop(state)
     end
@@ -628,14 +665,16 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
 
   defp detect_accessibility_issues(content) do
     issues = []
-    
+
     # Check for missing alt-text
-    issues = if content.type == :image && not Map.get(content, :accessibility_data, %{}) |> Map.get(:alt_text_generated, true) do
-      [%{type: :missing_alt_text, severity: :high} | issues]
-    else
-      issues
-    end
-    
+    issues =
+      if content.type == :image &&
+           not Map.get(content, :accessibility_data, %{}) |> Map.get(:alt_text_generated, true) do
+        [%{type: :missing_alt_text, severity: :high} | issues]
+      else
+        issues
+      end
+
     issues
   end
 

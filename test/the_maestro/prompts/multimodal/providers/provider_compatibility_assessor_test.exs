@@ -58,7 +58,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
       assert gemini_compat.max_video_duration_minutes == 50
       assert gemini_compat.max_audio_duration_minutes == 60
 
-      assert result.overall_compatibility_score == 1.0  # Full compatibility
+      # Full compatibility
+      assert result.overall_compatibility_score == 1.0
     end
 
     test "assesses OpenAI GPT multimodal capabilities" do
@@ -73,8 +74,10 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
       gpt_compat = result.provider_capabilities.openai
       assert gpt_compat.supports_images == true
       assert gpt_compat.vision_model_available == true
-      assert gpt_compat.supports_audio == false  # GPT-4V doesn't support audio
-      assert gpt_compat.whisper_integration_available == true  # For audio transcription
+      # GPT-4V doesn't support audio
+      assert gpt_compat.supports_audio == false
+      # For audio transcription
+      assert gpt_compat.whisper_integration_available == true
 
       audio_compat = result.content_compatibility |> Enum.find(&(&1.content_type == :audio))
       assert audio_compat.requires_preprocessing == true
@@ -92,7 +95,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
         }
       ]
 
-      adaptations = ProviderCompatibilityAssessor.suggest_content_adaptations(oversized_content, :anthropic)
+      adaptations =
+        ProviderCompatibilityAssessor.suggest_content_adaptations(oversized_content, :anthropic)
 
       image_adaptation = adaptations |> Enum.find(&(&1.content_type == :image))
       assert image_adaptation.adaptations_needed == true
@@ -116,7 +120,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
         }
       ]
 
-      adaptations = ProviderCompatibilityAssessor.suggest_content_adaptations(unsupported_content, :anthropic)
+      adaptations =
+        ProviderCompatibilityAssessor.suggest_content_adaptations(unsupported_content, :anthropic)
 
       image_adaptation = adaptations |> Enum.find(&(&1.content_type == :image))
       doc_adaptation = adaptations |> Enum.find(&(&1.content_type == :document))
@@ -132,16 +137,19 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
         %{
           type: :audio,
           content: "podcast_audio",
-          metadata: %{duration: 1800, speakers: 3}  # 30-minute podcast
+          # 30-minute podcast
+          metadata: %{duration: 1800, speakers: 3}
         },
         %{
           type: :video,
           content: "tutorial_video",
-          metadata: %{duration: 600, has_captions: true}  # 10-minute tutorial
+          # 10-minute tutorial
+          metadata: %{duration: 600, has_captions: true}
         }
       ]
 
-      adaptations = ProviderCompatibilityAssessor.suggest_content_adaptations(unsupported_content, :anthropic)
+      adaptations =
+        ProviderCompatibilityAssessor.suggest_content_adaptations(unsupported_content, :anthropic)
 
       audio_adaptation = adaptations |> Enum.find(&(&1.content_type == :audio))
       video_adaptation = adaptations |> Enum.find(&(&1.content_type == :video))
@@ -187,7 +195,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
 
       video_impact = quality_impact |> Enum.find(&(&1.content_type == :video))
       assert video_impact.original_quality_score >= 0.9
-      assert video_impact.adapted_quality_score <= 0.6  # Significant loss
+      # Significant loss
+      assert video_impact.adapted_quality_score <= 0.6
       assert video_impact.quality_loss >= 0.3
       assert video_impact.impact_category == :significant
       assert video_impact.lost_information |> Enum.member?(:motion_data)
@@ -208,12 +217,14 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
         provider_limitations: [:no_ocr, :limited_visual_analysis]
       }
 
-      quality_impact = ProviderCompatibilityAssessor.calculate_quality_impact(content, :anthropic, context)
+      quality_impact =
+        ProviderCompatibilityAssessor.calculate_quality_impact(content, :anthropic, context)
 
       diagram_impact = quality_impact |> Enum.find(&(&1.content_type == :image))
       assert diagram_impact.accessibility_enhancement_impact.positive_impact > 0
       assert diagram_impact.accessibility_enhancement_impact.information_gain |> length() > 0
-      assert diagram_impact.net_quality_change > 0  # Overall improvement due to accessibility
+      # Overall improvement due to accessibility
+      assert diagram_impact.net_quality_change > 0
     end
   end
 
@@ -238,9 +249,11 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
       optimized_doc = result.optimized_content |> Enum.find(&(&1.type == :document))
 
       assert optimized_image.metadata.size_mb <= 10
-      assert optimized_image.metadata.format == "PNG"  # More efficient than BMP
-      assert optimized_doc.metadata.pages <= 20  # Truncated or summarized
-      
+      # More efficient than BMP
+      assert optimized_image.metadata.format == "PNG"
+      # Truncated or summarized
+      assert optimized_doc.metadata.pages <= 20
+
       assert result.optimizations_applied |> Enum.member?(:image_compression)
       assert result.optimizations_applied |> Enum.member?(:document_truncation)
       assert result.quality_preservation_score >= 0.7
@@ -265,10 +278,13 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
       optimized_video = result.optimized_content |> Enum.find(&(&1.type == :video))
       optimized_audio = result.optimized_content |> Enum.find(&(&1.type == :audio))
 
-      assert optimized_video.metadata.format == "MP4"  # More compatible format
-      assert optimized_video.metadata.size_mb < 200  # Compressed
-      assert optimized_audio.metadata.format == "MP3"  # More compatible format
-      
+      # More compatible format
+      assert optimized_video.metadata.format == "MP4"
+      # Compressed
+      assert optimized_video.metadata.size_mb < 200
+      # More compatible format
+      assert optimized_audio.metadata.format == "MP3"
+
       assert result.multimodal_enhancements |> Enum.member?(:video_audio_correlation)
       assert result.optimization_strategy == :preserve_multimodal_richness
     end
@@ -278,7 +294,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
         %{
           type: :video,
           content: "presentation_video",
-          metadata: %{duration: 900, has_slides: true, has_audio: true}  # 15-minute presentation
+          # 15-minute presentation
+          metadata: %{duration: 900, has_slides: true, has_audio: true}
         }
       ]
 
@@ -286,11 +303,14 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
 
       # Should create multiple fallback representations
       fallback_content = result.fallback_representations
-      
+
       slide_images = fallback_content |> Enum.filter(&(&1.type == :image))
-      audio_transcript = fallback_content |> Enum.find(&(&1.type == :text && &1.source == :audio_transcript))
-      
-      assert slide_images |> length() >= 5  # Key slides extracted
+
+      audio_transcript =
+        fallback_content |> Enum.find(&(&1.type == :text && &1.source == :audio_transcript))
+
+      # Key slides extracted
+      assert slide_images |> length() >= 5
       assert audio_transcript.content |> String.length() > 100
       assert result.fallback_strategy == :comprehensive_decomposition
       assert result.information_retention_score >= 0.8
@@ -308,7 +328,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
 
       recommendations = ProviderCompatibilityAssessor.generate_provider_recommendations(content)
 
-      assert recommendations.primary_recommendation.provider == :google  # Best multimodal support
+      # Best multimodal support
+      assert recommendations.primary_recommendation.provider == :google
       assert recommendations.primary_recommendation.compatibility_score >= 0.9
       assert recommendations.primary_recommendation.reasoning |> String.contains?("video")
       assert recommendations.primary_recommendation.reasoning |> String.contains?("audio")
@@ -320,7 +341,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
 
     test "considers cost factors in recommendations" do
       large_content = [
-        %{type: :text, metadata: %{length: 50000}},  # Large text
+        # Large text
+        %{type: :text, metadata: %{length: 50_000}},
         %{type: :image, metadata: %{size_mb: 8}},
         %{type: :image, metadata: %{size_mb: 9}},
         %{type: :document, metadata: %{pages: 30}}
@@ -328,9 +350,10 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
 
       context = %{consider_cost: true, budget_tier: :standard}
 
-      recommendations = ProviderCompatibilityAssessor.generate_provider_recommendations(large_content, context)
+      recommendations =
+        ProviderCompatibilityAssessor.generate_provider_recommendations(large_content, context)
 
-      assert recommendations.cost_analysis.estimated_tokens > 10000
+      assert recommendations.cost_analysis.estimated_tokens > 10_000
       assert recommendations.cost_analysis.cost_by_provider |> Map.keys() |> length() >= 2
       assert recommendations.primary_recommendation.cost_efficiency >= 0.7
       assert recommendations.budget_considerations.optimization_suggestions |> length() > 0
@@ -339,12 +362,13 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
     test "provides specialized recommendations for different use cases" do
       research_content = [
         %{type: :document, metadata: %{pages: 100, type: :research_paper}},
-        %{type: :data, metadata: %{format: :csv, rows: 10000}}
+        %{type: :data, metadata: %{format: :csv, rows: 10_000}}
       ]
 
       context = %{use_case: :research_analysis, priority: :accuracy}
 
-      recommendations = ProviderCompatibilityAssessor.generate_provider_recommendations(research_content, context)
+      recommendations =
+        ProviderCompatibilityAssessor.generate_provider_recommendations(research_content, context)
 
       assert recommendations.use_case_analysis.research_suitability |> is_map()
       assert recommendations.specialized_features.document_analysis_capability >= 0.8
@@ -354,16 +378,32 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
 
   describe "monitor_provider_performance/2" do
     test "tracks provider performance metrics over time" do
-      {:ok, monitor_pid} = ProviderCompatibilityAssessor.start_performance_monitoring(%{
-        providers: [:anthropic, :google, :openai],
-        metrics: [:response_time, :quality_score, :error_rate]
-      })
+      {:ok, monitor_pid} =
+        ProviderCompatibilityAssessor.start_performance_monitoring(%{
+          providers: [:anthropic, :google, :openai],
+          metrics: [:response_time, :quality_score, :error_rate]
+        })
 
       # Simulate processing sessions
       test_sessions = [
-        %{provider: :anthropic, content_types: [:text, :image], response_time_ms: 1500, quality: 0.9},
-        %{provider: :google, content_types: [:video, :audio], response_time_ms: 3000, quality: 0.85},
-        %{provider: :anthropic, content_types: [:text, :document], response_time_ms: 2000, quality: 0.95}
+        %{
+          provider: :anthropic,
+          content_types: [:text, :image],
+          response_time_ms: 1500,
+          quality: 0.9
+        },
+        %{
+          provider: :google,
+          content_types: [:video, :audio],
+          response_time_ms: 3000,
+          quality: 0.85
+        },
+        %{
+          provider: :anthropic,
+          content_types: [:text, :document],
+          response_time_ms: 2000,
+          quality: 0.95
+        }
       ]
 
       Enum.each(test_sessions, fn session ->
@@ -372,7 +412,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
 
       performance_report = ProviderCompatibilityAssessor.get_performance_report(monitor_pid)
 
-      assert performance_report.anthropic.average_response_time_ms == 1750  # (1500 + 2000) / 2
+      # (1500 + 2000) / 2
+      assert performance_report.anthropic.average_response_time_ms == 1750
       assert performance_report.anthropic.average_quality_score >= 0.9
       assert performance_report.google.sessions_processed == 1
       assert performance_report.comparative_analysis.fastest_provider == :anthropic
@@ -381,21 +422,25 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
     end
 
     test "identifies performance trends and anomalies" do
-      {:ok, monitor_pid} = ProviderCompatibilityAssessor.start_performance_monitoring(%{
-        trend_analysis: true,
-        anomaly_detection: true
-      })
+      {:ok, monitor_pid} =
+        ProviderCompatibilityAssessor.start_performance_monitoring(%{
+          trend_analysis: true,
+          anomaly_detection: true
+        })
 
       # Simulate performance degradation
-      degrading_sessions = Enum.map(1..10, fn i ->
-        %{
-          provider: :anthropic,
-          content_types: [:image],
-          response_time_ms: 1000 + (i * 200),  # Increasing response time
-          quality: 0.95 - (i * 0.02),  # Decreasing quality
-          timestamp: DateTime.utc_now()
-        }
-      end)
+      degrading_sessions =
+        Enum.map(1..10, fn i ->
+          %{
+            provider: :anthropic,
+            content_types: [:image],
+            # Increasing response time
+            response_time_ms: 1000 + i * 200,
+            # Decreasing quality
+            quality: 0.95 - i * 0.02,
+            timestamp: DateTime.utc_now()
+          }
+        end)
 
       Enum.each(degrading_sessions, fn session ->
         ProviderCompatibilityAssessor.record_session_metrics(monitor_pid, session)
@@ -406,7 +451,9 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
       assert trend_analysis.anthropic.response_time_trend == :increasing
       assert trend_analysis.anthropic.quality_trend == :decreasing
       assert trend_analysis.anomalies_detected |> length() > 0
-      assert trend_analysis.recommendations |> Enum.any?(&(&1.type == :investigate_performance_degradation))
+
+      assert trend_analysis.recommendations
+             |> Enum.any?(&(&1.type == :investigate_performance_degradation))
 
       ProviderCompatibilityAssessor.stop_performance_monitoring(monitor_pid)
     end
@@ -416,7 +463,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
     test "handles unknown provider gracefully" do
       content = [%{type: :text, content: "test"}]
 
-      result = ProviderCompatibilityAssessor.assess_provider_compatibility(content, :unknown_provider)
+      result =
+        ProviderCompatibilityAssessor.assess_provider_compatibility(content, :unknown_provider)
 
       assert result.status == :error
       assert result.error_type == :unsupported_provider
@@ -428,10 +476,12 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
       malformed_content = [
         %{type: :invalid_type, content: "test"},
         %{content: "missing type field"},
-        %{type: :image}  # missing content field
+        # missing content field
+        %{type: :image}
       ]
 
-      result = ProviderCompatibilityAssessor.assess_provider_compatibility(malformed_content, :anthropic)
+      result =
+        ProviderCompatibilityAssessor.assess_provider_compatibility(malformed_content, :anthropic)
 
       assert result.validation_errors |> length() == 3
       assert result.valid_content_items == 0
@@ -443,9 +493,12 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
       content = [%{type: :image, content: "test_image"}]
 
       # Simulate provider service unavailability
-      context = %{provider_status: %{anthropic: :unavailable, google: :available, openai: :degraded}}
+      context = %{
+        provider_status: %{anthropic: :unavailable, google: :available, openai: :degraded}
+      }
 
-      result = ProviderCompatibilityAssessor.assess_provider_compatibility(content, :anthropic, context)
+      result =
+        ProviderCompatibilityAssessor.assess_provider_compatibility(content, :anthropic, context)
 
       assert result.provider_status == :unavailable
       assert result.fallback_recommendations |> length() >= 1

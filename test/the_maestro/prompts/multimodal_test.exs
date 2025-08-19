@@ -2,6 +2,7 @@ defmodule TheMaestro.Prompts.MultiModalTest do
   use ExUnit.Case, async: true
 
   alias TheMaestro.Prompts.MultiModal
+
   alias TheMaestro.Prompts.MultiModal.{
     ContentProcessor,
     CrossModalAnalyzer,
@@ -15,7 +16,7 @@ defmodule TheMaestro.Prompts.MultiModalTest do
       expected_types = [
         :text,
         :image,
-        :audio, 
+        :audio,
         :video,
         :document,
         :code,
@@ -38,7 +39,8 @@ defmodule TheMaestro.Prompts.MultiModalTest do
         },
         %{
           type: :image,
-          content: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+          content:
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
           metadata: %{filename: "error_screenshot.png", dimensions: %{width: 1920, height: 1080}}
         },
         %{
@@ -91,7 +93,7 @@ defmodule TheMaestro.Prompts.MultiModalTest do
       assert text_item.analysis.intent == :debugging
       assert text_item.analysis.complexity == :moderate
 
-      # Verify image content processing  
+      # Verify image content processing
       image_item = Enum.find(processed, &(&1.type == :image))
       assert image_item.processed_content.format == :base64
       assert image_item.analysis.visual_elements.detected_ui_elements > 0
@@ -266,7 +268,8 @@ defmodule TheMaestro.Prompts.MultiModalTest do
       report = MultiModal.generate_accessibility_report(content, [:wcag_aa])
 
       assert report.compliance_level == :wcag_aa
-      assert report.issues_found |> length() >= 2  # Missing alt_text and transcript
+      # Missing alt_text and transcript
+      assert report.issues_found |> length() >= 2
       assert report.recommendations |> length() >= 2
       assert report.severity_breakdown.critical >= 0
       assert report.estimated_fix_time_hours > 0

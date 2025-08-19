@@ -33,18 +33,29 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.TextProcessor do
   defp extract_topics(content) do
     # Simple keyword-based topic extraction
     topics = []
-    
-    topics = if String.contains?(content, ["auth", "login", "credential"]), do: [:authentication | topics], else: topics
-    topics = if String.contains?(content, ["error", "fail", "issue"]), do: [:error | topics], else: topics
-    topics = if String.contains?(content, ["security", "secure"]), do: [:security | topics], else: topics
-    topics = if String.contains?(content, ["test", "testing"]), do: [:testing | topics], else: topics
-    
+
+    topics =
+      if String.contains?(content, ["auth", "login", "credential"]),
+        do: [:authentication | topics],
+        else: topics
+
+    topics =
+      if String.contains?(content, ["error", "fail", "issue"]),
+        do: [:error | topics],
+        else: topics
+
+    topics =
+      if String.contains?(content, ["security", "secure"]), do: [:security | topics], else: topics
+
+    topics =
+      if String.contains?(content, ["test", "testing"]), do: [:testing | topics], else: topics
+
     topics
   end
 
   defp assess_complexity(content) do
     word_count = String.split(content) |> length()
-    
+
     cond do
       word_count < 10 -> :low
       word_count < 50 -> :moderate
@@ -63,13 +74,15 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.TextProcessor do
   defp extract_entities(content) do
     # Simple entity extraction
     entities = []
-    
+
     # File references
-    entities = if Regex.match?(~r/\w+\.\w+/, content), do: [:file_reference | entities], else: entities
-    
-    # Function references  
-    entities = if Regex.match?(~r/\w+\(\)/, content), do: [:function_reference | entities], else: entities
-    
+    entities =
+      if Regex.match?(~r/\w+\.\w+/, content), do: [:file_reference | entities], else: entities
+
+    # Function references
+    entities =
+      if Regex.match?(~r/\w+\(\)/, content), do: [:function_reference | entities], else: entities
+
     entities
   end
 

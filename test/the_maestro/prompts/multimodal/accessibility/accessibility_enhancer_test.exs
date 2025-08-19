@@ -26,7 +26,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
       assert alt_text.content_id == image_content
       assert alt_text.alt_text =~ "error dialog"
       assert alt_text.alt_text =~ "Authentication Failed"
-      assert alt_text.descriptive_detail |> String.length() > 50  # Detailed description
+      # Detailed description
+      assert alt_text.descriptive_detail |> String.length() > 50
       assert alt_text.wcag_compliance.level == :aa
     end
 
@@ -52,7 +53,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
 
       audio_desc = result.enhancements.audio_descriptions |> List.first()
       assert audio_desc.content_id == video_content
-      assert audio_desc.descriptions |> length() >= 3  # One for each key frame
+      # One for each key frame
+      assert audio_desc.descriptions |> length() >= 3
       assert audio_desc.timing_synchronized == true
       assert audio_desc.descriptions |> Enum.all?(&(String.length(&1.description) > 10))
     end
@@ -75,7 +77,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
 
       requirements = [:structure_tags, :navigation_aids]
 
-      result = AccessibilityEnhancer.enhance_content_accessibility([document_content], requirements)
+      result =
+        AccessibilityEnhancer.enhance_content_accessibility([document_content], requirements)
 
       structure = result.enhancements.structure_enhancements |> List.first()
       assert structure.heading_hierarchy |> length() == 3
@@ -141,8 +144,10 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
       non_compliant_image = %{
         type: :image,
         accessibility_enhancements: %{
-          alt_text: "",  # Empty alt text
-          color_contrast: %{ratio: 2.1, passes_aa: false}  # Insufficient contrast
+          # Empty alt text
+          alt_text: "",
+          # Insufficient contrast
+          color_contrast: %{ratio: 2.1, passes_aa: false}
         }
       }
 
@@ -161,7 +166,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
         accessibility_enhancements: %{
           captions: %{synchronized: true, accurate: true},
           audio_descriptions: %{comprehensive: true, well_timed: true},
-          sign_language: %{provided: true}  # AAA requirement
+          # AAA requirement
+          sign_language: %{provided: true}
         }
       }
 
@@ -178,7 +184,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
     test "creates simplified language versions" do
       complex_content = %{
         type: :text,
-        content: "Utilize the authentication mechanism to establish secure credentials validation",
+        content:
+          "Utilize the authentication mechanism to establish secure credentials validation",
         processed_content: %{complexity_score: 0.8, reading_level: :graduate}
       }
 
@@ -285,7 +292,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
         },
         %{
           type: :video,
-          accessibility_enhancements: %{captions: nil},  # Missing captions
+          # Missing captions
+          accessibility_enhancements: %{captions: nil},
           wcag_compliance: %{level: :aa, passes: false}
         },
         %{
@@ -297,7 +305,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
 
       report = AccessibilityEnhancer.generate_accessibility_report(mixed_content, :aa)
 
-      assert report.overall_compliance_score > 0.5  # Partial compliance
+      # Partial compliance
+      assert report.overall_compliance_score > 0.5
       assert report.compliant_items == 2
       assert report.non_compliant_items == 1
       assert report.compliance_breakdown.images.compliant == 1
@@ -338,7 +347,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
 
   describe "real-time accessibility monitoring" do
     test "monitors accessibility during content processing" do
-      {:ok, monitor_pid} = AccessibilityEnhancer.start_accessibility_monitoring(%{wcag_level: :aa})
+      {:ok, monitor_pid} =
+        AccessibilityEnhancer.start_accessibility_monitoring(%{wcag_level: :aa})
 
       test_content = %{
         type: :image,
@@ -357,14 +367,16 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
     end
 
     test "provides progressive accessibility enhancement suggestions" do
-      {:ok, monitor_pid} = AccessibilityEnhancer.start_accessibility_monitoring(%{
-        enhancement_mode: :progressive,
-        wcag_level: :aa
-      })
+      {:ok, monitor_pid} =
+        AccessibilityEnhancer.start_accessibility_monitoring(%{
+          enhancement_mode: :progressive,
+          wcag_level: :aa
+        })
 
       content_stream = [
         %{type: :text, accessibility_score: 0.9},
-        %{type: :image, accessibility_score: 0.3},  # Low score triggers enhancement
+        # Low score triggers enhancement
+        %{type: :image, accessibility_score: 0.3},
         %{type: :video, accessibility_score: 0.6}
       ]
 
@@ -383,13 +395,14 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
 
   describe "performance optimization" do
     test "optimizes accessibility processing for large content sets" do
-      large_content_set = Enum.map(1..100, fn i ->
-        %{
-          type: Enum.random([:text, :image, :audio]),
-          content: "Content item #{i}",
-          processed_content: %{complexity_score: :rand.uniform()}
-        }
-      end)
+      large_content_set =
+        Enum.map(1..100, fn i ->
+          %{
+            type: Enum.random([:text, :image, :audio]),
+            content: "Content item #{i}",
+            processed_content: %{complexity_score: :rand.uniform()}
+          }
+        end)
 
       start_time = System.monotonic_time(:millisecond)
       result = AccessibilityEnhancer.enhance_content_accessibility(large_content_set, [:alt_text])
@@ -398,7 +411,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
       processing_time = end_time - start_time
 
       assert result.enhancements |> Map.keys() |> length() > 0
-      assert processing_time < 10000  # Should complete within 10 seconds
+      # Should complete within 10 seconds
+      assert processing_time < 10_000
       assert result.performance_metrics.items_processed == 100
       assert result.performance_metrics.parallel_processing == true
     end
@@ -410,7 +424,8 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
         %{type: :text, priority: :normal, accessibility_score: 0.8}
       ]
 
-      result = AccessibilityEnhancer.process_with_priority_queue(priority_content, [:alt_text, :captions])
+      result =
+        AccessibilityEnhancer.process_with_priority_queue(priority_content, [:alt_text, :captions])
 
       processing_order = result.processing_order
       assert processing_order |> List.first() |> Map.get(:priority) == :critical
@@ -424,15 +439,19 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
   describe "error handling and resilience" do
     test "gracefully handles malformed content during accessibility enhancement" do
       malformed_content = [
-        %{type: :image, content: nil},  # Invalid content
-        %{type: :text, content: "Valid text"}  # Valid content
+        # Invalid content
+        %{type: :image, content: nil},
+        # Valid content
+        %{type: :text, content: "Valid text"}
       ]
 
       result = AccessibilityEnhancer.enhance_content_accessibility(malformed_content, [:alt_text])
 
-      assert result.error_recovery.items_processed == 1  # Only valid item processed
+      # Only valid item processed
+      assert result.error_recovery.items_processed == 1
       assert result.error_recovery.errors_handled == 1
-      assert result.enhancements.alt_text |> length() == 0  # No alt text for invalid image
+      # No alt text for invalid image
+      assert result.enhancements.alt_text |> length() == 0
       assert result.processing_warnings |> Enum.any?(&(&1 =~ "malformed content"))
     end
 
@@ -443,13 +462,16 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancerTest 
         processing_errors: [:visual_analysis_failed, :ocr_failed]
       }
 
-      result = AccessibilityEnhancer.enhance_content_accessibility([problematic_content], [:alt_text])
+      result =
+        AccessibilityEnhancer.enhance_content_accessibility([problematic_content], [:alt_text])
 
       fallback = result.fallback_enhancements |> List.first()
       assert fallback.primary_method_failed == true
       assert fallback.fallback_method_used |> is_atom()
-      assert fallback.fallback_alt_text |> is_binary()  # Basic alt text provided
-      assert fallback.quality_score < 0.7  # Lower quality due to fallback
+      # Basic alt text provided
+      assert fallback.fallback_alt_text |> is_binary()
+      # Lower quality due to fallback
+      assert fallback.quality_score < 0.7
     end
   end
 end

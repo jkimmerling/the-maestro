@@ -1,16 +1,16 @@
 defmodule TheMaestro.Prompts.MultiModal.Processors.ImageProcessor do
   @moduledoc """
   Specialized processor for image content including photos, screenshots, diagrams, and charts.
-  
+
   Provides visual analysis, text extraction (OCR), object detection, scene classification,
   accessibility enhancements, and specialized analysis for UI screenshots and code images.
   """
 
   @doc """
   Processes image content with comprehensive visual analysis.
-  
+
   ## Features
-  
+
   - Visual element detection and classification
   - Optical character recognition (OCR)
   - Scene and context analysis
@@ -74,7 +74,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ImageProcessor do
 
   defp determine_scene_category(metadata) do
     context = Map.get(metadata, :context, :general)
-    
+
     case context do
       :screenshot -> "application_screenshot"
       :code_screenshot -> "code_editor_screenshot"
@@ -88,46 +88,54 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ImageProcessor do
   defp extract_text_from_image(_content, metadata) do
     # Simulate OCR based on context
     case Map.get(metadata, :context) do
-      :error_screenshot -> "Authentication Failed: Invalid credentials provided. Please check your username and password."
-      :code_screenshot -> "def authenticate(user, password) do\n  case verify_credentials(user, password) do\n    {:ok, user} -> {:ok, user}\n    {:error, reason} -> {:error, reason}\n  end\nend"
-      :ui_testing -> "Login Button Submit Form Username Password"
-      _ -> "Sample text extracted from image"
+      :error_screenshot ->
+        "Authentication Failed: Invalid credentials provided. Please check your username and password."
+
+      :code_screenshot ->
+        "def authenticate(user, password) do\n  case verify_credentials(user, password) do\n    {:ok, user} -> {:ok, user}\n    {:error, reason} -> {:error, reason}\n  end\nend"
+
+      :ui_testing ->
+        "Login Button Submit Form Username Password"
+
+      _ ->
+        "Sample text extracted from image"
     end
   end
 
   defp generate_alt_text(metadata) do
     case Map.get(metadata, :context) do
-      :error_screenshot -> 
+      :error_screenshot ->
         "Error dialog showing authentication failure with red error message and close button"
-      
-      :code_screenshot -> 
+
+      :code_screenshot ->
         "Code editor screenshot showing Elixir function definition with syntax highlighting"
-      
-      :ui_testing -> 
+
+      :ui_testing ->
         "User interface screenshot showing login form with username and password fields"
-      
-      :diagram -> 
+
+      :diagram ->
         "Technical diagram illustrating system architecture with connected components"
-      
-      _ -> 
+
+      _ ->
         "Image content showing visual elements and information"
     end
   end
 
   defp generate_detailed_description(metadata) do
     base_description = generate_alt_text(metadata)
-    
-    additional_details = case Map.get(metadata, :context) do
-      :error_screenshot -> 
-        " The dialog has a red background indicating an error state, with white text for contrast. The error message is prominently displayed in the center, with a close button in the top-right corner."
-      
-      :code_screenshot -> 
-        " The code is displayed with syntax highlighting, showing keywords in blue, strings in green, and comments in gray. Line numbers are visible on the left margin."
-      
-      _ -> 
-        " The image contains various visual elements organized in a clear layout with appropriate color contrast and readable text."
-    end
-    
+
+    additional_details =
+      case Map.get(metadata, :context) do
+        :error_screenshot ->
+          " The dialog has a red background indicating an error state, with white text for contrast. The error message is prominently displayed in the center, with a close button in the top-right corner."
+
+        :code_screenshot ->
+          " The code is displayed with syntax highlighting, showing keywords in blue, strings in green, and comments in gray. Line numbers are visible on the left margin."
+
+        _ ->
+          " The image contains various visual elements organized in a clear layout with appropriate color contrast and readable text."
+      end
+
     base_description <> additional_details
   end
 
@@ -137,13 +145,15 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ImageProcessor do
       String.starts_with?(content, "data:image/jpeg") -> "JPEG"
       String.starts_with?(content, "data:image/gif") -> "GIF"
       String.starts_with?(content, "data:image/webp") -> "WebP"
-      true -> "PNG"  # Default assumption
+      # Default assumption
+      true -> "PNG"
     end
   end
 
   defp calculate_estimated_size(metadata) do
     case Map.get(metadata, :size_mb) do
-      nil -> 1024 * 1024 * 2  # Default 2MB estimate
+      # Default 2MB estimate
+      nil -> 1024 * 1024 * 2
       size_mb -> round(size_mb * 1024 * 1024)
     end
   end
@@ -184,8 +194,9 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ImageProcessor do
             text_size_adequate: true
           }
         }
-      
-      _ -> %{}
+
+      _ ->
+        %{}
     end
   end
 
@@ -218,7 +229,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ImageProcessor do
             style_compliance: %{follows_conventions: true}
           }
         }
-      
+
       _ ->
         # Basic code detection for non-code-specific screenshots
         %{

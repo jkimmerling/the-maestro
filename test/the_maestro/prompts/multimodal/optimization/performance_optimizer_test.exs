@@ -9,7 +9,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
         %{
           type: :video,
           content: "large_video_data",
-          metadata: %{size_mb: 500, duration: 1800}  # 30-minute, 500MB video
+          # 30-minute, 500MB video
+          metadata: %{size_mb: 500, duration: 1800}
         },
         %{
           type: :image,
@@ -22,14 +23,16 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
         }
       ]
 
-      context = %{performance_constraints: %{max_memory_mb: 100, max_processing_time_ms: 10000}}
+      context = %{performance_constraints: %{max_memory_mb: 100, max_processing_time_ms: 10_000}}
 
       result = PerformanceOptimizer.optimize_processing_pipeline(large_content, context)
 
       lazy_loading = result.optimizations_applied.lazy_loading
       assert lazy_loading.enabled == true
-      assert lazy_loading.deferred_items |> length() == 2  # Video and large image
-      assert lazy_loading.immediate_items |> length() == 1  # Text only
+      # Video and large image
+      assert lazy_loading.deferred_items |> length() == 2
+      # Text only
+      assert lazy_loading.immediate_items |> length() == 1
 
       video_opt = lazy_loading.deferred_items |> Enum.find(&(&1.type == :video))
       assert video_opt.loading_strategy == :on_demand
@@ -54,18 +57,20 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
       assert caching.enabled == true
       assert caching.cached_processors |> Enum.member?(:ui_screenshot_analyzer)
       assert caching.cached_processors |> Enum.member?(:elixir_code_analyzer)
-      assert caching.cache_hit_ratio >= 0.6  # 60% of items benefit from caching
+      # 60% of items benefit from caching
+      assert caching.cache_hit_ratio >= 0.6
       assert caching.processing_time_saved_ms > 1000
     end
 
     test "applies parallel processing for independent content items" do
-      parallel_content = Enum.map(1..10, fn i ->
-        %{
-          type: :text,
-          content: "Independent text content #{i}",
-          metadata: %{complexity: :moderate}
-        }
-      end)
+      parallel_content =
+        Enum.map(1..10, fn i ->
+          %{
+            type: :text,
+            content: "Independent text content #{i}",
+            metadata: %{complexity: :moderate}
+          }
+        end)
 
       context = %{
         parallel_processing: %{enabled: true, max_workers: 4},
@@ -78,7 +83,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
       assert parallel_opts.enabled == true
       assert parallel_opts.workers_used == 4
       assert parallel_opts.batches_created >= 2
-      assert parallel_opts.speedup_factor >= 2.0  # At least 2x faster than sequential
+      # At least 2x faster than sequential
+      assert parallel_opts.speedup_factor >= 2.0
       assert result.performance_metrics.total_processing_time_ms < 3000
     end
 
@@ -101,11 +107,13 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
         quality_requirements: %{min_quality_score: 0.7}
       }
 
-      result = PerformanceOptimizer.optimize_processing_pipeline(bandwidth_sensitive_content, context)
+      result =
+        PerformanceOptimizer.optimize_processing_pipeline(bandwidth_sensitive_content, context)
 
       compression = result.optimizations_applied.compression
       assert compression.enabled == true
-      assert compression.total_size_reduction_mb >= 20  # Significant reduction
+      # Significant reduction
+      assert compression.total_size_reduction_mb >= 20
       assert compression.quality_preserved >= 0.7
       assert result.optimized_content |> Enum.all?(&(&1.metadata.size_mb <= 10))
     end
@@ -119,7 +127,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
           content: "4k_tutorial_video",
           metadata: %{
             size_mb: 800,
-            duration: 2400,  # 40 minutes
+            # 40 minutes
+            duration: 2400,
             resolution: "4K"
           }
         },
@@ -128,7 +137,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
           content: "high_quality_podcast",
           metadata: %{
             size_mb: 200,
-            duration: 3600,  # 1 hour
+            # 1 hour
+            duration: 3600,
             bitrate: "320kbps"
           }
         }
@@ -136,7 +146,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
 
       lazy_config = %{
         preview_quality: :medium,
-        preview_duration_limit: 30,  # 30 seconds max for previews
+        # 30 seconds max for previews
+        preview_duration_limit: 30,
         memory_threshold_mb: 50
       }
 
@@ -152,12 +163,17 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
 
       assert audio_lazy.preview.size_mb < 5
       assert audio_lazy.preview.duration == 30
-      assert audio_lazy.thumbnail_generated == true  # Audio waveform thumbnail
+      # Audio waveform thumbnail
+      assert audio_lazy.thumbnail_generated == true
     end
 
     test "implements smart preloading based on user interaction patterns" do
       content_with_priority = [
-        %{type: :image, content: "critical_diagram", metadata: %{priority: :critical, size_mb: 8}},
+        %{
+          type: :image,
+          content: "critical_diagram",
+          metadata: %{priority: :critical, size_mb: 8}
+        },
         %{type: :image, content: "reference_chart", metadata: %{priority: :high, size_mb: 12}},
         %{type: :document, content: "appendix_doc", metadata: %{priority: :low, size_mb: 30}}
       ]
@@ -170,10 +186,11 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
         }
       }
 
-      result = PerformanceOptimizer.implement_lazy_loading(content_with_priority, %{
-        user_context: user_context,
-        preloading_strategy: :smart
-      })
+      result =
+        PerformanceOptimizer.implement_lazy_loading(content_with_priority, %{
+          user_context: user_context,
+          preloading_strategy: :smart
+        })
 
       preloaded = result.preloaded_items
       deferred = result.deferred_items
@@ -181,8 +198,10 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
       critical_item = preloaded |> Enum.find(&(&1.metadata.priority == :critical))
       appendix_item = deferred |> Enum.find(&(&1.metadata.priority == :low))
 
-      assert critical_item != nil  # Critical items should be preloaded
-      assert appendix_item != nil  # Low priority items should be deferred
+      # Critical items should be preloaded
+      assert critical_item != nil
+      # Low priority items should be deferred
+      assert appendix_item != nil
       assert result.preloading_decisions.based_on_user_patterns == true
     end
   end
@@ -190,8 +209,16 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
   describe "optimize_caching_strategy/2" do
     test "implements content-type specific caching" do
       diverse_content = [
-        %{type: :code, content: "elixir_function_1", metadata: %{language: :elixir, complexity: :high}},
-        %{type: :code, content: "elixir_function_2", metadata: %{language: :elixir, complexity: :moderate}},
+        %{
+          type: :code,
+          content: "elixir_function_1",
+          metadata: %{language: :elixir, complexity: :high}
+        },
+        %{
+          type: :code,
+          content: "elixir_function_2",
+          metadata: %{language: :elixir, complexity: :moderate}
+        },
         %{type: :image, content: "ui_screenshot_1", metadata: %{context: :ui_testing}},
         %{type: :image, content: "ui_screenshot_2", metadata: %{context: :ui_testing}},
         %{type: :text, content: "unique_description", metadata: %{uniqueness: :high}}
@@ -208,12 +235,16 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
       caching_strategy = result.caching_strategy
 
       # Should cache Elixir code processor
-      elixir_cache = caching_strategy.processor_caches |> Enum.find(&(&1.processor_type == :elixir_code))
+      elixir_cache =
+        caching_strategy.processor_caches |> Enum.find(&(&1.processor_type == :elixir_code))
+
       assert elixir_cache != nil
       assert elixir_cache.cache_hits_expected >= 2
 
       # Should cache UI screenshot analysis patterns
-      ui_cache = caching_strategy.pattern_caches |> Enum.find(&(&1.pattern_type == :ui_screenshot))
+      ui_cache =
+        caching_strategy.pattern_caches |> Enum.find(&(&1.pattern_type == :ui_screenshot))
+
       assert ui_cache != nil
       assert ui_cache.reuse_potential >= 0.5
 
@@ -225,7 +256,11 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
     test "implements distributed caching for session continuity" do
       session_content = [
         %{type: :image, content: "session_screenshot_1", metadata: %{session_id: "user_123"}},
-        %{type: :document, content: "working_doc", metadata: %{session_id: "user_123", version: 1}}
+        %{
+          type: :document,
+          content: "working_doc",
+          metadata: %{session_id: "user_123", version: 1}
+        }
       ]
 
       distributed_config = %{
@@ -248,10 +283,26 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
   describe "enable_parallel_processing/2" do
     test "optimizes worker allocation based on content complexity" do
       mixed_complexity_content = [
-        %{type: :text, content: "simple text", metadata: %{complexity: :low, processing_time_est: 100}},
-        %{type: :image, content: "complex_diagram", metadata: %{complexity: :high, processing_time_est: 5000}},
-        %{type: :video, content: "analysis_video", metadata: %{complexity: :very_high, processing_time_est: 15000}},
-        %{type: :code, content: "algorithm", metadata: %{complexity: :moderate, processing_time_est: 1000}}
+        %{
+          type: :text,
+          content: "simple text",
+          metadata: %{complexity: :low, processing_time_est: 100}
+        },
+        %{
+          type: :image,
+          content: "complex_diagram",
+          metadata: %{complexity: :high, processing_time_est: 5000}
+        },
+        %{
+          type: :video,
+          content: "analysis_video",
+          metadata: %{complexity: :very_high, processing_time_est: 15_000}
+        },
+        %{
+          type: :code,
+          content: "algorithm",
+          metadata: %{complexity: :moderate, processing_time_est: 1000}
+        }
       ]
 
       parallel_config = %{
@@ -260,10 +311,11 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
         load_balancing: :complexity_aware
       }
 
-      result = PerformanceOptimizer.enable_parallel_processing(mixed_complexity_content, parallel_config)
+      result =
+        PerformanceOptimizer.enable_parallel_processing(mixed_complexity_content, parallel_config)
 
       worker_allocation = result.worker_allocation
-      
+
       # High complexity items should get more workers
       video_allocation = worker_allocation |> Enum.find(&(&1.content_type == :video))
       text_allocation = worker_allocation |> Enum.find(&(&1.content_type == :text))
@@ -278,8 +330,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
       uneven_workload = [
         %{type: :image, content: "quick_process_1", metadata: %{processing_time_est: 500}},
         %{type: :image, content: "quick_process_2", metadata: %{processing_time_est: 600}},
-        %{type: :document, content: "slow_process_1", metadata: %{processing_time_est: 10000}},
-        %{type: :document, content: "slow_process_2", metadata: %{processing_time_est: 12000}}
+        %{type: :document, content: "slow_process_1", metadata: %{processing_time_est: 10_000}},
+        %{type: :document, content: "slow_process_2", metadata: %{processing_time_est: 12_000}}
       ]
 
       work_stealing_config = %{
@@ -288,7 +340,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
         worker_count: 4
       }
 
-      result = PerformanceOptimizer.enable_parallel_processing(uneven_workload, work_stealing_config)
+      result =
+        PerformanceOptimizer.enable_parallel_processing(uneven_workload, work_stealing_config)
 
       work_stealing = result.work_stealing
       assert work_stealing.enabled == true
@@ -309,7 +362,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
         %{
           type: :video,
           content: "large_video_file",
-          metadata: %{size_mb: 300, duration: 7200}  # 2 hours
+          # 2 hours
+          metadata: %{size_mb: 300, duration: 7200}
         }
       ]
 
@@ -333,13 +387,14 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
     end
 
     test "implements object pooling for frequently created objects" do
-      repetitive_content = Enum.map(1..50, fn i ->
-        %{
-          type: :image,
-          content: "screenshot_#{i}",
-          metadata: %{context: :ui_testing, similar_processing: true}
-        }
-      end)
+      repetitive_content =
+        Enum.map(1..50, fn i ->
+          %{
+            type: :image,
+            content: "screenshot_#{i}",
+            metadata: %{context: :ui_testing, similar_processing: true}
+          }
+        end)
 
       pooling_config = %{
         object_pooling: %{
@@ -361,10 +416,11 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
 
   describe "monitor_performance_metrics/1" do
     test "tracks comprehensive performance metrics during processing" do
-      {:ok, monitor_pid} = PerformanceOptimizer.start_performance_monitoring(%{
-        metrics: [:cpu_usage, :memory_usage, :processing_time, :throughput],
-        sampling_interval_ms: 100
-      })
+      {:ok, monitor_pid} =
+        PerformanceOptimizer.start_performance_monitoring(%{
+          metrics: [:cpu_usage, :memory_usage, :processing_time, :throughput],
+          sampling_interval_ms: 100
+        })
 
       # Simulate content processing
       test_content = [
@@ -389,16 +445,20 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
     end
 
     test "identifies performance bottlenecks and optimization opportunities" do
-      {:ok, monitor_pid} = PerformanceOptimizer.start_performance_monitoring(%{
-        bottleneck_detection: true,
-        optimization_suggestions: true
-      })
+      {:ok, monitor_pid} =
+        PerformanceOptimizer.start_performance_monitoring(%{
+          bottleneck_detection: true,
+          optimization_suggestions: true
+        })
 
       # Simulate bottleneck scenario
       bottleneck_events = [
-        %{stage: :content_loading, time_ms: 500, expected_ms: 100},  # Slow loading
-        %{stage: :image_processing, time_ms: 5000, expected_ms: 1000},  # Very slow processing
-        %{stage: :result_formatting, time_ms: 200, expected_ms: 50}  # Slow formatting
+        # Slow loading
+        %{stage: :content_loading, time_ms: 500, expected_ms: 100},
+        # Very slow processing
+        %{stage: :image_processing, time_ms: 5000, expected_ms: 1000},
+        # Slow formatting
+        %{stage: :result_formatting, time_ms: 200, expected_ms: 50}
       ]
 
       Enum.each(bottleneck_events, fn event ->
@@ -409,12 +469,14 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
 
       bottlenecks = bottleneck_analysis.identified_bottlenecks
       image_bottleneck = bottlenecks |> Enum.find(&(&1.stage == :image_processing))
-      
+
       assert image_bottleneck.severity == :critical
       assert image_bottleneck.performance_impact >= 0.8
       assert image_bottleneck.optimization_suggestions |> length() >= 2
 
-      assert bottleneck_analysis.optimization_opportunities |> Enum.any?(&(&1.type == :parallel_processing))
+      assert bottleneck_analysis.optimization_opportunities
+             |> Enum.any?(&(&1.type == :parallel_processing))
+
       assert bottleneck_analysis.optimization_opportunities |> Enum.any?(&(&1.type == :caching))
 
       PerformanceOptimizer.stop_performance_monitoring(monitor_pid)
@@ -433,7 +495,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
         available_memory_mb: 200,
         cpu_cores: 2,
         network_speed: :slow,
-        battery_level: :low  # Mobile device consideration
+        # Mobile device consideration
+        battery_level: :low
       }
 
       result = PerformanceOptimizer.adaptive_optimization(content, system_context)
@@ -447,9 +510,10 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
     end
 
     test "scales optimization aggressively on high-resource systems" do
-      content = Enum.map(1..20, fn i ->
-        %{type: :image, content: "batch_image_#{i}", metadata: %{size_mb: 5}}
-      end)
+      content =
+        Enum.map(1..20, fn i ->
+          %{type: :image, content: "batch_image_#{i}", metadata: %{size_mb: 5}}
+        end)
 
       # Simulate high-resource environment
       system_context = %{
@@ -466,22 +530,29 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
       assert adaptive_strategy.parallel_processing.max_workers >= 8
       assert adaptive_strategy.gpu_acceleration.enabled == true
       assert adaptive_strategy.batch_processing.large_batches == true
-      assert result.expected_performance_gain >= 5.0  # 5x speedup expected
+      # 5x speedup expected
+      assert result.expected_performance_gain >= 5.0
     end
   end
 
   describe "error handling and recovery" do
     test "gracefully handles optimization failures" do
       problematic_content = [
-        %{type: :image, content: "corrupted_data", metadata: %{size_mb: :invalid}},  # Invalid metadata
-        %{type: :video, content: nil, metadata: %{size_mb: 50}}  # Nil content
+        # Invalid metadata
+        %{type: :image, content: "corrupted_data", metadata: %{size_mb: :invalid}},
+        # Nil content
+        %{type: :video, content: nil, metadata: %{size_mb: 50}}
       ]
 
       optimization_config = %{
         error_recovery: %{enabled: true, fallback_to_basic: true}
       }
 
-      result = PerformanceOptimizer.optimize_processing_pipeline(problematic_content, optimization_config)
+      result =
+        PerformanceOptimizer.optimize_processing_pipeline(
+          problematic_content,
+          optimization_config
+        )
 
       error_recovery = result.error_recovery
       assert error_recovery.errors_encountered == 2
@@ -491,23 +562,28 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizerTest do
     end
 
     test "provides degraded performance mode for resource constraints" do
-      large_content = Enum.map(1..100, fn i ->
-        %{type: :document, content: "doc_#{i}", metadata: %{pages: 50}}
-      end)
+      large_content =
+        Enum.map(1..100, fn i ->
+          %{type: :document, content: "doc_#{i}", metadata: %{pages: 50}}
+        end)
 
       constrained_context = %{
-        available_memory_mb: 10,  # Very low memory
-        max_processing_time_ms: 1000,  # Very tight deadline
+        # Very low memory
+        available_memory_mb: 10,
+        # Very tight deadline
+        max_processing_time_ms: 1000,
         degraded_mode_acceptable: true
       }
 
-      result = PerformanceOptimizer.optimize_processing_pipeline(large_content, constrained_context)
+      result =
+        PerformanceOptimizer.optimize_processing_pipeline(large_content, constrained_context)
 
       degraded_mode = result.degraded_mode
       assert degraded_mode.activated == true
       assert degraded_mode.features_disabled |> length() > 0
       assert degraded_mode.processing_quality == :basic
-      assert degraded_mode.items_processed < 100  # Some items skipped
+      # Some items skipped
+      assert degraded_mode.items_processed < 100
       assert result.performance_metrics.completion_time_ms <= 1000
     end
   end

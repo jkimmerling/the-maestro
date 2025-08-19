@@ -6,7 +6,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.DataProcessor do
   @spec process(map(), map()) :: map()
   def process(%{type: :data, content: content, metadata: metadata} = _item, _context) do
     format = Map.get(metadata, :format, :json)
-    
+
     %{
       structure_analysis: analyze_structure(content, format),
       validation: validate_data(content, format),
@@ -25,6 +25,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.DataProcessor do
           schema: extract_schema(data),
           record_count: count_records(data)
         }
+
       {:error, _} ->
         %{schema: %{}, record_count: 0}
     end
@@ -33,10 +34,11 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.DataProcessor do
   defp analyze_structure(content, :csv) do
     lines = String.split(content, "\n")
     headers = String.split(List.first(lines, ""), ",")
-    
+
     %{
       columns: headers,
-      row_count: length(lines) - 1  # Subtract header row
+      # Subtract header row
+      row_count: length(lines) - 1
     }
   end
 
@@ -49,6 +51,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.DataProcessor do
   defp validate_data(_content, _format), do: %{is_valid: false}
 
   defp summarize_content(_content, :json), do: %{record_count: 1}
+
   defp summarize_content(content, :csv) do
     row_count = String.split(content, "\n") |> length() |> Kernel.-(1)
     %{record_count: row_count}
@@ -61,6 +64,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.DataProcessor do
   defp enhance_data_accessibility(_content, :csv) do
     %{table_headers: ["name", "age", "city"]}
   end
+
   defp enhance_data_accessibility(_content, _format) do
     %{table_headers: []}
   end
@@ -68,6 +72,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.DataProcessor do
   defp analyze_data_types(_content, :csv) do
     %{inferred_types: %{"name" => :string, "age" => :integer, "city" => :string}}
   end
+
   defp analyze_data_types(_content, _format) do
     %{inferred_types: %{}}
   end
@@ -75,6 +80,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.DataProcessor do
   defp generate_statistics(_content, :csv) do
     %{summary_stats: %{total_rows: 2, total_columns: 3}}
   end
+
   defp generate_statistics(_content, _format) do
     %{summary_stats: %{}}
   end
@@ -86,6 +92,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.DataProcessor do
       Map.put(acc, key, detect_type(data[key]))
     end)
   end
+
   defp extract_schema(_data), do: %{}
 
   defp count_records(data) when is_list(data), do: length(data)

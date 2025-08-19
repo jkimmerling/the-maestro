@@ -2,6 +2,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessorTest do
   use ExUnit.Case, async: true
 
   alias TheMaestro.Prompts.MultiModal.Processors.ContentProcessor
+
   alias TheMaestro.Prompts.MultiModal.Processors.{
     ImageProcessor,
     AudioProcessor,
@@ -40,7 +41,8 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessorTest do
     test "processes image content with visual analysis" do
       image_content = %{
         type: :image,
-        content: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        content:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
         metadata: %{filename: "test.png"}
       }
 
@@ -273,7 +275,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessorTest do
     test "applies lazy loading for large content" do
       large_content = %{
         type: :image,
-        content: String.duplicate("large_image_data", 10000),
+        content: String.duplicate("large_image_data", 10_000),
         metadata: %{size_mb: 50}
       }
 
@@ -286,16 +288,18 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessorTest do
     end
 
     test "enables parallel processing for multiple items" do
-      content_items = Enum.map(1..10, fn i ->
-        %{type: :text, content: "Content item #{i}"}
-      end)
+      content_items =
+        Enum.map(1..10, fn i ->
+          %{type: :text, content: "Content item #{i}"}
+        end)
 
       context = %{processing_mode: :parallel}
 
       results = ContentProcessor.process_batch(content_items, context)
 
       assert results.parallel_processing == true
-      assert results.processing_time_ms < (length(content_items) * 100)  # Should be faster than sequential
+      # Should be faster than sequential
+      assert results.processing_time_ms < length(content_items) * 100
     end
   end
 

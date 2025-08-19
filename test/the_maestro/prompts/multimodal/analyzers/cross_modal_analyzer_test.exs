@@ -23,7 +23,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
 
       result = CrossModalAnalyzer.analyze_content_coherence(content)
 
-      assert result.coherence_score >= 0.8  # High coherence expected
+      # High coherence expected
+      assert result.coherence_score >= 0.8
       assert result.supporting_relationships |> length() > 0
       assert result.topic_alignment.shared_topics |> Enum.member?(:authentication)
       assert result.narrative_consistency.consistent == true
@@ -48,7 +49,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
 
       result = CrossModalAnalyzer.analyze_content_coherence(content)
 
-      assert result.coherence_score < 0.5  # Low coherence due to conflict
+      # Low coherence due to conflict
+      assert result.coherence_score < 0.5
       assert result.conflicts_detected |> length() > 0
       conflict = result.conflicts_detected |> List.first()
       assert conflict.type == :sentiment_mismatch
@@ -78,7 +80,9 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
           type: :image,
           content: "credentials_screenshot",
           processed_content: %{
-            screenshot_analysis: %{ui_elements: %{text_fields: [%{type: "password", filled: true}]}}
+            screenshot_analysis: %{
+              ui_elements: %{text_fields: [%{type: "password", filled: true}]}
+            }
           }
         }
       ]
@@ -254,8 +258,10 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
       result = CrossModalAnalyzer.prioritize_content(content)
 
       ordered_content = result.priority_ranking.ordered_content
-      assert ordered_content |> List.first() |> Map.get(:type) == :code  # Highest priority
-      assert ordered_content |> List.last() |> Map.get(:type) == :text   # Lowest priority
+      # Highest priority
+      assert ordered_content |> List.first() |> Map.get(:type) == :code
+      # Lowest priority
+      assert ordered_content |> List.last() |> Map.get(:type) == :text
 
       assert result.priority_factors.security_weight > 0
       assert result.priority_factors.error_weight > 0
@@ -282,7 +288,11 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
 
       # Documentation should be prioritized higher due to user context
       ordered_content = result.priority_ranking.ordered_content
-      assert ordered_content |> List.first() |> Map.get(:processed_content) |> Map.get(:task_alignment) == :documentation
+
+      assert ordered_content
+             |> List.first()
+             |> Map.get(:processed_content)
+             |> Map.get(:task_alignment) == :documentation
     end
   end
 
@@ -321,12 +331,16 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
       relationships = result.relationship_map
 
       # Should find relationship between text problem and code implementation
-      text_code_rel = relationships |> Enum.find(&(&1.source_type == :text && &1.target_type == :code))
+      text_code_rel =
+        relationships |> Enum.find(&(&1.source_type == :text && &1.target_type == :code))
+
       assert text_code_rel != nil
       assert text_code_rel.relationship_type == :problem_to_implementation
 
       # Should find relationship between text description and visual evidence
-      text_image_rel = relationships |> Enum.find(&(&1.source_type == :text && &1.target_type == :image))
+      text_image_rel =
+        relationships |> Enum.find(&(&1.source_type == :text && &1.target_type == :image))
+
       assert text_image_rel != nil
       assert text_image_rel.relationship_type == :description_to_evidence
 
@@ -366,13 +380,14 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
 
   describe "performance and scalability" do
     test "handles large numbers of content items efficiently" do
-      large_content = Enum.map(1..100, fn i ->
-        %{
-          type: :text,
-          content: "Content item #{i}",
-          processed_content: %{item_id: i, relevance_score: :rand.uniform()}
-        }
-      end)
+      large_content =
+        Enum.map(1..100, fn i ->
+          %{
+            type: :text,
+            content: "Content item #{i}",
+            processed_content: %{item_id: i, relevance_score: :rand.uniform()}
+          }
+        end)
 
       start_time = System.monotonic_time(:millisecond)
       result = CrossModalAnalyzer.analyze_content_coherence(large_content)
@@ -381,7 +396,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
       processing_time = end_time - start_time
 
       assert result.coherence_score |> is_float()
-      assert processing_time < 5000  # Should complete within 5 seconds
+      # Should complete within 5 seconds
+      assert processing_time < 5000
       assert result.performance_metrics.items_processed == 100
     end
 
@@ -411,7 +427,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
   describe "error handling and robustness" do
     test "handles content with missing processed_content gracefully" do
       incomplete_content = [
-        %{type: :text, content: "Some text"},  # Missing processed_content
+        # Missing processed_content
+        %{type: :text, content: "Some text"},
         %{
           type: :image,
           content: "image_data",
@@ -430,7 +447,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
       problematic_content = [
         %{
           type: :text,
-          content: nil,  # Invalid content
+          # Invalid content
+          content: nil,
           processed_content: %{error: :processing_failed}
         },
         %{
@@ -444,7 +462,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzerTest do
 
       assert result.error_recovery.errors_handled > 0
       assert result.error_recovery.fallback_analysis == true
-      assert result.coherence_score |> is_float()  # Should still provide a score
+      # Should still provide a score
+      assert result.coherence_score |> is_float()
     end
   end
 end
