@@ -5,7 +5,7 @@ defmodule TheMaestro.Prompts.Enhancement.Optimizers.EnhancementOptimizer do
 
   alias TheMaestro.Prompts.Optimization.ProviderOptimizer
   alias TheMaestro.Prompts.Enhancement.Structs.EnhancedPrompt
-  
+
   require Logger
 
   @doc """
@@ -58,10 +58,10 @@ defmodule TheMaestro.Prompts.Enhancement.Optimizers.EnhancementOptimizer do
     try do
       # Apply provider-specific optimization
       case ProviderOptimizer.optimize_for_provider(
-        enhanced_prompt_struct,
-        provider_info,
-        optimization_config
-      ) do
+             enhanced_prompt_struct,
+             provider_info,
+             optimization_config
+           ) do
         {:ok, optimized_context} ->
           # Convert back to the map format expected by the pipeline
           %{
@@ -69,13 +69,17 @@ defmodule TheMaestro.Prompts.Enhancement.Optimizers.EnhancementOptimizer do
             | enhanced_prompt: optimized_context.enhanced_prompt.enhanced_prompt,
               pre_context: optimized_context.enhanced_prompt.pre_context,
               post_context: optimized_context.enhanced_prompt.post_context,
-              metadata: Map.merge(
-                Map.get(prompt, :metadata, %{}),
+              metadata:
                 Map.merge(
-                  optimized_context.enhanced_prompt.metadata,
-                  %{provider_optimization_applied: true, optimization_score: optimized_context.optimization_score}
+                  Map.get(prompt, :metadata, %{}),
+                  Map.merge(
+                    optimized_context.enhanced_prompt.metadata,
+                    %{
+                      provider_optimization_applied: true,
+                      optimization_score: optimized_context.optimization_score
+                    }
+                  )
                 )
-              )
           }
 
         {:error, reason} ->

@@ -7,7 +7,7 @@ defmodule TheMaestro.Prompts.Optimization.AdaptiveOptimizerTest do
   describe "adapt_optimization_strategy/2" do
     test "analyzes interaction patterns and creates adaptation strategy" do
       provider_info = %{provider: :anthropic, model: "claude-3-5-sonnet-20241022"}
-      
+
       interaction_history = [
         %{
           prompt_type: :reasoning,
@@ -39,14 +39,16 @@ defmodule TheMaestro.Prompts.Optimization.AdaptiveOptimizerTest do
 
     test "validates adaptation effectiveness before storing" do
       provider_info = %{provider: :openai, model: "gpt-4o"}
-      
+
       interaction_history = [
         %{
           prompt_type: :analytical,
-          success_rate: 0.3,  # Low success rate
+          # Low success rate
+          success_rate: 0.3,
           response_quality: 0.4,
           instruction_style: :unclear,
-          context_length: 100_000,  # Too long
+          # Too long
+          context_length: 100_000,
           example_type: :confusing
         }
       ]
@@ -59,7 +61,7 @@ defmodule TheMaestro.Prompts.Optimization.AdaptiveOptimizerTest do
 
     test "stores successful adaptation strategy for provider" do
       provider_info = %{provider: :google, model: "gemini-1.5-pro"}
-      
+
       interaction_history = [
         %{
           prompt_type: :multimodal,
@@ -98,15 +100,16 @@ defmodule TheMaestro.Prompts.Optimization.AdaptiveOptimizerTest do
       history = [
         %{context_length: 1000, response_quality: 0.7},
         %{context_length: 5000, response_quality: 0.9},
-        %{context_length: 10000, response_quality: 0.85},
-        %{context_length: 20000, response_quality: 0.6}  # Quality drops at very high length
+        %{context_length: 10_000, response_quality: 0.85},
+        # Quality drops at very high length
+        %{context_length: 20_000, response_quality: 0.6}
       ]
 
       patterns = AdaptiveOptimizer.analyze_interaction_patterns(history)
 
       # Should identify 5000 as optimal length
       assert patterns.optimal_context_lengths[:average] == 5000
-      assert patterns.optimal_context_lengths[:max_effective] <= 10000
+      assert patterns.optimal_context_lengths[:max_effective] <= 10_000
     end
 
     test "classifies effective example types" do
@@ -214,10 +217,12 @@ defmodule TheMaestro.Prompts.Optimization.AdaptiveOptimizerTest do
     test "warns about potentially problematic adaptations" do
       strategy = %AdaptationStrategy{
         preferred_instruction_style: :unclear,
-        optimal_context_length: 200_000,  # Extremely long
+        # Extremely long
+        optimal_context_length: 200_000,
         effective_example_types: [:confusing],
         successful_reasoning_patterns: [:circular],
-        error_prevention_strategies: []  # No error prevention
+        # No error prevention
+        error_prevention_strategies: []
       }
 
       result = AdaptiveOptimizer.validate_adaptation_effectiveness(strategy)
@@ -231,7 +236,7 @@ defmodule TheMaestro.Prompts.Optimization.AdaptiveOptimizerTest do
   describe "store_adaptation_strategy/2" do
     test "successfully stores validated adaptation strategy" do
       provider_info = %{provider: :anthropic, model: "claude-3-5-sonnet-20241022"}
-      
+
       strategy = %AdaptationStrategy{
         preferred_instruction_style: :structured,
         optimal_context_length: 5000,
@@ -251,7 +256,7 @@ defmodule TheMaestro.Prompts.Optimization.AdaptiveOptimizerTest do
 
     test "refuses to store invalid adaptation strategy" do
       provider_info = %{provider: :openai, model: "gpt-4o"}
-      
+
       strategy = %AdaptationStrategy{
         preferred_instruction_style: nil,
         validation_passed: false,

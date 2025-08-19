@@ -1,14 +1,24 @@
 defmodule TheMaestro.Prompts.Optimization.ProviderOptimizer do
   @moduledoc """
   Main optimization coordinator that routes optimization requests to provider-specific optimizers.
-  
+
   This module implements the core optimization engine that analyzes the target provider
   and delegates to specialized optimizers for Anthropic, Google, and OpenAI models.
   """
 
   alias TheMaestro.Prompts.Enhancement.Structs.EnhancedPrompt
-  alias TheMaestro.Prompts.Optimization.Structs.{OptimizationContext, ModelCapabilities, OptimizationTargets}
-  alias TheMaestro.Prompts.Optimization.Providers.{AnthropicOptimizer, GoogleOptimizer, OpenAIOptimizer}
+
+  alias TheMaestro.Prompts.Optimization.Structs.{
+    OptimizationContext,
+    ModelCapabilities,
+    OptimizationTargets
+  }
+
+  alias TheMaestro.Prompts.Optimization.Providers.{
+    AnthropicOptimizer,
+    GoogleOptimizer,
+    OpenAIOptimizer
+  }
 
   @providers %{
     anthropic: AnthropicOptimizer,
@@ -18,24 +28,24 @@ defmodule TheMaestro.Prompts.Optimization.ProviderOptimizer do
 
   @doc """
   Optimizes a prompt for a specific provider and model.
-  
+
   ## Parameters
   - enhanced_prompt: The enhanced prompt to optimize
   - provider_info: Provider and model information
   - optimization_config: Optional optimization configuration
-  
+
   ## Returns
   - {:ok, OptimizationContext.t()} on successful optimization
   - {:error, term()} on optimization failure
   """
   @spec optimize_for_provider(
-    EnhancedPrompt.t(), 
-    map(), 
-    map()
-  ) :: {:ok, OptimizationContext.t()} | {:error, term()}
+          EnhancedPrompt.t(),
+          map(),
+          map()
+        ) :: {:ok, OptimizationContext.t()} | {:error, term()}
   def optimize_for_provider(enhanced_prompt, provider_info, optimization_config \\ %{}) do
     optimizer_module = @providers[provider_info.provider]
-    
+
     if optimizer_module do
       %OptimizationContext{
         enhanced_prompt: enhanced_prompt,
@@ -59,7 +69,7 @@ defmodule TheMaestro.Prompts.Optimization.ProviderOptimizer do
   @spec get_model_capabilities(map()) :: ModelCapabilities.t()
   def get_model_capabilities(provider_info) do
     base_capabilities = get_base_model_capabilities(provider_info.provider, provider_info.model)
-    
+
     %ModelCapabilities{
       context_window: base_capabilities.context_window,
       supports_function_calling: base_capabilities.supports_function_calling,
@@ -72,7 +82,7 @@ defmodule TheMaestro.Prompts.Optimization.ProviderOptimizer do
       safety_filtering: base_capabilities.safety_filtering,
       latency_characteristics: base_capabilities.latency_characteristics,
       cost_characteristics: base_capabilities.cost_characteristics,
-      
+
       # Dynamic capability detection
       actual_context_utilization: measure_context_utilization(provider_info),
       function_calling_reliability: measure_function_calling_reliability(provider_info),
@@ -83,12 +93,12 @@ defmodule TheMaestro.Prompts.Optimization.ProviderOptimizer do
   @doc """
   Validates optimization results to ensure quality and effectiveness.
   """
-  @spec validate_optimization_results(OptimizationContext.t()) :: 
-    {:ok, OptimizationContext.t()} | {:error, atom()}
+  @spec validate_optimization_results(OptimizationContext.t()) ::
+          {:ok, OptimizationContext.t()} | {:error, atom()}
   def validate_optimization_results(optimization_context) do
-    if optimization_context.validation_passed and 
-       optimization_context.optimization_applied and 
-       optimization_context.optimization_score >= 0.5 do
+    if optimization_context.validation_passed and
+         optimization_context.optimization_applied and
+         optimization_context.optimization_score >= 0.5 do
       {:ok, optimization_context}
     else
       {:error, :optimization_validation_failed}
@@ -113,6 +123,7 @@ defmodule TheMaestro.Prompts.Optimization.ProviderOptimizer do
           latency_characteristics: :good,
           cost_characteristics: :balanced
         }
+
       _ ->
         default_anthropic_capabilities()
     end
@@ -134,6 +145,7 @@ defmodule TheMaestro.Prompts.Optimization.ProviderOptimizer do
           latency_characteristics: :good,
           cost_characteristics: :economy
         }
+
       _ ->
         default_google_capabilities()
     end
@@ -155,6 +167,7 @@ defmodule TheMaestro.Prompts.Optimization.ProviderOptimizer do
           latency_characteristics: :very_good,
           cost_characteristics: :premium
         }
+
       _ ->
         default_openai_capabilities()
     end
@@ -297,7 +310,7 @@ defmodule TheMaestro.Prompts.Optimization.ProviderOptimizer do
       optimization_score: 0.6,
       validation_passed: true
     }
-    
+
     {:ok, context}
   end
 end

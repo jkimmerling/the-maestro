@@ -264,6 +264,7 @@ defmodule TheMaestro.Prompts.Enhancement.Pipeline do
 
     # Include optimization metadata if available
     optimization_result = context.pipeline_state[:optimization]
+
     if optimization_result && is_map(optimization_result) do
       optimization_metadata = Map.get(optimization_result, :metadata, %{})
       Map.merge(base_metadata, optimization_metadata)

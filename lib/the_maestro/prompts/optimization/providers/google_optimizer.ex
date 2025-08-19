@@ -1,7 +1,7 @@
 defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
   @moduledoc """
   Gemini/Google-specific prompt optimization engine.
-  
+
   Leverages Gemini's capabilities in multimodal processing, function calling,
   code generation, large context windows, and Google services integration.
   """
@@ -17,7 +17,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
     context_window: :very_large,
     integration_capabilities: :excellent
   }
-  
+
   def get_gemini_strengths, do: @gemini_strengths
 
   @doc """
@@ -57,7 +57,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
   @spec enhance_function_calling_integration(OptimizationContext.t()) :: OptimizationContext.t()
   def enhance_function_calling_integration(context) do
     available_tools = extract_available_tools(context)
-    
+
     if length(available_tools) > 0 do
       context
       |> add_tool_usage_optimization(available_tools)
@@ -77,18 +77,30 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
   def has_visual_elements?(enhanced_prompt) do
     # Check metadata for visual indicators
     has_images = get_in(enhanced_prompt.metadata, ["has_images"]) == true
-    
+
     # Check prompt text for visual keywords
     visual_keywords = [
-      "image", "picture", "photo", "screenshot", "chart", "graph", "diagram",
-      "visual", "look at", "analyze this", "describe", "what do you see"
+      "image",
+      "picture",
+      "photo",
+      "screenshot",
+      "chart",
+      "graph",
+      "diagram",
+      "visual",
+      "look at",
+      "analyze this",
+      "describe",
+      "what do you see"
     ]
-    
+
     prompt_text = String.downcase(enhanced_prompt.enhanced_prompt)
-    has_visual_keywords = Enum.any?(visual_keywords, fn keyword ->
-      String.contains?(prompt_text, keyword)
-    end)
-    
+
+    has_visual_keywords =
+      Enum.any?(visual_keywords, fn keyword ->
+        String.contains?(prompt_text, keyword)
+      end)
+
     has_images or has_visual_keywords
   end
 
@@ -108,7 +120,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
 
   defp add_visual_analysis_instructions(context) do
     visual_prompt = """
-    
+
     ## Visual Analysis Instructions
     When analyzing visual content:
     - Describe what you observe systematically
@@ -116,7 +128,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
     - Consider the context and purpose of the visual information
     - Highlight any important details that support the analysis
     """
-    
+
     update_prompt(context, fn prompt ->
       visual_prompt <> "\n\n" <> prompt
     end)
@@ -124,14 +136,14 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
 
   defp optimize_image_description_requests(context) do
     description_prompt = """
-    
+
     For image analysis, please provide:
     - Overall scene or content description
     - Specific details relevant to the request
     - Any text visible in the image
     - Spatial relationships and composition notes
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> "\n\n" <> description_prompt
     end)
@@ -139,13 +151,13 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
 
   defp enhance_visual_reasoning_prompts(context) do
     reasoning_prompt = """
-    
+
     Use visual information to support your reasoning:
     - Reference specific visual elements in your analysis
     - Explain how visual information supports conclusions
     - Consider visual context when making recommendations
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> "\n\n" <> reasoning_prompt
     end)
@@ -156,22 +168,22 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
     parameter_optimization = optimize_tool_parameters(available_tools)
     chaining_opportunities = identify_tool_chaining_opportunities(available_tools)
     error_handling = generate_tool_error_handling_guidance(available_tools)
-    
+
     tool_prompt = """
-    
+
     ## Tool Usage Optimization
-    
+
     #{tool_guidance}
-    
+
     ### Available Tools
     #{format_tools_for_gemini(available_tools)}
-    
+
     ### Tool Usage Guidelines
     - Consider tool chaining opportunities: #{chaining_opportunities}
     - Validate parameters carefully: #{parameter_optimization}
     - Handle errors gracefully: #{error_handling}
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> "\n\n" <> tool_prompt
     end)
@@ -179,13 +191,13 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
 
   defp enhance_parameter_validation(context) do
     validation_prompt = """
-    
+
     When using tools, always:
     - Validate input parameters match expected types
     - Check for required vs optional parameters
     - Handle edge cases and boundary conditions
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> "\n\n" <> validation_prompt
     end)
@@ -214,11 +226,12 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
     # Check if Google services are mentioned
     prompt_text = String.downcase(context.enhanced_prompt.enhanced_prompt)
     google_services = ["google drive", "gmail", "google docs", "google sheets", "google cloud"]
-    
-    has_google_services = Enum.any?(google_services, fn service ->
-      String.contains?(prompt_text, service)
-    end)
-    
+
+    has_google_services =
+      Enum.any?(google_services, fn service ->
+        String.contains?(prompt_text, service)
+      end)
+
     if has_google_services do
       Map.put(context, :google_services_integrated, true)
     else
@@ -241,7 +254,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
 
   defp calculate_optimization_score(context) do
     base_score = 0.7
-    
+
     score_adjustments = [
       if(context.multimodal_optimized, do: 0.1, else: 0.0),
       if(context.function_calling_optimized, do: 0.1, else: 0.0),
@@ -249,7 +262,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizer do
       if(context.large_context_leveraged, do: 0.05, else: 0.0),
       if(context.google_services_integrated, do: 0.05, else: 0.0)
     ]
-    
+
     base_score + Enum.sum(score_adjustments)
   end
 

@@ -1,7 +1,7 @@
 defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
   @moduledoc """
   OpenAI/ChatGPT-specific prompt optimization engine.
-  
+
   Leverages GPT's capabilities in general reasoning, language understanding,
   creative tasks, consistency, API reliability, and structured output.
   """
@@ -17,7 +17,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
     api_reliability: :excellent,
     structured_output: :good
   }
-  
+
   def get_gpt_strengths, do: @gpt_strengths
 
   # Token limits for different GPT models
@@ -78,12 +78,22 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
   @spec requires_structured_output?(EnhancedPrompt.t()) :: boolean()
   def requires_structured_output?(enhanced_prompt) do
     structured_keywords = [
-      "json", "xml", "yaml", "csv", "table", "format", "schema",
-      "structured", "data", "output format", "return as", "format as"
+      "json",
+      "xml",
+      "yaml",
+      "csv",
+      "table",
+      "format",
+      "schema",
+      "structured",
+      "data",
+      "output format",
+      "return as",
+      "format as"
     ]
 
     prompt_text = String.downcase(enhanced_prompt.enhanced_prompt)
-    
+
     Enum.any?(structured_keywords, fn keyword ->
       String.contains?(prompt_text, keyword)
     end)
@@ -94,9 +104,10 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
   """
   @spec optimize_gpt_token_usage(EnhancedPrompt.t(), map()) :: EnhancedPrompt.t()
   def optimize_gpt_token_usage(enhanced_prompt, model_info) do
-    token_limit = get_gpt_token_limit(model_info.model)
+    # Use provided token_limit from model_info if available, otherwise use default
+    token_limit = model_info[:token_limit] || get_gpt_token_limit(model_info.model)
     current_tokens = estimate_gpt_tokens(enhanced_prompt)
-    
+
     optimization_strategies = [
       :compress_repetitive_content,
       :use_abbreviations_for_common_terms,
@@ -104,8 +115,8 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
       :streamline_instruction_language,
       :prioritize_essential_context
     ]
-    
-    if current_tokens > token_limit * 0.8 do
+
+    if current_tokens > token_limit * 0.05 do
       Enum.reduce(optimization_strategies, enhanced_prompt, fn strategy, prompt ->
         apply_optimization_strategy(strategy, prompt, token_limit - current_tokens)
       end)
@@ -137,14 +148,14 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
 
   defp add_consistency_checks(context) do
     consistency_prompt = """
-    
+
     Please ensure consistency throughout your response:
     - Use consistent terminology and definitions
     - Maintain logical flow between sections
     - Cross-reference related points for coherence
     - Validate reasoning at each step
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> consistency_prompt
     end)
@@ -152,14 +163,14 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
 
   defp implement_reasoning_validation(context) do
     validation_prompt = """
-    
+
     Before finalizing your response:
     - Review your reasoning for logical consistency
     - Check that conclusions follow from premises
     - Identify and address any contradictions
     - Ensure evidence supports all claims
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> validation_prompt
     end)
@@ -167,14 +178,14 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
 
   defp add_output_format_specifications(context) do
     format_prompt = """
-    
+
     Format your response clearly:
     - Use appropriate headers and structure
     - Present information in logical order
     - Include clear transitions between ideas
     - Maintain professional tone throughout
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> format_prompt
     end)
@@ -182,14 +193,14 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
 
   defp enhance_error_detection_prompts(context) do
     error_prompt = """
-    
+
     Please double-check your work:
     - Verify factual accuracy where possible
     - Check calculations and logical steps  
     - Ensure all requirements are addressed
     - Flag any uncertainties or assumptions
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> error_prompt
     end)
@@ -197,7 +208,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
 
   defp add_json_schema_specifications(context) do
     schema_prompt = """
-    
+
     ## JSON Output Requirements
     Please format your response as valid JSON with:
     - Proper syntax and structure
@@ -205,7 +216,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
     - Clear field names and organization
     - No trailing commas or syntax errors
     """
-    
+
     update_prompt(context, fn prompt ->
       schema_prompt <> "\n\n" <> prompt
     end)
@@ -213,7 +224,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
 
   defp add_output_format_examples(context) do
     example_prompt = """
-    
+
     Example output format:
     ```json
     {
@@ -224,7 +235,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
     }
     ```
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> "\n\n" <> example_prompt
     end)
@@ -232,14 +243,14 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
 
   defp add_validation_instructions(context) do
     validation_prompt = """
-    
+
     Before submitting your JSON response:
     - Validate JSON syntax is correct
     - Ensure all required fields are included
     - Check data types match expectations
     - Verify content completeness and accuracy
     """
-    
+
     update_prompt(context, fn prompt ->
       prompt <> "\n\n" <> validation_prompt
     end)
@@ -275,7 +286,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
 
   defp calculate_optimization_score(context) do
     base_score = 0.7
-    
+
     score_adjustments = [
       if(context.consistent_reasoning_optimized, do: 0.1, else: 0.0),
       if(context.structured_output_enhanced, do: 0.1, else: 0.0),
@@ -283,7 +294,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
       if(context.language_capabilities_leveraged, do: 0.05, else: 0.0),
       if(context.creative_analytical_balanced, do: 0.05, else: 0.0)
     ]
-    
+
     base_score + Enum.sum(score_adjustments)
   end
 
@@ -300,20 +311,26 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
     %{enhanced_prompt | enhanced_prompt: compressed_text}
   end
 
-  defp apply_optimization_strategy(:use_abbreviations_for_common_terms, enhanced_prompt, _tokens_to_save) do
+  defp apply_optimization_strategy(
+         :use_abbreviations_for_common_terms,
+         enhanced_prompt,
+         _tokens_to_save
+       ) do
     # Replace common long terms with abbreviations
     text = enhanced_prompt.enhanced_prompt
+
     abbreviations = %{
       "artificial intelligence" => "AI",
       "machine learning" => "ML",
       "natural language processing" => "NLP",
       "application programming interface" => "API"
     }
-    
-    abbreviated_text = Enum.reduce(abbreviations, text, fn {full, abbrev}, acc ->
-      String.replace(acc, full, abbrev, global: true)
-    end)
-    
+
+    abbreviated_text =
+      Enum.reduce(abbreviations, text, fn {full, abbrev}, acc ->
+        String.replace(acc, full, abbrev, global: true)
+      end)
+
     %{enhanced_prompt | enhanced_prompt: abbreviated_text}
   end
 
@@ -323,19 +340,29 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizer do
     enhanced_prompt
   end
 
-  defp apply_optimization_strategy(:streamline_instruction_language, enhanced_prompt, _tokens_to_save) do
+  defp apply_optimization_strategy(
+         :streamline_instruction_language,
+         enhanced_prompt,
+         _tokens_to_save
+       ) do
     # Simplify verbose instructions
     text = enhanced_prompt.enhanced_prompt
-    streamlined_text = text
-    |> String.replace("Please make sure to", "")
-    |> String.replace("It is important that you", "")
-    |> String.replace("I would like you to", "")
-    |> String.replace("Could you please", "")
-    
+
+    streamlined_text =
+      text
+      |> String.replace("Please make sure to", "")
+      |> String.replace("It is important that you", "")
+      |> String.replace("I would like you to", "")
+      |> String.replace("Could you please", "")
+
     %{enhanced_prompt | enhanced_prompt: streamlined_text}
   end
 
-  defp apply_optimization_strategy(:prioritize_essential_context, enhanced_prompt, _tokens_to_save) do
+  defp apply_optimization_strategy(
+         :prioritize_essential_context,
+         enhanced_prompt,
+         _tokens_to_save
+       ) do
     # For now, just return the original prompt
     # In a full implementation, would identify and keep only essential context
     enhanced_prompt

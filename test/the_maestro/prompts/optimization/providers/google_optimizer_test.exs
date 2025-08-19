@@ -79,7 +79,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizerTest do
 
     test "leverages large context window for comprehensive tasks" do
       large_context_prompt = String.duplicate("Context data: ", 5000)
-      
+
       context = %OptimizationContext{
         enhanced_prompt: %EnhancedPrompt{enhanced_prompt: large_context_prompt},
         provider_info: %{provider: :google, model: "gemini-1.5-pro"},
@@ -134,9 +134,10 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizerTest do
       result = GoogleOptimizer.optimize_for_multimodal_capabilities(context)
 
       prompt = result.enhanced_prompt.enhanced_prompt
-      assert String.contains?(prompt, "visual") or 
-             String.contains?(prompt, "analysis") or
-             String.contains?(prompt, "image")
+
+      assert String.contains?(prompt, "visual") or
+               String.contains?(prompt, "analysis") or
+               String.contains?(prompt, "image")
     end
 
     test "skips multimodal optimization when no visual elements" do
@@ -168,9 +169,10 @@ defmodule TheMaestro.Prompts.Optimization.Providers.GoogleOptimizerTest do
       result = GoogleOptimizer.enhance_function_calling_integration(context)
 
       prompt = result.enhanced_prompt.enhanced_prompt
-      assert String.contains?(prompt, "tool") or 
-             String.contains?(prompt, "function") or
-             String.contains?(prompt, "parameter")
+
+      assert String.contains?(prompt, "tool") or
+               String.contains?(prompt, "function") or
+               String.contains?(prompt, "parameter")
     end
 
     test "skips function calling optimization when no tools available" do

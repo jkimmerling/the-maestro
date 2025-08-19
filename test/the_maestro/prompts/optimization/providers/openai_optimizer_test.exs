@@ -53,9 +53,10 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizerTest do
 
       assert result.structured_output_enhanced == true
       prompt = result.enhanced_prompt.enhanced_prompt
-      assert String.contains?(prompt, "JSON") or 
-             String.contains?(prompt, "schema") or
-             String.contains?(prompt, "format")
+
+      assert String.contains?(prompt, "JSON") or
+               String.contains?(prompt, "schema") or
+               String.contains?(prompt, "format")
     end
 
     test "optimizes for API reliability" do
@@ -128,9 +129,10 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizerTest do
       result = OpenAIOptimizer.optimize_for_consistent_reasoning(context)
 
       prompt = result.enhanced_prompt.enhanced_prompt
-      assert String.contains?(prompt, "consistency") or 
-             String.contains?(prompt, "validation") or
-             String.contains?(prompt, "reasoning")
+
+      assert String.contains?(prompt, "consistency") or
+               String.contains?(prompt, "validation") or
+               String.contains?(prompt, "reasoning")
     end
   end
 
@@ -146,9 +148,10 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizerTest do
       result = OpenAIOptimizer.enhance_structured_output_requests(context)
 
       prompt = result.enhanced_prompt.enhanced_prompt
-      assert String.contains?(prompt, "schema") or 
-             String.contains?(prompt, "format") or
-             String.contains?(prompt, "JSON")
+
+      assert String.contains?(prompt, "schema") or
+               String.contains?(prompt, "format") or
+               String.contains?(prompt, "JSON")
     end
 
     test "skips structured output enhancement for non-structured requests" do
@@ -162,8 +165,8 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizerTest do
       result = OpenAIOptimizer.enhance_structured_output_requests(context)
 
       # Should not modify prompt significantly for non-structured output
-      assert String.length(result.enhanced_prompt.enhanced_prompt) <= 
-             String.length(context.enhanced_prompt.enhanced_prompt) * 1.2
+      assert String.length(result.enhanced_prompt.enhanced_prompt) <=
+               String.length(context.enhanced_prompt.enhanced_prompt) * 1.2
     end
   end
 
@@ -202,7 +205,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizerTest do
     test "compresses content when approaching token limit" do
       long_prompt = String.duplicate("This is repetitive content. ", 1000)
       enhanced_prompt = %EnhancedPrompt{enhanced_prompt: long_prompt}
-      
+
       model_info = %{model: "gpt-4o", token_limit: 128_000}
 
       result = OpenAIOptimizer.optimize_gpt_token_usage(enhanced_prompt, model_info)
@@ -214,7 +217,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizerTest do
     test "preserves content when well under token limit" do
       short_prompt = "This is a short prompt"
       enhanced_prompt = %EnhancedPrompt{enhanced_prompt: short_prompt}
-      
+
       model_info = %{model: "gpt-4o", token_limit: 128_000}
 
       result = OpenAIOptimizer.optimize_gpt_token_usage(enhanced_prompt, model_info)
@@ -226,7 +229,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizerTest do
     test "applies multiple optimization strategies for high token usage" do
       very_long_prompt = String.duplicate("Repetitive example content with common terms. ", 2000)
       enhanced_prompt = %EnhancedPrompt{enhanced_prompt: very_long_prompt}
-      
+
       model_info = %{model: "gpt-3.5-turbo", token_limit: 16_000}
 
       result = OpenAIOptimizer.optimize_gpt_token_usage(enhanced_prompt, model_info)
@@ -252,9 +255,9 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizerTest do
     test "estimates token count for typical prompts" do
       prompt = "This is a test prompt with about ten words"
       enhanced_prompt = %EnhancedPrompt{enhanced_prompt: prompt}
-      
+
       token_count = OpenAIOptimizer.estimate_gpt_tokens(enhanced_prompt)
-      
+
       # Should estimate roughly 10-15 tokens for this prompt
       assert token_count >= 8 and token_count <= 20
     end
@@ -262,9 +265,9 @@ defmodule TheMaestro.Prompts.Optimization.Providers.OpenAIOptimizerTest do
     test "estimates higher token count for longer prompts" do
       long_prompt = String.duplicate("word ", 1000)
       enhanced_prompt = %EnhancedPrompt{enhanced_prompt: long_prompt}
-      
+
       token_count = OpenAIOptimizer.estimate_gpt_tokens(enhanced_prompt)
-      
+
       # Should estimate roughly 1000+ tokens
       assert token_count >= 900
     end

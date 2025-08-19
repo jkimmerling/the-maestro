@@ -29,7 +29,8 @@ defmodule TheMaestro.Prompts.Optimization.Providers.AnthropicOptimizerTest do
     test "adds thinking framework for complex reasoning tasks" do
       context = %OptimizationContext{
         enhanced_prompt: %EnhancedPrompt{
-          enhanced_prompt: "Analyze this complex architectural problem and provide multiple solutions"
+          enhanced_prompt:
+            "Analyze this complex architectural problem and provide multiple solutions"
         },
         provider_info: %{provider: :anthropic, model: "claude-3-5-sonnet-20241022"},
         model_capabilities: %{reasoning_strength: :excellent}
@@ -45,7 +46,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.AnthropicOptimizerTest do
 
     test "optimizes for large context when prompt exceeds threshold" do
       large_prompt = String.duplicate("This is a very long context. ", 2000)
-      
+
       context = %OptimizationContext{
         enhanced_prompt: %EnhancedPrompt{enhanced_prompt: large_prompt},
         provider_info: %{provider: :anthropic, model: "claude-3-5-sonnet-20241022"},
@@ -55,9 +56,10 @@ defmodule TheMaestro.Prompts.Optimization.Providers.AnthropicOptimizerTest do
       result = AnthropicOptimizer.optimize(context)
 
       prompt = result.enhanced_prompt.enhanced_prompt
-      assert String.contains?(prompt, "navigation aids") or 
-             String.contains?(prompt, "hierarchical") or
-             String.contains?(prompt, "summarization")
+
+      assert String.contains?(prompt, "navigation aids") or
+               String.contains?(prompt, "hierarchical") or
+               String.contains?(prompt, "summarization")
     end
 
     test "enhances instruction clarity for Claude" do
@@ -73,8 +75,8 @@ defmodule TheMaestro.Prompts.Optimization.Providers.AnthropicOptimizerTest do
 
       assert result.optimization_applied == true
       # The prompt should be more detailed and structured after optimization
-      assert String.length(result.enhanced_prompt.enhanced_prompt) > 
-             String.length(context.enhanced_prompt.enhanced_prompt)
+      assert String.length(result.enhanced_prompt.enhanced_prompt) >
+               String.length(context.enhanced_prompt.enhanced_prompt)
     end
 
     test "utilizes structured thinking patterns" do
@@ -158,7 +160,7 @@ defmodule TheMaestro.Prompts.Optimization.Providers.AnthropicOptimizerTest do
   describe "optimize_for_large_context/1" do
     test "adds context navigation aids for very large prompts" do
       large_prompt = String.duplicate("Context section. ", 3000)
-      
+
       context = %OptimizationContext{
         enhanced_prompt: %EnhancedPrompt{
           enhanced_prompt: large_prompt,
@@ -221,14 +223,14 @@ defmodule TheMaestro.Prompts.Optimization.Providers.AnthropicOptimizerTest do
     test "correctly identifies prompts exceeding token threshold" do
       large_prompt = String.duplicate("token ", 25_000)
       enhanced_prompt = %EnhancedPrompt{enhanced_prompt: large_prompt}
-      
+
       assert AnthropicOptimizer.exceeds_token_threshold?(enhanced_prompt, 50_000) == true
     end
 
     test "correctly identifies prompts below token threshold" do
       small_prompt = "This is a small prompt"
       enhanced_prompt = %EnhancedPrompt{enhanced_prompt: small_prompt}
-      
+
       assert AnthropicOptimizer.exceeds_token_threshold?(enhanced_prompt, 50_000) == false
     end
   end

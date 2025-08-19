@@ -85,7 +85,8 @@ defmodule TheMaestro.Prompts.ProviderOptimizerTest do
         model: "claude-3-5-sonnet-20241022"
       }
 
-      {:ok, optimized_context} = ProviderOptimizer.optimize_for_provider(enhanced_prompt, provider_info)
+      {:ok, optimized_context} =
+        ProviderOptimizer.optimize_for_provider(enhanced_prompt, provider_info)
 
       assert optimized_context.model_capabilities.context_window > 0
       assert is_boolean(optimized_context.model_capabilities.supports_function_calling)
@@ -109,11 +110,12 @@ defmodule TheMaestro.Prompts.ProviderOptimizerTest do
         optimize_for_cost: true
       }
 
-      {:ok, optimized_context} = ProviderOptimizer.optimize_for_provider(
-        enhanced_prompt, 
-        provider_info, 
-        optimization_config
-      )
+      {:ok, optimized_context} =
+        ProviderOptimizer.optimize_for_provider(
+          enhanced_prompt,
+          provider_info,
+          optimization_config
+        )
 
       assert optimized_context.optimization_targets.quality == true
       assert optimized_context.optimization_targets.speed == false
