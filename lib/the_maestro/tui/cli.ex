@@ -11,7 +11,6 @@ defmodule TheMaestro.TUI.CLI do
   alias TheMaestro.Agents.{Agent, DynamicSupervisor}
   alias TheMaestro.Models.Model
   alias TheMaestro.TUI.{AuthFlow, ModelSelection, ProviderSelection}
-  alias TheMaestro.MCP.Registry
 
   @doc """
   Main entry point for the escript executable.
@@ -721,7 +720,7 @@ defmodule TheMaestro.TUI.CLI do
   # MCP Integration Helper Functions for TUI
 
   defp get_mcp_server_status do
-    case Registry.list_servers(Registry) do
+    case TheMaestro.MCP.Tools.Registry.list_servers(TheMaestro.MCP.Tools.Registry) do
       {:ok, servers} ->
         servers
         |> Enum.map(&format_server_for_tui/1)

@@ -10,7 +10,6 @@ defmodule TheMaestroWeb.AgentLive do
 
   alias TheMaestro.Agents
   alias TheMaestro.Providers.Auth.CredentialStore
-  alias TheMaestro.MCP.Registry
 
   def mount(_params, session, socket) do
     require Logger
@@ -1016,7 +1015,7 @@ defmodule TheMaestroWeb.AgentLive do
   # MCP Integration Helper Functions
 
   defp get_mcp_server_status do
-    case Registry.list_servers(Registry) do
+    case TheMaestro.MCP.Tools.Registry.list_servers(TheMaestro.MCP.Tools.Registry) do
       {:ok, servers} ->
         servers
         |> Enum.map(&format_server_for_ui/1)
