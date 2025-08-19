@@ -47,9 +47,10 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
   """
   def add_tool_integration_instructions(%AssemblyContext{} = context) do
     tool_instructions = Modules.ToolIntegration.generate(context.available_tools)
-    
-    %{context | 
-      assembled_instructions: context.assembled_instructions <> "\n\n" <> tool_instructions
+
+    %{
+      context
+      | assembled_instructions: context.assembled_instructions <> "\n\n" <> tool_instructions
     }
   end
 
@@ -60,9 +61,10 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
     environment = context.environment || %{}
     security_context = Map.merge(context.security_context, environment)
     security_instructions = Modules.SecurityGuidelines.generate(security_context)
-    
-    %{context | 
-      assembled_instructions: context.assembled_instructions <> "\n\n" <> security_instructions
+
+    %{
+      context
+      | assembled_instructions: context.assembled_instructions <> "\n\n" <> security_instructions
     }
   end
 
@@ -72,12 +74,13 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
   def add_provider_optimizations(%AssemblyContext{} = context) do
     provider = get_in(context.provider_info, [:provider])
     model = get_in(context.provider_info, [:model])
-    
+
     optimizations = Modules.ProviderOptimization.generate(provider, model)
-    
+
     if String.trim(optimizations) != "" do
-      %{context | 
-        assembled_instructions: context.assembled_instructions <> "\n\n" <> optimizations
+      %{
+        context
+        | assembled_instructions: context.assembled_instructions <> "\n\n" <> optimizations
       }
     else
       context
@@ -91,8 +94,10 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
     if Enum.empty?(context.validation_errors) do
       context.assembled_instructions
     else
-      error_message = "Instruction assembly validation failed: " <> 
-                     Enum.join(context.validation_errors, ", ")
+      error_message =
+        "Instruction assembly validation failed: " <>
+          Enum.join(context.validation_errors, ", ")
+
       raise RuntimeError, error_message
     end
   end
@@ -125,27 +130,32 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
 
   defp add_environmental_context(%AssemblyContext{} = context) do
     env_instructions = Modules.ContextAwareness.generate(context.environment)
-    
-    %{context | 
-      assembled_instructions: context.assembled_instructions <> "\n\n" <> env_instructions
+
+    %{
+      context
+      | assembled_instructions: context.assembled_instructions <> "\n\n" <> env_instructions
     }
   end
 
   defp add_capability_descriptions(%AssemblyContext{} = context) do
     agent_state = build_agent_state(context)
     capability_instructions = Modules.CapabilityDescription.generate(agent_state)
-    
-    %{context | 
-      assembled_instructions: context.assembled_instructions <> "\n\n" <> capability_instructions
+
+    %{
+      context
+      | assembled_instructions:
+          context.assembled_instructions <> "\n\n" <> capability_instructions
     }
   end
 
   defp add_workflow_guidance(%AssemblyContext{} = context) do
     if context.task_context do
       workflow_instructions = Modules.WorkflowGuidance.generate(context.task_context)
-      
-      %{context | 
-        assembled_instructions: context.assembled_instructions <> "\n\n" <> workflow_instructions
+
+      %{
+        context
+        | assembled_instructions:
+            context.assembled_instructions <> "\n\n" <> workflow_instructions
       }
     else
       context
@@ -179,13 +189,15 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
 
   defp get_provider_info(input_context) do
     case Map.get(input_context, :provider_info) do
-      nil -> 
+      nil ->
         # Try to extract from direct provider/model keys
         %{
           provider: Map.get(input_context, :provider, :unknown),
           model: Map.get(input_context, :model, "unknown")
         }
-      provider_info -> provider_info
+
+      provider_info ->
+        provider_info
     end
   end
 
@@ -200,23 +212,26 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
       file_access_level: determine_file_access_level(context),
       command_execution_level: determine_command_execution_level(context),
       available_mcp_tools: context.mcp_servers,
-      auth_status: :authenticated,  # Placeholder
+      # Placeholder
+      auth_status: :authenticated,
       limitations: determine_limitations(context)
     }
   end
 
   defp determine_file_access_level(context) do
-    has_read = Enum.any?(context.available_tools, fn
-      %{name: name} -> String.contains?(to_string(name), "read")
-      name when is_atom(name) -> String.contains?(to_string(name), "read")
-      _ -> false
-    end)
+    has_read =
+      Enum.any?(context.available_tools, fn
+        %{name: name} -> String.contains?(to_string(name), "read")
+        name when is_atom(name) -> String.contains?(to_string(name), "read")
+        _ -> false
+      end)
 
-    has_write = Enum.any?(context.available_tools, fn
-      %{name: name} -> String.contains?(to_string(name), "write")
-      name when is_atom(name) -> String.contains?(to_string(name), "write")
-      _ -> false
-    end)
+    has_write =
+      Enum.any?(context.available_tools, fn
+        %{name: name} -> String.contains?(to_string(name), "write")
+        name when is_atom(name) -> String.contains?(to_string(name), "write")
+        _ -> false
+      end)
 
     cond do
       has_read and has_write -> :full
@@ -226,11 +241,19 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
   end
 
   defp determine_command_execution_level(context) do
-    has_execute = Enum.any?(context.available_tools, fn
-      %{name: name} -> String.contains?(to_string(name), "execute") or String.contains?(to_string(name), "command")
-      name when is_atom(name) -> String.contains?(to_string(name), "execute") or String.contains?(to_string(name), "command")
-      _ -> false
-    end)
+    has_execute =
+      Enum.any?(context.available_tools, fn
+        %{name: name} ->
+          String.contains?(to_string(name), "execute") or
+            String.contains?(to_string(name), "command")
+
+        name when is_atom(name) ->
+          String.contains?(to_string(name), "execute") or
+            String.contains?(to_string(name), "command")
+
+        _ ->
+          false
+      end)
 
     if has_execute do
       if Map.get(context.environment, :sandbox_enabled, false) do
@@ -246,17 +269,19 @@ defmodule TheMaestro.Prompts.SystemInstructions.InstructionAssembler do
   defp determine_limitations(context) do
     limitations = []
 
-    limitations = if Map.get(context.environment, :sandbox_enabled, false) do
-      ["Running in sandboxed environment" | limitations]
-    else
-      limitations
-    end
+    limitations =
+      if Map.get(context.environment, :sandbox_enabled, false) do
+        ["Running in sandboxed environment" | limitations]
+      else
+        limitations
+      end
 
-    limitations = if get_in(context.security_context, [:trust_level]) == :low do
-      ["Limited trust level - additional confirmations required" | limitations]
-    else
-      limitations
-    end
+    limitations =
+      if get_in(context.security_context, [:trust_level]) == :low do
+        ["Limited trust level - additional confirmations required" | limitations]
+      else
+        limitations
+      end
 
     limitations
   end

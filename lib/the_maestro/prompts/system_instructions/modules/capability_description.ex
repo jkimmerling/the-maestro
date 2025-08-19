@@ -23,13 +23,13 @@ defmodule TheMaestro.Prompts.SystemInstructions.Modules.CapabilityDescription do
     - Code analysis and modification
     - File system operations (#{format_access_level(file_access_level)})
     - Command execution (#{format_execution_level(command_execution_level)})
-    
+
     ### Available Integrations
     - **LLM Provider:** #{current_provider}
     - **Model:** #{current_model}
     - **MCP Tools:** #{format_mcp_tools(available_mcp_tools)}
     - **Authentication:** #{format_auth_status(auth_status)}
-    
+
     ### Current Limitations
     #{format_limitations(limitations)}
     """
@@ -48,11 +48,13 @@ defmodule TheMaestro.Prompts.SystemInstructions.Modules.CapabilityDescription do
   defp format_execution_level(_), do: "unknown execution level"
 
   defp format_mcp_tools([]), do: "No MCP tools available"
+
   defp format_mcp_tools(tools) when is_list(tools) do
     tools
     |> Enum.map(&to_string/1)
     |> Enum.join(", ")
   end
+
   defp format_mcp_tools(_), do: "Unknown MCP tools"
 
   defp format_auth_status(:authenticated), do: "Authenticated and ready"
@@ -61,10 +63,12 @@ defmodule TheMaestro.Prompts.SystemInstructions.Modules.CapabilityDescription do
   defp format_auth_status(_), do: "Unknown authentication status"
 
   defp format_limitations([]), do: "No significant limitations identified"
+
   defp format_limitations(limitations) when is_list(limitations) do
     limitations
     |> Enum.map(&("- " <> &1))
     |> Enum.join("\n")
   end
+
   defp format_limitations(_), do: "Limitation information not available"
 end

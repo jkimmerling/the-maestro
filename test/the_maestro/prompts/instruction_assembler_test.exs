@@ -94,7 +94,7 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
       instructions = InstructionAssembler.assemble_instructions(context)
 
       assert is_binary(instructions)
-      
+
       # Check for presence of all expected sections
       assert String.contains?(instructions, "Core Mandates")
       assert String.contains?(instructions, "Available Tools")
@@ -112,9 +112,20 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
       instructions = InstructionAssembler.assemble_instructions(context)
 
       # Core mandates should come first
-      core_pos = String.length(instructions) - String.length(String.split(instructions, "Base instructions", parts: 2) |> List.last())
-      tools_pos = String.length(instructions) - String.length(String.split(instructions, "Available Tools", parts: 2) |> List.last())
-      security_pos = String.length(instructions) - String.length(String.split(instructions, "Security and Safety Rules", parts: 2) |> List.last())
+      core_pos =
+        String.length(instructions) -
+          String.length(String.split(instructions, "Base instructions", parts: 2) |> List.last())
+
+      tools_pos =
+        String.length(instructions) -
+          String.length(String.split(instructions, "Available Tools", parts: 2) |> List.last())
+
+      security_pos =
+        String.length(instructions) -
+          String.length(
+            String.split(instructions, "Security and Safety Rules", parts: 2)
+            |> List.last()
+          )
 
       assert core_pos < tools_pos
       assert tools_pos < security_pos
@@ -151,7 +162,10 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
 
       updated_context = InstructionAssembler.add_tool_integration_instructions(context)
 
-      assert String.contains?(updated_context.assembled_instructions, "No tools currently available")
+      assert String.contains?(
+               updated_context.assembled_instructions,
+               "No tools currently available"
+             )
     end
   end
 
@@ -172,6 +186,7 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
       high_trust_context = %AssemblyContext{
         security_context: %{trust_level: :high, sandbox_mode: false}
       }
+
       low_trust_context = %AssemblyContext{
         security_context: %{trust_level: :low, sandbox_mode: false}
       }
@@ -180,7 +195,8 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
       low_trust_updated = InstructionAssembler.add_security_guidelines(low_trust_context)
 
       # Low trust should have more restrictive guidelines
-      assert String.length(low_trust_updated.assembled_instructions) >= String.length(high_trust_updated.assembled_instructions)
+      assert String.length(low_trust_updated.assembled_instructions) >=
+               String.length(high_trust_updated.assembled_instructions)
     end
   end
 
@@ -192,7 +208,11 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
 
       updated_context = InstructionAssembler.add_provider_optimizations(context)
 
-      assert String.contains?(updated_context.assembled_instructions, "Claude-Specific Optimizations")
+      assert String.contains?(
+               updated_context.assembled_instructions,
+               "Claude-Specific Optimizations"
+             )
+
       assert String.contains?(updated_context.assembled_instructions, "reasoning capabilities")
     end
 
@@ -203,7 +223,11 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
 
       updated_context = InstructionAssembler.add_provider_optimizations(context)
 
-      assert String.contains?(updated_context.assembled_instructions, "Gemini-Specific Optimizations")
+      assert String.contains?(
+               updated_context.assembled_instructions,
+               "Gemini-Specific Optimizations"
+             )
+
       assert String.contains?(updated_context.assembled_instructions, "multimodal capabilities")
     end
 
@@ -223,19 +247,19 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
       context = %AssemblyContext{
         assembled_instructions: """
         You are an interactive CLI agent.
-        
+
         ## Available Tools
         - read_file: Read file contents
-        
+
         ## Security and Safety Rules
         - Always explain critical commands
-        
+
         ## Current Environment
         - Date: 2025-01-19
-        
+
         ## Your Current Capabilities
         - File operations
-        
+
         ## Software Engineering Tasks
         - Follow TDD practices
         """,
@@ -264,19 +288,19 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
     test "validates presence of required sections" do
       complete_instructions = """
       You are an interactive CLI agent specializing in software engineering tasks.
-      
+
       # Core Mandates
       Essential operational guidelines.
-      
+
       ## Available Tools
       You have access to the following tools.
-      
+
       ## Security and Safety Rules
       Always follow security best practices.
-      
+
       ## Current Environment
       Working in development environment.
-      
+
       ## Your Current Capabilities
       You can perform various tasks.
       """
@@ -289,7 +313,7 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
     test "identifies missing required sections" do
       incomplete_instructions = """
       You are an interactive CLI agent.
-      
+
       ## Available Tools
       You have access to tools.
       """

@@ -48,13 +48,26 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
     architectural_changes = Map.get(context, :architectural_changes, false)
 
     cond do
-      project_complexity -> project_complexity
-      architectural_changes or contains_keywords?(user_request, high_complexity_keywords()) -> :high
-      estimated_scope == :system_wide or length(project_files) > 10 -> :high
-      contains_keywords?(user_request, simple_task_keywords()) or estimated_scope == :single_file -> :low
-      estimated_scope == :multi_file or length(available_tools) > 2 -> :moderate
-      contains_keywords?(user_request, ["new React app", "Create a new"]) -> :high
-      true -> :moderate
+      project_complexity ->
+        project_complexity
+
+      architectural_changes or contains_keywords?(user_request, high_complexity_keywords()) ->
+        :high
+
+      estimated_scope == :system_wide or length(project_files) > 10 ->
+        :high
+
+      contains_keywords?(user_request, simple_task_keywords()) or estimated_scope == :single_file ->
+        :low
+
+      estimated_scope == :multi_file or length(available_tools) > 2 ->
+        :moderate
+
+      contains_keywords?(user_request, ["new React app", "Create a new"]) ->
+        :high
+
+      true ->
+        :moderate
     end
   end
 
@@ -66,35 +79,40 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
     available_tools = Map.get(context, :available_tools, [])
     capabilities = []
 
-    capabilities = if has_file_tools?(available_tools) do
-      [:file_operations | capabilities]
-    else
-      capabilities
-    end
+    capabilities =
+      if has_file_tools?(available_tools) do
+        [:file_operations | capabilities]
+      else
+        capabilities
+      end
 
-    capabilities = if has_command_tools?(available_tools) do
-      [:command_execution | capabilities]
-    else
-      capabilities
-    end
+    capabilities =
+      if has_command_tools?(available_tools) do
+        [:command_execution | capabilities]
+      else
+        capabilities
+      end
 
-    capabilities = if contains_keywords?(user_request, ["test", "testing", "spec", "verify"]) do
-      [:testing | capabilities]
-    else
-      capabilities
-    end
+    capabilities =
+      if contains_keywords?(user_request, ["test", "testing", "spec", "verify"]) do
+        [:testing | capabilities]
+      else
+        capabilities
+      end
 
-    capabilities = if contains_security_keywords?(context) do
-      [:security_analysis | capabilities]
-    else
-      capabilities
-    end
+    capabilities =
+      if contains_security_keywords?(context) do
+        [:security_analysis | capabilities]
+      else
+        capabilities
+      end
 
-    capabilities = if contains_performance_keywords?(context) do
-      [:performance_analysis | capabilities]
-    else
-      capabilities
-    end
+    capabilities =
+      if contains_performance_keywords?(context) do
+        [:performance_analysis | capabilities]
+      else
+        capabilities
+      end
 
     capabilities
   end
@@ -108,11 +126,16 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
     flexible_keywords = Map.get(context, :flexible_keywords, [])
 
     cond do
-      contains_keywords?(user_request, ["urgent", "critical", "immediate", "asap"]) or 
-      length(urgency_keywords) > 0 -> :urgent
+      contains_keywords?(user_request, ["urgent", "critical", "immediate", "asap"]) or
+          length(urgency_keywords) > 0 ->
+        :urgent
+
       contains_keywords?(user_request, ["when you have time", "eventually", "nice to have"]) or
-      length(flexible_keywords) > 0 -> :flexible
-      true -> :normal
+          length(flexible_keywords) > 0 ->
+        :flexible
+
+      true ->
+        :normal
     end
   end
 
@@ -127,18 +150,35 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
     has_tests = Map.get(context, :has_tests, false)
     urgency_level = Map.get(context, :urgency_level, :normal)
     user_request = Map.get(context, :user_request, "")
-    
+
     # Handle risk_factors array format
     security_sensitive = security_sensitive or :security_sensitive in risk_factors
 
     cond do
-      security_sensitive and affects_production and urgency_level == :urgent -> :critical
-      security_sensitive and affects_production -> :high
-      primary_task_type == :debugging and affects_production -> :high
-      contains_keywords?(user_request, ["security vulnerability", "vulnerability", "security breach"]) -> :high
-      primary_task_type == :software_engineering and not has_tests -> :medium
-      primary_task_type == :documentation -> :low
-      true -> :medium
+      security_sensitive and affects_production and urgency_level == :urgent ->
+        :critical
+
+      security_sensitive and affects_production ->
+        :high
+
+      primary_task_type == :debugging and affects_production ->
+        :high
+
+      contains_keywords?(user_request, [
+        "security vulnerability",
+        "vulnerability",
+        "security breach"
+      ]) ->
+        :high
+
+      primary_task_type == :software_engineering and not has_tests ->
+        :medium
+
+      primary_task_type == :documentation ->
+        :low
+
+      true ->
+        :medium
     end
   end
 
@@ -154,11 +194,18 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
 
     cond do
       educational_intent or length(learning_indicators) > 0 or
-      contains_keywords?(user_request, ["show me", "how to", "explain", "teach"]) -> :guided
+          contains_keywords?(user_request, ["show me", "how to", "explain", "teach"]) ->
+        :guided
+
       requires_clarification or task_clarity == :low or
-      contains_keywords?(user_request, ["better", "improve", "enhance", "comprehensive"]) -> :collaborative
-      task_clarity == :high -> :autonomous
-      true -> :autonomous
+          contains_keywords?(user_request, ["better", "improve", "enhance", "comprehensive"]) ->
+        :collaborative
+
+      task_clarity == :high ->
+        :autonomous
+
+      true ->
+        :autonomous
     end
   end
 
@@ -184,30 +231,90 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
   # Private helper functions
 
   defp software_engineering_keywords do
-    ["implement", "feature", "refactor", "optimize", 
-     "add", "remove", "update", "modify", "enhance", "improve", "code", "function",
-     "authentication system", "payment system", "fix the bug", "authentication bug", "login system"]
+    [
+      "implement",
+      "feature",
+      "refactor",
+      "optimize",
+      "add",
+      "remove",
+      "update",
+      "modify",
+      "enhance",
+      "improve",
+      "code",
+      "function",
+      "authentication system",
+      "payment system",
+      "fix the bug",
+      "authentication bug",
+      "login system"
+    ]
   end
 
   defp new_application_keywords do
-    ["create a new", "build a", "develop a new", "from scratch", "bootstrap", "initialize",
-     "new project", "new application", "new app", "new microservice", "scaffold"]
+    [
+      "create a new",
+      "build a",
+      "develop a new",
+      "from scratch",
+      "bootstrap",
+      "initialize",
+      "new project",
+      "new application",
+      "new app",
+      "new microservice",
+      "scaffold"
+    ]
   end
 
   defp debugging_keywords do
-    ["debug", "troubleshoot", "investigate", "failing tests", "failing integration tests", 
-     "broken", "not working", "crash", "debug the", "investigate the", "why the tests",
-     "memory leak", "deployment errors", "performance bottleneck"]
+    [
+      "debug",
+      "troubleshoot",
+      "investigate",
+      "failing tests",
+      "failing integration tests",
+      "broken",
+      "not working",
+      "crash",
+      "debug the",
+      "investigate the",
+      "why the tests",
+      "memory leak",
+      "deployment errors",
+      "performance bottleneck"
+    ]
   end
 
   defp documentation_keywords do
-    ["document", "readme", "guide", "manual", "wiki", "docs", "documentation",
-     "comment", "explain", "describe"]
+    [
+      "document",
+      "readme",
+      "guide",
+      "manual",
+      "wiki",
+      "docs",
+      "documentation",
+      "comment",
+      "explain",
+      "describe"
+    ]
   end
 
   defp high_complexity_keywords do
-    ["architecture", "system", "migrate", "redesign", "overhaul",
-     "complex", "comprehensive", "entire", "complete", "refactor the database"]
+    [
+      "architecture",
+      "system",
+      "migrate",
+      "redesign",
+      "overhaul",
+      "complex",
+      "comprehensive",
+      "entire",
+      "complete",
+      "refactor the database"
+    ]
   end
 
   defp simple_task_keywords do
@@ -229,109 +336,149 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
 
   defp has_command_tools?(tools) do
     Enum.any?(tools, fn
-      %{name: name} -> String.contains?(to_string(name), "command") or String.contains?(to_string(name), "execute")
-      name when is_atom(name) -> String.contains?(to_string(name), "command") or String.contains?(to_string(name), "execute")
-      _ -> false
+      %{name: name} ->
+        String.contains?(to_string(name), "command") or
+          String.contains?(to_string(name), "execute")
+
+      name when is_atom(name) ->
+        String.contains?(to_string(name), "command") or
+          String.contains?(to_string(name), "execute")
+
+      _ ->
+        false
     end)
   end
 
   defp contains_security_keywords?(context) do
     user_request = Map.get(context, :user_request, "")
-    security_keywords = ["security", "authentication", "authorization", "password", "token",
-                        "vulnerability", "secure", "encrypt", "decrypt", "auth"]
+
+    security_keywords = [
+      "security",
+      "authentication",
+      "authorization",
+      "password",
+      "token",
+      "vulnerability",
+      "secure",
+      "encrypt",
+      "decrypt",
+      "auth"
+    ]
+
     contains_keywords?(user_request, security_keywords)
   end
 
   defp contains_performance_keywords?(context) do
     user_request = Map.get(context, :user_request, "")
-    performance_keywords = ["performance", "optimize", "slow", "fast", "speed", "bottleneck",
-                           "efficient", "cache", "memory", "cpu"]
+
+    performance_keywords = [
+      "performance",
+      "optimize",
+      "slow",
+      "fast",
+      "speed",
+      "bottleneck",
+      "efficient",
+      "cache",
+      "memory",
+      "cpu"
+    ]
+
     contains_keywords?(user_request, performance_keywords)
   end
 
   defp extract_file_references(user_request, project_files) do
     # Extract file paths mentioned in the request
     file_pattern = ~r/[\w\-\.\/]+\.\w+/
-    
-    mentioned = Regex.scan(file_pattern, user_request)
-    |> Enum.map(fn [file] -> file end)
-    
+
+    mentioned =
+      Regex.scan(file_pattern, user_request)
+      |> Enum.map(fn [file] -> file end)
+
     # Also include project files that are directly mentioned
-    direct_mentions = Enum.filter(project_files, fn file ->
-      String.contains?(user_request, file)
-    end)
-    
+    direct_mentions =
+      Enum.filter(project_files, fn file ->
+        String.contains?(user_request, file)
+      end)
+
     Enum.uniq(mentioned ++ direct_mentions)
   end
 
   defp detect_programming_languages(user_request, project_files) do
     languages = []
-    
+
     # From file extensions
-    extensions = project_files
-    |> Enum.map(&Path.extname/1)
-    |> Enum.map(&String.trim_leading(&1, "."))
-    
-    languages = languages ++ 
-      case Enum.member?(extensions, "ex") or Enum.member?(extensions, "exs") do
-        true -> [:elixir]
-        false -> []
-      end
-    
-    languages = languages ++
-      case Enum.member?(extensions, "tsx") or Enum.member?(extensions, "jsx") do
-        true -> [:typescript, :react]
-        false -> []
-      end
-    
+    extensions =
+      project_files
+      |> Enum.map(&Path.extname/1)
+      |> Enum.map(&String.trim_leading(&1, "."))
+
+    languages =
+      languages ++
+        case Enum.member?(extensions, "ex") or Enum.member?(extensions, "exs") do
+          true -> [:elixir]
+          false -> []
+        end
+
+    languages =
+      languages ++
+        case Enum.member?(extensions, "tsx") or Enum.member?(extensions, "jsx") do
+          true -> [:typescript, :react]
+          false -> []
+        end
+
     # From user request mentions
-    languages = languages ++
-      cond do
-        contains_keywords?(user_request, ["react", "jsx", "tsx"]) -> [:react, :typescript]
-        contains_keywords?(user_request, ["elixir", "phoenix"]) -> [:elixir]
-        contains_keywords?(user_request, ["python", "py"]) -> [:python]
-        contains_keywords?(user_request, ["javascript", "js"]) -> [:javascript]
-        true -> []
-      end
-    
+    languages =
+      languages ++
+        cond do
+          contains_keywords?(user_request, ["react", "jsx", "tsx"]) -> [:react, :typescript]
+          contains_keywords?(user_request, ["elixir", "phoenix"]) -> [:elixir]
+          contains_keywords?(user_request, ["python", "py"]) -> [:python]
+          contains_keywords?(user_request, ["javascript", "js"]) -> [:javascript]
+          true -> []
+        end
+
     Enum.uniq(languages)
   end
 
   defp detect_technologies(user_request, project_files) do
     technologies = []
-    
+
     # From file patterns
-    technologies = technologies ++
-      cond do
-        Enum.any?(project_files, &String.contains?(&1, "package.json")) -> [:npm, :node]
-        Enum.any?(project_files, &String.contains?(&1, "mix.exs")) -> [:elixir, :mix]
-        true -> []
-      end
-    
+    technologies =
+      technologies ++
+        cond do
+          Enum.any?(project_files, &String.contains?(&1, "package.json")) -> [:npm, :node]
+          Enum.any?(project_files, &String.contains?(&1, "mix.exs")) -> [:elixir, :mix]
+          true -> []
+        end
+
     # From user request
-    technologies = technologies ++
-      cond do
-        contains_keywords?(user_request, ["react", "component"]) -> [:react]
-        contains_keywords?(user_request, ["api", "endpoint"]) -> [:api]
-        contains_keywords?(user_request, ["database", "db"]) -> [:database]
-        true -> []
-      end
-    
+    technologies =
+      technologies ++
+        cond do
+          contains_keywords?(user_request, ["react", "component"]) -> [:react]
+          contains_keywords?(user_request, ["api", "endpoint"]) -> [:api]
+          contains_keywords?(user_request, ["database", "db"]) -> [:database]
+          true -> []
+        end
+
     Enum.uniq(technologies)
   end
 
   defp extract_task_indicators(user_request) do
     indicators = []
-    
-    indicators = indicators ++
-      cond do
-        contains_keywords?(user_request, ["fix", "bug"]) -> [:bug_fix]
-        contains_keywords?(user_request, ["add", "new", "create"]) -> [:feature_addition]
-        contains_keywords?(user_request, ["refactor", "improve"]) -> [:refactoring]
-        contains_keywords?(user_request, ["test", "testing"]) -> [:testing]
-        true -> []
-      end
-    
+
+    indicators =
+      indicators ++
+        cond do
+          contains_keywords?(user_request, ["fix", "bug"]) -> [:bug_fix]
+          contains_keywords?(user_request, ["add", "new", "create"]) -> [:feature_addition]
+          contains_keywords?(user_request, ["refactor", "improve"]) -> [:refactoring]
+          contains_keywords?(user_request, ["test", "testing"]) -> [:testing]
+          true -> []
+        end
+
     indicators
   end
 
@@ -364,25 +511,36 @@ defmodule TheMaestro.Prompts.SystemInstructions.TaskAnalyzer do
 
   defp detect_domain_areas(user_request, project_files) do
     areas = []
-    
-    areas = areas ++
-      cond do
-        contains_keywords?(user_request, ["ui", "component", "frontend", "interface"]) -> [:frontend]
-        contains_keywords?(user_request, ["api", "backend", "server", "database"]) -> [:backend]
-        contains_keywords?(user_request, ["deploy", "infrastructure", "ci/cd"]) -> [:devops]
-        contains_keywords?(user_request, ["security", "auth", "vulnerability"]) -> [:security]
-        true -> []
-      end
-    
+
+    areas =
+      areas ++
+        cond do
+          contains_keywords?(user_request, ["ui", "component", "frontend", "interface"]) ->
+            [:frontend]
+
+          contains_keywords?(user_request, ["api", "backend", "server", "database"]) ->
+            [:backend]
+
+          contains_keywords?(user_request, ["deploy", "infrastructure", "ci/cd"]) ->
+            [:devops]
+
+          contains_keywords?(user_request, ["security", "auth", "vulnerability"]) ->
+            [:security]
+
+          true ->
+            []
+        end
+
     # From project structure
-    areas = areas ++
-      cond do
-        Enum.any?(project_files, &String.contains?(&1, "components")) -> [:frontend]
-        Enum.any?(project_files, &String.contains?(&1, "controllers")) -> [:backend]
-        Enum.any?(project_files, &String.contains?(&1, "test")) -> [:testing]
-        true -> []
-      end
-    
+    areas =
+      areas ++
+        cond do
+          Enum.any?(project_files, &String.contains?(&1, "components")) -> [:frontend]
+          Enum.any?(project_files, &String.contains?(&1, "controllers")) -> [:backend]
+          Enum.any?(project_files, &String.contains?(&1, "test")) -> [:testing]
+          true -> []
+        end
+
     Enum.uniq(areas)
   end
 end

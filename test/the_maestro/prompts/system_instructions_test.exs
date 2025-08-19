@@ -2,6 +2,7 @@ defmodule TheMaestro.Prompts.SystemInstructionsTest do
   use ExUnit.Case, async: true
 
   alias TheMaestro.Prompts.SystemInstructions
+
   alias TheMaestro.Prompts.SystemInstructions.{
     AssemblyContext,
     TaskContext,
@@ -207,7 +208,11 @@ defmodule TheMaestro.Prompts.SystemInstructionsTest do
 
   describe "provider optimization module" do
     test "generates Claude-specific optimizations" do
-      optimizations = SystemInstructions.generate_provider_optimizations(:anthropic, "claude-3-5-sonnet-20241022")
+      optimizations =
+        SystemInstructions.generate_provider_optimizations(
+          :anthropic,
+          "claude-3-5-sonnet-20241022"
+        )
 
       assert is_binary(optimizations)
       assert String.contains?(optimizations, "Claude-Specific Optimizations")
@@ -230,7 +235,8 @@ defmodule TheMaestro.Prompts.SystemInstructionsTest do
     end
 
     test "returns empty string for unknown providers" do
-      optimizations = SystemInstructions.generate_provider_optimizations(:unknown, "unknown-model")
+      optimizations =
+        SystemInstructions.generate_provider_optimizations(:unknown, "unknown-model")
 
       assert optimizations == ""
     end
@@ -273,7 +279,7 @@ defmodule TheMaestro.Prompts.SystemInstructionsTest do
       instructions = InstructionAssembler.assemble_instructions(assembly_context)
 
       assert is_binary(instructions)
-      
+
       # Verify all sections are present
       assert String.contains?(instructions, "You are an interactive CLI agent")
       assert String.contains?(instructions, "Available Tools")
@@ -323,7 +329,8 @@ defmodule TheMaestro.Prompts.SystemInstructionsTest do
       long_instructions = String.duplicate("This is a long instruction. ", 1000)
       token_budget = 5000
 
-      optimized = SystemInstructions.optimize_instructions_for_length(long_instructions, token_budget)
+      optimized =
+        SystemInstructions.optimize_instructions_for_length(long_instructions, token_budget)
 
       assert byte_size(optimized) < byte_size(long_instructions)
       assert String.contains?(optimized, "This is a long instruction")
@@ -364,7 +371,7 @@ defmodule TheMaestro.Prompts.SystemInstructionsTest do
 
       # Generate instructions for first context
       instructions1 = SystemInstructions.assemble_system_instructions(context1)
-      
+
       # Generate instructions for second context
       instructions2 = SystemInstructions.assemble_system_instructions(context2)
 
@@ -376,10 +383,10 @@ defmodule TheMaestro.Prompts.SystemInstructionsTest do
   describe "error handling" do
     test "handles empty context gracefully" do
       empty_context = %{}
-      
+
       # Should not raise an error, but return basic instructions
       instructions = SystemInstructions.assemble_system_instructions(empty_context)
-      
+
       assert is_binary(instructions)
       assert String.contains?(instructions, "Core Mandates")
     end
@@ -391,7 +398,7 @@ defmodule TheMaestro.Prompts.SystemInstructionsTest do
       ]
 
       instructions = SystemInstructions.generate_tool_instructions(invalid_tools)
-      
+
       # Should handle gracefully and skip invalid tools
       assert is_binary(instructions)
       assert String.contains?(instructions, "Available Tools")

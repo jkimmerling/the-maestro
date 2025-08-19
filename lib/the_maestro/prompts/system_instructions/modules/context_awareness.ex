@@ -28,29 +28,46 @@ defmodule TheMaestro.Prompts.SystemInstructions.Modules.ContextAwareness do
     - **Sandbox Mode:** #{if(sandbox_enabled, do: "Enabled", else: "Disabled")}
     """
 
-    project_section = if Enum.empty?(project_structure) do
-      ""
-    else
-      """
-      
-      ## Project Structure
-      
-      #{generate_directory_listing(project_structure)}
-      """
-    end
+    project_section =
+      if Enum.empty?(project_structure) do
+        ""
+      else
+        """
+
+        ## Project Structure
+
+        #{generate_directory_listing(project_structure)}
+        """
+      end
 
     base_context <> project_section
   end
 
   defp detect_project_type(working_directory) do
     cond do
-      String.contains?(working_directory, "node_modules") or String.ends_with?(working_directory, ".js") -> "Node.js"
-      String.contains?(working_directory, "mix.exs") or String.contains?(working_directory, "_build") -> "Elixir"
-      String.contains?(working_directory, "requirements.txt") or String.contains?(working_directory, ".py") -> "Python"
-      String.contains?(working_directory, "Cargo.toml") -> "Rust"
-      String.contains?(working_directory, "go.mod") -> "Go"
-      String.contains?(working_directory, "package.json") -> "JavaScript/TypeScript"
-      true -> "Unknown"
+      String.contains?(working_directory, "node_modules") or
+          String.ends_with?(working_directory, ".js") ->
+        "Node.js"
+
+      String.contains?(working_directory, "mix.exs") or
+          String.contains?(working_directory, "_build") ->
+        "Elixir"
+
+      String.contains?(working_directory, "requirements.txt") or
+          String.contains?(working_directory, ".py") ->
+        "Python"
+
+      String.contains?(working_directory, "Cargo.toml") ->
+        "Rust"
+
+      String.contains?(working_directory, "go.mod") ->
+        "Go"
+
+      String.contains?(working_directory, "package.json") ->
+        "JavaScript/TypeScript"
+
+      true ->
+        "Unknown"
     end
   end
 
@@ -65,7 +82,8 @@ defmodule TheMaestro.Prompts.SystemInstructions.Modules.ContextAwareness do
 
   defp generate_directory_listing(structure) when is_list(structure) do
     structure
-    |> Enum.take(20)  # Limit to prevent overwhelming output
+    # Limit to prevent overwhelming output
+    |> Enum.take(20)
     |> Enum.map(&format_directory_item/1)
     |> Enum.join("\n")
     |> case do

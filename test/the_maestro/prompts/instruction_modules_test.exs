@@ -36,8 +36,16 @@ defmodule TheMaestro.Prompts.InstructionModulesTest do
     test "generates tool instructions for multiple tools" do
       tools = [
         %{name: "read_file", description: "Read file contents", usage: "Use to examine code"},
-        %{name: "write_file", description: "Write file contents", usage: "Use to create/modify files"},
-        %{name: "execute_command", description: "Execute shell commands", usage: "Use for testing and building"}
+        %{
+          name: "write_file",
+          description: "Write file contents",
+          usage: "Use to create/modify files"
+        },
+        %{
+          name: "execute_command",
+          description: "Execute shell commands",
+          usage: "Use for testing and building"
+        }
       ]
 
       instructions = ToolIntegration.generate(tools)

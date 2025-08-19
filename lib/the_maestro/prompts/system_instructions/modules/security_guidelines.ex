@@ -9,7 +9,7 @@ defmodule TheMaestro.Prompts.SystemInstructions.Modules.SecurityGuidelines do
   def generate(context) do
     sandbox_status = get_sandbox_status(context)
     trust_level = Map.get(context, :trust_level, :medium)
-    
+
     base_guidelines = """
     ## Security and Safety Rules
 
@@ -22,7 +22,7 @@ defmodule TheMaestro.Prompts.SystemInstructions.Modules.SecurityGuidelines do
     """
 
     additional_guidelines = get_trust_level_guidelines(trust_level)
-    
+
     base_guidelines <> additional_guidelines
   end
 

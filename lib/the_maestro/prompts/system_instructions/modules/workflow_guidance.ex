@@ -29,7 +29,7 @@ defmodule TheMaestro.Prompts.SystemInstructions.Modules.WorkflowGuidance do
 
   defp generate_software_engineering_workflow(task_context) do
     complexity_level = Map.get(task_context, :complexity_level, :moderate)
-    
+
     base_workflow = """
     ## Software Engineering Tasks
     When requested to perform tasks like fixing bugs, adding features, refactoring, or explaining code, follow this sequence:
@@ -40,34 +40,35 @@ defmodule TheMaestro.Prompts.SystemInstructions.Modules.WorkflowGuidance do
     5. **Verify (Standards):** Execute project-specific build, linting and type-checking commands
     """
 
-    complexity_additions = case complexity_level do
-      :high ->
-        """
-        
-        ### High Complexity Task Guidelines
-        - Break down complex changes into smaller, manageable steps
-        - Consider architectural implications of changes
-        - Document rationale for significant design decisions
-        - Plan rollback strategy for major changes
-        """
+    complexity_additions =
+      case complexity_level do
+        :high ->
+          """
 
-      :moderate ->
-        """
-        
-        ### Moderate Complexity Task Guidelines
-        - Ensure changes are well-tested and documented
-        - Consider impact on related components
-        - Follow established patterns and conventions
-        """
+          ### High Complexity Task Guidelines
+          - Break down complex changes into smaller, manageable steps
+          - Consider architectural implications of changes
+          - Document rationale for significant design decisions
+          - Plan rollback strategy for major changes
+          """
 
-      :low ->
-        """
-        
-        ### Simple Task Guidelines
-        - Make minimal, focused changes
-        - Verify changes don't introduce unintended side effects
-        """
-    end
+        :moderate ->
+          """
+
+          ### Moderate Complexity Task Guidelines
+          - Ensure changes are well-tested and documented
+          - Consider impact on related components
+          - Follow established patterns and conventions
+          """
+
+        :low ->
+          """
+
+          ### Simple Task Guidelines
+          - Make minimal, focused changes
+          - Verify changes don't introduce unintended side effects
+          """
+      end
 
     base_workflow <> complexity_additions
   end

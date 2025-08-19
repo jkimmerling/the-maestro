@@ -1,7 +1,7 @@
 defmodule TheMaestro.Prompts.SystemInstructions do
   @moduledoc """
   Dynamic system instruction management for The Maestro agents.
-  
+
   This module provides composable system instruction modules that adapt
   based on agent capabilities, context, and task requirements.
   """
@@ -31,9 +31,9 @@ defmodule TheMaestro.Prompts.SystemInstructions do
 
   @doc """
   Assembles complete system instructions based on the provided context.
-  
+
   ## Parameters
-  
+
   - `context` - A map containing:
     - `available_tools` - List of available tools
     - `connected_mcp_servers` - List of connected MCP servers
@@ -41,13 +41,13 @@ defmodule TheMaestro.Prompts.SystemInstructions do
     - `provider_info` - Provider and model information
     - `security_context` - Security and trust level information
     - `task_type` - Primary task type (optional)
-  
+
   ## Returns
-  
+
   A string containing the assembled system instructions.
-  
+
   ## Examples
-  
+
       iex> context = %{
       ...>   available_tools: [:read_file, :write_file],
       ...>   environment: %{current_date: "2025-01-19"},
@@ -125,14 +125,16 @@ defmodule TheMaestro.Prompts.SystemInstructions do
   """
   def optimize_instructions_for_length(instructions, token_budget) do
     # Simple length optimization - in practice this would be more sophisticated
-    target_length = token_budget * 4  # Rough estimate: 1 token ≈ 4 characters
-    
+    # Rough estimate: 1 token ≈ 4 characters
+    target_length = token_budget * 4
+
     if String.length(instructions) <= target_length do
       instructions
     else
       # Truncate to fit within budget, keeping proportional content
       instructions
-      |> String.slice(0, round(target_length * 0.9))  # Leave some room for the truncation message
+      # Leave some room for the truncation message
+      |> String.slice(0, round(target_length * 0.9))
       |> Kernel.<>("\n\n[Instructions truncated for length optimization]")
     end
   end
@@ -142,14 +144,15 @@ defmodule TheMaestro.Prompts.SystemInstructions do
   """
   def filter_relevant_modules(context) do
     base_modules = [:core_mandates]
-    
-    modules = base_modules ++
-      (if has_tools?(context), do: [:tool_integration], else: []) ++
-      (if requires_security?(context), do: [:security_guidelines], else: []) ++
-      (if has_environment_info?(context), do: [:context_awareness], else: []) ++
-      (if has_workflow_context?(context), do: [:workflow_guidance], else: []) ++
-      (if has_provider_info?(context), do: [:provider_optimization], else: [])
-    
+
+    modules =
+      base_modules ++
+        if(has_tools?(context), do: [:tool_integration], else: []) ++
+        if(requires_security?(context), do: [:security_guidelines], else: []) ++
+        if(has_environment_info?(context), do: [:context_awareness], else: []) ++
+        if(has_workflow_context?(context), do: [:workflow_guidance], else: []) ++
+        if has_provider_info?(context), do: [:provider_optimization], else: []
+
     modules
   end
 
@@ -172,11 +175,13 @@ defmodule TheMaestro.Prompts.SystemInstructions do
   # Private helper functions
 
   defp validate_required_context(context) when is_map(context) do
-    required_fields = []  # Made flexible for now
-    
-    missing_fields = Enum.filter(required_fields, fn field ->
-      not Map.has_key?(context, field)
-    end)
+    # Made flexible for now
+    required_fields = []
+
+    missing_fields =
+      Enum.filter(required_fields, fn field ->
+        not Map.has_key?(context, field)
+      end)
 
     if length(missing_fields) > 0 do
       raise ArgumentError, "Required context fields missing: #{Enum.join(missing_fields, ", ")}"
