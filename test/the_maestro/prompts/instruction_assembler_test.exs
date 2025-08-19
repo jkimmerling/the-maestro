@@ -7,6 +7,8 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
     TaskContext
   }
 
+  alias TheMaestro.Prompts.SystemInstructions.Modules.CoreMandates
+
   describe "create_assembly_context/1" do
     test "creates assembly context with all required fields" do
       input = %{
@@ -57,7 +59,7 @@ defmodule TheMaestro.Prompts.InstructionAssemblerTest do
   describe "assemble_instructions/1" do
     setup do
       context = %AssemblyContext{
-        base_instructions: TheMaestro.Prompts.SystemInstructions.Modules.CoreMandates.generate(),
+        base_instructions: CoreMandates.generate(),
         available_tools: [
           %{name: "read_file", description: "Read file contents"},
           %{name: "write_file", description: "Write file contents"}
