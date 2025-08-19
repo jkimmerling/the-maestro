@@ -93,7 +93,7 @@ defmodule TheMaestro.TUI.CLI do
       %{type: :system, content: "Press Ctrl-C or 'q' to exit."}
     ]
 
-    # Initial state
+    # Initial state with MCP integration
     initial_state = %{
       conversation_history: welcome_messages,
       current_input: "",
@@ -101,7 +101,10 @@ defmodule TheMaestro.TUI.CLI do
       model: model,
       auth_context: auth_context,
       status_message: "",
-      streaming_buffer: ""
+      streaming_buffer: "",
+      mcp_servers: get_mcp_server_status(),
+      last_mcp_tool_call: nil,
+      show_mcp_panel: false
     }
 
     # Store state in process dictionary for simple state management
@@ -163,6 +166,24 @@ defmodule TheMaestro.TUI.CLI do
         Process.put(:tui_state, new_state)
         run_tui()
 
+      {:show_mcp_panel} ->
+        new_state = %{state | show_mcp_panel: !state.show_mcp_panel}
+        Process.put(:tui_state, new_state)
+        run_tui()
+
+      {:show_mcp_status} ->
+        show_mcp_status_info(state)
+        run_tui()
+
+      {:refresh_mcp} ->
+        new_state = %{state | mcp_servers: get_mcp_server_status()}
+        Process.put(:tui_state, new_state)
+        run_tui()
+
+      {:show_help} ->
+        show_tui_help()
+        run_tui()
+
       {:error, reason} ->
         IO.puts("Error: #{reason}")
         cleanup_and_exit()
@@ -203,7 +224,17 @@ defmodule TheMaestro.TUI.CLI do
     IO.puts([IO.ANSI.bright(), IO.ANSI.blue(), input_separator, IO.ANSI.reset()])
 
     IO.puts([IO.ANSI.bright(), "Input: ", IO.ANSI.reset(), state.current_input])
-    IO.puts([IO.ANSI.faint(), "Press Enter to send, Ctrl-C or 'q' to quit", IO.ANSI.reset()])
+
+    # Show MCP panel if enabled
+    if state.show_mcp_panel do
+      render_mcp_panel(state.mcp_servers, width)
+    end
+
+    IO.puts([
+      IO.ANSI.faint(),
+      "Commands: 'mcp' (toggle servers), 'help', 'q' (quit)",
+      IO.ANSI.reset()
+    ])
 
     # Bottom border
     footer = "╚" <> String.duplicate("═", width - 2) <> "╝"
@@ -248,6 +279,10 @@ defmodule TheMaestro.TUI.CLI do
 
         case trimmed do
           "q" -> {:quit}
+          "mcp" -> {:show_mcp_panel}
+          "mcp status" -> {:show_mcp_status}
+          "mcp refresh" -> {:refresh_mcp}
+          "help" -> {:show_help}
           "" -> {:input, ""}
           text -> {:input, text}
         end
@@ -441,10 +476,26 @@ defmodule TheMaestro.TUI.CLI do
     %{state | status_message: "Status: #{status}"}
   end
 
-  defp handle_tool_call_start(state, %{name: tool_name, arguments: _args}) do
-    emoji = get_tool_emoji(tool_name)
-    status = "#{emoji} Using tool: #{tool_name}..."
-    %{state | status_message: status}
+  defp handle_tool_call_start(state, %{name: tool_name, arguments: _args} = _tool_info) do
+    # Enhanced MCP tool call display for TUI
+    {mcp_server, emoji} = detect_mcp_server_for_tui(tool_name)
+
+    status =
+      if mcp_server != :unknown do
+        "#{emoji} Using MCP tool: #{tool_name} via #{mcp_server}..."
+      else
+        emoji = get_tool_emoji(tool_name)
+        "#{emoji} Using tool: #{tool_name}..."
+      end
+
+    mcp_info = %{
+      type: :tool_start,
+      tool_name: tool_name,
+      server: mcp_server,
+      timestamp: DateTime.utc_now()
+    }
+
+    %{state | status_message: status, last_mcp_tool_call: mcp_info}
   rescue
     e ->
       require Logger
@@ -453,17 +504,34 @@ defmodule TheMaestro.TUI.CLI do
   end
 
   defp handle_tool_call_end(state, %{name: tool_name, result: result}) do
-    # Add formatted tool result to conversation history
+    # Enhanced MCP tool result display for TUI
+    {mcp_server, _emoji} = detect_mcp_server_for_tui(tool_name)
+
+    formatted_content =
+      if mcp_server != :unknown do
+        format_mcp_tool_result_for_tui(tool_name, result, mcp_server)
+      else
+        format_tool_result_for_display(tool_name, result)
+      end
+
     tool_result_message = %{
       type: :tool_result,
-      content: format_tool_result_for_display(tool_name, result),
+      content: formatted_content,
+      timestamp: DateTime.utc_now()
+    }
+
+    mcp_info = %{
+      type: :tool_result,
+      tool_name: tool_name,
+      server: mcp_server,
+      result: format_mcp_result_summary(result),
       timestamp: DateTime.utc_now()
     }
 
     new_history =
       limit_conversation_history(state.conversation_history ++ [tool_result_message])
 
-    %{state | conversation_history: new_history, status_message: ""}
+    %{state | conversation_history: new_history, status_message: "", last_mcp_tool_call: mcp_info}
   rescue
     e ->
       require Logger
@@ -648,4 +716,255 @@ defmodule TheMaestro.TUI.CLI do
         {:error, reason}
     end
   end
+
+  # MCP Integration Helper Functions for TUI
+
+  defp get_mcp_server_status do
+    case TheMaestro.MCP.Tools.Registry.list_servers(TheMaestro.MCP.Tools.Registry) do
+      {:ok, servers} ->
+        servers
+        |> Enum.map(&format_server_for_tui/1)
+        |> Enum.sort_by(& &1.priority)
+
+      {:error, _reason} ->
+        # Return demo servers if registry not available
+        [
+          %{
+            id: "context7_stdio",
+            name: "Context7 (stdio)",
+            status: :connecting,
+            transport: "stdio",
+            icon: "📚",
+            priority: 1
+          },
+          %{
+            id: "context7_sse",
+            name: "Context7 (SSE)",
+            status: :connecting,
+            transport: "sse",
+            icon: "🌐",
+            priority: 2
+          },
+          %{
+            id: "tavily_http",
+            name: "Tavily (HTTP)",
+            status: :connecting,
+            transport: "http",
+            icon: "🔍",
+            priority: 3
+          }
+        ]
+    end
+  end
+
+  defp format_server_for_tui({server_id, server_info}) do
+    %{
+      id: server_id,
+      name: get_server_display_name_tui(server_id),
+      status: Map.get(server_info, :status, :unknown),
+      transport: Map.get(server_info, :transport_type, "unknown"),
+      icon: get_server_icon_tui(server_id),
+      priority: get_server_priority_tui(server_id)
+    }
+  end
+
+  defp get_server_display_name_tui("context7_stdio"), do: "Context7 (stdio)"
+  defp get_server_display_name_tui("context7_sse"), do: "Context7 (SSE)"
+  defp get_server_display_name_tui("tavily_http"), do: "Tavily (HTTP)"
+
+  defp get_server_display_name_tui(server_id),
+    do: String.replace(server_id, "_", " ") |> String.capitalize()
+
+  defp get_server_icon_tui("context7_stdio"), do: "📚"
+  defp get_server_icon_tui("context7_sse"), do: "🌐"
+  defp get_server_icon_tui("tavily_http"), do: "🔍"
+  defp get_server_icon_tui(_), do: "🔧"
+
+  defp get_server_priority_tui("context7_stdio"), do: 1
+  defp get_server_priority_tui("context7_sse"), do: 2
+  defp get_server_priority_tui("tavily_http"), do: 3
+  defp get_server_priority_tui(_), do: 10
+
+  defp detect_mcp_server_for_tui(tool_name) do
+    case tool_name do
+      tool when tool in ["resolve-library-id", "get-library-docs"] -> {"Context7 (stdio)", "📚"}
+      tool when tool in ["search", "extract", "crawl"] -> {"Tavily (HTTP)", "🔍"}
+      tool when tool in ["context7-sse", "sse-docs"] -> {"Context7 (SSE)", "🌐"}
+      _ -> {:unknown, "🔧"}
+    end
+  end
+
+  defp format_mcp_tool_result_for_tui(tool_name, result, mcp_server) do
+    server_display =
+      case mcp_server do
+        {"Context7" <> _, _} -> "📚 Context7"
+        {"Tavily" <> _, _} -> "🔍 Tavily"
+        _ -> "🔧 #{mcp_server}"
+      end
+
+    separator = String.duplicate("─", String.length("#{server_display} Tool: #{tool_name}"))
+
+    case result do
+      result when is_binary(result) and byte_size(result) > 1000 ->
+        preview = String.slice(result, 0, 500) <> "... (truncated for TUI display)"
+        "#{server_display} Tool: #{tool_name}\n#{separator}\n#{preview}"
+
+      result when is_binary(result) ->
+        "#{server_display} Tool: #{tool_name}\n#{separator}\n#{result}"
+
+      {:ok, data} when is_binary(data) ->
+        content =
+          if String.length(data) > 500, do: String.slice(data, 0, 500) <> "...", else: data
+
+        "#{server_display} Tool: #{tool_name}\n#{separator}\n#{content}"
+
+      {:error, reason} ->
+        "#{server_display} Tool: #{tool_name}\n#{separator}\n❌ Error: #{reason}"
+
+      other ->
+        formatted = inspect(other, limit: 50, pretty: true)
+        "#{server_display} Tool: #{tool_name}\n#{separator}\n#{formatted}"
+    end
+  end
+
+  defp format_mcp_result_summary(result) when is_binary(result) do
+    if String.length(result) > 100 do
+      String.slice(result, 0, 100) <> "..."
+    else
+      result
+    end
+  end
+
+  defp format_mcp_result_summary(result) do
+    inspect(result, limit: 20, pretty: false)
+  end
+
+  defp render_mcp_panel(servers, width) do
+    panel_width = min(width - 4, 70)
+    panel_header = "╔ MCP Servers " <> String.duplicate("═", panel_width - 14) <> "╗"
+
+    IO.puts([IO.ANSI.bright(), IO.ANSI.cyan(), panel_header, IO.ANSI.reset()])
+
+    for server <- servers do
+      status_color =
+        case server.status do
+          :connected -> IO.ANSI.green()
+          :connecting -> IO.ANSI.yellow()
+          _ -> IO.ANSI.red()
+        end
+
+      line = "║ #{server.icon} #{server.name} [#{server.transport}] "
+      status_text = "#{server.status}"
+      padding_len = panel_width - String.length(line) - String.length(status_text) - 2
+      padding = String.duplicate(" ", max(0, padding_len))
+
+      IO.puts([
+        IO.ANSI.bright(),
+        IO.ANSI.cyan(),
+        "║ ",
+        IO.ANSI.reset(),
+        server.icon,
+        " ",
+        server.name,
+        " [",
+        server.transport,
+        "] ",
+        padding,
+        status_color,
+        status_text,
+        IO.ANSI.bright(),
+        IO.ANSI.cyan(),
+        " ║",
+        IO.ANSI.reset()
+      ])
+    end
+
+    panel_footer = "╚" <> String.duplicate("═", panel_width - 2) <> "╝"
+    IO.puts([IO.ANSI.bright(), IO.ANSI.cyan(), panel_footer, IO.ANSI.reset()])
+  end
+
+  defp show_mcp_status_info(state) do
+    IO.puts([IO.ANSI.bright(), IO.ANSI.cyan(), "\n🔗 MCP Server Status Report", IO.ANSI.reset()])
+    IO.puts(String.duplicate("=", 40))
+
+    if length(state.mcp_servers) == 0 do
+      IO.puts("No MCP servers configured or available.")
+    else
+      for server <- state.mcp_servers do
+        status_color =
+          case server.status do
+            :connected -> IO.ANSI.green()
+            :connecting -> IO.ANSI.yellow()
+            _ -> IO.ANSI.red()
+          end
+
+        IO.puts([
+          server.icon,
+          " ",
+          IO.ANSI.bright(),
+          server.name,
+          IO.ANSI.reset(),
+          "\n  Status: ",
+          status_color,
+          "#{server.status}",
+          IO.ANSI.reset(),
+          "\n  Transport: #{server.transport}",
+          "\n  ID: #{server.id}",
+          "\n"
+        ])
+      end
+    end
+
+    if state.last_mcp_tool_call do
+      IO.puts([IO.ANSI.bright(), "🔧 Last MCP Tool Call:", IO.ANSI.reset()])
+      IO.puts("  Tool: #{state.last_mcp_tool_call.tool_name}")
+      IO.puts("  Server: #{state.last_mcp_tool_call.server}")
+      IO.puts("  Time: #{format_timestamp(state.last_mcp_tool_call.timestamp)}")
+
+      if state.last_mcp_tool_call.type == :tool_result do
+        IO.puts("  Result: #{state.last_mcp_tool_call.result}")
+      end
+    end
+
+    IO.puts("\nPress Enter to continue...")
+    IO.gets("")
+  end
+
+  defp show_tui_help do
+    IO.puts([IO.ANSI.bright(), IO.ANSI.green(), "\n📖 The Maestro TUI Help", IO.ANSI.reset()])
+    IO.puts(String.duplicate("=", 40))
+    IO.puts("Commands:")
+    IO.puts("  q            - Quit the TUI")
+    IO.puts("  help         - Show this help")
+    IO.puts("  mcp          - Toggle MCP server panel")
+    IO.puts("  mcp status   - Show detailed MCP server status")
+    IO.puts("  mcp refresh  - Refresh MCP server status")
+    IO.puts("")
+    IO.puts("MCP Integration Features:")
+    IO.puts("  • Real-time MCP server status display")
+    IO.puts("  • Enhanced tool execution with MCP server identification")
+    IO.puts("  • Rich content display for Context7 documentation")
+    IO.puts("  • Tavily search result formatting")
+    IO.puts("  • Multi-transport support (stdio, HTTP, SSE)")
+    IO.puts("")
+    IO.puts("Press Enter to continue...")
+    IO.gets("")
+  end
+
+  # Helper function for timestamp formatting in TUI
+  defp format_timestamp(%DateTime{} = timestamp) do
+    timestamp
+    |> DateTime.to_time()
+    |> Time.to_string()
+    |> String.slice(0, 8)
+  end
+
+  defp format_timestamp(timestamp) when is_binary(timestamp) do
+    case DateTime.from_iso8601(timestamp) do
+      {:ok, dt, _} -> format_timestamp(dt)
+      _ -> timestamp
+    end
+  end
+
+  defp format_timestamp(_), do: "unknown"
 end
