@@ -77,10 +77,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   def start_context7_stdio_server do
     IO.puts("\n📚 Starting Context7 stdio server...")
 
-    unless System.get_env("CONTEXT7_API_KEY") do
-      IO.puts("⏭️ Skipping Context7 - API key not configured")
-      :ok
-    else
+    if System.get_env("CONTEXT7_API_KEY") do
       config = %{
         :id => "context7_stdio",
         "name" => "context7_stdio",
@@ -108,6 +105,9 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
           IO.puts("❌ NPX not available: #{reason}")
           {:error, {:npx_unavailable, reason}}
       end
+    else
+      IO.puts("⏭️ Skipping Context7 - API key not configured")
+      :ok
     end
   end
 
@@ -117,10 +117,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   def establish_context7_sse_connection do
     IO.puts("\n🌐 Establishing Context7 SSE connection...")
 
-    unless System.get_env("CONTEXT7_API_KEY") do
-      IO.puts("⏭️ Skipping Context7 SSE - API key not configured")
-      :ok
-    else
+    if System.get_env("CONTEXT7_API_KEY") do
       config = %{
         :id => "context7_sse",
         "name" => "context7_sse",
@@ -140,6 +137,9 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
           IO.puts("❌ Failed to establish Context7 SSE connection: #{inspect(reason)}")
           {:error, {:context7_sse_failed, reason}}
       end
+    else
+      IO.puts("⏭️ Skipping Context7 SSE - API key not configured")
+      :ok
     end
   end
 
@@ -149,10 +149,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   def connect_to_tavily_http do
     IO.puts("\n🔍 Connecting to Tavily HTTP server...")
 
-    unless System.get_env("TAVILY_API_KEY") do
-      IO.puts("⏭️ Skipping Tavily - API key not configured")
-      :ok
-    else
+    if System.get_env("TAVILY_API_KEY") do
       config = %{
         :id => "tavily_http",
         "name" => "tavily_http",
@@ -172,6 +169,9 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
           IO.puts("❌ Failed to connect to Tavily HTTP server: #{inspect(reason)}")
           {:error, {:tavily_connection_failed, reason}}
       end
+    else
+      IO.puts("⏭️ Skipping Tavily - API key not configured")
+      :ok
     end
   end
 
