@@ -21,7 +21,8 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
   - Voice command detection
   """
   @spec process(map(), map()) :: map()
-  def process(%{type: :audio, content: _content, metadata: metadata} = _item, _context) do
+  def process(%{type: :audio, content: _content} = item, _context) do
+    metadata = Map.get(item, :metadata, %{})
     %{
       transcription: generate_transcription(metadata),
       speaker_analysis: analyze_speakers(metadata),

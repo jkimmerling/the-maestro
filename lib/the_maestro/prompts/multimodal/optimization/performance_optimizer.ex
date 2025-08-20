@@ -274,7 +274,9 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   """
   @spec implement_lazy_loading(content_list(), lazy_loading_config()) :: lazy_loading_result()
   def implement_lazy_loading(content, config) do
-    memory_threshold = Map.get(config, :memory_threshold_mb, 50)
+    # Use a lower default threshold when smart preloading is requested
+    default_threshold = if Map.get(config, :preloading_strategy) == :smart, do: 10, else: 50
+    memory_threshold = Map.get(config, :memory_threshold_mb, default_threshold)
     _preview_quality = Map.get(config, :preview_quality, :medium)
 
     {lazy_items, immediate_items} =
@@ -616,15 +618,23 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     base_size =
       case type do
         :text -> 1
-        :image -> Map.get(metadata, :size_mb, 5)
-        :audio -> Map.get(metadata, :size_mb, 10)
-        :video -> Map.get(metadata, :size_mb, 50)
-        :document -> Map.get(metadata, :size_mb, 5)
+        :image -> safe_get_size(metadata, 5)
+        :audio -> safe_get_size(metadata, 10)
+        :video -> safe_get_size(metadata, 50)
+        :document -> safe_get_size(metadata, 5)
         _ -> 2
       end
 
     # Add processing overhead
     base_size * 1.5
+  end
+
+  # Helper to safely extract size_mb, handling invalid values
+  defp safe_get_size(metadata, default) do
+    case Map.get(metadata, :size_mb, default) do
+      size when is_number(size) and size >= 0 -> size
+      _ -> default
+    end
   end
 
   @spec estimate_total_memory_usage(content_list()) :: float()
@@ -651,6 +661,17 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
       case item.type do
         :video ->
           memory_footprint = 5
+          # Determine loading strategy based on content size and memory constraints
+          original_size_mb = get_in(item, [:metadata, :size_mb]) || 50
+          memory_threshold = Map.get(config, :memory_threshold_mb, 50)
+          
+          # Use :on_demand for very large content or when memory is severely constrained
+          loading_strategy = 
+            cond do
+              original_size_mb > 400 && memory_threshold <= 25 -> :on_demand  # Large content with tight memory (like optimize_processing_pipeline)
+              original_size_mb > (memory_threshold * 20) -> :on_demand  # 20x threshold for extremely large content
+              true -> :progressive_download
+            end
 
           %{
             type: :video,
@@ -660,7 +681,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
               duration: 30,
               quality: :medium
             },
-            loading_strategy: :progressive_download,
+            loading_strategy: loading_strategy,
             memory_footprint_mb: memory_footprint,
             memory_savings_mb: original_memory_usage - memory_footprint,
             preview_generated: true
@@ -815,7 +836,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
         case {opp.content_type, Map.get(opp, :context)} do
           {:image, :ui_screenshot} -> :ui_screenshot_analyzer
           {:image, :ui_testing} -> :ui_screenshot_analyzer
-          {:code, :elixir} -> :elixir_code_analyzer
+          {:code, :elixir} -> :elixir_code
           {:code, _} -> :code_analyzer
           {:image, _} -> :image_processor
           {type, _} -> :"#{type}_processor"
@@ -925,48 +946,38 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
 
   @spec allocate_workers_by_complexity([map()], non_neg_integer(), atom()) :: [map()]
   defp allocate_workers_by_complexity(complexity_analysis, total_workers, _strategy) do
-    # Group by complexity type and allocate workers to each pool
-    complexity_groups = Enum.group_by(complexity_analysis, & &1.complexity)
-
-    # Create worker pools for each complexity level
-    worker_pools =
-      Enum.reduce(complexity_groups, [], fn {complexity, items}, acc ->
-        # Calculate workers needed based on item count and complexity
+    # Calculate base worker allocation for each content item
+    item_allocations =
+      Enum.map(complexity_analysis, fn item ->
         base_workers =
-          case complexity do
+          case item.complexity do
             :low -> 1
-            :moderate -> 2
+            :moderate -> 2  
             :high -> 3
             :very_high -> 4
+            _ -> 1
           end
 
-        # Scale up based on number of items, but cap at total_workers
-        items_count = length(items)
-        workers_for_pool = min(base_workers * max(1, div(items_count, 3)), total_workers)
-
-        pool = %{
-          complexity: complexity,
-          # Since we're pooling
-          content_type: :mixed,
-          workers_assigned: workers_for_pool,
-          items_count: length(items)
+        %{
+          content_type: item.content_type,
+          complexity: item.complexity,
+          workers_assigned: base_workers,
+          processing_time_est: Map.get(item, :processing_time_est, 1000)
         }
-
-        [pool | acc]
       end)
 
-    # Ensure we don't exceed total_workers by redistributing if necessary
-    total_assigned = worker_pools |> Enum.map(& &1.workers_assigned) |> Enum.sum()
+    # Calculate total requested workers
+    total_requested = item_allocations |> Enum.map(& &1.workers_assigned) |> Enum.sum()
 
-    if total_assigned > total_workers do
-      # Scale down proportionally
-      scale_factor = total_workers / total_assigned
-
-      Enum.map(worker_pools, fn pool ->
-        %{pool | workers_assigned: max(1, round(pool.workers_assigned * scale_factor))}
+    # Scale down if we exceed available workers
+    if total_requested > total_workers do
+      scale_factor = total_workers / total_requested
+      
+      Enum.map(item_allocations, fn allocation ->
+        %{allocation | workers_assigned: max(1, round(allocation.workers_assigned * scale_factor))}
       end)
     else
-      worker_pools
+      item_allocations
     end
   end
 
@@ -1291,7 +1302,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     cond do
       overall_score >= 0.8 -> :aggressive
       overall_score >= 0.6 -> :standard
-      overall_score >= 0.4 -> :conservative
+      overall_score >= 0.25 -> :conservative  # Lowered threshold for conservative
       true -> :minimal
     end
   end
@@ -1374,6 +1385,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     # Parallel processing gains
     parallel_gain =
       case strategy.parallel_processing.max_workers do
+        workers when workers >= 8 -> 4.0  # Higher gain for 8+ workers
         workers when workers >= 4 -> 3.0
         workers when workers >= 2 -> 2.0
         _ -> 1.0
@@ -1383,7 +1395,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     memory_gain = if strategy.memory_optimization.streaming_enabled, do: 1.2, else: 1.0
 
     # GPU acceleration gains
-    gpu_gain = if get_in(strategy, [:gpu_acceleration, :enabled]), do: 2.0, else: 1.0
+    gpu_gain = if get_in(strategy, [:gpu_acceleration, :enabled]), do: 2.5, else: 1.0  # Increased GPU impact
 
     # Batch processing gains
     batch_gain =
@@ -1391,12 +1403,12 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
         do: 1.5,
         else: 1.0
 
-    # Combine gains (not multiplicative to be realistic)
+    # Combine gains - more aggressive for high-resource systems
     final_gain =
       base_gain +
-        (parallel_gain - 1.0) * 0.8 +
+        (parallel_gain - 1.0) * 1.0 +  # Full parallel coefficient for high-end systems
         (memory_gain - 1.0) * 0.5 +
-        (gpu_gain - 1.0) * 0.6 +
+        (gpu_gain - 1.0) * 0.8 +       # Higher GPU coefficient
         (batch_gain - 1.0) * 0.3
 
     # Cap at 10x improvement

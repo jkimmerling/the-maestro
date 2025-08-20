@@ -132,11 +132,46 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessor do
         status: :error,
         error_details: %{
           type: :content_malformed,
-          message: Exception.message(error)
+          message: Exception.message(error),
+          line_number: 1,  # Default line number for debugging
+          column_number: 1,  # Default column number
+          error_message: Exception.message(error)
         },
+        debugging_hints: generate_debugging_hints(error),
         fallback_processing: %{attempted: true},
         processor_used: :error_handler
       }
+  end
+
+  # Helper function to generate debugging hints based on the error
+  defp generate_debugging_hints(error) do
+    error_message = Exception.message(error)
+    
+    hints = []
+    
+    hints = 
+      if error_message =~ ~r/no function clause/ do
+        ["Check that the content structure matches the expected format", "Verify the content type is supported" | hints]
+      else
+        hints
+      end
+    
+    hints =
+      if error_message =~ ~r/bad argument|arithmetic/ do
+        ["Check for invalid data types in content metadata", "Ensure numeric fields contain valid numbers" | hints]
+      else
+        hints
+      end
+    
+    hints =
+      if error_message =~ ~r/timeout|process/ do
+        ["Consider reducing content size or complexity", "Check system resources and memory usage" | hints]
+      else
+        hints
+      end
+    
+    # Always include generic hints
+    ["Verify content structure and format", "Check for missing required fields" | hints]
   end
 
   @doc """

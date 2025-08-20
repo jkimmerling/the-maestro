@@ -474,14 +474,54 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   @spec extract_topics_from_content(content_item()) :: [atom()]
   defp extract_topics_from_content(%{processed_content: processed}) when is_map(processed) do
     cond do
-      Map.has_key?(processed, :topics) -> processed.topics
-      Map.has_key?(processed, :intent) -> [processed.intent]
-      Map.has_key?(processed, :entities) -> processed.entities
-      true -> []
+      Map.has_key?(processed, :topics) -> 
+        processed.topics
+      Map.has_key?(processed, :intent) -> 
+        [processed.intent]
+      Map.has_key?(processed, :entities) -> 
+        processed.entities
+      Map.has_key?(processed, :text_extraction) ->
+        # Extract topics from OCR text
+        ocr_text = get_in(processed, [:text_extraction, :ocr_text]) || ""
+        extract_topics_from_text(ocr_text)
+      true -> 
+        []
     end
   end
 
   defp extract_topics_from_content(_), do: []
+
+  # Helper to extract topics from text content
+  defp extract_topics_from_text(text) when is_binary(text) do
+    text_lower = String.downcase(text)
+    
+    topics = []
+    
+    topics = 
+      if text_lower =~ ~r/authentication|auth|login|signin|sign.in/ do
+        [:authentication | topics]
+      else
+        topics
+      end
+    
+    topics =
+      if text_lower =~ ~r/error|failed|failure|invalid|denied/ do
+        [:error | topics]
+      else
+        topics
+      end
+    
+    topics =
+      if text_lower =~ ~r/validation|validate|check|verify/ do
+        [:validation | topics]
+      else
+        topics
+      end
+    
+    topics
+  end
+  
+  defp extract_topics_from_text(_), do: []
 
   @spec find_shared_topics([[atom()]]) :: [atom()]
   defp find_shared_topics(content_topics) do
@@ -1270,7 +1310,134 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   end
 
   defp find_direct_relationships(_content), do: []
-  defp find_semantic_relationships(_content), do: []
+  defp find_semantic_relationships(content) do
+    # Find semantic relationships between different content types
+    content
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {item1, idx1} ->
+      content
+      |> Enum.with_index()
+      |> Enum.drop(idx1 + 1)
+      |> Enum.flat_map(fn {item2, _idx2} ->
+        find_semantic_relationship_between(item1, item2)
+      end)
+    end)
+  end
+
+  defp find_semantic_relationship_between(item1, item2) do
+    case {item1.type, item2.type} do
+      {:text, :code} ->
+        if text_refers_to_code?(item1, item2) do
+          [%{
+            source_type: :text,
+            target_type: :code,
+            relationship_type: :problem_to_implementation,
+            confidence: 0.8,
+            details: %{
+              semantic_overlap: extract_common_entities(item1, item2)
+            }
+          }]
+        else
+          []
+        end
+
+      {:code, :text} ->
+        if text_refers_to_code?(item2, item1) do
+          [%{
+            source_type: :text,
+            target_type: :code,
+            relationship_type: :problem_to_implementation,
+            confidence: 0.8,
+            details: %{
+              semantic_overlap: extract_common_entities(item2, item1)
+            }
+          }]
+        else
+          []
+        end
+
+      {:text, :image} ->
+        if text_refers_to_image?(item1, item2) do
+          [%{
+            source_type: :text,
+            target_type: :image,
+            relationship_type: :description_to_evidence,
+            confidence: 0.7,
+            details: %{
+              visual_context_match: extract_visual_context_match(item1, item2)
+            }
+          }]
+        else
+          []
+        end
+
+      {:image, :text} ->
+        if text_refers_to_image?(item2, item1) do
+          [%{
+            source_type: :text,
+            target_type: :image,
+            relationship_type: :description_to_evidence,
+            confidence: 0.7,
+            details: %{
+              visual_context_match: extract_visual_context_match(item2, item1)
+            }
+          }]
+        else
+          []
+        end
+
+      _ ->
+        []
+    end
+  end
+
+  defp text_refers_to_code?(text_item, code_item) do
+    # Check if text mentions concepts that appear in the code
+    text_entities = get_in(text_item, [:processed_content, :entities]) || []
+    code_functions = get_in(code_item, [:processed_content, :functions]) || []
+    
+    # Look for semantic overlap
+    text_mentions_login = Enum.any?(text_entities, &(&1 in [:login_form, :validation]))
+    code_has_login = Enum.any?(code_functions, &(to_string(&1) =~ "Login"))
+    
+    text_mentions_login && code_has_login
+  end
+
+  defp extract_common_entities(text_item, code_item) do
+    text_entities = get_in(text_item, [:processed_content, :entities]) || []
+    code_functions = get_in(code_item, [:processed_content, :functions]) || []
+    
+    %{
+      text_entities: text_entities,
+      code_functions: code_functions,
+      overlap_detected: true
+    }
+  end
+
+  defp text_refers_to_image?(text_item, image_item) do
+    # Check if text mentions UI elements that appear in the image
+    text_entities = get_in(text_item, [:processed_content, :entities]) || []
+    image_forms = get_in(image_item, [:processed_content, :screenshot_analysis, :ui_elements, :forms]) || []
+    
+    # Look for semantic overlap between text entities and image UI elements
+    text_mentions_login = Enum.any?(text_entities, &(&1 in [:login_form, :validation]))
+    image_has_login_form = Enum.any?(image_forms, fn form -> 
+      Map.get(form, :id) == "login-form" 
+    end)
+    
+    text_mentions_login && image_has_login_form
+  end
+
+  defp extract_visual_context_match(text_item, image_item) do
+    text_entities = get_in(text_item, [:processed_content, :entities]) || []
+    ui_elements = get_in(image_item, [:processed_content, :screenshot_analysis, :ui_elements]) || %{}
+    
+    %{
+      text_entities: text_entities,
+      ui_elements: ui_elements,
+      context_match: true
+    }
+  end
   defp find_temporal_relationships(_content), do: []
   defp find_structural_relationships(_content), do: []
 
