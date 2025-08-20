@@ -223,7 +223,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
     end)
   end
 
-  defp assess_item_compatibility(%{type: type, metadata: metadata} = item, capabilities) do
+  defp assess_item_compatibility(%{type: type, metadata: metadata} = _item, capabilities) do
     case type do
       :image ->
         size_mb = Map.get(metadata, :size_mb, 0)
@@ -378,7 +378,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
     end
   end
 
-  defp generate_fallback_recommendations(content, provider, context) do
+  defp generate_fallback_recommendations(_content, provider, context) do
     provider_status = Map.get(context, :provider_status, %{})
 
     case Map.get(provider_status, provider) do
@@ -442,7 +442,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
     end
   end
 
-  defp calculate_item_quality_impact(%{type: type, metadata: metadata} = item, provider, context) do
+  defp calculate_item_quality_impact(%{type: type, metadata: metadata} = _item, provider, context) do
     case type do
       :image ->
         size_mb = Map.get(metadata, :size_mb, 0)
@@ -724,7 +724,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
     if length(type_scores) > 0, do: Enum.sum(type_scores) / length(type_scores), else: 0.0
   end
 
-  defp calculate_cost_efficiency(provider, content_analysis, context) do
+  defp calculate_cost_efficiency(provider, content_analysis, _context) do
     base_efficiency =
       case provider do
         :anthropic -> 0.8
@@ -855,7 +855,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
     end
   end
 
-  defp analyze_use_case_fit(content, context) do
+  defp analyze_use_case_fit(_content, context) do
     use_case = Map.get(context, :use_case, :general)
 
     case use_case do

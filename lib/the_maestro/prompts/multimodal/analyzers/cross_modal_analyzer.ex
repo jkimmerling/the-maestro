@@ -42,7 +42,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
 
     %{
       coherence_score: coherence_score,
-      narrative_flow_score: coherence_score,  # Add missing field expected by tests
+      # Add missing field expected by tests
+      narrative_flow_score: coherence_score,
       topic_alignment: topic_alignment,
       semantic_relationships: semantic_relationships,
       temporal_consistency: temporal_consistency,
@@ -51,9 +52,12 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
       conflict_detection: %{conflicts: conflicts},
       supporting_relationships: find_supporting_relationships(content),
       workflow_coherence: analyze_workflow_coherence(content),
-      information_gaps: detect_information_gaps(content),  # Add missing field expected by tests
-      synthesis_opportunities: find_synthesis_opportunities(content),  # Add missing field expected by tests
-      priority_ranking: %{ordered_content: content},  # Add missing field expected by tests - simple ordering
+      # Add missing field expected by tests
+      information_gaps: detect_information_gaps(content),
+      # Add missing field expected by tests
+      synthesis_opportunities: find_synthesis_opportunities(content),
+      # Add missing field expected by tests - simple ordering
+      priority_ranking: %{ordered_content: content},
       processing_time_ms: end_time - start_time,
       analysis_warnings: collect_analysis_warnings(content)
     }
@@ -87,7 +91,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
       completion_suggestions: completion_suggestions,
       total_gaps: length(gaps),
       critical_gaps: Enum.count(gaps, &(&1.severity == :critical)),
-      missing_context: gaps  # Add missing field expected by tests - alias for identified_gaps
+      # Add missing field expected by tests - alias for identified_gaps
+      missing_context: gaps
     }
   end
 
@@ -386,7 +391,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
     # Simple similarity based on content type and shared attributes
     type1 = Map.get(item1, :type)
     type2 = Map.get(item2, :type)
-    
+
     type_similarity = if type1 == type2, do: 0.3, else: 0.0
 
     content_similarity = calculate_content_similarity(item1, item2)
@@ -436,7 +441,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   defp find_supporting_relationships(content) do
     Enum.filter(content, fn item ->
       processed = Map.get(item, :processed_content, %{})
-      
+
       # Handle different types of processed_content
       case processed do
         # For text items, processed_content is a string - no supporting relationships
@@ -721,7 +726,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
 
   defp calculate_priority_score(item, context) do
     processed = Map.get(item, :processed_content, %{})
-    
+
     base_score =
       case processed do
         content when is_map(content) ->
@@ -732,7 +737,9 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
             :low -> 0.3
             _ -> 0.5
           end
-        _ -> 0.5
+
+        _ ->
+          0.5
       end
 
     # Adjust based on context
@@ -773,6 +780,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   defp has_cross_reference_potential?(_item1, _item2), do: true
 
   defp extract_reference_info(nil), do: %{}
+
   defp extract_reference_info(item) do
     case Map.get(item, :type) do
       :text -> %{line: 42, file: "auth.ex"}

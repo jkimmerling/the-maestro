@@ -36,7 +36,7 @@ defmodule TheMaestro.Prompts.MultiModal do
       result = MultiModal.process_multimodal_content(content, context)
   """
 
-  alias TheMaestro.Prompts.MultiModal.Processors.ContentProcessor
+  # alias TheMaestro.Prompts.MultiModal.Processors.ContentProcessor
   alias TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer
   alias TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer
   alias TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor
@@ -103,7 +103,8 @@ defmodule TheMaestro.Prompts.MultiModal do
          optimized_result <- apply_performance_optimizations(processed_content, context),
          assembled_prompt <- assemble_final_prompt(optimized_result, context) do
       end_time = System.monotonic_time(:millisecond)
-      processing_time = max(end_time - start_time, 1)  # Ensure at least 1ms for test compatibility
+      # Ensure at least 1ms for test compatibility
+      processing_time = max(end_time - start_time, 1)
 
       %{
         processed_content: processed_content,
@@ -113,8 +114,10 @@ defmodule TheMaestro.Prompts.MultiModal do
         performance_metrics:
           Map.merge(optimized_result.performance_metrics, %{
             processing_time_ms: max(processing_time, 1),
-            content_processing_times: %{},  # Add missing field expected by tests
-            optimization_applied: []  # Add missing field expected by tests
+            # Add missing field expected by tests
+            content_processing_times: %{},
+            # Add missing field expected by tests
+            optimization_applied: []
           }),
         assembled_prompt: assembled_prompt
       }
@@ -246,7 +249,6 @@ defmodule TheMaestro.Prompts.MultiModal do
     {:error, "missing required field: type"}
   end
 
-
   defp enhance_accessibility(processed_content, context) do
     accessibility_requirements = Map.get(context, :accessibility_requirements, [])
 
@@ -277,23 +279,29 @@ defmodule TheMaestro.Prompts.MultiModal do
         }
       end)
 
-    assessment = ProviderCompatibilityAssessor.assess_provider_compatibility(content_for_assessment, provider)
-    
+    assessment =
+      ProviderCompatibilityAssessor.assess_provider_compatibility(
+        content_for_assessment,
+        provider
+      )
+
     # Flatten provider-specific capabilities to top level for easier test access
     provider_capabilities = get_in(assessment, [:provider_capabilities, provider]) || %{}
-    
+
     # Add test compatibility aliases for provider capabilities
-    provider_capabilities_with_aliases = 
+    provider_capabilities_with_aliases =
       Map.merge(provider_capabilities, %{
-        max_image_size: Map.get(provider_capabilities, :max_image_size_mb, 0),  # Alias for test compatibility
-        supported_formats: Map.get(provider_capabilities, :supported_image_formats, [])  # Alias for test compatibility
+        # Alias for test compatibility
+        max_image_size: Map.get(provider_capabilities, :max_image_size_mb, 0),
+        # Alias for test compatibility
+        supported_formats: Map.get(provider_capabilities, :supported_image_formats, [])
       })
-    
+
     # Add quality_impact field expected by tests
     quality_impact = %{
       overall_score: Map.get(assessment, :overall_compatibility_score, 0.0)
     }
-    
+
     Map.merge(assessment, %{
       provider => provider_capabilities_with_aliases,
       quality_impact: quality_impact
@@ -368,6 +376,7 @@ defmodule TheMaestro.Prompts.MultiModal do
 
   defp calculate_item_complexity(%{type: type} = item) do
     metadata = Map.get(item, :metadata, %{})
+
     base_complexity =
       case type do
         :text -> 0.1
@@ -428,7 +437,13 @@ defmodule TheMaestro.Prompts.MultiModal do
             # Compress images larger than 10MB for Anthropic's limits
             new_metadata = Map.put(item.metadata, :size_mb, min(size * 0.7, 10))
             optimized_item = %{item | metadata: new_metadata}
-            modification = %{type: :compression, original_size: size, new_size: new_metadata.size_mb}
+
+            modification = %{
+              type: :compression,
+              original_size: size,
+              new_size: new_metadata.size_mb
+            }
+
             {optimized_item, [modification | acc]}
 
           %{type: :video} ->
@@ -438,6 +453,7 @@ defmodule TheMaestro.Prompts.MultiModal do
               | type: :image,
                 metadata: Map.put(item.metadata || %{}, :converted_from, :video)
             }
+
             modification = %{type: :format_conversion, from: :video, to: :image}
             {optimized_item, [modification | acc]}
 
@@ -448,6 +464,7 @@ defmodule TheMaestro.Prompts.MultiModal do
               | type: :text,
                 metadata: Map.put(item.metadata || %{}, :converted_from, :audio)
             }
+
             modification = %{type: :format_conversion, from: :audio, to: :text}
             {optimized_item, [modification | acc]}
 
@@ -547,17 +564,17 @@ defmodule TheMaestro.Prompts.MultiModal do
   defp generate_merge_optimizations(merged_content) do
     # Get synthesis opportunities from analyzer
     synthesis = CrossModalAnalyzer.find_synthesis_opportunities(merged_content)
-    
+
     # Convert to list format expected by tests
     base_suggestions = [
       "Consider reordering content for better narrative flow",
-      "Optimize repeated content for brevity", 
+      "Optimize repeated content for brevity",
       "Enhance cross-references between related items"
     ]
-    
+
     # Add specific suggestions from synthesis analysis
     specific_suggestions = Map.get(synthesis, :enhancement_suggestions, [])
-    
+
     base_suggestions ++ specific_suggestions
   end
 
@@ -595,7 +612,8 @@ defmodule TheMaestro.Prompts.MultiModal do
 
   defp process_text_item(item, _context) do
     Map.merge(item, %{
-      processed_content: Map.get(item, :content, ""),  # For text, processed_content is the original content
+      # For text, processed_content is the original content
+      processed_content: Map.get(item, :content, ""),
       analysis: %{
         intent: :debugging,
         complexity: :moderate,
@@ -684,7 +702,8 @@ defmodule TheMaestro.Prompts.MultiModal do
         },
         analysis: %{
           visual_elements: %{detected_ui_elements: 3},
-          text_extraction: %{has_text: true},  # Add missing field expected by tests
+          # Add missing field expected by tests
+          text_extraction: %{has_text: true},
           processing_status: :success
         },
         processor_used: :image_processor
@@ -756,5 +775,4 @@ defmodule TheMaestro.Prompts.MultiModal do
       processor_used: :generic_processor
     })
   end
-
 end

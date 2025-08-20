@@ -60,18 +60,20 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.CodeProcessor do
     vulnerabilities = []
 
     # Check for hardcoded credentials
-    vulnerabilities = if Regex.match?(~r/password.*=.*["'][^"']+["']/, content) do
-      [:hardcoded_credentials | vulnerabilities]
-    else
-      vulnerabilities
-    end
+    vulnerabilities =
+      if Regex.match?(~r/password.*=.*["'][^"']+["']/, content) do
+        [:hardcoded_credentials | vulnerabilities]
+      else
+        vulnerabilities
+      end
 
     # Check for weak authentication
-    vulnerabilities = if String.contains?(content, ~s(== "admin")) do
-      [:weak_authentication | vulnerabilities]
-    else
-      vulnerabilities
-    end
+    vulnerabilities =
+      if String.contains?(content, ~s(== "admin")) do
+        [:weak_authentication | vulnerabilities]
+      else
+        vulnerabilities
+      end
 
     vulnerabilities
   end
@@ -83,11 +85,12 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.CodeProcessor do
   defp detect_patterns(content) do
     patterns = []
 
-    patterns = if Regex.match?(~r/def \w+.*do.*end/s, content) do
-      [:function_definition | patterns]
-    else
-      patterns
-    end
+    patterns =
+      if Regex.match?(~r/def \w+.*do.*end/s, content) do
+        [:function_definition | patterns]
+      else
+        patterns
+      end
 
     patterns
   end
@@ -96,20 +99,22 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.CodeProcessor do
     antipatterns = []
 
     # Deep nesting antipattern
-    antipatterns = if calculate_nesting_depth(content) > 3 do
-      [:deep_nesting | antipatterns]
-    else
-      antipatterns
-    end
+    antipatterns =
+      if calculate_nesting_depth(content) > 3 do
+        [:deep_nesting | antipatterns]
+      else
+        antipatterns
+      end
 
     # Long function antipattern
     line_count = String.split(content, "\n") |> length()
 
-    antipatterns = if line_count > 20 do
-      [:long_function | antipatterns]
-    else
-      antipatterns
-    end
+    antipatterns =
+      if line_count > 20 do
+        [:long_function | antipatterns]
+      else
+        antipatterns
+      end
 
     antipatterns
   end

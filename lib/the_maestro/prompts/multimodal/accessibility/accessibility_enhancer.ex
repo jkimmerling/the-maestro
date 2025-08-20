@@ -49,18 +49,20 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
       end
 
     # Convert to expected test structure
-    alt_texts = if Map.has_key?(enhancements, :alt_text) do
-      %{image_descriptions: enhancements.alt_text}
-    else
-      %{image_descriptions: []}
-    end
-    
-    audio_descriptions = if Map.has_key?(enhancements, :audio_descriptions) do
-      %{content_summaries: enhancements.audio_descriptions}
-    else  
-      %{content_summaries: []}
-    end
-    
+    alt_texts =
+      if Map.has_key?(enhancements, :alt_text) do
+        %{image_descriptions: enhancements.alt_text}
+      else
+        %{image_descriptions: []}
+      end
+
+    audio_descriptions =
+      if Map.has_key?(enhancements, :audio_descriptions) do
+        %{content_summaries: enhancements.audio_descriptions}
+      else
+        %{content_summaries: []}
+      end
+
     %{
       alt_texts: alt_texts,
       audio_descriptions: audio_descriptions,
@@ -116,11 +118,13 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
   @spec generate_accessibility_report(list(map()), atom()) :: map()
   def generate_accessibility_report(content, wcag_levels) do
     # Handle both single level and list of levels
-    wcag_level = case wcag_levels do
-      [level | _] -> level
-      level when is_atom(level) -> level
-      _ -> :wcag_aa
-    end
+    wcag_level =
+      case wcag_levels do
+        [level | _] -> level
+        level when is_atom(level) -> level
+        _ -> :wcag_aa
+      end
+
     # Count compliant vs non-compliant items
     compliance_results = Enum.map(content, &check_compliance(&1, wcag_level))
 
@@ -161,9 +165,12 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
       improvement_recommendations: improvement_recommendations,
       remediation_plan: remediation_plan,
       issues_found: priority_issues,
-      recommendations: improvement_recommendations,  # Alias for test compatibility
-      severity_breakdown: %{critical: non_compliant_items},  # Simple severity breakdown
-      estimated_fix_time_hours: non_compliant_items * 0.5  # Estimate 0.5 hours per issue
+      # Alias for test compatibility
+      recommendations: improvement_recommendations,
+      # Simple severity breakdown
+      severity_breakdown: %{critical: non_compliant_items},
+      # Estimate 0.5 hours per issue
+      estimated_fix_time_hours: non_compliant_items * 0.5
     }
   end
 
@@ -290,7 +297,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
       }
     end)
   end
-  
+
   defp generate_content_summary(item) do
     case item.type do
       :text -> "Text content: #{String.slice(item.content, 0, 100)}..."
@@ -554,7 +561,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
       :image ->
         alt_text_ok =
           (Map.get(accessibility, :alt_text) != nil && Map.get(accessibility, :alt_text) != "") ||
-          (Map.get(metadata, :alt_text) != nil && Map.get(metadata, :alt_text) != "")
+            (Map.get(metadata, :alt_text) != nil && Map.get(metadata, :alt_text) != "")
 
         %{compliant: alt_text_ok, type: :image}
 
@@ -565,7 +572,7 @@ defmodule TheMaestro.Prompts.MultiModal.Accessibility.AccessibilityEnhancer do
       :audio ->
         transcript_ok =
           (Map.get(accessibility, :transcript) != nil && Map.get(accessibility, :transcript) != "") ||
-          (Map.get(metadata, :transcript) != nil && Map.get(metadata, :transcript) != "")
+            (Map.get(metadata, :transcript) != nil && Map.get(metadata, :transcript) != "")
 
         %{compliant: transcript_ok, type: :audio}
 

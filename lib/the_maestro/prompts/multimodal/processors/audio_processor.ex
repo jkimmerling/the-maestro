@@ -407,7 +407,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.AudioProcessor do
     [%{speaker: "Primary", start: 0.0, end: duration, content: "Continuous speech"}]
   end
 
-  defp generate_silence_segments(duration) do
+  defp generate_silence_segments(_duration) do
     [
       %{start: 14.5, end: 15.5, duration: 1.0, type: :natural_pause},
       %{start: 34.5, end: 36.0, duration: 1.5, type: :speaker_transition}

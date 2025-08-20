@@ -13,28 +13,31 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   @spec optimize_processing_pipeline(list(map()), map()) :: map()
   def optimize_processing_pipeline(content, context) do
     start_time = System.monotonic_time(:millisecond)
-    
+
     # Check for performance constraints
-    max_processing_time = get_in(context, [:performance_constraints, :max_processing_time_ms]) || 5000
-    
+    max_processing_time =
+      get_in(context, [:performance_constraints, :max_processing_time_ms]) || 5000
+
     # Simulate processing time based on content
     simulated_processing_time = calculate_simulated_processing_time(content)
     timeout_occurred = simulated_processing_time > max_processing_time
-    
+
     # If timeout would occur, simulate partial processing
     if timeout_occurred do
       performance_metrics = %{
         optimization_time_ms: max_processing_time,
         processing_time_ms: max_processing_time,
         total_processing_time_ms: simulated_processing_time,
-        memory_usage_mb: 100,  # High memory usage for large content
+        # High memory usage for large content
+        memory_usage_mb: 100,
         items_processed: length(content),
         timeout_occurred: true,
         partial_processing: true
       }
-      
+
       %{
-        optimized_content: content,  # Return original content due to timeout
+        # Return original content due to timeout
+        optimized_content: content,
         optimizations_applied: %{},
         performance_metrics: performance_metrics,
         recommendations: ["Reduce content size", "Increase processing time limit"]
@@ -58,46 +61,51 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
 
       end_time = System.monotonic_time(:millisecond)
       processing_time = end_time - start_time
-      
+
       performance_metrics = %{
         optimization_time_ms: processing_time,
         processing_time_ms: processing_time,
         total_processing_time_ms:
           calculate_estimated_processing_time(optimized_content, optimizations_applied),
-        memory_usage_mb: calculate_estimated_memory_usage(optimized_content, optimizations_applied),
+        memory_usage_mb:
+          calculate_estimated_memory_usage(optimized_content, optimizations_applied),
         items_processed: length(content),
         timeout_occurred: false,
         partial_processing: false
       }
-      
+
       %{
         optimized_content: optimized_content,
         optimizations_applied: optimizations_applied,
         performance_metrics: performance_metrics,
-        recommendations: generate_optimization_recommendations(content, context, optimizations_applied)
+        recommendations:
+          generate_optimization_recommendations(content, context, optimizations_applied)
       }
     end
   end
-  
+
   defp calculate_simulated_processing_time(content) do
     Enum.reduce(content, 0, fn item, acc ->
-      base_time = case item.type do
-        :text -> 10
-        :image -> 50
-        :audio -> 100
-        :video -> 200
-        :document -> 75
-        :code -> 25
-        _ -> 20
-      end
-      
+      base_time =
+        case item.type do
+          :text -> 10
+          :image -> 50
+          :audio -> 100
+          :video -> 200
+          :document -> 75
+          :code -> 25
+          _ -> 20
+        end
+
       # Add extra time for large content
-      size_multiplier = case get_in(item, [:metadata, :size_gb]) do
-        size when is_number(size) and size > 1 -> size * 50  # Large content
-        _ -> 1
-      end
-      
-      acc + (base_time * size_multiplier)
+      size_multiplier =
+        case get_in(item, [:metadata, :size_gb]) do
+          # Large content
+          size when is_number(size) and size > 1 -> size * 50
+          _ -> 1
+        end
+
+      acc + base_time * size_multiplier
     end)
   end
 
@@ -107,7 +115,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   @spec implement_lazy_loading(list(map()), map()) :: map()
   def implement_lazy_loading(content, config) do
     memory_threshold = Map.get(config, :memory_threshold_mb, 50)
-    preview_quality = Map.get(config, :preview_quality, :medium)
+    _preview_quality = Map.get(config, :preview_quality, :medium)
 
     {lazy_items, immediate_items} =
       Enum.split_with(content, fn item ->
@@ -447,7 +455,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   end
 
   defp create_lazy_loading_item(item, config) do
-    preview_quality = Map.get(config, :preview_quality, :medium)
+    _preview_quality = Map.get(config, :preview_quality, :medium)
 
     case item.type do
       :video ->
@@ -456,7 +464,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
           preview: %{
             size_mb: 5,
             duration: 30,
-            quality: preview_quality
+            quality: :medium
           },
           loading_strategy: :progressive_download,
           memory_footprint_mb: 5
@@ -505,8 +513,6 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
       _ -> :medium
     end
   end
-
-  defp priority_meets_threshold?(:critical, _), do: true
 
   defp priority_meets_threshold?(:high, threshold) when threshold in [:low, :medium, :high],
     do: true
@@ -696,7 +702,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     end)
   end
 
-  defp implement_work_stealing(content, worker_allocation, config) do
+  defp implement_work_stealing(_content, worker_allocation, config) do
     if Map.get(config, :enabled, false) do
       steal_threshold = Map.get(config, :steal_threshold_ms, 2000)
 
@@ -712,7 +718,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
         end)
         |> Enum.sum()
 
-      avg_processing_time = total_processing_time / length(worker_allocation)
+      _avg_processing_time = total_processing_time / length(worker_allocation)
 
       steal_events_expected =
         Enum.count(worker_allocation, fn alloc ->
@@ -757,7 +763,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     base_speedup * (1 + work_stealing_bonus)
   end
 
-  defp calculate_worker_utilization(worker_allocation, work_stealing) do
+  defp calculate_worker_utilization(_worker_allocation, work_stealing) do
     # Assume 80% base utilization
     base_utilization = 0.8
 
@@ -837,7 +843,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     streaming_enabled = get_in(optimizations, [:streaming, :enabled]) || false
     pooling_enabled = get_in(optimizations, [:object_pooling]) != nil
 
-    base_efficiency = analysis.peak_usage_mb / max_memory
+    _base_efficiency = analysis.peak_usage_mb / max_memory
 
     # Improve efficiency with optimizations
     streaming_improvement = if streaming_enabled, do: 0.3, else: 0.0
@@ -1154,7 +1160,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   end
 
   defp extract_cached_processors(cache_strategy) do
-    cache_strategy.processor_caches
+    (get_in(cache_strategy, [:caching_strategy, :processor_caches]) || [])
     |> Enum.map(& &1.processor_type)
   end
 
