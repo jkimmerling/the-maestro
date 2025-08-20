@@ -86,7 +86,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.TextProcessor do
     entities
   end
 
-  defp assess_language_quality(content) do
+  defp assess_language_quality(_content) do
     %{
       readability: :good,
       grammar: :correct,
@@ -95,7 +95,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.TextProcessor do
     }
   end
 
-  defp enhance_text_accessibility(content) do
+  defp enhance_text_accessibility(_content) do
     %{
       reading_level: :college,
       structure_clear: true,

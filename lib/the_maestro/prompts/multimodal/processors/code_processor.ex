@@ -60,13 +60,17 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.CodeProcessor do
     vulnerabilities = []
 
     # Check for hardcoded credentials
-    if Regex.match?(~r/password.*=.*["'][^"']+["']/, content) do
-      vulnerabilities = [:hardcoded_credentials | vulnerabilities]
+    vulnerabilities = if Regex.match?(~r/password.*=.*["'][^"']+["']/, content) do
+      [:hardcoded_credentials | vulnerabilities]
+    else
+      vulnerabilities
     end
 
     # Check for weak authentication
-    if String.contains?(content, ~s(== "admin")) do
-      vulnerabilities = [:weak_authentication | vulnerabilities]
+    vulnerabilities = if String.contains?(content, ~s(== "admin")) do
+      [:weak_authentication | vulnerabilities]
+    else
+      vulnerabilities
     end
 
     vulnerabilities
@@ -79,8 +83,10 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.CodeProcessor do
   defp detect_patterns(content) do
     patterns = []
 
-    if Regex.match?(~r/def \w+.*do.*end/s, content) do
-      patterns = [:function_definition | patterns]
+    patterns = if Regex.match?(~r/def \w+.*do.*end/s, content) do
+      [:function_definition | patterns]
+    else
+      patterns
     end
 
     patterns
@@ -90,15 +96,19 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.CodeProcessor do
     antipatterns = []
 
     # Deep nesting antipattern
-    if calculate_nesting_depth(content) > 3 do
-      antipatterns = [:deep_nesting | antipatterns]
+    antipatterns = if calculate_nesting_depth(content) > 3 do
+      [:deep_nesting | antipatterns]
+    else
+      antipatterns
     end
 
     # Long function antipattern
     line_count = String.split(content, "\n") |> length()
 
-    if line_count > 20 do
-      antipatterns = [:long_function | antipatterns]
+    antipatterns = if line_count > 20 do
+      [:long_function | antipatterns]
+    else
+      antipatterns
     end
 
     antipatterns
