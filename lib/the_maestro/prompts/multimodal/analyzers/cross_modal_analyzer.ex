@@ -254,30 +254,31 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
 
   defp analyze_semantic_relationships(content) do
     content_length = length(content)
-    
-    relationships = if content_length >= 2 do
-      for i <- 0..(content_length - 2),
-          j <- (i + 1)..(content_length - 1) do
-        item1 = Enum.at(content, i)
-        item2 = Enum.at(content, j)
 
-        semantic_similarity = calculate_semantic_similarity(item1, item2)
+    relationships =
+      if content_length >= 2 do
+        for i <- 0..(content_length - 2),
+            j <- (i + 1)..(content_length - 1) do
+          item1 = Enum.at(content, i)
+          item2 = Enum.at(content, j)
 
-        if semantic_similarity > 0.3 do
-          %{
-            source_index: i,
-            target_index: j,
-            similarity_score: semantic_similarity,
-            relationship_type: determine_semantic_relationship_type(item1, item2)
-          }
-        else
-          nil
+          semantic_similarity = calculate_semantic_similarity(item1, item2)
+
+          if semantic_similarity > 0.3 do
+            %{
+              source_index: i,
+              target_index: j,
+              similarity_score: semantic_similarity,
+              relationship_type: determine_semantic_relationship_type(item1, item2)
+            }
+          else
+            nil
+          end
         end
+        |> Enum.reject(&is_nil/1)
+      else
+        []
       end
-      |> Enum.reject(&is_nil/1)
-    else
-      []
-    end
 
     %{
       relationships: relationships,

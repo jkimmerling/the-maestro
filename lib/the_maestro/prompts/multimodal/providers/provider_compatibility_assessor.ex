@@ -28,7 +28,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
       # Check for validation errors in content
       validation_errors = validate_content_structure(content)
       valid_content_items = length(content) - length(validation_errors)
-      
+
       %{
         provider_capabilities: %{provider => provider_capabilities},
         content_compatibility: content_compatibility,
@@ -37,7 +37,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
         fallback_recommendations: generate_fallback_recommendations(content, provider, context),
         validation_errors: validation_errors,
         valid_content_items: valid_content_items,
-        processing_status: if(length(validation_errors) > 0, do: :completed_with_errors, else: :completed)
+        processing_status:
+          if(length(validation_errors) > 0, do: :completed_with_errors, else: :completed)
       }
     end
   end
@@ -233,10 +234,11 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
   defp assess_item_compatibility(item, capabilities) do
     type = Map.get(item, :type)
     metadata = Map.get(item, :metadata, %{})
-    
+
     content = Map.get(item, :content)
-    
-    if is_nil(type) or type not in [:text, :image, :audio, :video, :code, :document] or is_nil(content) do
+
+    if is_nil(type) or type not in [:text, :image, :audio, :video, :code, :document] or
+         is_nil(content) do
       %{
         content_type: :unknown,
         compatible: false,
@@ -244,81 +246,84 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
         alternative_approaches: []
       }
     else
-    case type do
-      :image ->
-        size_mb = Map.get(metadata, :size_mb, 0)
-        format = Map.get(metadata, :format, "PNG")
+      case type do
+        :image ->
+          size_mb = Map.get(metadata, :size_mb, 0)
+          format = Map.get(metadata, :format, "PNG")
 
-        size_compatible = size_mb <= Map.get(capabilities, :max_image_size_mb, 0)
-        format_compatible = format in Map.get(capabilities, :supported_image_formats, [])
+          size_compatible = size_mb <= Map.get(capabilities, :max_image_size_mb, 0)
+          format_compatible = format in Map.get(capabilities, :supported_image_formats, [])
 
-        %{
-          content_type: :image,
-          compatible: capabilities.supports_images && size_compatible && format_compatible,
-          compatibility_issues:
-            generate_image_compatibility_issues(size_mb, format, capabilities),
-          alternative_approaches:
-            if(!capabilities.supports_images, do: [:convert_to_text_description], else: [])
-        }
+          %{
+            content_type: :image,
+            compatible: capabilities.supports_images && size_compatible && format_compatible,
+            compatibility_issues:
+              generate_image_compatibility_issues(size_mb, format, capabilities),
+            alternative_approaches:
+              if(!capabilities.supports_images, do: [:convert_to_text_description], else: [])
+          }
 
-      :audio ->
-        duration = Map.get(metadata, :duration, 0)
-        duration_minutes = duration / 60
+        :audio ->
+          duration = Map.get(metadata, :duration, 0)
+          duration_minutes = duration / 60
 
-        duration_compatible =
-          duration_minutes <= Map.get(capabilities, :max_audio_duration_minutes, 0)
+          duration_compatible =
+            duration_minutes <= Map.get(capabilities, :max_audio_duration_minutes, 0)
 
-        %{
-          content_type: :audio,
-          compatible: Map.get(capabilities, :supports_audio, false) && duration_compatible,
-          compatibility_issues: generate_audio_compatibility_issues(capabilities),
-          alternative_approaches: generate_audio_alternatives(capabilities),
-          requires_preprocessing: Map.get(capabilities, :whisper_integration_available, false),
-          preprocessing_steps:
-            if(Map.get(capabilities, :whisper_integration_available, false),
-              do: [:transcription_via_whisper],
-              else: []
-            )
-        }
+          %{
+            content_type: :audio,
+            compatible: Map.get(capabilities, :supports_audio, false) && duration_compatible,
+            compatibility_issues: generate_audio_compatibility_issues(capabilities),
+            alternative_approaches: generate_audio_alternatives(capabilities),
+            requires_preprocessing: Map.get(capabilities, :whisper_integration_available, false),
+            preprocessing_steps:
+              if(Map.get(capabilities, :whisper_integration_available, false),
+                do: [:transcription_via_whisper],
+                else: []
+              )
+          }
 
-      :video ->
-        duration = Map.get(metadata, :duration, 0)
-        duration_minutes = duration / 60
+        :video ->
+          duration = Map.get(metadata, :duration, 0)
+          duration_minutes = duration / 60
 
-        duration_compatible =
-          duration_minutes <= Map.get(capabilities, :max_video_duration_minutes, 0)
+          duration_compatible =
+            duration_minutes <= Map.get(capabilities, :max_video_duration_minutes, 0)
 
-        %{
-          content_type: :video,
-          compatible: Map.get(capabilities, :supports_video, false) && duration_compatible,
-          compatibility_issues: generate_video_compatibility_issues(capabilities),
-          alternative_approaches:
-            if(!Map.get(capabilities, :supports_video, false),
-              do: [:extract_keyframes, :use_existing_captions],
-              else: []
-            )
-        }
+          %{
+            content_type: :video,
+            compatible: Map.get(capabilities, :supports_video, false) && duration_compatible,
+            compatibility_issues: generate_video_compatibility_issues(capabilities),
+            alternative_approaches:
+              if(!Map.get(capabilities, :supports_video, false),
+                do: [:extract_keyframes, :use_existing_captions],
+                else: []
+              )
+          }
 
-      :document ->
-        pages = Map.get(metadata, :pages, 0)
-        pages_compatible = pages <= Map.get(capabilities, :max_document_pages, 0)
+        :document ->
+          pages = Map.get(metadata, :pages, 0)
+          pages_compatible = pages <= Map.get(capabilities, :max_document_pages, 0)
 
-        %{
-          content_type: :document,
-          compatible: Map.get(capabilities, :supports_documents, false) && pages_compatible,
-          compatibility_issues: generate_document_compatibility_issues(capabilities),
-          alternative_approaches:
-            if(!Map.get(capabilities, :supports_documents, false), do: [:extract_text], else: [])
-        }
+          %{
+            content_type: :document,
+            compatible: Map.get(capabilities, :supports_documents, false) && pages_compatible,
+            compatibility_issues: generate_document_compatibility_issues(capabilities),
+            alternative_approaches:
+              if(!Map.get(capabilities, :supports_documents, false),
+                do: [:extract_text],
+                else: []
+              )
+          }
 
-      _ ->
-        %{
-          content_type: type,
-          compatible: true,
-          compatibility_issues: [],
-          alternative_approaches: []
-        }
-    end
+        _ ->
+          %{
+            content_type: type,
+            compatible: true,
+            compatibility_issues: [],
+            alternative_approaches: []
+          }
+      end
     end
   end
 
@@ -450,7 +455,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
       :document ->
         format = Map.get(metadata, :format, "PDF")
         suggested_changes = if format != "PDF", do: [:convert_to_pdf, :extract_text], else: []
-        
+
         %{
           content_type: :document,
           adaptations_needed: length(suggested_changes) > 0,
@@ -471,7 +476,11 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
           content_type: :video,
           adaptations_needed: false,
           suggested_changes: [],
-          alternative_approaches: [:extract_keyframes, :transcribe_to_text, :use_existing_captions]
+          alternative_approaches: [
+            :extract_keyframes,
+            :transcribe_to_text,
+            :use_existing_captions
+          ]
         }
 
       _ ->
@@ -486,6 +495,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
 
   defp calculate_item_quality_impact(%{type: type} = item, provider, context) do
     metadata = Map.get(item, :metadata, %{})
+
     case type do
       :image ->
         size_mb = Map.get(metadata, :size_mb, 0)
@@ -525,7 +535,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
 
         # Check if accessibility requirements exist
         accessibility_requirements = Map.get(context, :accessibility_requirements, [])
-        
+
         result = %{
           content_type: :image,
           original_quality_score: quality_score,
@@ -533,7 +543,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
           quality_loss: quality_loss,
           impact_category: impact_category
         }
-        
+
         if length(accessibility_requirements) > 0 do
           result
           |> Map.put(:accessibility_enhancement_impact, %{
@@ -596,13 +606,15 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
             metadata = Map.get(image_item, :metadata, %{})
             size = Map.get(metadata, :size_mb, 0)
             _format = Map.get(metadata, :format, "PNG")
-            
-            new_metadata = metadata
-            |> then(fn m -> 
-              if size > 10, do: Map.put(m, :size_mb, min(size * 0.7, 10)), else: m 
-            end)
-            |> Map.put(:format, "PNG")  # Anthropic prefers PNG format
-            
+
+            new_metadata =
+              metadata
+              |> then(fn m ->
+                if size > 10, do: Map.put(m, :size_mb, min(size * 0.7, 10)), else: m
+              end)
+              # Anthropic prefers PNG format
+              |> Map.put(:format, "PNG")
+
             %{image_item | metadata: new_metadata}
 
           %{type: :document, metadata: %{pages: pages}} when pages > 20 ->
@@ -713,7 +725,8 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
       Enum.map(audio_items, fn _audio ->
         %{
           type: :text,
-          content: "Extracted audio transcript from presentation video containing comprehensive technical discussion, including key concepts, methodologies, implementation details, best practices, potential challenges, and actionable recommendations.",
+          content:
+            "Extracted audio transcript from presentation video containing comprehensive technical discussion, including key concepts, methodologies, implementation details, best practices, potential challenges, and actionable recommendations.",
           source: :audio_transcript
         }
       end)
@@ -1051,51 +1064,51 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
   end
 
   defp generate_trend_analysis(performance_data) do
-    
-    provider_trends = Enum.reduce(performance_data, %{}, fn {provider, data}, acc ->
-      # Most recent first
-      sessions = data.sessions |> Enum.reverse()
+    provider_trends =
+      Enum.reduce(performance_data, %{}, fn {provider, data}, acc ->
+        # Most recent first
+        sessions = data.sessions |> Enum.reverse()
 
-      trends =
-        if length(sessions) >= 3 do
-          recent_times = sessions |> Enum.take(5) |> Enum.map(& &1.response_time_ms)
-          recent_quality = sessions |> Enum.take(5) |> Enum.map(& &1.quality)
+        trends =
+          if length(sessions) >= 3 do
+            recent_times = sessions |> Enum.take(5) |> Enum.map(& &1.response_time_ms)
+            recent_quality = sessions |> Enum.take(5) |> Enum.map(& &1.quality)
 
-          time_trend =
-            if List.last(recent_times) > List.first(recent_times),
-              do: :increasing,
-              else: :decreasing
+            time_trend =
+              if List.last(recent_times) > List.first(recent_times),
+                do: :increasing,
+                else: :decreasing
 
-          quality_trend =
-            if List.last(recent_quality) > List.first(recent_quality),
-              do: :increasing,
-              else: :decreasing
+            quality_trend =
+              if List.last(recent_quality) > List.first(recent_quality),
+                do: :increasing,
+                else: :decreasing
 
-          %{
-            response_time_trend: time_trend,
-            quality_trend: quality_trend,
-            anomalies_detected: detect_anomalies(sessions),
-            recommendations: generate_performance_recommendations(time_trend, quality_trend)
-          }
-        else
-          %{
-            response_time_trend: :insufficient_data,
-            quality_trend: :insufficient_data,
-            anomalies_detected: [],
-            recommendations: []
-          }
-        end
+            %{
+              response_time_trend: time_trend,
+              quality_trend: quality_trend,
+              anomalies_detected: detect_anomalies(sessions),
+              recommendations: generate_performance_recommendations(time_trend, quality_trend)
+            }
+          else
+            %{
+              response_time_trend: :insufficient_data,
+              quality_trend: :insufficient_data,
+              anomalies_detected: [],
+              recommendations: []
+            }
+          end
 
-      Map.put(acc, provider, trends)
-    end)
+        Map.put(acc, provider, trends)
+      end)
 
     # Collect all anomalies from all providers
-    all_anomalies = 
+    all_anomalies =
       provider_trends
       |> Enum.flat_map(fn {_provider, trends} -> trends.anomalies_detected end)
 
     # Collect all recommendations from all providers
-    all_recommendations = 
+    all_recommendations =
       provider_trends
       |> Enum.flat_map(fn {_provider, trends} -> trends.recommendations end)
 
@@ -1116,36 +1129,47 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
 
       anomalous_sessions = Enum.filter(sessions, &(&1.response_time_ms > threshold))
 
-      anomalies = if length(anomalous_sessions) > 0 do
-        [%{type: :slow_response, count: length(anomalous_sessions), threshold: threshold}]
-      else
-        []
-      end
-      
-      # Also detect quality degradation (more sensitive)
-      qualities = sessions |> Enum.map(& &1.quality)
-      avg_quality = Enum.sum(qualities) / length(qualities)
-      quality_threshold = avg_quality * 0.9  # More sensitive threshold
-      low_quality_sessions = Enum.filter(sessions, &(&1.quality < quality_threshold))
-      
-      quality_anomalies = if length(low_quality_sessions) > 0 do
-        [%{type: :quality_degradation, count: length(low_quality_sessions), threshold: quality_threshold}]
-      else
-        []
-      end
-      
-      # Add trend-based anomaly detection (detect consistent degradation)
-      trend_anomalies = if length(sessions) >= 5 do
-        recent_times = sessions |> Enum.take(-5) |> Enum.map(& &1.response_time_ms)
-        if List.last(recent_times) > List.first(recent_times) * 1.5 do
-          [%{type: :performance_trend_degradation, severity: :high}]
+      anomalies =
+        if length(anomalous_sessions) > 0 do
+          [%{type: :slow_response, count: length(anomalous_sessions), threshold: threshold}]
         else
           []
         end
-      else
-        []
-      end
-      
+
+      # Also detect quality degradation (more sensitive)
+      qualities = sessions |> Enum.map(& &1.quality)
+      avg_quality = Enum.sum(qualities) / length(qualities)
+      # More sensitive threshold
+      quality_threshold = avg_quality * 0.9
+      low_quality_sessions = Enum.filter(sessions, &(&1.quality < quality_threshold))
+
+      quality_anomalies =
+        if length(low_quality_sessions) > 0 do
+          [
+            %{
+              type: :quality_degradation,
+              count: length(low_quality_sessions),
+              threshold: quality_threshold
+            }
+          ]
+        else
+          []
+        end
+
+      # Add trend-based anomaly detection (detect consistent degradation)
+      trend_anomalies =
+        if length(sessions) >= 5 do
+          recent_times = sessions |> Enum.take(-5) |> Enum.map(& &1.response_time_ms)
+
+          if List.last(recent_times) > List.first(recent_times) * 1.5 do
+            [%{type: :performance_trend_degradation, severity: :high}]
+          else
+            []
+          end
+        else
+          []
+        end
+
       anomalies ++ quality_anomalies ++ trend_anomalies
     end
   end
@@ -1163,17 +1187,26 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
     Enum.reduce(content, [], fn item, errors ->
       cond do
         not is_map(item) ->
-          [%{type: :invalid_structure, item: item, message: "Content item must be a map"} | errors]
-        
+          [
+            %{type: :invalid_structure, item: item, message: "Content item must be a map"}
+            | errors
+          ]
+
         not Map.has_key?(item, :type) ->
-          [%{type: :missing_type, item: item, message: "Content item missing :type field"} | errors]
-        
+          [
+            %{type: :missing_type, item: item, message: "Content item missing :type field"}
+            | errors
+          ]
+
         Map.get(item, :type) not in [:text, :image, :audio, :video, :code, :document] ->
           [%{type: :invalid_type, item: item, message: "Invalid content type"} | errors]
-        
+
         not Map.has_key?(item, :content) ->
-          [%{type: :missing_content, item: item, message: "Content item missing :content field"} | errors]
-        
+          [
+            %{type: :missing_content, item: item, message: "Content item missing :content field"}
+            | errors
+          ]
+
         true ->
           errors
       end
