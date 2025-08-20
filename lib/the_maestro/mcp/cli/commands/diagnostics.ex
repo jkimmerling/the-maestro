@@ -13,28 +13,31 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   @doc """
   Diagnose system issues and connectivity problems.
   """
+  @spec diagnose(list(String.t()), map()) :: {:ok, atom()} | {:error, String.t()}
   def diagnose(args, options) do
     if Map.get(options, :help) do
-      show_help()
+      _ = show_help()
       {:ok, :help}
-    end
+    else
+      case args do
+        [] ->
+          run_comprehensive_diagnosis(options)
 
-    case args do
-      [] ->
-        run_comprehensive_diagnosis(options)
-
-      [server_name | _] ->
-        diagnose_server(server_name, options)
+        [server_name | _] ->
+          diagnose_server(server_name, options)
+      end
     end
   end
 
   @doc """
   Show server logs with filtering and search capabilities.
   """
+  @spec show_logs(list(String.t()), map()) :: {:ok, atom()} | {:error, String.t()}
   def show_logs(args, options) do
     case args do
       [] ->
-        CLI.print_error("Server name is required for log viewing.")
+        _ = CLI.print_error("Server name is required for log viewing.")
+        {:error, "server_name_required"}
 
       [server_name | _] ->
         show_server_logs(server_name, options)
@@ -44,10 +47,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   @doc """
   Ping server to test basic connectivity.
   """
+  @spec ping_server(list(String.t()), map()) :: {:ok, atom()} | {:error, String.t()}
   def ping_server(args, options) do
     case args do
       [] ->
-        CLI.print_error("Server name is required for ping.")
+        _ = CLI.print_error("Server name is required for ping.")
+        {:error, "server_name_required"}
 
       [server_name | _] ->
         ping_specific_server(server_name, options)
@@ -57,10 +62,12 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   @doc """
   Trace connection and protocol interactions.
   """
+  @spec trace_connection(list(String.t()), map()) :: {:ok, atom()} | {:error, String.t()}
   def trace_connection(args, options) do
     case args do
       [] ->
-        CLI.print_error("Server name is required for tracing.")
+        _ = CLI.print_error("Server name is required for tracing.")
+        {:error, "server_name_required"}
 
       [server_name | _] ->
         trace_server_connection(server_name, options)
@@ -70,6 +77,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
   @doc """
   Show help for the diagnostics command.
   """
+  @spec show_help() :: :ok
   def show_help do
     IO.puts("""
     MCP Diagnostics & Troubleshooting
@@ -116,12 +124,13 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
 
   ## Private Functions - Comprehensive Diagnosis
 
+  @spec run_comprehensive_diagnosis(map()) :: {:ok, atom()}
   defp run_comprehensive_diagnosis(options) do
     IO.puts("MCP System Diagnosis")
     IO.puts("#{String.duplicate("=", 25)}")
     IO.puts("")
 
-    CLI.print_if_verbose("Running comprehensive system diagnosis...", options)
+    _ = CLI.print_if_verbose("Running comprehensive system diagnosis...", options)
 
     # Run multiple diagnostic checks
     results = %{
@@ -135,7 +144,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
         if(Map.get(options, :dependencies), do: diagnose_dependencies(options), else: :skipped)
     }
 
-    display_diagnosis_results(results, options)
+    _ = display_diagnosis_results(results, options)
 
     # Provide recommendations based on results
     recommendations = generate_diagnosis_recommendations(results)
@@ -153,28 +162,34 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
         end
       end)
     end
+
+    {:ok, :diagnosis_completed}
   end
 
+  @spec diagnose_server(String.t(), map()) :: {:ok, atom()} | {:error, String.t()}
   defp diagnose_server(server_name, options) do
     IO.puts("Server Diagnosis: #{server_name}")
     IO.puts("#{String.duplicate("=", String.length("Server Diagnosis: #{server_name}"))}")
     IO.puts("")
 
-    CLI.print_if_verbose("Diagnosing server '#{server_name}'...", options)
+    _ = CLI.print_if_verbose("Diagnosing server '#{server_name}'...", options)
 
     case Config.get_configuration() do
       {:ok, config} ->
         case get_in(config, ["mcpServers", server_name]) do
           nil ->
-            CLI.print_error("Server '#{server_name}' not found in configuration.")
+            _ = CLI.print_error("Server '#{server_name}' not found in configuration.")
+            {:error, "server_not_found"}
 
           server_config ->
             results = run_server_diagnosis(server_name, server_config, options)
-            display_server_diagnosis_results(server_name, results, options)
+            _ = display_server_diagnosis_results(server_name, results, options)
+            {:ok, :server_diagnosis_completed}
         end
 
       {:error, reason} ->
-        CLI.print_error("Failed to load configuration: #{reason}")
+        _ = CLI.print_error("Failed to load configuration: #{reason}")
+        {:error, reason}
     end
   end
 
@@ -656,7 +671,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
       |> Enum.filter(fn port ->
         case :gen_tcp.connect(~c"httpbin.org", port, [], 1000) do
           {:ok, socket} ->
-            :gen_tcp.close(socket)
+            _ = :gen_tcp.close(socket)
             true
 
           {:error, _} ->
@@ -678,11 +693,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     test_file = Path.join(config_dir, "write_test.tmp")
 
     # Ensure directory exists
-    File.mkdir_p(config_dir)
+    _ = File.mkdir_p(config_dir)
 
     case File.write(test_file, "test") do
       :ok ->
-        File.rm(test_file)
+        _ = File.rm(test_file)
         %{status: :pass, message: "Configuration directory is writable"}
 
       {:error, reason} ->
@@ -695,11 +710,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     test_file = Path.join(log_dir, "write_test.tmp")
 
     # Ensure directory exists
-    File.mkdir_p(log_dir)
+    _ = File.mkdir_p(log_dir)
 
     case File.write(test_file, "test") do
       :ok ->
-        File.rm(test_file)
+        _ = File.rm(test_file)
         %{status: :pass, message: "Log directory is writable"}
 
       {:error, reason} ->
@@ -781,33 +796,37 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
 
   ## Display Functions
 
+  @spec display_diagnosis_results(map(), map()) :: :ok
   defp display_diagnosis_results(results, _options) do
     # System Health
-    display_diagnosis_section("System Health", results.system)
+    _ = display_diagnosis_section("System Health", results.system)
 
     # Configuration
-    display_diagnosis_section("Configuration", results.configuration)
+    _ = display_diagnosis_section("Configuration", results.configuration)
 
     # Servers
-    display_servers_diagnosis_section(results.servers)
+    _ = display_servers_diagnosis_section(results.servers)
 
     # Optional sections
     if results.network != :skipped do
-      display_diagnosis_section("Network", results.network)
+      _ = display_diagnosis_section("Network", results.network)
     end
 
     if results.permissions != :skipped do
-      display_diagnosis_section("Permissions", results.permissions)
+      _ = display_diagnosis_section("Permissions", results.permissions)
     end
 
     if results.dependencies != :skipped do
-      display_diagnosis_section("Dependencies", results.dependencies)
+      _ = display_diagnosis_section("Dependencies", results.dependencies)
     end
 
     # Overall summary
-    display_overall_diagnosis_summary(results)
+    _ = display_overall_diagnosis_summary(results)
+
+    :ok
   end
 
+  @spec display_diagnosis_section(String.t(), map()) :: :ok
   defp display_diagnosis_section(title, section_result) do
     IO.puts("#{title}:")
 
@@ -837,8 +856,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     end
 
     IO.puts("")
+    :ok
   end
 
+  @spec display_servers_diagnosis_section(map()) :: :ok
   defp display_servers_diagnosis_section(servers_result) do
     IO.puts("Servers:")
 
@@ -871,8 +892,10 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     end
 
     IO.puts("")
+    :ok
   end
 
+  @spec display_server_diagnosis_results(String.t(), map(), map()) :: :ok
   defp display_server_diagnosis_results(_server_name, results, _options) do
     IO.puts(
       "Overall Status: #{format_diagnosis_status(results.status)} (#{Float.round(results.score, 1)}%)"
@@ -891,8 +914,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
 
       IO.puts("#{status_icon} #{format_check_name(check_name)}: #{result.message}")
     end)
+
+    :ok
   end
 
+  @spec display_overall_diagnosis_summary(map()) :: :ok
   defp display_overall_diagnosis_summary(results) do
     IO.puts("Overall System Health Summary:")
     IO.puts("#{String.duplicate("-", 35)}")
@@ -926,21 +952,26 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     IO.puts(
       "- Servers: #{servers_healthy}/#{servers_total} healthy (#{Float.round(server_score, 1)}%)"
     )
+
+    :ok
   end
 
   ## Server Logs Functions
 
+  @spec show_server_logs(String.t(), map()) :: {:ok, atom()} | {:error, String.t()}
   defp show_server_logs(server_name, options) do
     log_file = get_server_log_file(server_name)
 
     if File.exists?(log_file) do
       if Map.get(options, :follow) do
-        follow_log_file(log_file, options)
+        _ = follow_log_file(log_file, options)
+        {:ok, :logs_followed}
       else
-        show_static_logs(log_file, options)
+        _ = show_static_logs(log_file, options)
+        {:ok, :logs_displayed}
       end
     else
-      CLI.print_error("Log file not found for server '#{server_name}': #{log_file}")
+      _ = CLI.print_error("Log file not found for server '#{server_name}': #{log_file}")
 
       # Suggest checking if server has been started
       IO.puts("")
@@ -950,6 +981,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
       IO.puts("  - Log file path is different")
       IO.puts("")
       IO.puts("Try: maestro mcp status #{server_name}")
+
+      {:error, "log_file_not_found"}
     end
   end
 
@@ -976,7 +1009,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
         end
 
       {:error, reason} ->
-        CLI.print_error("Cannot read log file: #{reason}")
+        _ = CLI.print_error("Cannot read log file: #{reason}")
     end
   end
 
@@ -986,7 +1019,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     IO.puts("")
 
     # Show last few lines first
-    show_static_logs(log_file, Map.put(options, :lines, 10))
+    _ = show_static_logs(log_file, Map.put(options, :lines, 10))
 
     # Start tailing the file
     tail_log_file(log_file, options)
@@ -1015,7 +1048,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
           {:ok, file} ->
             :file.position(file, last_size)
             new_content = IO.read(file, current_size - last_size)
-            File.close(file)
+            _ = File.close(file)
 
             # Process new lines
             new_content
@@ -1046,6 +1079,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
 
   ## Ping Functions
 
+  @spec ping_specific_server(String.t(), map()) :: {:ok, atom()} | {:error, String.t()}
   defp ping_specific_server(server_name, options) do
     count = ensure_integer(Map.get(options, :count, 3))
     timeout = Map.get(options, :timeout, 5000)
@@ -1106,14 +1140,18 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
       )
 
       IO.puts("  Round-trip times: min=#{min_time}ms, avg=#{avg_time}ms, max=#{max_time}ms")
+
+      {:ok, :ping_completed}
     else
       IO.puts("")
       IO.puts("All ping attempts failed.")
+      {:error, "all_pings_failed"}
     end
   end
 
   ## Trace Functions
 
+  @spec trace_server_connection(String.t(), map()) :: {:ok, atom()} | {:error, String.t()}
   defp trace_server_connection(server_name, options) do
     duration = Map.get(options, :duration, 10)
     save_file = Map.get(options, :save)
@@ -1136,18 +1174,25 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
         # Stop tracing and get results
         case ConnectionManager.stop_trace(ConnectionManager, trace_id) do
           {:ok, trace_data} ->
-            display_trace_results(trace_data, options)
+            _ = display_trace_results(trace_data, options)
 
             if save_file do
-              save_trace_to_file(trace_data, save_file)
+              case save_trace_to_file(trace_data, save_file) do
+                :ok -> {:ok, :trace_completed_and_saved}
+                {:error, _reason} -> {:ok, :trace_completed_save_failed}
+              end
+            else
+              {:ok, :trace_completed}
             end
 
           {:error, reason} ->
-            CLI.print_error("Failed to stop trace: #{reason}")
+            _ = CLI.print_error("Failed to stop trace: #{reason}")
+            {:error, reason}
         end
 
       {:error, reason} ->
-        CLI.print_error("Failed to start trace: #{reason}")
+        _ = CLI.print_error("Failed to start trace: #{reason}")
+        {:error, reason}
     end
   end
 
@@ -1182,6 +1227,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     lines
   end
 
+  @spec display_trace_results(map(), map()) :: :ok
   defp display_trace_results(trace_data, options) do
     IO.puts("Trace Results:")
     IO.puts("#{String.duplicate("=", 15)}")
@@ -1207,17 +1253,22 @@ defmodule TheMaestro.MCP.CLI.Commands.Diagnostics do
     IO.puts("  Duration: #{trace_data.duration}ms")
     IO.puts("  Total Events: #{length(trace_data.entries)}")
     IO.puts("  Event Types: #{trace_data.event_types |> Map.keys() |> Enum.join(", ")}")
+
+    :ok
   end
 
+  @spec save_trace_to_file(map(), String.t()) :: :ok | {:error, String.t()}
   defp save_trace_to_file(trace_data, filename) do
     content = Jason.encode!(trace_data, pretty: true)
 
     case File.write(filename, content) do
       :ok ->
-        CLI.print_success("Trace saved to #{filename}")
+        _ = CLI.print_success("Trace saved to #{filename}")
+        :ok
 
       {:error, reason} ->
-        CLI.print_error("Failed to save trace: #{reason}")
+        _ = CLI.print_error("Failed to save trace: #{reason}")
+        {:error, "failed_to_save_trace"}
     end
   end
 

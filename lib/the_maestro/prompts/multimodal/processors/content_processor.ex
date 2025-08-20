@@ -19,6 +19,50 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessor do
 
   alias TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer
 
+  # Type definitions for content processing
+  @type content_type ::
+          :text | :image | :audio | :video | :document | :code | :data | :diagram | :web_content
+
+  @type content_item :: %{
+          type: content_type(),
+          content: String.t() | binary(),
+          metadata: map(),
+          processed_content: map() | nil
+        }
+
+  @type processing_context :: %{
+          optional(:performance_mode) => :optimized | :standard,
+          optional(:processing_mode) => :parallel | :sequential,
+          optional(:max_workers) => non_neg_integer()
+        }
+
+  @type processing_result ::
+          %{
+            processor_used: atom(),
+            analysis: map()
+          }
+          | %{
+              processor_used: atom(),
+              analysis: map(),
+              optimization_applied: [atom()],
+              performance_metrics: map()
+            }
+
+  @type error_result :: %{
+          status: :error,
+          error: atom() | String.t(),
+          error_details: map(),
+          fallback_processing: map(),
+          processor_used: atom()
+        }
+
+  @type batch_result :: %{
+          results: [processing_result() | error_result()],
+          parallel_processing: boolean(),
+          processing_time_ms: non_neg_integer(),
+          items_processed: non_neg_integer()
+        }
+
   @doc """
   Processes content by delegating to the appropriate specialized processor.
 
@@ -31,7 +75,8 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessor do
 
   Processed content result with analysis, enhancements, and metadata.
   """
-  @spec process_content(map(), map()) :: map()
+  @spec process_content(content_item(), processing_context()) ::
+          processing_result() | error_result()
   def process_content(%{type: type} = content, context) do
     result =
       case type do
@@ -97,7 +142,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessor do
   @doc """
   Processes multiple content items in batch with optional parallel processing.
   """
-  @spec process_batch(list(map()), map()) :: map()
+  @spec process_batch([content_item()], processing_context()) :: batch_result()
   def process_batch(content_items, context) do
     start_time = System.monotonic_time(:millisecond)
     processing_mode = Map.get(context, :processing_mode, :sequential)
@@ -120,10 +165,16 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessor do
 
   # Private helper functions
 
+  @spec process_sequential([content_item()], processing_context()) :: [
+          processing_result() | error_result()
+        ]
   defp process_sequential(content_items, context) do
     Enum.map(content_items, &process_content(&1, context))
   end
 
+  @spec process_parallel([content_item()], processing_context()) :: [
+          processing_result() | error_result()
+        ]
   defp process_parallel(content_items, context) do
     max_workers = Map.get(context, :max_workers, System.schedulers_online())
 
@@ -139,6 +190,11 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessor do
     end)
   end
 
+  @spec apply_performance_optimizations(
+          processing_result(),
+          [content_item()],
+          processing_context()
+        ) :: processing_result()
   defp apply_performance_optimizations(result, content, context) do
     # Apply performance optimizations using the PerformanceOptimizer
     optimization_result = PerformanceOptimizer.optimize_processing_pipeline(content, context)

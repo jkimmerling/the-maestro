@@ -8,13 +8,84 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   content integration and enhancement.
   """
 
+  # Type definitions for cross-modal analysis
+  @type content_type ::
+          :text | :image | :audio | :video | :document | :code | :data | :diagram | :web_content
+
+  @type content_item :: %{
+          type: content_type(),
+          content: String.t() | binary(),
+          metadata: map(),
+          processed_content: map() | nil
+        }
+
+  @type content_list :: [content_item()]
+
+  @type coherence_analysis :: %{
+          coherence_score: float(),
+          narrative_flow_score: float(),
+          topic_alignment: map(),
+          semantic_relationships: map(),
+          temporal_consistency: map(),
+          narrative_consistency: map(),
+          conflicts_detected: [map()],
+          conflict_detection: map(),
+          supporting_relationships: [map()],
+          workflow_coherence: map(),
+          information_gaps: map(),
+          synthesis_opportunities: map(),
+          priority_ranking: map(),
+          processing_time_ms: non_neg_integer(),
+          analysis_warnings: [String.t()],
+          performance_metrics: map(),
+          partial_analysis: boolean(),
+          error_recovery: map()
+        }
+
+  @type information_gaps :: %{
+          identified_gaps: [map()],
+          gap_severity: map(),
+          completion_suggestions: [String.t()],
+          total_gaps: non_neg_integer(),
+          critical_gaps: non_neg_integer(),
+          missing_context: [map()]
+        }
+
+  @type synthesis_opportunities :: %{
+          synthesis_opportunities: [map()],
+          cross_references: [map()],
+          enhancement_suggestions: [map()],
+          potential_value_score: float()
+        }
+
+  @type priority_analysis :: %{
+          priority_ranking: map(),
+          priority_factors: map(),
+          ranking_explanation: [map()],
+          high_priority_count: non_neg_integer(),
+          medium_priority_count: non_neg_integer()
+        }
+
+  @type relationship_analysis :: %{
+          relationship_map: [map()],
+          relationship_strength: map(),
+          semantic_connections: [map()],
+          relationship_types: map(),
+          network_analysis: map()
+        }
+
+  @type priority_context :: %{
+          optional(:user_task) => atom(),
+          optional(:priority_focus) => [atom()]
+        }
+
   @doc """
   Analyzes coherence between different content modalities.
 
   Examines semantic relationships, temporal consistency, topic alignment,
   and narrative flow across text, images, audio, video, and other content types.
   """
-  @spec analyze_content_coherence(list(map())) :: map()
+  @spec analyze_content_coherence(content_list()) :: coherence_analysis()
   def analyze_content_coherence([]),
     do: %{coherence_score: 0.0, analysis_warnings: ["No content to analyze"]}
 
@@ -81,7 +152,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   @doc """
   Detects information gaps and missing context between content items.
   """
-  @spec detect_information_gaps(list(map())) :: map()
+  @spec detect_information_gaps(content_list()) :: information_gaps()
   def detect_information_gaps(content) do
     gaps = []
 
@@ -114,7 +185,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   @doc """
   Finds opportunities to synthesize and enhance content across modalities.
   """
-  @spec find_synthesis_opportunities(list(map())) :: map()
+  @spec find_synthesis_opportunities(content_list()) :: synthesis_opportunities()
   def find_synthesis_opportunities(content) do
     synthesis_opportunities = []
 
@@ -138,7 +209,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   @doc """
   Prioritizes content based on importance, relevance, and user context.
   """
-  @spec prioritize_content(list(map()), map()) :: map()
+  @spec prioritize_content(content_list(), priority_context()) :: priority_analysis()
   def prioritize_content(content, context \\ %{}) do
     # Calculate priority scores for each content item
     scored_content =
@@ -166,7 +237,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   @doc """
   Analyzes relationships and connections between different content types.
   """
-  @spec analyze_content_relationships(list(map())) :: map()
+  @spec analyze_content_relationships(content_list()) :: relationship_analysis()
   def analyze_content_relationships(content) do
     relationships = []
 
@@ -246,6 +317,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
 
   # Private helper functions
 
+  @spec analyze_topic_alignment(content_list()) :: map()
   defp analyze_topic_alignment(content) do
     # Extract topics from each content item
     content_topics = Enum.map(content, &extract_topics_from_content/1)
@@ -267,6 +339,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
     }
   end
 
+  @spec analyze_semantic_relationships(content_list()) :: map()
   defp analyze_semantic_relationships(content) do
     content_length = length(content)
 
@@ -302,6 +375,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
     }
   end
 
+  @spec analyze_temporal_consistency(content_list()) :: map()
   defp analyze_temporal_consistency(content) do
     # Look for temporal indicators and sequence markers
     temporal_items = Enum.filter(content, &has_temporal_indicators/1)
@@ -317,6 +391,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
     }
   end
 
+  @spec analyze_narrative_flow(content_list()) :: map()
   defp analyze_narrative_flow(content) do
     # Analyze narrative elements and story structure
     narrative_elements = extract_narrative_elements(content)
@@ -330,6 +405,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
     }
   end
 
+  @spec detect_content_conflicts(content_list()) :: [map()]
   defp detect_content_conflicts(content) do
     conflicts = []
 
@@ -395,6 +471,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
 
   # Additional helper functions for content analysis
 
+  @spec extract_topics_from_content(content_item()) :: [atom()]
   defp extract_topics_from_content(%{processed_content: processed}) when is_map(processed) do
     cond do
       Map.has_key?(processed, :topics) -> processed.topics
@@ -406,6 +483,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
 
   defp extract_topics_from_content(_), do: []
 
+  @spec find_shared_topics([[atom()]]) :: [atom()]
   defp find_shared_topics(content_topics) do
     all_topics = List.flatten(content_topics)
 
@@ -415,6 +493,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
     |> Enum.map(fn {topic, _count} -> topic end)
   end
 
+  @spec calculate_topic_distribution([[atom()]]) :: map()
   defp calculate_topic_distribution(content_topics) do
     all_topics = List.flatten(content_topics)
     total_topics = length(all_topics)
@@ -429,6 +508,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
     end
   end
 
+  @spec calculate_semantic_similarity(content_item(), content_item()) :: float()
   defp calculate_semantic_similarity(item1, item2) when item1 != nil and item2 != nil do
     # Simple similarity based on content type and shared attributes
     type1 = Map.get(item1, :type)
@@ -480,6 +560,7 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   # More helper functions would continue here...
   # For brevity, I'll provide key implementations for the remaining functions
 
+  @spec find_supporting_relationships(content_list()) :: [map()]
   defp find_supporting_relationships(content) do
     # Find relationships where content items support or complement each other
     content_length = length(content)
@@ -538,8 +619,10 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
 
     if mentions_screenshot do
       image_processed = Map.get(image_item, :processed_content, %{})
-      visual_analysis = Map.get(image_processed, :visual_analysis, %{})
-      text_extraction = Map.get(image_processed, :text_extraction, %{})
+      # Ensure image_processed is a map
+      normalized_image_processed = if is_map(image_processed), do: image_processed, else: %{}
+      visual_analysis = Map.get(normalized_image_processed, :visual_analysis, %{})
+      text_extraction = Map.get(normalized_image_processed, :text_extraction, %{})
 
       # Check for alignment between text description and image content
       has_visual_content = not Enum.empty?(visual_analysis) or not Enum.empty?(text_extraction)
@@ -673,7 +756,16 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
     conflicts =
       conflicts ++
         Enum.flat_map(text_items, fn {text_item, text_index} ->
-          text_processed = Map.get(text_item, :processed_content, %{})
+          # Handle both processed and unprocessed content structures
+          text_processed =
+            case text_item do
+              %{processed_content: processed} when is_map(processed) -> processed
+              %{} = item -> Map.get(item, :processed_content, %{})
+              _ -> %{}
+            end
+
+          # Ensure text_processed is always a map
+          text_processed = if is_map(text_processed), do: text_processed, else: %{}
           text_sentiment = Map.get(text_processed, :sentiment)
 
           if text_sentiment == :positive do
@@ -710,14 +802,16 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
 
   defp has_error_indicators?(item) do
     processed = Map.get(item, :processed_content, %{})
+    # Ensure processed is a map
+    normalized_processed = if is_map(processed), do: processed, else: %{}
 
     case item.type do
       :image ->
-        visual_analysis = Map.get(processed, :visual_analysis, %{})
+        visual_analysis = Map.get(normalized_processed, :visual_analysis, %{})
         scene_classification = Map.get(visual_analysis, :scene_classification, %{})
         category = Map.get(scene_classification, :category, "")
 
-        text_extraction = Map.get(processed, :text_extraction, %{})
+        text_extraction = Map.get(normalized_processed, :text_extraction, %{})
         ocr_text = Map.get(text_extraction, :ocr_text, "")
 
         String.contains?(category, "error") or
@@ -802,7 +896,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
       |> Enum.with_index()
       |> Enum.filter(fn {item, _index} ->
         processed = Map.get(item, :processed_content, %{})
-        Map.get(processed, :specificity) == :vague
+        normalized_processed = if is_map(processed), do: processed, else: %{}
+        Map.get(normalized_processed, :specificity) == :vague
       end)
       |> Enum.map(fn {_item, index} ->
         %{
@@ -820,7 +915,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
       |> Enum.filter(fn {item, _index} ->
         content_text = Map.get(item, :content, "")
         processed = Map.get(item, :processed_content, %{})
-        references = Map.get(processed, :references, [])
+        normalized_processed = if is_map(processed), do: processed, else: %{}
+        references = Map.get(normalized_processed, :references, [])
 
         # Check if item mentions error but lacks error handling details
         error_mentioned =
@@ -828,8 +924,8 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
             :error in references
 
         has_error_handling =
-          Map.has_key?(processed, :error_handling) and
-            Map.get(processed, :error_handling) != :none
+          Map.has_key?(normalized_processed, :error_handling) and
+            Map.get(normalized_processed, :error_handling) != :none
 
         error_mentioned and not has_error_handling
       end)
@@ -848,9 +944,10 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
       |> Enum.filter(fn {item, _index} ->
         content_text = Map.get(item, :content, "")
         processed = Map.get(item, :processed_content, %{})
+        normalized_processed = if is_map(processed), do: processed, else: %{}
 
         is_binary(content_text) and String.contains?(content_text, "file") and
-          Map.get(processed, :specificity) == :vague
+          Map.get(normalized_processed, :specificity) == :vague
       end)
       |> Enum.map(fn {_item, index} ->
         %{
@@ -1075,6 +1172,13 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
     processed_content = Map.get(item, :processed_content, %{})
     type = Map.get(item, :type)
 
+    # Ensure processed_content is a map - handle both string and map cases
+    normalized_processed_content =
+      case processed_content do
+        content when is_map(content) -> content
+        _string_content -> %{}
+      end
+
     topics = []
 
     # Extract topics based on content type and processed_content structure
@@ -1082,12 +1186,12 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
       case type do
         :text ->
           # Text items may have topics directly in processed_content
-          text_topics = Map.get(processed_content, :topics, [])
+          text_topics = Map.get(normalized_processed_content, :topics, [])
           topics ++ text_topics
 
         :code ->
           # Code items may have security_analysis that indicates security topics
-          if Map.has_key?(processed_content, :security_analysis) do
+          if Map.has_key?(normalized_processed_content, :security_analysis) do
             topics ++ [:security_analysis, :authentication]
           else
             topics
@@ -1095,10 +1199,10 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
 
         :image ->
           # Image items may have OCR text and visual analysis that indicates topics
-          text_extraction = Map.get(processed_content, :text_extraction, %{})
+          text_extraction = Map.get(normalized_processed_content, :text_extraction, %{})
           ocr_text = Map.get(text_extraction, :ocr_text, "")
 
-          visual_analysis = Map.get(processed_content, :visual_analysis, %{})
+          visual_analysis = Map.get(normalized_processed_content, :visual_analysis, %{})
           scene_classification = Map.get(visual_analysis, :scene_classification, %{})
           category = Map.get(scene_classification, :category, "")
 

@@ -7,10 +7,112 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   complex multi-modal content sets.
   """
 
+  # Type definitions for performance optimization
+  @type content_type ::
+          :text | :image | :audio | :video | :document | :code | :data | :diagram | :web_content
+
+  @type content_item :: %{
+          type: content_type(),
+          content: String.t() | binary(),
+          metadata: map(),
+          processed_content: map() | nil
+        }
+
+  @type content_list :: [content_item()]
+
+  @type processing_context :: %{
+          optional(:performance_constraints) => map(),
+          optional(:performance_mode) => :optimized | :standard,
+          optional(:processing_mode) => :parallel | :sequential,
+          optional(:max_workers) => non_neg_integer(),
+          optional(:enable_caching) => boolean(),
+          optional(:parallel_processing) => map(),
+          optional(:bandwidth_constraints) => map(),
+          optional(:distributed_config) => map(),
+          optional(:session_id) => String.t()
+        }
+
+  @type optimization_result :: %{
+          optimized_content: content_list(),
+          optimizations_applied: map(),
+          performance_metrics: map(),
+          recommendations: [String.t()],
+          error_recovery: map(),
+          optimization_status: :completed | :completed_with_fallback
+        }
+
+  @type optimization_with_degraded_mode :: %{
+          optimized_content: content_list(),
+          optimizations_applied: map(),
+          performance_metrics: map(),
+          recommendations: [String.t()],
+          error_recovery: map(),
+          degraded_mode: map(),
+          optimization_status: :completed_with_fallback
+        }
+
+  @type lazy_loading_config :: %{
+          optional(:memory_threshold_mb) => number(),
+          optional(:preview_quality) => :low | :medium | :high,
+          optional(:user_context) => map()
+        }
+
+  @type lazy_loading_result :: %{
+          lazy_items: [map()],
+          immediate_items: content_list(),
+          preloaded_items: [map()],
+          deferred_items: [map()],
+          memory_savings_mb: float(),
+          preloading_decisions: map()
+        }
+
+  @type caching_strategy_result :: %{
+          caching_strategy: map(),
+          distributed_caching: map(),
+          cache_efficiency: map(),
+          estimated_hit_ratio: float(),
+          memory_efficiency: float()
+        }
+
+  @type parallel_processing_result :: %{
+          worker_allocation: [map()],
+          work_stealing: map(),
+          estimated_speedup: float(),
+          worker_utilization: map(),
+          load_distribution: map()
+        }
+
+  @type memory_optimization_result :: %{
+          memory_optimizations: map(),
+          memory_efficiency: map(),
+          performance_metrics: map()
+        }
+
+  @type complexity_level :: :low | :moderate | :high | :very_high
+  @type optimization_level :: :minimal | :conservative | :standard | :aggressive
+  @type priority_level :: :low | :medium | :high | :critical
+
+  @type system_context :: %{
+          optional(:available_memory_mb) => non_neg_integer(),
+          optional(:cpu_cores) => non_neg_integer(),
+          optional(:network_speed) => :slow | :medium | :fast | :very_fast,
+          optional(:battery_level) => :low | :medium | :high,
+          optional(:gpu_available) => boolean()
+        }
+
+  @type adaptive_optimization_result :: %{
+          adaptive_strategy: map(),
+          resource_analysis: map(),
+          optimization_level: optimization_level(),
+          expected_performance_gain: float(),
+          optimization_status: :completed
+        }
+
   @doc """
   Optimizes the entire processing pipeline for performance.
   """
-  @spec optimize_processing_pipeline(list(map()), map()) :: map()
+  @spec optimize_processing_pipeline(content_list(), processing_context()) ::
+          optimization_result() | optimization_with_degraded_mode()
   def optimize_processing_pipeline(content, context) do
     start_time = System.monotonic_time(:millisecond)
 
@@ -141,6 +243,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     end
   end
 
+  @spec calculate_simulated_processing_time(content_list()) :: non_neg_integer()
   defp calculate_simulated_processing_time(content) do
     Enum.reduce(content, 0, fn item, acc ->
       base_time =
@@ -169,7 +272,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   @doc """
   Implements lazy loading for large content items.
   """
-  @spec implement_lazy_loading(list(map()), map()) :: map()
+  @spec implement_lazy_loading(content_list(), lazy_loading_config()) :: lazy_loading_result()
   def implement_lazy_loading(content, config) do
     memory_threshold = Map.get(config, :memory_threshold_mb, 50)
     _preview_quality = Map.get(config, :preview_quality, :medium)
@@ -203,7 +306,8 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   @doc """
   Optimizes caching strategy for content processing.
   """
-  @spec optimize_caching_strategy(list(map()), map()) :: map()
+  @spec optimize_caching_strategy(content_list(), processing_context()) ::
+          caching_strategy_result()
   def optimize_caching_strategy(content, context) do
     cache_levels = Map.get(context, :cache_levels, [:processor_cache, :result_cache])
 
@@ -230,7 +334,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   @doc """
   Enables parallel processing with dynamic worker allocation.
   """
-  @spec enable_parallel_processing(list(map()), map()) :: map()
+  @spec enable_parallel_processing(content_list(), map()) :: parallel_processing_result()
   def enable_parallel_processing(content, config) do
     # Check for max_workers first, then available_workers
     max_workers =
@@ -266,7 +370,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   @doc """
   Optimizes memory usage with streaming and garbage collection.
   """
-  @spec optimize_memory_usage(list(map()), map()) :: map()
+  @spec optimize_memory_usage(content_list(), map()) :: memory_optimization_result()
   def optimize_memory_usage(content, constraints) do
     max_memory_mb = Map.get(constraints, :max_memory_mb, 100)
     streaming_threshold = Map.get(constraints, :streaming_threshold_mb, 20)
@@ -388,7 +492,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   @doc """
   Applies adaptive optimization based on system resources.
   """
-  @spec adaptive_optimization(list(map()), map()) :: map()
+  @spec adaptive_optimization(content_list(), system_context()) :: adaptive_optimization_result()
   def adaptive_optimization(content, system_context) do
     # Analyze system resources
     resource_analysis = analyze_system_resources(system_context)
@@ -413,6 +517,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
 
   # Private helper functions
 
+  @spec maybe_apply_lazy_loading(content_list(), processing_context()) :: map()
   defp maybe_apply_lazy_loading(content, context) do
     constraints = Map.get(context, :performance_constraints, %{})
     max_memory = Map.get(constraints, :max_memory_mb)
@@ -444,6 +549,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     end
   end
 
+  @spec maybe_apply_caching(content_list(), processing_context()) :: map()
   defp maybe_apply_caching(content, context) do
     if Map.get(context, :enable_caching, false) do
       cache_strategy = optimize_caching_strategy(content, context)
@@ -461,6 +567,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     end
   end
 
+  @spec maybe_apply_parallel_processing(content_list(), processing_context()) :: map()
   defp maybe_apply_parallel_processing(content, context) do
     parallel_config = Map.get(context, :parallel_processing, %{})
 
@@ -481,6 +588,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     end
   end
 
+  @spec maybe_apply_compression(content_list(), processing_context()) :: map()
   defp maybe_apply_compression(content, context) do
     bandwidth_constraints = Map.get(context, :bandwidth_constraints, %{})
     max_total_mb = Map.get(bandwidth_constraints, :max_total_mb)
@@ -501,6 +609,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     end
   end
 
+  @spec estimate_content_memory_usage(content_item()) :: float()
   defp estimate_content_memory_usage(%{type: type} = item) do
     metadata = Map.get(item, :metadata, %{})
 
@@ -518,18 +627,21 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     base_size * 1.5
   end
 
+  @spec estimate_total_memory_usage(content_list()) :: float()
   defp estimate_total_memory_usage(content) do
     content
     |> Enum.map(&estimate_content_memory_usage/1)
     |> Enum.sum()
   end
 
+  @spec estimate_total_size_mb(content_list()) :: number()
   defp estimate_total_size_mb(content) do
     content
     |> Enum.map(fn item -> Map.get(item.metadata || %{}, :size_mb, 1) end)
     |> Enum.sum()
   end
 
+  @spec create_lazy_loading_item(content_item(), lazy_loading_config()) :: map()
   defp create_lazy_loading_item(item, config) do
     _preview_quality = Map.get(config, :preview_quality, :medium)
     original_memory_usage = estimate_content_memory_usage(item)
@@ -588,6 +700,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     Map.put(lazy_item, :metadata, Map.get(item, :metadata, %{}))
   end
 
+  @spec apply_smart_preloading([map()], lazy_loading_config()) :: {[map()], [map()]}
   defp apply_smart_preloading(lazy_items, config) do
     user_context = Map.get(config, :user_context, %{})
     preload_threshold = Map.get(user_context, :preload_threshold, :medium)
@@ -601,6 +714,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     {preloaded, deferred}
   end
 
+  @spec get_item_priority(map()) :: priority_level()
   defp get_item_priority(item) do
     # Check for explicit priority in metadata first
     metadata_priority = get_in(item, [:metadata, :priority])
@@ -621,6 +735,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     end
   end
 
+  @spec priority_meets_threshold?(priority_level(), priority_level()) :: boolean()
   defp priority_meets_threshold?(:critical, _), do: true
 
   defp priority_meets_threshold?(:high, threshold) when threshold in [:low, :medium, :high],
@@ -630,6 +745,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
   defp priority_meets_threshold?(:low, :low), do: true
   defp priority_meets_threshold?(_, _), do: false
 
+  @spec calculate_memory_savings([map()]) :: float()
   defp calculate_memory_savings(lazy_items) do
     lazy_items
     |> Enum.map(&estimate_content_memory_usage/1)
@@ -638,6 +754,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     |> Kernel.*(0.8)
   end
 
+  @spec analyze_caching_opportunities(content_list()) :: map()
   defp analyze_caching_opportunities(content) do
     # Group content by type and context for more specific caching
     content_groups =
@@ -667,6 +784,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     %{opportunities: caching_opportunities}
   end
 
+  @spec generate_caching_strategy(map(), [atom()], processing_context()) :: map()
   defp generate_caching_strategy(analysis, cache_levels, context) do
     processor_caches =
       if :processor_cache in cache_levels do
@@ -752,6 +870,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     end
   end
 
+  @spec calculate_cache_efficiency(map(), content_list()) :: map()
   defp calculate_cache_efficiency(strategy, content) do
     total_processors = length(strategy.processor_caches)
     total_patterns = length(strategy.pattern_caches)
@@ -772,6 +891,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     }
   end
 
+  @spec analyze_content_complexity_for_parallelization(content_list()) :: [map()]
   defp analyze_content_complexity_for_parallelization(content) do
     content
     |> Enum.map(fn item ->
@@ -803,6 +923,7 @@ defmodule TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer do
     end)
   end
 
+  @spec allocate_workers_by_complexity([map()], non_neg_integer(), atom()) :: [map()]
   defp allocate_workers_by_complexity(complexity_analysis, total_workers, _strategy) do
     # Group by complexity type and allocate workers to each pool
     complexity_groups = Enum.group_by(complexity_analysis, & &1.complexity)

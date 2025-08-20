@@ -42,6 +42,70 @@ defmodule TheMaestro.Prompts.MultiModal do
   alias TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor
   alias TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer
 
+  # Type definitions for multimodal content
+  @type content_type ::
+          :text | :image | :audio | :video | :document | :code | :data | :diagram | :web_content
+
+  @type content_item :: %{
+          type: content_type(),
+          content: String.t() | binary(),
+          metadata: map(),
+          processed_content: map() | nil
+        }
+
+  @type content_list :: [content_item()]
+
+  @type processing_context :: %{
+          optional(:provider) => atom(),
+          optional(:accessibility_requirements) => [atom()],
+          optional(:performance_constraints) => map()
+        }
+
+  @type processing_result :: %{
+          processed_content: content_list(),
+          accessibility_enhancements: map(),
+          cross_modal_analysis: map(),
+          provider_compatibility: map(),
+          performance_metrics: map(),
+          assembled_prompt: String.t()
+        }
+
+  @type error_result :: %{
+          status: :error,
+          error: String.t(),
+          processed_content: [],
+          accessibility_enhancements: map(),
+          cross_modal_analysis: map(),
+          provider_compatibility: map(),
+          performance_metrics: map(),
+          assembled_prompt: String.t()
+        }
+
+  @type complexity_analysis :: %{
+          overall_score: float(),
+          estimated_processing_time_ms: non_neg_integer(),
+          text_complexity: complexity_level(),
+          image_complexity: complexity_level(),
+          video_complexity: complexity_level(),
+          audio_complexity: complexity_level(),
+          document_complexity: complexity_level()
+        }
+
+  @type complexity_level :: :none | :low | :moderate | :high
+
+  @type provider_optimization_result :: %{
+          content: content_list(),
+          modifications_applied: [map()],
+          warnings: [String.t()]
+        }
+
+  @type merge_result :: %{
+          merged_content: content_list(),
+          coherence_analysis: map(),
+          conflict_resolution: map(),
+          optimization_suggestions: [String.t()]
+        }
+
   @content_types [
     :text,
     :image,
@@ -80,7 +144,8 @@ defmodule TheMaestro.Prompts.MultiModal do
   - `performance_metrics` - Processing performance data
   - `assembled_prompt` - Final assembled prompt ready for LLM
   """
-  @spec process_multimodal_content(list(map()), map()) :: map()
+  @spec process_multimodal_content(content_list(), processing_context()) ::
+          processing_result() | error_result()
   def process_multimodal_content([], _context) do
     %{
       processed_content: [],
@@ -140,7 +205,8 @@ defmodule TheMaestro.Prompts.MultiModal do
   Validates the structure of multi-modal content to ensure all required fields are present
   and content types are supported.
   """
-  @spec validate_content_structure(list(map())) :: {:ok, list(map())} | {:error, String.t()}
+  @spec validate_content_structure(content_list()) :: {:ok, content_list()} | {:error, String.t()}
+  @spec validate_content_structure(term()) :: {:ok, content_list()} | {:error, String.t()}
   def validate_content_structure(content) when is_list(content) do
     validation_results = Enum.map(content, &validate_single_content_item/1)
 
@@ -158,7 +224,7 @@ defmodule TheMaestro.Prompts.MultiModal do
   Returns a complexity analysis including overall score, per-type complexity,
   and estimated processing time.
   """
-  @spec estimate_processing_complexity(list(map())) :: map()
+  @spec estimate_processing_complexity(content_list()) :: complexity_analysis()
   def estimate_processing_complexity([]) do
     %{
       overall_score: 0.0,
@@ -192,7 +258,7 @@ defmodule TheMaestro.Prompts.MultiModal do
   Optimizes content for a specific LLM provider, applying necessary format conversions,
   size adjustments, and compatibility modifications.
   """
-  @spec optimize_for_provider(list(map()), atom()) :: map()
+  @spec optimize_for_provider(content_list(), atom()) :: provider_optimization_result()
   def optimize_for_provider(content, provider) do
     case provider do
       :anthropic -> optimize_for_anthropic(content)
@@ -206,7 +272,7 @@ defmodule TheMaestro.Prompts.MultiModal do
   Generates a comprehensive accessibility report for multi-modal content,
   identifying compliance issues and providing remediation recommendations.
   """
-  @spec generate_accessibility_report(list(map()), list(atom())) :: map()
+  @spec generate_accessibility_report(content_list(), [atom()]) :: map()
   def generate_accessibility_report(content, compliance_levels) do
     AccessibilityEnhancer.generate_accessibility_report(content, compliance_levels)
   end
@@ -214,7 +280,7 @@ defmodule TheMaestro.Prompts.MultiModal do
   @doc """
   Merges multiple multi-modal contexts while maintaining coherence and resolving conflicts.
   """
-  @spec merge_multimodal_contexts(list(map()), list(map())) :: map()
+  @spec merge_multimodal_contexts(content_list(), content_list()) :: merge_result()
   def merge_multimodal_contexts(context1, context2) do
     merged_content = context1 ++ context2
 
@@ -232,6 +298,7 @@ defmodule TheMaestro.Prompts.MultiModal do
 
   # Private helper functions
 
+  @spec validate_single_content_item(map()) :: {:ok, content_item()} | {:error, String.t()}
   defp validate_single_content_item(%{type: type, content: content} = item)
        when not is_nil(content) do
     if type in @content_types do
@@ -249,6 +316,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     {:error, "missing required field: type"}
   end
 
+  @spec enhance_accessibility(content_list(), processing_context()) :: map()
   defp enhance_accessibility(processed_content, context) do
     accessibility_requirements = Map.get(context, :accessibility_requirements, [])
 
@@ -262,10 +330,12 @@ defmodule TheMaestro.Prompts.MultiModal do
     end
   end
 
+  @spec analyze_cross_modal_relationships(content_list()) :: map()
   defp analyze_cross_modal_relationships(processed_content) do
     CrossModalAnalyzer.analyze_content_coherence(processed_content)
   end
 
+  @spec assess_provider_compatibility(content_list(), processing_context()) :: map()
   defp assess_provider_compatibility(processed_content, context) do
     provider = Map.get(context, :provider, :anthropic)
 
@@ -308,6 +378,10 @@ defmodule TheMaestro.Prompts.MultiModal do
     })
   end
 
+  @spec apply_performance_optimizations(content_list(), processing_context()) :: %{
+          optimized_content: content_list(),
+          performance_metrics: map()
+        }
   defp apply_performance_optimizations(processed_content, context) do
     performance_constraints = Map.get(context, :performance_constraints, %{})
 
@@ -323,6 +397,8 @@ defmodule TheMaestro.Prompts.MultiModal do
     }
   end
 
+  @spec assemble_final_prompt(%{optimized_content: content_list()}, processing_context()) ::
+          String.t()
   defp assemble_final_prompt(optimized_result, _context) do
     content_summaries =
       Enum.map(optimized_result.optimized_content, &summarize_content_for_prompt/1)
@@ -338,6 +414,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     Enum.join(prompt_sections, "\n")
   end
 
+  @spec summarize_content_for_prompt(content_item()) :: String.t()
   defp summarize_content_for_prompt(%{type: type, content: content} = item) do
     processed = Map.get(item, :processed_content, %{})
     accessibility = Map.get(item, :accessibility_enhancements, %{})
@@ -374,6 +451,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     end
   end
 
+  @spec calculate_item_complexity(content_item()) :: float()
   defp calculate_item_complexity(%{type: type} = item) do
     metadata = Map.get(item, :metadata, %{})
 
@@ -402,11 +480,13 @@ defmodule TheMaestro.Prompts.MultiModal do
     min(base_complexity * size_factor, 1.0)
   end
 
+  @spec complexity_to_time(float()) :: non_neg_integer()
   defp complexity_to_time(complexity_score) do
     # Base processing time of 100ms, scaled by complexity
     round(100 * (1 + complexity_score * 10))
   end
 
+  @spec get_type_complexity(content_list(), content_type()) :: complexity_level()
   defp get_type_complexity(content, type) do
     type_items = Enum.filter(content, &(&1.type == type))
 
@@ -429,6 +509,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     end
   end
 
+  @spec optimize_for_anthropic(content_list()) :: provider_optimization_result()
   defp optimize_for_anthropic(content) do
     {optimized_content, modifications} =
       Enum.map_reduce(content, [], fn item, acc ->
@@ -480,6 +561,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     }
   end
 
+  @spec optimize_for_google(content_list()) :: provider_optimization_result()
   defp optimize_for_google(content) do
     # Google Gemini has good multimodal support
     {optimized_content, modifications} =
@@ -504,6 +586,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     }
   end
 
+  @spec optimize_for_openai(content_list()) :: provider_optimization_result()
   defp optimize_for_openai(content) do
     modifications = []
 
@@ -537,6 +620,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     }
   end
 
+  @spec handle_unknown_provider(content_list(), atom()) :: provider_optimization_result()
   defp handle_unknown_provider(content, provider) do
     %{
       content: content,
@@ -545,6 +629,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     }
   end
 
+  @spec resolve_content_conflicts(content_list()) :: map()
   defp resolve_content_conflicts(merged_content) do
     conflicts = CrossModalAnalyzer.detect_information_conflicts(merged_content)
 
@@ -561,6 +646,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     }
   end
 
+  @spec generate_merge_optimizations(content_list()) :: [String.t()]
   defp generate_merge_optimizations(merged_content) do
     # Get synthesis opportunities from analyzer
     synthesis = CrossModalAnalyzer.find_synthesis_opportunities(merged_content)
@@ -578,6 +664,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     base_suggestions ++ specific_suggestions
   end
 
+  @spec determine_conflict_resolution(map()) :: atom()
   defp determine_conflict_resolution(conflict) do
     case conflict.type do
       :temporal_inconsistency -> :use_latest_timestamp
@@ -587,6 +674,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     end
   end
 
+  @spec apply_conflict_resolution(map(), atom()) :: map()
   defp apply_conflict_resolution(conflict, strategy) do
     %{
       conflict: conflict,
@@ -596,6 +684,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     }
   end
 
+  @spec process_content_items(content_list(), processing_context()) :: content_list()
   defp process_content_items(content, context) do
     Enum.map(content, fn item ->
       case item.type do
@@ -610,6 +699,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     end)
   end
 
+  @spec process_text_item(content_item(), processing_context()) :: content_item()
   defp process_text_item(item, _context) do
     Map.merge(item, %{
       # For text, processed_content is the original content
@@ -637,6 +727,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     })
   end
 
+  @spec process_image_item(content_item(), processing_context()) :: content_item()
   defp process_image_item(item, _context) do
     # Check for corrupted or invalid image data
     if Map.get(item, :content) == "invalid_base64_data" do
@@ -711,6 +802,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     end
   end
 
+  @spec process_audio_item(content_item(), processing_context()) :: content_item()
   defp process_audio_item(item, _context) do
     Map.merge(item, %{
       processed_content: %{
@@ -727,6 +819,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     })
   end
 
+  @spec process_video_item(content_item(), processing_context()) :: content_item()
   defp process_video_item(item, _context) do
     Map.merge(item, %{
       processed_content: %{
@@ -741,6 +834,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     })
   end
 
+  @spec process_code_item(content_item(), processing_context()) :: content_item()
   defp process_code_item(item, _context) do
     Map.merge(item, %{
       processed_content: %{
@@ -756,6 +850,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     })
   end
 
+  @spec process_document_item(content_item(), processing_context()) :: content_item()
   defp process_document_item(item, _context) do
     Map.merge(item, %{
       processed_content: %{
@@ -768,6 +863,7 @@ defmodule TheMaestro.Prompts.MultiModal do
     })
   end
 
+  @spec process_generic_item(content_item(), processing_context()) :: content_item()
   defp process_generic_item(item, _context) do
     Map.merge(item, %{
       processed_content: %{content: Map.get(item, :content, "")},

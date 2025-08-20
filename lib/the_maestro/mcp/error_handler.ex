@@ -319,6 +319,7 @@ defmodule TheMaestro.MCP.ErrorHandler do
 
   # Private functions
 
+  @spec format_context(error_context()) :: String.t()
   defp format_context(context) do
     context
     |> Enum.filter(fn {_k, v} -> v != nil end)
@@ -329,6 +330,13 @@ defmodule TheMaestro.MCP.ErrorHandler do
   @doc """
   Get error code constants for testing and reference.
   """
+  @spec error_codes() :: %{
+          parse_error: integer(),
+          invalid_request: integer(),
+          method_not_found: integer(),
+          invalid_params: integer(),
+          internal_error: integer()
+        }
   def error_codes do
     %{
       parse_error: @parse_error,
