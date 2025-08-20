@@ -25,12 +25,19 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
       content_compatibility = assess_content_compatibility(content, provider_capabilities)
       overall_score = calculate_overall_compatibility_score(content_compatibility)
 
+      # Check for validation errors in content
+      validation_errors = validate_content_structure(content)
+      valid_content_items = length(content) - length(validation_errors)
+      
       %{
         provider_capabilities: %{provider => provider_capabilities},
         content_compatibility: content_compatibility,
         overall_compatibility_score: overall_score,
         provider_status: Map.get(context, :provider_status, %{}) |> Map.get(provider, :available),
-        fallback_recommendations: generate_fallback_recommendations(content, provider, context)
+        fallback_recommendations: generate_fallback_recommendations(content, provider, context),
+        validation_errors: validation_errors,
+        valid_content_items: valid_content_items,
+        processing_status: if(length(validation_errors) > 0, do: :completed_with_errors, else: :completed)
       }
     end
   end
@@ -175,7 +182,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
     %{
       supports_images: true,
       max_image_size_mb: 10,
-      supported_image_formats: ["PNG", "JPEG", "GIF", "WebP"],
+      supported_image_formats: ["PNG", "JPEG", "GIF"],
       supports_documents: true,
       max_document_pages: 200,
       supports_video: false,
@@ -425,19 +432,39 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
           quality_impact: :minimal
         }
 
-      :document when adaptations_needed ->
+      :document ->
+        format = Map.get(metadata, :format, "PDF")
+        suggested_changes = if format != "PDF", do: [:convert_to_pdf, :extract_text], else: []
+        
         %{
           content_type: :document,
-          adaptations_needed: true,
-          suggested_changes: [:convert_to_pdf, :extract_text],
+          adaptations_needed: length(suggested_changes) > 0,
+          suggested_changes: suggested_changes,
           conversion_complexity: :moderate
+        }
+
+      :audio ->
+        %{
+          content_type: :audio,
+          adaptations_needed: false,
+          suggested_changes: [],
+          alternative_approaches: [:transcribe_to_text]
+        }
+
+      :video ->
+        %{
+          content_type: :video,
+          adaptations_needed: false,
+          suggested_changes: [],
+          alternative_approaches: [:extract_keyframes, :transcribe_to_text]
         }
 
       _ ->
         %{
           content_type: type,
           adaptations_needed: false,
-          suggested_changes: []
+          suggested_changes: [],
+          alternative_approaches: []
         }
     end
   end
@@ -1035,5 +1062,24 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessor 
 
   defp generate_performance_recommendations(_, _) do
     [%{type: :continue_monitoring, priority: :low}]
+  end
+
+  # Helper function to validate content structure
+  defp validate_content_structure(content) do
+    Enum.reduce(content, [], fn item, errors ->
+      cond do
+        not is_map(item) ->
+          [%{type: :invalid_structure, item: item, message: "Content item must be a map"} | errors]
+        
+        not Map.has_key?(item, :type) ->
+          [%{type: :missing_type, item: item, message: "Content item missing :type field"} | errors]
+        
+        Map.get(item, :type) not in [:text, :image, :audio, :video, :code, :document] ->
+          [%{type: :invalid_type, item: item, message: "Invalid content type"} | errors]
+        
+        true ->
+          errors
+      end
+    end)
   end
 end

@@ -3,13 +3,7 @@ defmodule TheMaestro.Prompts.MultiModalTest do
 
   alias TheMaestro.Prompts.MultiModal
 
-  alias TheMaestro.Prompts.MultiModal.{
-    ContentProcessor,
-    CrossModalAnalyzer,
-    AccessibilityEnhancer,
-    ProviderCompatibilityAssessor,
-    PerformanceOptimizer
-  }
+  # Remove unused aliases - they're not needed in main test file
 
   describe "content_type_definitions/0" do
     test "defines all supported content types" do

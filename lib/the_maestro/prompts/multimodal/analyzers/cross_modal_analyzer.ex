@@ -253,27 +253,30 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   end
 
   defp analyze_semantic_relationships(content) do
-    relationships = []
+    content_length = length(content)
+    
+    relationships = if content_length >= 2 do
+      for i <- 0..(content_length - 2),
+          j <- (i + 1)..(content_length - 1) do
+        item1 = Enum.at(content, i)
+        item2 = Enum.at(content, j)
 
-    # Compare each pair of content items
-    for i <- 0..(length(content) - 2),
-        j <- (i + 1)..(length(content) - 1) do
-      item1 = Enum.at(content, i)
-      item2 = Enum.at(content, j)
+        semantic_similarity = calculate_semantic_similarity(item1, item2)
 
-      semantic_similarity = calculate_semantic_similarity(item1, item2)
-
-      if semantic_similarity > 0.3 do
-        _relationships = [
+        if semantic_similarity > 0.3 do
           %{
             source_index: i,
             target_index: j,
             similarity_score: semantic_similarity,
             relationship_type: determine_semantic_relationship_type(item1, item2)
           }
-          | relationships
-        ]
+        else
+          nil
+        end
       end
+      |> Enum.reject(&is_nil/1)
+    else
+      []
     end
 
     %{
@@ -664,51 +667,55 @@ defmodule TheMaestro.Prompts.MultiModal.Analyzers.CrossModalAnalyzer do
   # Additional required functions
   defp find_complementary_content(content) do
     # Find content items that complement each other
-    complementary_pairs = []
+    content_length = length(content)
 
-    for i <- 0..(length(content) - 2),
-        j <- (i + 1)..(length(content) - 1) do
-      item1 = Enum.at(content, i)
-      item2 = Enum.at(content, j)
+    if content_length >= 2 do
+      for i <- 0..(content_length - 2),
+          j <- (i + 1)..(content_length - 1) do
+        item1 = Enum.at(content, i)
+        item2 = Enum.at(content, j)
 
-      if are_complementary?(item1, item2) do
-        _complementary_pairs = [
+        if are_complementary?(item1, item2) do
           %{
             topic: extract_common_topic(item1, item2),
             content_items: [item1, item2],
             synthesis_type: :comprehensive_analysis,
             potential_value: :high
           }
-          | complementary_pairs
-        ]
+        else
+          nil
+        end
       end
+      |> Enum.reject(&is_nil/1)
+    else
+      []
     end
-
-    complementary_pairs
   end
 
   defp find_cross_reference_opportunities(content) do
     # Find opportunities for cross-referencing between content
-    cross_refs = []
+    content_length = length(content)
 
-    for i <- 0..(length(content) - 2),
-        j <- (i + 1)..(length(content) - 1) do
-      item1 = Enum.at(content, i)
-      item2 = Enum.at(content, j)
+    if content_length >= 2 do
+      for i <- 0..(content_length - 2),
+          j <- (i + 1)..(content_length - 1) do
+        item1 = Enum.at(content, i)
+        item2 = Enum.at(content, j)
 
-      if has_cross_reference_potential?(item1, item2) do
-        _cross_refs = [
+        if has_cross_reference_potential?(item1, item2) do
           %{
             text_reference: extract_reference_info(item1),
             code_reference: extract_reference_info(item2),
             relationship_type: :direct_reference
           }
-          | cross_refs
-        ]
+        else
+          nil
+        end
       end
+      |> Enum.reject(&is_nil/1)
+    else
+      []
     end
-
-    cross_refs
   end
 
   defp find_enhancement_opportunities(_content) do

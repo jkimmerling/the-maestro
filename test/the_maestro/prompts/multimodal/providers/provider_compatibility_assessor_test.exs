@@ -356,7 +356,7 @@ defmodule TheMaestro.Prompts.MultiModal.Providers.ProviderCompatibilityAssessorT
       assert recommendations.cost_analysis.estimated_tokens > 10_000
       assert recommendations.cost_analysis.cost_by_provider |> Map.keys() |> length() >= 2
       assert recommendations.primary_recommendation.cost_efficiency >= 0.7
-      assert recommendations.budget_considerations.optimization_suggestions |> length() > 0
+      assert recommendations.cost_analysis.budget_considerations.optimization_suggestions |> length() > 0
     end
 
     test "provides specialized recommendations for different use cases" do
