@@ -17,6 +17,8 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessor do
     TextProcessor
   }
 
+  alias TheMaestro.Prompts.MultiModal.Optimization.PerformanceOptimizer
+
   @doc """
   Processes content by delegating to the appropriate specialized processor.
 
@@ -31,43 +33,53 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessor do
   """
   @spec process_content(map(), map()) :: map()
   def process_content(%{type: type} = content, context) do
-    case type do
-      :text ->
-        %{processor_used: :text_processor, analysis: TextProcessor.process(content, context)}
+    result =
+      case type do
+        :text ->
+          %{processor_used: :text_processor, analysis: TextProcessor.process(content, context)}
 
-      :image ->
-        %{processor_used: :image_processor, analysis: ImageProcessor.process(content, context)}
+        :image ->
+          %{processor_used: :image_processor, analysis: ImageProcessor.process(content, context)}
 
-      :audio ->
-        %{processor_used: :audio_processor, analysis: AudioProcessor.process(content, context)}
+        :audio ->
+          %{processor_used: :audio_processor, analysis: AudioProcessor.process(content, context)}
 
-      :video ->
-        %{processor_used: :video_processor, analysis: VideoProcessor.process(content, context)}
+        :video ->
+          %{processor_used: :video_processor, analysis: VideoProcessor.process(content, context)}
 
-      :document ->
-        %{
-          processor_used: :document_processor,
-          analysis: DocumentProcessor.process(content, context)
-        }
+        :document ->
+          %{
+            processor_used: :document_processor,
+            analysis: DocumentProcessor.process(content, context)
+          }
 
-      :code ->
-        %{processor_used: :code_processor, analysis: CodeProcessor.process(content, context)}
+        :code ->
+          %{processor_used: :code_processor, analysis: CodeProcessor.process(content, context)}
 
-      :data ->
-        %{processor_used: :data_processor, analysis: DataProcessor.process(content, context)}
+        :data ->
+          %{processor_used: :data_processor, analysis: DataProcessor.process(content, context)}
 
-      :diagram ->
-        %{processor_used: :image_processor, analysis: ImageProcessor.process(content, context)}
+        :diagram ->
+          %{processor_used: :image_processor, analysis: ImageProcessor.process(content, context)}
 
-      :web_content ->
-        %{processor_used: :text_processor, analysis: TextProcessor.process(content, context)}
+        :web_content ->
+          %{processor_used: :text_processor, analysis: TextProcessor.process(content, context)}
+
+        _ ->
+          %{
+            status: :error,
+            error: :unsupported_content_type,
+            processor_used: :none
+          }
+      end
+
+    # Apply performance optimizations if requested
+    case Map.get(context, :performance_mode) do
+      :optimized ->
+        apply_performance_optimizations(result, [content], context)
 
       _ ->
-        %{
-          status: :error,
-          error: :unsupported_content_type,
-          processor_used: :none
-        }
+        result
     end
   rescue
     error ->
@@ -125,5 +137,15 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessor do
       {:ok, result} -> result
       {:exit, reason} -> %{status: :error, error: :processing_timeout, reason: reason}
     end)
+  end
+
+  defp apply_performance_optimizations(result, content, context) do
+    # Apply performance optimizations using the PerformanceOptimizer
+    optimization_result = PerformanceOptimizer.optimize_processing_pipeline(content, context)
+
+    # Merge the optimization results with the processor result
+    result
+    |> Map.put(:optimization_applied, optimization_result.optimizations_applied)
+    |> Map.put(:performance_metrics, optimization_result.performance_metrics)
   end
 end

@@ -283,7 +283,7 @@ defmodule TheMaestro.Prompts.MultiModal.Processors.ContentProcessorTest do
 
       result = ContentProcessor.process_content(large_content, context)
 
-      assert result.optimization_applied.lazy_loading == true
+      assert result.optimization_applied.lazy_loading.enabled == true
       assert result.performance_metrics.memory_saved_mb > 0
     end
 
