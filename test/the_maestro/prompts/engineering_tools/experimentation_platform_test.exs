@@ -1,0 +1,555 @@
+defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatformTest do
+  use ExUnit.Case, async: true
+
+  alias TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform
+  alias TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform.{
+    PromptExperiment,
+    ExperimentExecution,
+    ExperimentVariant,
+    StatisticalAnalyzer
+  }
+
+  describe "create_prompt_experiment/1" do
+    test "creates a comprehensive A/B test experiment" do
+      experiment_config = %{
+        name: "Role Definition A/B Test",
+        description: "Testing different role definitions for code review prompts",
+        hypothesis: "More specific role definitions will improve code review quality",
+        base_prompt: "You are a code reviewer. Review the following code: {{code | required}}",
+        variations: [
+          %{
+            name: "Generic Reviewer",
+            changes: %{role: "code reviewer"}
+          },
+          %{
+            name: "Senior Developer",
+            changes: %{role: "senior software developer with 10+ years experience"}
+          },
+          %{
+            name: "Security Expert", 
+            changes: %{role: "security-focused code reviewer and penetration testing expert"}
+          }
+        ],
+        success_metrics: [
+          %{name: "review_completeness", weight: 0.4, target: 0.85},
+          %{name: "issue_identification", weight: 0.3, target: 0.9},
+          %{name: "suggestion_quality", weight: 0.3, target: 0.8}
+        ],
+        duration: %{days: 14},
+        significance_level: 0.05,
+        power: 0.8
+      }
+
+      experiment = ExperimentationPlatform.create_prompt_experiment(experiment_config)
+
+      assert %PromptExperiment{} = experiment
+      assert experiment.name == experiment_config.name
+      assert experiment.description == experiment_config.description
+      assert experiment.hypothesis == experiment_config.hypothesis
+      assert String.match?(experiment.experiment_id, ~r/^exp_[a-f0-9]{8}$/)
+      
+      # Should have 3 variants (including control)
+      assert length(experiment.variants) == 3
+      assert Enum.all?(experiment.variants, fn variant ->
+        Map.has_key?(variant, :variant_id) && Map.has_key?(variant, :name) && Map.has_key?(variant, :prompt)
+      end)
+      
+      # Should have properly configured success metrics
+      assert length(experiment.success_metrics) == 3
+      total_weight = Enum.reduce(experiment.success_metrics, 0, fn metric, acc -> 
+        acc + metric.weight 
+      end)
+      assert_in_delta total_weight, 1.0, 0.01
+    end
+
+    test "creates multivariate experiment with parameter combinations" do
+      experiment_config = %{
+        name: "Multivariate Prompt Optimization",
+        description: "Testing combinations of role, tone, and output format",
+        hypothesis: "Optimized combinations will improve overall performance",
+        base_prompt: "You are a {{role}}. Use a {{tone}} tone. Provide {{format}} response to: {{query | required}}",
+        variations: [
+          %{
+            parameter_combinations: [
+              %{role: "assistant", tone: "professional", format: "detailed"},
+              %{role: "expert", tone: "casual", format: "brief"},
+              %{role: "mentor", tone: "encouraging", format: "structured"}
+            ]
+          }
+        ],
+        success_metrics: [
+          %{name: "user_satisfaction", weight: 0.6, target: 4.0},
+          %{name: "response_quality", weight: 0.4, target: 0.85}
+        ],
+        duration: %{days: 21}
+      }
+
+      experiment = ExperimentationPlatform.create_prompt_experiment(experiment_config)
+
+      assert experiment.experiment_type == :multivariate
+      assert length(experiment.variants) == 3
+      
+      # Each variant should have the parameter combinations applied
+      variant_prompts = Enum.map(experiment.variants, & &1.prompt)
+      assert Enum.any?(variant_prompts, fn prompt -> 
+        String.contains?(prompt, "professional tone") 
+      end)
+      assert Enum.any?(variant_prompts, fn prompt -> 
+        String.contains?(prompt, "casual tone") 
+      end)
+    end
+
+    test "optimizes traffic allocation based on variant count" do
+      experiment_config = %{
+        name: "Traffic Allocation Test",
+        description: "Testing traffic allocation optimization",
+        hypothesis: "Equal allocation will provide best statistical power",
+        base_prompt: "Test prompt {{param}}",
+        variations: [
+          %{name: "Variant A", changes: %{param: "A"}},
+          %{name: "Variant B", changes: %{param: "B"}},
+          %{name: "Variant C", changes: %{param: "C"}}
+        ],
+        success_metrics: [%{name: "success_rate", weight: 1.0, target: 0.8}],
+        duration: %{days: 7}
+      }
+
+      experiment = ExperimentationPlatform.create_prompt_experiment(experiment_config)
+
+      # Should have equal allocation for all variants
+      allocations = Enum.map(experiment.variants, & &1.traffic_allocation)
+      target_allocation = 1.0 / length(experiment.variants)
+      
+      assert Enum.all?(allocations, fn allocation ->
+        abs(allocation - target_allocation) < 0.01
+      end)
+      
+      # Total allocation should sum to 1
+      total_allocation = Enum.sum(allocations)
+      assert_in_delta total_allocation, 1.0, 0.01
+    end
+
+    test "calculates required sample size for statistical power" do
+      experiment_config = %{
+        name: "Sample Size Test",
+        description: "Testing sample size calculation",
+        hypothesis: "Need sufficient sample size for 80% power",
+        base_prompt: "Test prompt",
+        variations: [%{name: "Variant", changes: %{}}],
+        success_metrics: [%{name: "conversion", weight: 1.0, target: 0.1}],
+        duration: %{days: 14},
+        significance_level: 0.05,
+        power: 0.8,
+        minimum_detectable_effect: 0.05
+      }
+
+      experiment = ExperimentationPlatform.create_prompt_experiment(experiment_config)
+
+      assert Map.has_key?(experiment.statistical_power, :required_sample_size_per_variant)
+      assert Map.has_key?(experiment.statistical_power, :total_required_samples)
+      assert Map.has_key?(experiment.statistical_power, :estimated_duration_days)
+      
+      assert experiment.statistical_power.required_sample_size_per_variant > 0
+      assert experiment.statistical_power.total_required_samples > experiment.statistical_power.required_sample_size_per_variant
+    end
+
+    test "validates experiment design for statistical validity" do
+      invalid_config = %{
+        name: "Invalid Experiment",
+        description: "Missing required fields",
+        # Missing hypothesis, variations, success_metrics
+        base_prompt: "Test prompt",
+        duration: %{days: 1}  # Too short
+      }
+
+      assert_raise ArgumentError, ~r/Invalid experiment configuration/, fn ->
+        ExperimentationPlatform.create_prompt_experiment(invalid_config)
+      end
+    end
+
+    test "initializes experiment tracking systems" do
+      experiment_config = %{
+        name: "Tracking Test",
+        description: "Testing tracking initialization",
+        hypothesis: "Tracking should be properly initialized",
+        base_prompt: "Test prompt {{param}}",
+        variations: [%{name: "Control", changes: %{param: "control"}}],
+        success_metrics: [%{name: "success", weight: 1.0, target: 0.5}],
+        duration: %{days: 7}
+      }
+
+      experiment = ExperimentationPlatform.create_prompt_experiment(experiment_config)
+
+      assert Map.has_key?(experiment, :tracking_config)
+      assert Map.has_key?(experiment.tracking_config, :events_to_track)
+      assert Map.has_key?(experiment.tracking_config, :metrics_collection)
+      assert Map.has_key?(experiment.tracking_config, :data_retention)
+      
+      events_to_track = experiment.tracking_config.events_to_track
+      assert Enum.member?(events_to_track, :experiment_start)
+      assert Enum.member?(events_to_track, :variant_assignment)
+      assert Enum.member?(events_to_track, :prompt_execution)
+      assert Enum.member?(events_to_track, :success_metric_measurement)
+    end
+  end
+
+  describe "execute_experiment_iteration/2" do
+    setup do
+      experiment_config = %{
+        name: "Test Experiment",
+        description: "Test execution",
+        hypothesis: "Test hypothesis",
+        base_prompt: "You are a {{role}}. Help with: {{task | required}}",
+        variations: [
+          %{name: "Assistant", changes: %{role: "helpful assistant"}},
+          %{name: "Expert", changes: %{role: "domain expert"}}
+        ],
+        success_metrics: [%{name: "quality", weight: 1.0, target: 0.8}],
+        duration: %{days: 7}
+      }
+
+      experiment = ExperimentationPlatform.create_prompt_experiment(experiment_config)
+      
+      user_context = %{
+        user_id: "user_123",
+        session_id: "session_456",
+        request_id: "request_789",
+        demographics: %{experience_level: "intermediate"},
+        preferences: %{response_style: "detailed"}
+      }
+
+      {:ok, experiment: experiment, user_context: user_context}
+    end
+
+    test "selects experiment variant based on traffic allocation", %{experiment: experiment, user_context: user_context} do
+      execution = ExperimentationPlatform.execute_experiment_iteration(experiment, user_context)
+
+      assert %ExperimentExecution{} = execution
+      assert execution.experiment_id == experiment.experiment_id
+      assert execution.user_context.user_id == nil  # Should be anonymized
+      assert execution.user_context.session_id != nil  # Should preserve session info
+      assert String.match?(execution.variant_id, ~r/^var_[a-f0-9]{8}$/)
+      assert is_binary(execution.prompt_used)
+      assert %DateTime{} = execution.execution_timestamp
+    end
+
+    test "anonymizes user context for privacy", %{experiment: experiment, user_context: user_context} do
+      execution = ExperimentationPlatform.execute_experiment_iteration(experiment, user_context)
+
+      anonymized_context = execution.user_context
+      
+      # Should remove personally identifiable information
+      assert anonymized_context.user_id == nil
+      
+      # Should preserve non-PII context needed for analysis
+      assert Map.has_key?(anonymized_context, :demographics)
+      assert Map.has_key?(anonymized_context, :preferences)
+      assert Map.has_key?(anonymized_context, :session_id)
+      
+      # Should add anonymization metadata
+      assert Map.has_key?(anonymized_context, :anonymized_at)
+      assert Map.has_key?(anonymized_context, :anonymization_level)
+    end
+
+    test "selects variant consistently for same user session", %{experiment: experiment, user_context: user_context} do
+      # Multiple executions with same session should get same variant
+      execution1 = ExperimentationPlatform.execute_experiment_iteration(experiment, user_context)
+      execution2 = ExperimentationPlatform.execute_experiment_iteration(experiment, user_context)
+      execution3 = ExperimentationPlatform.execute_experiment_iteration(experiment, user_context)
+
+      assert execution1.variant_id == execution2.variant_id
+      assert execution2.variant_id == execution3.variant_id
+    end
+
+    test "distributes variants according to traffic allocation", %{experiment: experiment} do
+      # Generate many executions to test distribution
+      executions = Enum.map(1..1000, fn i ->
+        user_context = %{
+          user_id: "user_#{i}",
+          session_id: "session_#{i}",
+          request_id: "request_#{i}"
+        }
+        ExperimentationPlatform.execute_experiment_iteration(experiment, user_context)
+      end)
+
+      variant_counts = executions
+        |> Enum.group_by(& &1.variant_id)
+        |> Enum.map(fn {variant_id, execs} -> {variant_id, length(execs)} end)
+        |> Enum.into(%{})
+
+      # Should have roughly equal distribution (within 10% for large sample)
+      total_executions = length(executions)
+      expected_per_variant = total_executions / length(experiment.variants)
+      
+      Enum.each(variant_counts, fn {_variant_id, count} ->
+        deviation = abs(count - expected_per_variant) / expected_per_variant
+        assert deviation < 0.1  # Within 10% of expected
+      end)
+    end
+
+    test "initializes performance tracking for execution", %{experiment: experiment, user_context: user_context} do
+      execution = ExperimentationPlatform.execute_experiment_iteration(experiment, user_context)
+
+      performance_tracking = execution.performance_tracking
+
+      assert Map.has_key?(performance_tracking, :start_time)
+      assert Map.has_key?(performance_tracking, :metrics_to_collect)
+      assert Map.has_key?(performance_tracking, :tracking_id)
+      assert Map.has_key?(performance_tracking, :quality_measurements)
+      
+      assert is_list(performance_tracking.metrics_to_collect)
+      assert String.match?(performance_tracking.tracking_id, ~r/^track_[a-f0-9]{8}$/)
+    end
+
+    test "tracks experiment execution for analysis", %{experiment: experiment, user_context: user_context} do
+      execution = ExperimentationPlatform.execute_experiment_iteration(experiment, user_context)
+
+      # Should create tracking record
+      assert function_exported?(ExperimentationPlatform, :track_experiment_execution, 1)
+      
+      # Execution should have all required fields for tracking
+      assert execution.experiment_id != nil
+      assert execution.variant_id != nil
+      assert execution.execution_timestamp != nil
+      assert execution.prompt_used != nil
+      assert execution.performance_tracking != nil
+    end
+  end
+
+  describe "statistical analysis" do
+    setup do
+      experiment = %PromptExperiment{
+        experiment_id: "exp_test123",
+        name: "Statistical Test",
+        experiment_type: :ab_test,
+        variants: [
+          %{variant_id: "var_control", name: "Control"},
+          %{variant_id: "var_treatment", name: "Treatment"}
+        ],
+        success_metrics: [
+          %{name: "conversion_rate", weight: 0.6, target: 0.1},
+          %{name: "quality_score", weight: 0.4, target: 0.8}
+        ],
+        significance_level: 0.05
+      }
+
+      results_data = [
+        # Control variant results
+        %{variant_id: "var_control", conversion_rate: 0.08, quality_score: 0.75, sample_size: 1000},
+        %{variant_id: "var_control", conversion_rate: 0.09, quality_score: 0.78, sample_size: 1000},
+        %{variant_id: "var_control", conversion_rate: 0.085, quality_score: 0.76, sample_size: 1000},
+        
+        # Treatment variant results
+        %{variant_id: "var_treatment", conversion_rate: 0.12, quality_score: 0.82, sample_size: 1000},
+        %{variant_id: "var_treatment", conversion_rate: 0.115, quality_score: 0.84, sample_size: 1000},
+        %{variant_id: "var_treatment", conversion_rate: 0.125, quality_score: 0.83, sample_size: 1000}
+      ]
+
+      {:ok, experiment: experiment, results_data: results_data}
+    end
+
+    test "performs comprehensive statistical analysis", %{experiment: experiment, results_data: results_data} do
+      analysis = StatisticalAnalyzer.analyze_experiment_results(experiment, results_data)
+
+      assert Map.has_key?(analysis, :descriptive_statistics)
+      assert Map.has_key?(analysis, :hypothesis_testing)
+      assert Map.has_key?(analysis, :confidence_intervals)
+      assert Map.has_key?(analysis, :effect_size_analysis)
+      assert Map.has_key?(analysis, :statistical_significance)
+      assert Map.has_key?(analysis, :practical_significance)
+      assert Map.has_key?(analysis, :power_analysis)
+      assert Map.has_key?(analysis, :recommendation)
+    end
+
+    test "calculates descriptive statistics for each variant", %{experiment: experiment, results_data: results_data} do
+      analysis = StatisticalAnalyzer.analyze_experiment_results(experiment, results_data)
+
+      descriptive_stats = analysis.descriptive_statistics
+
+      assert Map.has_key?(descriptive_stats, "var_control")
+      assert Map.has_key?(descriptive_stats, "var_treatment")
+
+      control_stats = descriptive_stats["var_control"]
+      assert Map.has_key?(control_stats, :conversion_rate)
+      assert Map.has_key?(control_stats, :quality_score)
+
+      # Control conversion rate should be around 0.085
+      assert_in_delta control_stats.conversion_rate.mean, 0.085, 0.01
+      assert control_stats.conversion_rate.sample_size == 3000
+      
+      treatment_stats = descriptive_stats["var_treatment"]
+      # Treatment conversion rate should be around 0.120
+      assert_in_delta treatment_stats.conversion_rate.mean, 0.120, 0.01
+    end
+
+    test "performs hypothesis testing for A/B test", %{experiment: experiment, results_data: results_data} do
+      analysis = StatisticalAnalyzer.analyze_experiment_results(experiment, results_data)
+
+      hypothesis_testing = analysis.hypothesis_testing
+
+      assert Map.has_key?(hypothesis_testing, :test_type)
+      assert Map.has_key?(hypothesis_testing, :p_values)
+      assert Map.has_key?(hypothesis_testing, :test_statistics)
+      assert Map.has_key?(hypothesis_testing, :degrees_of_freedom)
+
+      assert hypothesis_testing.test_type == :two_sample_t_test
+      
+      # Should have p-values for each metric
+      p_values = hypothesis_testing.p_values
+      assert Map.has_key?(p_values, :conversion_rate)
+      assert Map.has_key?(p_values, :quality_score)
+      
+      # Given the large difference in means, p-values should be significant
+      assert p_values.conversion_rate < 0.05
+    end
+
+    test "calculates confidence intervals", %{experiment: experiment, results_data: results_data} do
+      analysis = StatisticalAnalyzer.analyze_experiment_results(experiment, results_data)
+
+      confidence_intervals = analysis.confidence_intervals
+
+      assert Map.has_key?(confidence_intervals, :conversion_rate)
+      assert Map.has_key?(confidence_intervals, :quality_score)
+
+      conversion_ci = confidence_intervals.conversion_rate
+      assert Map.has_key?(conversion_ci, :control)
+      assert Map.has_key?(conversion_ci, :treatment)
+      assert Map.has_key?(conversion_ci, :difference)
+
+      # Confidence intervals should not overlap given the large effect size
+      control_ci = conversion_ci.control
+      treatment_ci = conversion_ci.treatment
+      
+      assert control_ci.upper < treatment_ci.lower  # No overlap indicates significance
+    end
+
+    test "analyzes effect sizes", %{experiment: experiment, results_data: results_data} do
+      analysis = StatisticalAnalyzer.analyze_experiment_results(experiment, results_data)
+
+      effect_sizes = analysis.effect_size_analysis
+
+      assert Map.has_key?(effect_sizes, :cohens_d)
+      assert Map.has_key?(effect_sizes, :relative_improvement)
+      assert Map.has_key?(effect_sizes, :absolute_difference)
+      assert Map.has_key?(effect_sizes, :effect_magnitude)
+
+      # Should show large effect size given the differences
+      cohens_d = effect_sizes.cohens_d.conversion_rate
+      assert cohens_d > 0.8  # Large effect size
+
+      relative_improvement = effect_sizes.relative_improvement.conversion_rate
+      assert relative_improvement > 0.3  # 30%+ improvement
+    end
+
+    test "assesses statistical significance", %{experiment: experiment, results_data: results_data} do
+      analysis = StatisticalAnalyzer.analyze_experiment_results(experiment, results_data)
+
+      significance = analysis.statistical_significance
+
+      assert Map.has_key?(significance, :is_significant)
+      assert Map.has_key?(significance, :significant_metrics)
+      assert Map.has_key?(significance, :confidence_level)
+
+      assert significance.is_significant == true
+      assert Enum.member?(significance.significant_metrics, :conversion_rate)
+      assert significance.confidence_level >= 0.95
+    end
+
+    test "assesses practical significance", %{experiment: experiment, results_data: results_data} do
+      analysis = StatisticalAnalyzer.analyze_experiment_results(experiment, results_data)
+
+      practical_significance = analysis.practical_significance
+
+      assert Map.has_key?(practical_significance, :is_practically_significant)
+      assert Map.has_key?(practical_significance, :business_impact)
+      assert Map.has_key?(practical_significance, :cost_benefit_ratio)
+
+      # Large improvement should be practically significant
+      assert practical_significance.is_practically_significant == true
+      
+      business_impact = practical_significance.business_impact
+      assert business_impact.conversion_rate.impact_magnitude == :large
+    end
+
+    test "performs post-hoc power analysis", %{experiment: experiment, results_data: results_data} do
+      analysis = StatisticalAnalyzer.analyze_experiment_results(experiment, results_data)
+
+      power_analysis = analysis.power_analysis
+
+      assert Map.has_key?(power_analysis, :achieved_power)
+      assert Map.has_key?(power_analysis, :minimum_detectable_effect)
+      assert Map.has_key?(power_analysis, :sample_size_adequacy)
+
+      # With large effect size and sample size, should achieve high power
+      assert power_analysis.achieved_power > 0.8
+      assert power_analysis.sample_size_adequacy == :adequate
+    end
+
+    test "generates experiment recommendations", %{experiment: experiment, results_data: results_data} do
+      analysis = StatisticalAnalyzer.analyze_experiment_results(experiment, results_data)
+
+      recommendation = analysis.recommendation
+
+      assert Map.has_key?(recommendation, :decision)
+      assert Map.has_key?(recommendation, :rationale)
+      assert Map.has_key?(recommendation, :confidence_level)
+      assert Map.has_key?(recommendation, :next_steps)
+
+      # Should recommend implementing the treatment
+      assert recommendation.decision == :implement_treatment
+      assert recommendation.confidence_level == :high
+      assert is_list(recommendation.next_steps)
+    end
+  end
+
+  describe "experiment types" do
+    test "handles multi-armed bandit experiments" do
+      config = %{
+        name: "MAB Test",
+        description: "Multi-armed bandit optimization",
+        hypothesis: "Dynamic allocation will optimize performance",
+        experiment_type: :multi_armed_bandit,
+        base_prompt: "Test prompt {{param}}",
+        variations: [
+          %{name: "A", changes: %{param: "A"}},
+          %{name: "B", changes: %{param: "B"}},
+          %{name: "C", changes: %{param: "C"}}
+        ],
+        success_metrics: [%{name: "reward", weight: 1.0, target: 0.5}],
+        bandit_config: %{
+          algorithm: :epsilon_greedy,
+          epsilon: 0.1,
+          exploration_decay: 0.995
+        }
+      }
+
+      experiment = ExperimentationPlatform.create_prompt_experiment(config)
+
+      assert experiment.experiment_type == :multi_armed_bandit
+      assert Map.has_key?(experiment, :bandit_config)
+      assert experiment.bandit_config.algorithm == :epsilon_greedy
+    end
+
+    test "handles multivariate experiments" do
+      config = %{
+        name: "Multivariate Test",
+        description: "Testing multiple factors simultaneously",
+        hypothesis: "Factor interactions will affect performance",
+        experiment_type: :multivariate,
+        base_prompt: "{{role}} with {{tone}} using {{format}}",
+        factors: [
+          %{name: "role", levels: ["assistant", "expert", "mentor"]},
+          %{name: "tone", levels: ["formal", "casual"]},
+          %{name: "format", levels: ["brief", "detailed"]}
+        ],
+        success_metrics: [%{name: "effectiveness", weight: 1.0, target: 0.8}]
+      }
+
+      experiment = ExperimentationPlatform.create_prompt_experiment(config)
+
+      assert experiment.experiment_type == :multivariate
+      # Should create variants for all factor combinations: 3 * 2 * 2 = 12 variants
+      assert length(experiment.variants) == 12
+    end
+  end
+end
