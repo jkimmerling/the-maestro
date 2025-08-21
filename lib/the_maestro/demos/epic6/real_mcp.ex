@@ -24,6 +24,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   - Tool execution demonstrations
   - Security feature demonstrations
   """
+  @spec run_full_demo() :: :ok | {:error, term()}
   def run_full_demo do
     IO.puts("🤖 The Maestro - Epic 6 Real MCP Integration Demo")
     IO.puts("=" |> String.duplicate(50))
@@ -53,6 +54,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   @doc """
   Setup the real MCP environment and validate API keys.
   """
+  @spec setup_real_mcp_environment() :: :ok
   def setup_real_mcp_environment do
     IO.puts("\n🔧 Setting up real MCP environment...")
 
@@ -74,6 +76,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   @doc """
   Start Context7 MCP server via stdio transport.
   """
+  @spec start_context7_stdio_server() :: :ok | {:error, term()}
   def start_context7_stdio_server do
     IO.puts("\n📚 Starting Context7 stdio server...")
 
@@ -114,6 +117,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   @doc """
   Establish Context7 SSE (Server-Sent Events) connection.
   """
+  @spec establish_context7_sse_connection() :: :ok | {:error, term()}
   def establish_context7_sse_connection do
     IO.puts("\n🌐 Establishing Context7 SSE connection...")
 
@@ -146,6 +150,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   @doc """
   Connect to Tavily HTTP MCP server.
   """
+  @spec connect_to_tavily_http() :: :ok | {:error, term()}
   def connect_to_tavily_http do
     IO.puts("\n🔍 Connecting to Tavily HTTP server...")
 
@@ -178,6 +183,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   @doc """
   Wait for all MCP server connections to be established.
   """
+  @spec wait_for_all_connections() :: :ok
   def wait_for_all_connections do
     IO.puts("\n⏳ Waiting for server connections...")
 
@@ -219,6 +225,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   @doc """
   Validate API authentication with connected servers.
   """
+  @spec validate_api_authentication() :: :ok
   def validate_api_authentication do
     IO.puts("\n🔐 Validating API authentication...")
 
@@ -248,6 +255,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   @doc """
   Run real demo scenarios with actual MCP servers.
   """
+  @spec run_real_demo_scenarios() :: :ok | {:error, term()}
   def run_real_demo_scenarios do
     IO.puts("\n🚀 Running real demo scenarios...")
 
@@ -283,7 +291,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
       IO.puts("Query: #{message}")
 
       case Agents.send_message(agent_id, message) do
-        :ok -> IO.puts("✅ Context7 query sent successfully")
+        {:ok, _response} -> IO.puts("✅ Context7 query sent successfully")
         {:error, reason} -> IO.puts("❌ Context7 query failed: #{inspect(reason)}")
       end
     else
@@ -300,7 +308,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
       IO.puts("Query: #{message}")
 
       case Agents.send_message(agent_id, message) do
-        :ok -> IO.puts("✅ Context7 SSE query sent successfully")
+        {:ok, _response} -> IO.puts("✅ Context7 SSE query sent successfully")
         {:error, reason} -> IO.puts("❌ Context7 SSE query failed: #{inspect(reason)}")
       end
     else
@@ -317,7 +325,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
       IO.puts("Query: #{message}")
 
       case Agents.send_message(agent_id, message) do
-        :ok -> IO.puts("✅ Tavily query sent successfully")
+        {:ok, _response} -> IO.puts("✅ Tavily query sent successfully")
         {:error, reason} -> IO.puts("❌ Tavily query failed: #{inspect(reason)}")
       end
     else
@@ -325,8 +333,12 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
     end
   end
 
+  @spec run_multi_server_demo(String.t()) :: :ok
   defp run_multi_server_demo(agent_id) do
-    if System.get_env("CONTEXT7_API_KEY") and System.get_env("TAVILY_API_KEY") do
+    context7_key = System.get_env("CONTEXT7_API_KEY")
+    tavily_key = System.get_env("TAVILY_API_KEY")
+
+    if context7_key != nil and tavily_key != nil do
       IO.puts("\n🤝 Multi-Server Coordination Demo")
       IO.puts("-" |> String.duplicate(30))
 
@@ -336,7 +348,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
       IO.puts("Query: #{message}")
 
       case Agents.send_message(agent_id, message) do
-        :ok -> IO.puts("✅ Multi-server query sent successfully")
+        {:ok, _response} -> IO.puts("✅ Multi-server query sent successfully")
         {:error, reason} -> IO.puts("❌ Multi-server query failed: #{inspect(reason)}")
       end
 
@@ -345,24 +357,28 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
       IO.puts("  Context7 stdio: Low latency, local process")
       IO.puts("  Context7 SSE: Streaming, real-time updates")
       IO.puts("  Tavily HTTP: REST API, standardized responses")
+      :ok
     else
       IO.puts("⏭️ Skipping multi-server demo - API keys not fully configured")
+      :ok
     end
   end
 
   @doc """
   Demonstrate real security features with actual servers.
   """
+  @spec demonstrate_real_security_features() :: :ok
   def demonstrate_real_security_features do
     IO.puts("\n🔒 Security Feature Demonstrations")
     IO.puts("-" |> String.duplicate(35))
 
-    demonstrate_trust_levels()
-    demonstrate_confirmation_flows()
+    :ok = demonstrate_trust_levels()
+    :ok = demonstrate_confirmation_flows()
 
     :ok
   end
 
+  @spec demonstrate_trust_levels() :: :ok
   defp demonstrate_trust_levels do
     IO.puts("\n🛡️ Trust Level Configuration:")
 
@@ -387,8 +403,11 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
       IO.puts("  #{example.server}: #{trust_symbol}")
       IO.puts("    Reason: #{example.reason}")
     end
+
+    :ok
   end
 
+  @spec demonstrate_confirmation_flows() :: :ok
   defp demonstrate_confirmation_flows do
     IO.puts("\n🔐 Confirmation Flow Examples:")
 
@@ -401,11 +420,14 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
     IO.puts("  Trusted tool execution (Context7 lookup):")
     IO.puts("    Query: 'Look up FastAPI documentation'")
     IO.puts("    ✅ No confirmation required - proceeding automatically")
+
+    :ok
   end
 
   @doc """
   Show production CLI capabilities.
   """
+  @spec show_production_cli_capabilities() :: :ok
   def show_production_cli_capabilities do
     IO.puts("\n🖥️ CLI Management Capabilities")
     IO.puts("-" |> String.duplicate(30))
@@ -444,6 +466,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
   @doc """
   Cleanup demo resources.
   """
+  @spec cleanup_demo() :: :ok
   def cleanup_demo do
     IO.puts("\n🧹 Cleaning up demo resources...")
 
@@ -470,6 +493,7 @@ defmodule TheMaestro.Demos.Epic6.RealMCP do
 
   # Helper functions
 
+  @spec check_npx_availability() :: :ok | {:error, String.t()}
   defp check_npx_availability do
     case System.cmd("which", ["npx"], stderr_to_stdout: true) do
       {_output, 0} ->

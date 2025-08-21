@@ -12,36 +12,39 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
   @doc """
   Execute the discovery command.
   """
+  @spec execute([String.t()], map()) :: {:ok, :help | :success} | {:error, String.t()}
   def execute(args, options) do
     if Map.get(options, :help) do
       show_help()
       {:ok, :help}
-    end
+    else
+      case args do
+        [] ->
+          run_full_discovery(options)
 
-    case args do
-      [] ->
-        run_full_discovery(options)
+        ["scan"] ->
+          run_network_scan(options)
 
-      ["scan"] ->
-        run_network_scan(options)
+        ["local"] ->
+          discover_local_servers(options)
 
-      ["local"] ->
-        discover_local_servers(options)
+        ["templates"] ->
+          show_available_templates(options)
 
-      ["templates"] ->
-        show_available_templates(options)
+        ["from-template", template_name] ->
+          create_from_template(template_name, options)
 
-      ["from-template", template_name] ->
-        create_from_template(template_name, options)
-
-      _ ->
-        CLI.print_error("Invalid discovery command. Use --help for usage.")
+        _ ->
+          CLI.print_error("Invalid discovery command. Use --help for usage.")
+          {:error, "Invalid discovery command"}
+      end
     end
   end
 
   @doc """
   Show help for the discovery command.
   """
+  @spec show_help() :: :ok
   def show_help do
     IO.puts("""
     MCP Server Discovery & Auto-Configuration
@@ -90,6 +93,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
   ## Private Functions - Discovery Orchestration
 
+  @spec run_full_discovery(map()) :: {:ok, :success}
   defp run_full_discovery(options) do
     IO.puts("MCP Server Discovery")
     IO.puts("#{String.duplicate("=", 25)}")
@@ -119,6 +123,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     process_discovery_results(discovered_servers, options)
   end
 
+  @spec run_network_scan(map()) :: {:ok, :success}
   defp run_network_scan(options) do
     IO.puts("Network MCP Server Scan")
     IO.puts("#{String.duplicate("=", 30)}")
@@ -137,8 +142,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
         offer_to_add_servers(network_servers, options)
       end
     end
+
+    {:ok, :success}
   end
 
+  @spec discover_local_servers(map()) :: {:ok, :success}
   defp discover_local_servers(options) do
     IO.puts("Local MCP Server Discovery")
     IO.puts("#{String.duplicate("=", 35)}")
@@ -162,10 +170,13 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
         offer_to_add_servers(local_servers, options)
       end
     end
+
+    {:ok, :success}
   end
 
   ## Local Server Discovery
 
+  @spec discover_local_servers_internal(map()) :: list()
   defp discover_local_servers_internal(options) do
     search_paths = get_search_paths(options)
     extensions = get_search_extensions(options)
@@ -439,6 +450,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
   ## Network Server Discovery
 
+  @spec discover_network_servers_internal(map()) :: list()
   defp discover_network_servers_internal(options) do
     hosts = get_scan_hosts(options)
     ports = get_scan_ports(options)
@@ -977,6 +989,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
   ## Results Processing
 
+  @spec process_discovery_results(list(), map()) :: {:ok, :success}
   defp process_discovery_results(discovered_servers, options) do
     if Enum.empty?(discovered_servers) do
       CLI.print_info("No MCP servers discovered.")
@@ -995,8 +1008,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
         end
       end
     end
+
+    {:ok, :success}
   end
 
+  @spec display_discovered_servers(list(), map()) :: :ok
   defp display_discovered_servers(servers, options) do
     # Sort by confidence
     sorted_servers = Enum.sort_by(servers, & &1.confidence, :desc)
@@ -1010,8 +1026,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
       # Table view
       display_servers_table(sorted_servers)
     end
+
+    :ok
   end
 
+  @spec display_detailed_server_info(map()) :: :ok
   defp display_detailed_server_info(server) do
     IO.puts("")
     IO.puts("Server: #{server.name}")
@@ -1049,8 +1068,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
     IO.puts("  Transport: #{String.upcase(to_string(server.transport))}")
     IO.puts("  Description: #{server.description}")
+
+    :ok
   end
 
+  @spec display_servers_table(list()) :: :ok
   defp display_servers_table(servers) do
     headers = ["Name", "Type", "Transport", "Confidence", "Description"]
 
@@ -1070,27 +1092,36 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     IO.puts("")
     IO.puts("Found #{length(servers)} potential MCP servers")
     IO.puts("Use --verbose for detailed information")
+
+    :ok
   end
 
+  @spec offer_to_add_servers(list(), map()) :: :ok
   defp offer_to_add_servers(servers, options) do
     unless CLI.quiet?(options) do
       IO.puts("")
       IO.write("Add discovered servers to configuration? [y/N]: ")
 
       case IO.read(:stdio, :line) do
-        {:ok, input} ->
+        input when is_binary(input) ->
           case String.trim(String.downcase(input)) do
             "y" -> add_discovered_servers(servers, options)
             "yes" -> add_discovered_servers(servers, options)
             _ -> IO.puts("Discovery complete. No servers added.")
           end
 
-        _ ->
+        :eof ->
+          IO.puts("Discovery complete. No servers added.")
+
+        {:error, _reason} ->
           IO.puts("Discovery complete. No servers added.")
       end
     end
+
+    :ok
   end
 
+  @spec auto_add_servers(list(), map()) :: :ok
   defp auto_add_servers(servers, options) do
     CLI.print_if_verbose("Auto-adding discovered servers...", options)
 
@@ -1103,6 +1134,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     add_discovered_servers(high_confidence_servers, options)
   end
 
+  @spec add_discovered_servers(list(), map()) :: :ok
   defp add_discovered_servers(servers, _options) do
     case Config.get_configuration() do
       {:ok, current_config} ->
@@ -1119,10 +1151,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
                   {:error, :server_exists} ->
                     CLI.print_warning("Skipped: #{server_name} (already exists)")
-                    {config, count}
-
-                  {:error, reason} ->
-                    CLI.print_error("Failed to add #{server_name}: #{reason}")
                     {config, count}
                 end
 
@@ -1154,6 +1182,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
       {:error, reason} ->
         CLI.print_error("Failed to load current configuration: #{reason}")
     end
+
+    :ok
   end
 
   defp convert_discovered_to_config(server) do
@@ -1265,6 +1295,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
   ## Template Functions
 
+  @spec show_available_templates(map()) :: {:ok, :success}
   defp show_available_templates(options) do
     IO.puts("Available MCP Server Templates")
     IO.puts("#{String.duplicate("=", 35)}")
@@ -1279,8 +1310,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
       filtered_templates = filter_templates_by_category(templates, category_filter)
       display_templates_by_category(filtered_templates, options)
     end
+
+    {:ok, :success}
   end
 
+  @spec create_from_template(String.t(), map()) :: {:ok, :success} | {:error, String.t()}
   defp create_from_template(template_name, options) do
     templates = get_available_templates()
 
@@ -1290,6 +1324,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
         IO.puts("")
         IO.puts("Available templates:")
         list_template_names(templates)
+        {:error, "Template not found"}
 
       template ->
         create_server_from_template(template, options)
@@ -1345,6 +1380,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
   ## Display and Helper Functions
 
+  @spec show_discovery_suggestions() :: :ok
   defp show_discovery_suggestions do
     IO.puts("")
     IO.puts("Discovery Tips:")
@@ -1357,6 +1393,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     IO.puts("You can also create servers from templates:")
     IO.puts("  maestro mcp discover templates")
     IO.puts("  maestro mcp discover from-template python-basic")
+
+    :ok
   end
 
   defp format_server_type(:discovered_file), do: "File"
@@ -1379,6 +1417,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
   defp truncate_text(text, _max_length), do: to_string(text)
 
+  @spec display_simple_table(list(String.t()), list(list(String.t()))) :: :ok
   defp display_simple_table(headers, rows) do
     # Calculate column widths
     col_widths = calculate_column_widths(headers, rows)
@@ -1414,6 +1453,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
       IO.puts(row_line)
     end)
+
+    :ok
   end
 
   defp calculate_column_widths(headers, rows) do
@@ -1436,10 +1477,13 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
   end
 
   # Template helper functions (simplified implementations)
+  @spec display_all_templates(map(), map()) :: :ok
   defp display_all_templates(templates, _options) do
     Enum.each(templates, fn {name, template} ->
       IO.puts("#{name}: #{template.description} (#{template.category})")
     end)
+
+    :ok
   end
 
   defp filter_templates_by_category(templates, nil), do: templates
@@ -1450,6 +1494,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     end)
   end
 
+  @spec display_templates_by_category(map(), map()) :: :ok
   defp display_templates_by_category(templates, _options) do
     templates
     |> Enum.group_by(fn {_name, template} -> template.category end)
@@ -1462,6 +1507,8 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
 
       IO.puts("")
     end)
+
+    :ok
   end
 
   defp find_template_by_name(templates, name) do
@@ -1471,6 +1518,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     end
   end
 
+  @spec list_template_names(map()) :: :ok
   defp list_template_names(templates) do
     templates
     |> Map.keys()
@@ -1478,8 +1526,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     |> Enum.each(fn name ->
       IO.puts("  - #{name}")
     end)
+
+    :ok
   end
 
+  @spec create_server_from_template(map(), map()) :: {:ok, :success} | {:error, String.t()}
   defp create_server_from_template(template, options) do
     IO.puts("Creating server from template: #{template.name}")
     IO.puts("Description: #{template.description}")
@@ -1489,20 +1540,27 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
     IO.write("Enter server name: ")
 
     case IO.read(:stdio, :line) do
-      {:ok, input} ->
+      input when is_binary(input) ->
         server_name = String.trim(input)
 
         if String.length(server_name) > 0 do
           create_template_server(server_name, template, options)
         else
           CLI.print_error("Server name is required.")
+          {:error, "Server name is required"}
         end
 
-      _ ->
+      :eof ->
         CLI.print_error("Failed to read server name.")
+        {:error, "Failed to read server name"}
+
+      {:error, reason} ->
+        CLI.print_error("Failed to read server name: #{reason}")
+        {:error, "Failed to read server name"}
     end
   end
 
+  @spec create_template_server(String.t(), map(), map()) :: {:ok, :success} | {:error, String.t()}
   defp create_template_server(server_name, template, _options) do
     server_config = %{
       "command" => template.command,
@@ -1542,20 +1600,21 @@ defmodule TheMaestro.MCP.CLI.Commands.Discovery do
                 IO.puts("Next steps:")
                 IO.puts("  maestro mcp status #{server_name}")
                 IO.puts("  maestro mcp test #{server_name}")
+                {:ok, :success}
 
               {:error, reason} ->
                 CLI.print_error("Failed to save configuration: #{reason}")
+                {:error, "Failed to save configuration: #{reason}"}
             end
 
           {:error, :server_exists} ->
             CLI.print_error("Server '#{server_name}' already exists.")
-
-          {:error, reason} ->
-            CLI.print_error("Failed to create server: #{reason}")
+            {:error, "Server already exists"}
         end
 
       {:error, reason} ->
         CLI.print_error("Failed to load configuration: #{reason}")
+        {:error, "Failed to load configuration: #{reason}"}
     end
   end
 end

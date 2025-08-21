@@ -1,0 +1,1655 @@
+Finding suitable PLTs
+Checking PLT...
+[:altar, :anthropix, :asn1, :bandit, :castore, :certifi, :compiler, :crypto, :db_connection, :decimal, :dns_cluster, :ecto, :ecto_sql, :eex, :elixir, :esbuild, :et, :ex_unit, :expo, :file_only_logger, :file_system, :finch, :gemini_ex, :gettext, :goth, :hackney, :hpax, :httpoison, :idna, :inets, :io_ansi_plus, :io_ansi_table, :jason, :joken, :jose, :kernel, :log_reset, :logger, :map_sorter, :metrics, :mime, :mimerl, :mint, :mix, :multipart, :nimble_options, :nimble_pool, :observer, :openai_ex, :parse_trans, :phoenix, :phoenix_ecto, :phoenix_html, :phoenix_live_dashboard, :phoenix_live_reload, :phoenix_live_view, :phoenix_pubsub, :phoenix_template, :plug, :plug_crypto, :postgrex, :public_key, :req, :runtime_tools, :ssl, :ssl_verify_fun, :stdlib, :swoosh, :syntax_tools, :tailwind, :telemetry, :telemetry_metrics, :telemetry_poller, :the_maestro, :thousand_island, :typed_struct, :unicode_util_compat, :websock, :websock_adapter, :wx, :xmerl, :yamerl, :yaml_elixir, :ymlr]
+PLT is up to date!
+:ignore_warnings opt specified in mix.exs: .dialyzer_ignore.exs, but file does not exist.
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"/Users/jasonk/Development/the-maestro/priv/plts/dialyzer.plt",
+  files: [~c"_build/dev/lib/the_maestro/ebin/Elixir.TheMaestro.Prompts.Enhancement.Structs.EnvironmentalContext.beam",
+   ~c"_build/dev/lib/the_maestro/ebin/Elixir.TheMaestro.Providers.Auth.AnthropicDeviceFlow.DeviceCodeResponse.beam",
+   ~c"_build/dev/lib/the_maestro/ebin/Elixir.TheMaestro.TUI.APIKeyHandler.beam",
+   ~c"_build/dev/lib/the_maestro/ebin/Elixir.TheMaestro.TUI.EmbeddedServer.beam",
+   ~c"_build/dev/lib/the_maestro/ebin/Elixir.TheMaestro.MCP.Registry.ServerInfo.beam",
+   ...],
+  ...
+]
+Total errors: 239, Skipped: 2, Unnecessary Skips: 0
+done in 0m4.89s
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(false) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/demos/epic6/real_mcp.ex:1: The pattern 'false' can never match the type 'nil' | binary()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | [any()]) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/demos/epic6/real_mcp.ex:433: Expression produces a value of type 'ok' | [any()], but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/demos/epic6/real_mcp.ex:37:14: The pattern 'ok' can never match the type {'error',{'demo_agent_failed',_}}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/demos/epic6/real_mcp.ex:286:13: The pattern 'ok' can never match the type {'error',_} | {'ok',#{'content':=binary(), 'role':='assistant' | 'user', 'timestamp':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={_,_}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}, 'type':='assistant' | 'user'}}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/demos/epic6/real_mcp.ex:303:13: The pattern 'ok' can never match the type {'error',_} | {'ok',#{'content':=binary(), 'role':='assistant' | 'user', 'timestamp':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={_,_}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}, 'type':='assistant' | 'user'}}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/demos/epic6/real_mcp.ex:320:13: The pattern 'ok' can never match the type {'error',_} | {'ok',#{'content':=binary(), 'role':='assistant' | 'user', 'timestamp':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={_,_}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}, 'type':='assistant' | 'user'}}
+________________________________________________________________________________
+lib/the_maestro/demos/epic6/real_mcp.ex:328:8:no_return
+Function run_multi_server_demo/1 has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(true) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/demos/epic6/real_mcp.ex:329:54: The pattern 'true' can never match the type 'nil' | binary()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a([any()]) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/demos/epic6/real_mcp.ex:360:5: Expression produces a value of type [any()], but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/demos/epic6/real_mcp.ex:457:31: Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_command, __subcommand, __options) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli.ex:339:8: The pattern <_command@1, __subcommand@1, __options@1> can never match since previous clauses completely covered the type <'mcp',_,#{'args':=[binary()], 'options':=map()}>
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/add.ex:32: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/add.ex:368:20: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','server_exists'} | map()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/auth.ex:15: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:error, :invalid_key}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/auth.ex:218: Expression produces a value of type 'nil' | {'error','invalid_key'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/auth.ex:258:16: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type 'ok' | {'error','not_found'}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(false) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:1: The pattern 'false' can never match the type 'true'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:17: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, []}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:595:17: The pattern {'ok', []} can never match the type {'error','not_found'}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, :not_connected}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:598:32: The pattern {'error', 'not_connected'} can never match the type {'error','not_found'}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:681:10: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:685:14: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:698:10: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:702:14: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%{:message => _message, :status => _status}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:828:7: The pattern #{'message':=_message@1, 'status':=_status@1} can never match the type 'skipped'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, atom()} | {:ok, integer()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:1016:19: Expression produces a value of type {'error',atom()} | {'ok',integer()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:1018:18: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(variable_status) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/diagnostics.ex:1287:8: The variable _status@1 can never match since previous clauses completely covered the type 'healthy' | 'unhealthy'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/discovery.ex:16: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/discovery.ex:532:11: The variable _ can never match since previous clauses completely covered the type binary()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, _input}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/discovery.ex:1081:15: The pattern {'ok', _input@1} can never match the type 'eof' | binary() | [binary() | char()] | {'error',_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/discovery.ex:1124:28: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','server_exists'} | map()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, _input}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/discovery.ex:1492:13: The pattern {'ok', _input@1} can never match the type 'eof' | binary() | [binary() | char()] | {'error',_}
+________________________________________________________________________________
+lib/the_maestro/mcp/cli/commands/discovery.ex:1506:8:unused_fun
+Function create_template_server/3 will never be called.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/import_export.ex:16: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/import_export.ex:39: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, :invalid_format}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/import_export.ex:139:33: The pattern {'error', 'invalid_format'} can never match the type {'error','parse_error' | 'toml_not_supported' | {'config_load_error',atom() | [any()] | {_,_}} | {'file_read_error',atom()}} | {'error','validation_failed',[any()]}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/import_export.ex:251:9: The variable _ can never match since previous clauses completely covered the type 'json' | 'toml' | 'yaml'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/import_export.ex:501:11: The variable _ can never match since previous clauses completely covered the type {'ok',[#{'description':=<<_:168>>, 'name':=<<_:80>>, 'transport':=<<_:32>>, 'variables':=[any(),...]},...]}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/import_export.ex:539:5: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/interactive.ex:15: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        :ok\n        | %{\n            :auto_complete => _,\n            :command_history => [any()],\n            :connected_servers => map(),\n            :current_server => _,\n            :history => _,\n            :prompt => _,\n            :repl_mode => true,\n            :shell_mode => true,\n            :variables => map()\n          }\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/interactive.ex:439:5: Expression produces a value of type 'ok' | #{'auto_complete':=_, 'command_history':=[any()], 'connected_servers':=map(), 'current_server':=_, 'history':=_, 'prompt':=_, 'repl_mode'=>'true', 'shell_mode'=>'true', 'variables'=>map()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, __config}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/interactive.ex:872:13: The pattern {'ok', __config@1} can never match the type 'ok' | {'error',atom() | [binary()] | {'json_decode_error',map()} | {'yaml_decode_error',map()}}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/list.ex:24: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, __reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/list.ex:137:16: The pattern {'error', __reason@1} can never match since previous clauses completely covered the type {'error','not_found'} | {'ok',#{'__struct__':='Elixir.TheMaestro.MCP.ConnectionManager.ConnectionInfo', 'connection_pid':=pid(), 'heartbeat_interval':=integer(), 'last_heartbeat':=integer(), 'server_id':=binary(), 'started_at':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={non_neg_integer(),non_neg_integer()}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}, 'status':='connected' | 'connecting' | 'disconnected' | 'error', 'transport_pid':=pid()}}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/list.ex:285:8: The pattern 'nil' can never match the type integer()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/list.ex:294:8: The pattern 'nil' can never match the type #{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={non_neg_integer(),non_neg_integer()}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/metrics.ex:17: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :no_data}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/metrics.ex:319: Expression produces a value of type 'nil' | {'ok','no_data'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/remove.ex:25: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/remove.ex:102:20: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','not_found'} | {'ok',_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/remove.ex:152:16: The pattern {'error', _} can never match the type {'connected',#{'__struct__':='Elixir.TheMaestro.MCP.ConnectionManager.ConnectionInfo', 'connection_pid':=pid(), 'heartbeat_interval':=integer(), 'last_heartbeat':=integer(), 'server_id':=binary(), 'started_at':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={_,_}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}, 'status':='connected' | 'connecting' | 'disconnected' | 'error', 'transport_pid':=pid()}} | {'disconnected','nil'}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/remove.ex:167:16: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','not_found'} | {'ok',#{'__struct__':='Elixir.TheMaestro.MCP.ConnectionManager.ConnectionInfo', 'connection_pid':=pid(), 'heartbeat_interval':=integer(), 'last_heartbeat':=integer(), 'server_id':=binary(), 'started_at':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={non_neg_integer(),non_neg_integer()}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}, 'status':='connected' | 'connecting' | 'disconnected' | 'error', 'transport_pid':=pid()}}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, _input}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/remove.ex:176:13: The pattern {'ok', _input@1} can never match the type 'eof' | binary() | [binary() | char()] | {'error',_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/setup.ex:15: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :cancelled}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/setup.ex:159: Expression produces a value of type 'nil' | {'ok','cancelled'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:continue | {:error, :missing_requirements}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/setup.ex:110:5: Expression produces a value of type 'continue' | {'error','missing_requirements'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/setup.ex:688:10: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/setup.ex:710:12: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/setup.ex:772:14: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(false) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/status.ex:1: The pattern 'false' can never match the type 'true'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/status.ex:28: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/status.ex:214:16: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','not_found'} | {'ok',#{'__struct__':='Elixir.TheMaestro.MCP.ConnectionManager.ConnectionInfo', 'connection_pid':=pid(), 'heartbeat_interval':=integer(), 'last_heartbeat':=integer(), 'server_id':=binary(), 'started_at':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={non_neg_integer(),non_neg_integer()}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}, 'status':='connected' | 'connecting' | 'disconnected' | 'error', 'transport_pid':=pid()}}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/status.ex:534:16: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','not_found'} | {'ok',#{'__struct__':='Elixir.TheMaestro.MCP.ConnectionManager.ConnectionInfo', 'connection_pid':=pid(), 'heartbeat_interval':=integer(), 'last_heartbeat':=integer(), 'server_id':=binary(), 'started_at':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={non_neg_integer(),non_neg_integer()}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}, 'status':='connected' | 'connecting' | 'disconnected' | 'error', 'transport_pid':=pid()}}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/status.ex:665:8: The pattern 'nil' can never match the type #{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={non_neg_integer(),non_neg_integer()}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/templates.ex:15: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/templates.ex:203:16: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','not_found'} | {'ok',_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, :template_not_found}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/templates.ex:254:37: The pattern {'error', 'template_not_found'} can never match the type {'error','invalid_format' | 'missing_variables' | 'not_found' | 'parse_error' | 'unsupported_transport'}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, :invalid_variables}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/templates.ex:258:36: The pattern {'error', 'invalid_variables'} can never match the type {'error','invalid_format' | 'missing_variables' | 'not_found' | 'parse_error' | 'unsupported_transport'}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/templates.ex:346:16: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','not_found'} | {'ok',_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/templates.ex:403:16: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','not_found'} | {'ok',_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(variable_error) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/templates.ex:490:7: The variable _error@1 can never match since previous clauses completely covered the type {'ok',[#{'category':=<<_:16,_:_*24>>, 'description':=<<_:64,_:_*8>>, 'name':=<<_:80,_:_*16>>, 'transport':=<<_:32,_:_*8>>, 'variables':=[any(),...], 'version':=<<_:24>>},...]}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/tools.ex:16: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, _input}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/tools.ex:375:13: The pattern {'ok', _input@1} can never match the type 'eof' | binary() | [binary() | char()] | {'error',_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/trust.ex:15: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/trust.ex:307:11: The pattern 'ok' can never match the type {'error',_} | {'ok',pid()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(nil | {:ok, :help}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/update.ex:32: Expression produces a value of type 'nil' | {'ok','help'}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/commands/update.ex:265:8: The pattern {'error', _reason@1} can never match the type #{<<_:24,_:_*8>>=>_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(false) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/cli/formatters/yaml_formatter.ex:1: The pattern 'false' can never match the type 'true'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/config.ex:280:24: Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        :ok\n        | {:error,\n           atom() | [binary()] | {:json_decode_error, map()} | {:yaml_decode_error, map()}}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/config/env_resolver.ex:309:20: Expression produces a value of type 'ok' | {'error',atom() | [binary()] | {'json_decode_error',map()} | {'yaml_decode_error',map()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(atom() | :ets.tid()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/connection_manager.ex:285:10: Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(false | :ok | non_neg_integer()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/connection_manager.ex:614:5: Expression produces a value of type 'false' | 'ok' | non_neg_integer(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/connection_manager.ex:883:7: The variable _ can never match since previous clauses completely covered the type #{'__struct__':='Elixir.TheMaestro.MCP.ConnectionManager.ConnectionInfo', 'status':='connected', _=>_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/connection_manager.ex:935:7: The variable _ can never match since previous clauses completely covered the type {#{'__struct__':='Elixir.TheMaestro.MCP.ConnectionManager.ConnectionInfo', 'status':='connected', _=>_},_,_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_trace_id :: <<_::56, _::size(8)>>) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/connection_manager.ex:1020:46: Guard test not(is_binary(_trace_id@3::<<_:56,_:_*8>>)) can never succeed
+________________________________________________________________________________
+lib/the_maestro/mcp/error_handler.ex:48:7:no_return
+Function handle_error/1 has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_ :: any(), %{}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/error_handler.ex:48:38: The call 'Elixir.TheMaestro.MCP.ErrorHandler':handle_error(_@1::any(),#{}) breaks the contract (term(),error_context()) -> mcp_error()
+________________________________________________________________________________
+lib/the_maestro/mcp/error_handler.ex:263:7:no_return
+Function to_json_rpc_error/1 has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_ :: any(), nil) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/error_handler.ex:263:43: The call 'Elixir.TheMaestro.MCP.ErrorHandler':to_json_rpc_error(_@1::any(),'nil') will never return since it differs in the 2nd argument from the success typing arguments: (any(),binary())
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(false | non_neg_integer()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/message_router.ex:150:17: Expression produces a value of type 'false' | non_neg_integer(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _} | {:ok, :timer.tref()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/security/anomaly_detector.ex:173:12: Expression produces a value of type {'error',_} | {'ok',timer:tref()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _} | {:ok, :timer.tref()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/security/anomaly_detector.ex:177:12: Expression produces a value of type {'error',_} | {'ok',timer:tref()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/security/anomaly_detector.ex:869:9: The variable _ can never match since previous clauses completely covered the type 'anomaly_detected' | 'event_recorded'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a([any()] | {:ok, pid()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/security/audit_logger.ex:100: Expression produces a value of type [any()] | {'ok',pid()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _} | {:ok, :timer.tref()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/security/policy_engine.ex:193:12: Expression produces a value of type {'error',_} | {'ok',timer:tref()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/security/risk_assessor.ex:427:8: The variable _ can never match since previous clauses completely covered the type map()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(variable_other) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/security/secure_executor.ex:687:8: The variable _other@1 can never match since previous clauses completely covered the type 'allow' | 'deny'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:module, atom(), binary(), _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/tool_adapter.ex:149:12: Expression produces a value of type {'module',atom(),binary(),_}, but this value is unmatched
+________________________________________________________________________________
+lib/the_maestro/mcp/tools/content_handler.ex:48:44:unknown_type
+Unknown type: ContentBlock.t/0.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(variable_atom) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/tools/executor.ex:420:8: The variable _atom@1 can never match since previous clauses completely covered the type #{'type':='connection_error' | 'connection_not_available' | 'malformed_content' | 'mcp_protocol_error' | 'parameter_validation_error' | 'server_not_found', 'details'=>_, 'message'=><<_:192>>, 'reason'=>_, 'server_id'=>_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/tools/executor.ex:421:8: The variable _ can never match since previous clauses completely covered the type #{'type':='connection_error' | 'connection_not_available' | 'malformed_content' | 'mcp_protocol_error' | 'parameter_validation_error' | 'server_not_found', 'details'=>_, 'message'=><<_:192>>, 'reason'=>_, 'server_id'=>_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%{:missing => _missing, :type => :missing_required_parameters}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/tools/executor.ex:435:8: The pattern #{'missing':=_missing@1, 'type':='missing_required_parameters'} can never match the type #{'type':='connection_error' | 'connection_not_available' | 'malformed_content' | 'mcp_protocol_error' | 'parameter_validation_error' | 'server_not_found', 'details'=>_, 'message'=><<_:192>>, 'reason'=>_, 'server_id'=>_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%{:errors => _errors, :type => :parameter_type_error}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/tools/executor.ex:438:8: The pattern #{'errors':=_errors@1, 'type':='parameter_type_error'} can never match the type #{'type':='connection_error' | 'connection_not_available' | 'malformed_content' | 'mcp_protocol_error' | 'parameter_validation_error' | 'server_not_found', 'details'=>_, 'message'=><<_:192>>, 'reason'=>_, 'server_id'=>_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%{:type => :execution_timeout}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/tools/executor.ex:441:8: The pattern #{'type':='execution_timeout'} can never match the type #{'type':='connection_error' | 'connection_not_available' | 'malformed_content' | 'mcp_protocol_error' | 'parameter_validation_error' | 'server_not_found', 'details'=>_, 'message'=><<_:192>>, 'reason'=>_, 'server_id'=>_}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         %HTTPoison.Error{:__exception__ => true, :id => nil | reference(), :reason => <<_::160>>}}\n        | {:ok, %HTTPoison.AsyncResponse{:id => reference()}}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/transport/http.ex:195:19: Expression produces a value of type {'error',#{'__exception__':='true', '__struct__':='Elixir.HTTPoison.Error', 'id':='nil' | reference(), 'reason':=<<_:160>>}} | {'ok',#{'__struct__':='Elixir.HTTPoison.AsyncResponse', 'id':=reference()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         %HTTPoison.Error{:__exception__ => true, :id => nil | reference(), :reason => <<_::160>>}}\n        | {:ok, %HTTPoison.AsyncResponse{:id => reference()}}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/transport/http.ex:202:19: Expression produces a value of type {'error',#{'__exception__':='true', '__struct__':='Elixir.HTTPoison.Error', 'id':='nil' | reference(), 'reason':=<<_:160>>}} | {'ok',#{'__struct__':='Elixir.HTTPoison.AsyncResponse', 'id':=reference()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         %HTTPoison.Error{:__exception__ => true, :id => nil | reference(), :reason => <<_::160>>}}\n        | {:ok, %HTTPoison.AsyncResponse{:id => reference()}}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/transport/http.ex:214:19: Expression produces a value of type {'error',#{'__exception__':='true', '__struct__':='Elixir.HTTPoison.Error', 'id':='nil' | reference(), 'reason':=<<_:160>>}} | {'ok',#{'__struct__':='Elixir.HTTPoison.AsyncResponse', 'id':=reference()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%{:stream_pid => nil, _ => _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/transport/sse.ex:130:5: Expression produces a value of type #{'stream_pid':='nil', _=>_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         %HTTPoison.Error{:__exception__ => true, :id => nil | reference(), :reason => <<_::160>>}}\n        | {:ok, %HTTPoison.AsyncResponse{:id => reference()}}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/transport/sse.ex:174:19: Expression produces a value of type {'error',#{'__exception__':='true', '__struct__':='Elixir.HTTPoison.Error', 'id':='nil' | reference(), 'reason':=<<_:160>>}} | {'ok',#{'__struct__':='Elixir.HTTPoison.AsyncResponse', 'id':=reference()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         %HTTPoison.Error{:__exception__ => true, :id => nil | reference(), :reason => <<_::160>>}}\n        | {:ok, %HTTPoison.AsyncResponse{:id => reference()}}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/transport/sse.ex:178:19: Expression produces a value of type {'error',#{'__exception__':='true', '__struct__':='Elixir.HTTPoison.Error', 'id':='nil' | reference(), 'reason':=<<_:160>>}} | {'ok',#{'__struct__':='Elixir.HTTPoison.AsyncResponse', 'id':=reference()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         %HTTPoison.Error{:__exception__ => true, :id => nil | reference(), :reason => <<_::160>>}}\n        | {:ok, %HTTPoison.AsyncResponse{:id => reference()}}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/mcp/transport/sse.ex:183:19: Expression produces a value of type {'error',#{'__exception__':='true', '__struct__':='Elixir.HTTPoison.Error', 'id':='nil' | reference(), 'reason':=<<_:160>>}} | {'ok',#{'__struct__':='Elixir.HTTPoison.AsyncResponse', 'id':=reference()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ :: binary() :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/enhancement/gatherers/context_gatherer.ex:255: Guard test _@1::binary() =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/enhancement/pipeline.ex:309:8: The variable _ can never match since previous clauses completely covered the type map()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a([map()], atom()) :: %{\n        :compliance_breakdown => _,\n        :compliance_level => _,\n        :compliance_score => float(),\n        :compliant_items => non_neg_integer(),\n        :estimated_fix_time_hours => float(),\n        :improvement_recommendations => [any()],\n        :issues_found => [any()],\n        :non_compliant_items => non_neg_integer(),\n        :overall_compliance_score => float(),\n        :priority_issues => [any()],\n        :recommendations => [any()],\n        :remediation_plan => %{\n          :estimated_effort_hours => non_neg_integer(),\n          :immediate_actions => [any()]\n        },\n        :severity_breakdown => %{:critical => non_neg_integer()}\n      }\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal.ex:209: Invalid type specification for function 'Elixir.TheMaestro.Prompts.MultiModal':generate_accessibility_report/2.
+ The success typing is 'Elixir.TheMaestro.Prompts.MultiModal':generate_accessibility_report([map()],atom()) -> #{'compliance_breakdown':=_, 'compliance_level':=_, 'compliance_score':=float(), 'compliant_items':=non_neg_integer(), 'estimated_fix_time_hours':=float(), 'improvement_recommendations':=[any()], 'issues_found':=[any()], 'non_compliant_items':=non_neg_integer(), 'overall_compliance_score':=float(), 'priority_issues':=[any()], 'recommendations':=[any()], 'remediation_plan':=#{'estimated_effort_hours':=non_neg_integer(), 'immediate_actions':=[any()]}, 'severity_breakdown':=#{'critical':=non_neg_integer()}}
+ But the spec is 'Elixir.TheMaestro.Prompts.MultiModal':generate_accessibility_report([map()],[atom()]) -> map()
+ They do not overlap in the 2nd argument
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ ::\n        %{\n          :items_processed => non_neg_integer(),\n          :memory_usage_mb => 50 | 100,\n          :optimization_time_ms => _,\n          :partial_processing => boolean(),\n          :processing_time_ms => _,\n          :timeout_occurred => boolean(),\n          :total_processing_time_ms => _,\n          :completion_time_ms => _,\n          :memory_saved_mb => number()\n        } :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal.ex:322: Guard test _@7::#{'items_processed':=non_neg_integer(), 'memory_usage_mb':=50 | 100, 'optimization_time_ms':=_, 'partial_processing':=boolean(), 'processing_time_ms':=_, 'timeout_occurred':=boolean(), 'total_processing_time_ms':=_, 'completion_time_ms'=>_, 'memory_saved_mb'=>number()} =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ :: true :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal/analyzers/cross_modal_analyzer.ex:1003: Guard test _@1::'true' =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ ::\n        %{\n          :enabled => boolean(),\n          :deferred_items => [any()],\n          :immediate_items => [any()],\n          :memory_savings_mb => float()\n        } :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal/optimization/performance_optimizer.ex:75: Guard test _@14::#{'enabled':=boolean(), 'deferred_items'=>[any()], 'immediate_items'=>[any()], 'memory_savings_mb'=>float()} =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ ::\n        %{\n          :enabled => boolean(),\n          :cache_hit_ratio => float(),\n          :cached_processors => [any()],\n          :processing_time_saved_ms => float()\n        } :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal/optimization/performance_optimizer.ex:76: Guard test _@18::#{'enabled':=boolean(), 'cache_hit_ratio'=>float(), 'cached_processors'=>[any()], 'processing_time_saved_ms'=>float()} =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ ::\n        %{\n          :enabled => boolean(),\n          :batches_created => integer(),\n          :speedup_factor => float(),\n          :workers_used => number()\n        } :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal/optimization/performance_optimizer.ex:77: Guard test _@22::#{'enabled':=boolean(), 'batches_created'=>integer(), 'speedup_factor'=>float(), 'workers_used'=>number()} =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ ::\n        %{\n          :enabled => boolean(),\n          :quality_preserved => float(),\n          :total_size_reduction_mb => number()\n        } :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal/optimization/performance_optimizer.ex:78: Guard test _@26::#{'enabled':=boolean(), 'quality_preserved'=>float(), 'total_size_reduction_mb'=>number()} =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ :: true :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal/providers/provider_compatibility_assessor.ex:259: Guard test _@3::'true' =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ :: true :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal/providers/provider_compatibility_assessor.ex:263: Guard test _@7::'true' =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/multimodal/providers/provider_compatibility_assessor.ex:850:7: The variable _ can never match since previous clauses completely covered the type 'anthropic' | 'google' | 'openai'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        nil\n        | %{\n            :detailed_analysis => %{\n              :complexity_analysis => %{},\n              :optimization_effectiveness => %{},\n              :provider_rankings => []\n            },\n            :executive_summary => %{\n              :average_optimization_improvement => float(),\n              :best_performing_provider => :none,\n              :total_test_cases_analyzed => 0\n            },\n            :recommendations => [],\n            :report_generated_at => %DateTime{\n              :calendar => atom(),\n              :day => pos_integer(),\n              :hour => non_neg_integer(),\n              :microsecond => {non_neg_integer(), non_neg_integer()},\n              :minute => non_neg_integer(),\n              :month => pos_integer(),\n              :second => non_neg_integer(),\n              :std_offset => integer(),\n              :time_zone => binary(),\n              :utc_offset => integer(),\n              :year => integer(),\n              :zone_abbr => binary()\n            }\n          }\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/monitoring/benchmark_runner.ex:125: Expression produces a value of type 'nil' | #{'detailed_analysis':=#{'complexity_analysis':=#{}, 'optimization_effectiveness':=#{}, 'provider_rankings':=[]}, 'executive_summary':=#{'average_optimization_improvement':=float(), 'best_performing_provider':='none', 'total_test_cases_analyzed':=0}, 'recommendations':=[], 'report_generated_at':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={non_neg_integer(),non_neg_integer()}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/monitoring/benchmark_runner.ex:351:20: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error',#{'__exception__':='true', '__struct__':='Elixir.Jason.DecodeError', 'data':=binary(), 'position':=integer(), 'token':=_}} | {'ok',_}
+________________________________________________________________________________
+lib/the_maestro/prompts/optimization/monitoring/benchmark_runner.ex:383:36:no_return
+The created anonymous function has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(atom() | :ets.tid()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/monitoring/effectiveness_tracker.ex:272:14: Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_, _) :: none()\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/monitoring/performance_benchmark.ex:172: Invalid type specification for function 'Elixir.TheMaestro.Prompts.Optimization.Monitoring.PerformanceBenchmark':measure_optimization_performance/2.
+ The success typing is 'Elixir.TheMaestro.Prompts.Optimization.Monitoring.PerformanceBenchmark':measure_optimization_performance(_,_) -> none()
+ But the spec is 'Elixir.TheMaestro.Prompts.Optimization.Monitoring.PerformanceBenchmark':measure_optimization_performance(map(),atom()) -> map()
+ The return types do not overlap
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         %{\n           :__exception__ => true,\n           :__struct__ => Jason.EncodeError | Protocol.UndefinedError,\n           atom() => _\n         }}\n        | {:ok, binary()}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/monitoring/performance_benchmark.ex:97:5: Expression produces a value of type {'error',#{'__exception__':='true', '__struct__':='Elixir.Jason.EncodeError' | 'Elixir.Protocol.UndefinedError', atom()=>_}} | {'ok',binary()}, but this value is unmatched
+________________________________________________________________________________
+lib/the_maestro/prompts/optimization/monitoring/performance_benchmark.ex:132:49:no_return
+The created anonymous function has no local return.
+________________________________________________________________________________
+lib/the_maestro/prompts/optimization/monitoring/performance_benchmark.ex:173:7:no_return
+Function measure_optimization_performance/2 has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        _original_prompt :: %TheMaestro.Prompts.Enhancement.Structs.EnhancedPrompt{\n          :enhanced_prompt => binary(),\n          :metadata => %{\n            :created_at => %DateTime{\n              :calendar => atom(),\n              :day => pos_integer(),\n              :hour => non_neg_integer(),\n              :microsecond => {_, _},\n              :minute => non_neg_integer(),\n              :month => pos_integer(),\n              :second => non_neg_integer(),\n              :std_offset => integer(),\n              :time_zone => binary(),\n              :utc_offset => integer(),\n              :year => integer(),\n              :zone_abbr => binary()\n            },\n            :enhancement_type => <<_::64>>\n          },\n          :original => binary(),\n          :post_context => nil,\n          :pre_context => nil,\n          :relevance_scores => [float(), ...],\n          :total_tokens => non_neg_integer()\n        },\n        _provider_info :: %{\n          :model => <<_::48, _::size(8)>>,\n          :provider => :anthropic | :google | :openai\n        },\n        _optimization_config :: any()\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/monitoring/performance_benchmark.ex:185:9: The call 'Elixir.TheMaestro.Prompts.Optimization.ProviderOptimizer':optimize_for_provider(_original_prompt@1::#{'__struct__':='Elixir.TheMaestro.Prompts.Enhancement.Structs.EnhancedPrompt', 'enhanced_prompt':=binary(), 'metadata':=#{'created_at':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={_,_}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}, 'enhancement_type':=<<_:64>>}, 'original':=binary(), 'post_context':='nil', 'pre_context':='nil', 'relevance_scores':=[float(),...], 'total_tokens':=non_neg_integer()},_provider_info@1::#{'model':=<<_:48,_:_*8>>, 'provider':='anthropic' | 'google' | 'openai'},_optimization_config@1::any()) breaks the contract ('Elixir.TheMaestro.Prompts.Enhancement.Structs.EnhancedPrompt':t(),map(),map()) -> {'ok','Elixir.TheMaestro.Prompts.Optimization.Structs.OptimizationContext':t()} | {'error',term()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:optimized) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/monitoring/performance_benchmark.ex:316:20: The pattern 'optimized' can never match the type 'baseline'
+________________________________________________________________________________
+lib/the_maestro/prompts/optimization/monitoring/performance_benchmark.ex:342:8:unused_fun
+Function get_baseline_quality_score/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/prompts/optimization/monitoring/performance_benchmark.ex:343:8:unused_fun
+Function get_baseline_response_time/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/prompts/optimization/monitoring/performance_benchmark.ex:344:8:unused_fun
+Function get_baseline_error_rate/2 will never be called.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        nil\n        | %{\n            :current_metrics => nil | maybe_improper_list() | map(),\n            :estimated_impact => %{\n              :cost_impact => float(),\n              :overall_impact => float(),\n              :performance_impact => float(),\n              :quality_impact => float()\n            },\n            :historical_baseline => nil | maybe_improper_list() | map(),\n            :regression_indicators => %{\n              :error_rate_regression => :critical | false | :high | :medium,\n              :latency_regression => :critical | false | :high | :medium,\n              :quality_regression => :critical | false | :high | :medium,\n              :token_efficiency_regression => :critical | false | :high | :medium,\n              :user_satisfaction_regression => :critical | false | :high | :medium\n            },\n            :review_priority => :high | :immediate | :normal | :urgent,\n            :triggered_at => %DateTime{\n              :calendar => atom(),\n              :day => pos_integer(),\n              :hour => non_neg_integer(),\n              :microsecond => {non_neg_integer(), non_neg_integer()},\n              :minute => non_neg_integer(),\n              :month => pos_integer(),\n              :second => non_neg_integer(),\n              :std_offset => integer(),\n              :time_zone => binary(),\n              :utc_offset => integer(),\n              :year => integer(),\n              :zone_abbr => binary()\n            }\n          }\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/monitoring/regression_detector.ex:67: Expression produces a value of type 'nil' | #{'current_metrics':='nil' | maybe_improper_list() | map(), 'estimated_impact':=#{'cost_impact':=float(), 'overall_impact':=float(), 'performance_impact':=float(), 'quality_impact':=float()}, 'historical_baseline':='nil' | maybe_improper_list() | map(), 'regression_indicators':=#{'error_rate_regression':='critical' | 'false' | 'high' | 'medium', 'latency_regression':='critical' | 'false' | 'high' | 'medium', 'quality_regression':='critical' | 'false' | 'high' | 'medium', 'token_efficiency_regression':='critical' | 'false' | 'high' | 'medium', 'user_satisfaction_regression':='critical' | 'false' | 'high' | 'medium'}, 'review_priority':='high' | 'immediate' | 'normal' | 'urgent', 'triggered_at':=#{'__struct__':='Elixir.DateTime', 'calendar':=atom(), 'day':=pos_integer(), 'hour':=non_neg_integer(), 'microsecond':={non_neg_integer(),non_neg_integer()}, 'minute':=non_neg_integer(), 'month':=pos_integer(), 'second':=non_neg_integer(), 'std_offset':=integer(), 'time_zone':=binary(), 'utc_offset':=integer(), 'year':=integer(), 'zone_abbr':=binary()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/monitoring/regression_detector.ex:523:8: The variable _ can never match since previous clauses completely covered the type float()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_) :: %TheMaestro.Prompts.Optimization.Structs.ModelCapabilities{\n        :actual_context_utilization => float(),\n        :code_understanding => :excellent | :fair | :very_good,\n        :context_window => 8000 | 128_000 | 200_000 | 1_000_000 | 2_000_000,\n        :cost_characteristics => :balanced | :economy | :premium,\n        :function_calling_reliability => float(),\n        :language_capabilities => :excellent | :good | :very_good,\n        :latency_characteristics => :fair | :good | :very_good,\n        :reasoning_strength => :excellent | :fair | :very_good,\n        :response_consistency => float(),\n        :safety_filtering => :excellent | :fair | :good,\n        :supports_function_calling => boolean(),\n        :supports_multimodal => boolean(),\n        :supports_streaming => boolean(),\n        :supports_structured_output => boolean()\n      }\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/provider_optimizer.ex:69: Invalid type specification for function 'Elixir.TheMaestro.Prompts.Optimization.ProviderOptimizer':get_model_capabilities/1.
+ The success typing is 'Elixir.TheMaestro.Prompts.Optimization.ProviderOptimizer':get_model_capabilities(_) -> #{'__struct__':='Elixir.TheMaestro.Prompts.Optimization.Structs.ModelCapabilities', 'actual_context_utilization':=float(), 'code_understanding':='excellent' | 'fair' | 'very_good', 'context_window':=8000 | 128000 | 200000 | 1000000 | 2000000, 'cost_characteristics':='balanced' | 'economy' | 'premium', 'function_calling_reliability':=float(), 'language_capabilities':='excellent' | 'good' | 'very_good', 'latency_characteristics':='fair' | 'good' | 'very_good', 'reasoning_strength':='excellent' | 'fair' | 'very_good', 'response_consistency':=float(), 'safety_filtering':='excellent' | 'fair' | 'good', 'supports_function_calling':=boolean(), 'supports_multimodal':=boolean(), 'supports_streaming':=boolean(), 'supports_structured_output':=boolean()}
+ But the spec is 'Elixir.TheMaestro.Prompts.Optimization.ProviderOptimizer':get_model_capabilities(map()) -> 'Elixir.TheMaestro.Prompts.Optimization.Structs.ModelCapabilities':t()
+ The return types do not overlap
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ :: true :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/providers/google_optimizer.ex:261: Guard test _@9::'true' =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ :: true :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/providers/google_optimizer.ex:262: Guard test _@12::'true' =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ :: true :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/providers/openai_optimizer.ex:293: Guard test _@9::'true' =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ :: true :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/providers/openai_optimizer.ex:294: Guard test _@12::'true' =:= 'nil' can never succeed
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a_ :: true :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/prompts/optimization/providers/openai_optimizer.ex:295: Guard test _@15::'true' =:= 'nil' can never succeed
+________________________________________________________________________________
+lib/the_maestro/prompts/optimization/structs.ex:48:50:unknown_type
+Unknown type: ModelCapabilities.t/0.
+________________________________________________________________________________
+lib/the_maestro/prompts/optimization/structs.ex:49:54:unknown_type
+Unknown type: OptimizationTargets.t/0.
+________________________________________________________________________________
+lib/the_maestro/prompts/system_instructions/structs.ex:23:36:unknown_type
+Unknown type: TaskContext.t/0.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/anthropic.ex:438:18: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         {:failed_to_cache_credentials, atom()} | {:failed_to_create_credential_dir, atom()}}\n        | {:ok, _}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/anthropic.ex:542:5: Expression produces a value of type {'error',{'failed_to_cache_credentials',atom()} | {'failed_to_create_credential_dir',atom()}} | {'ok',_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/auth/anthropic_device_flow.ex:355:7: The variable _ can never match since previous clauses completely covered the type {'unix',atom()} | {'win32',atom()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        nil\n        | {:error, :decryption_failed | :not_found | :update_failed}\n        | {:ok,\n           %{\n             :auth_method => atom(),\n             :credentials => _,\n             :expires_at => _,\n             :id => _,\n             :inserted_at => _,\n             :provider => atom(),\n             :updated_at => _\n           }}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/auth/auth.ex:106: Expression produces a value of type 'nil' | {'error','decryption_failed' | 'not_found' | 'update_failed'} | {'ok',#{'auth_method':=atom(), 'credentials':=_, 'expires_at':=_, 'id':=_, 'inserted_at':=_, 'provider':=atom(), 'updated_at':=_}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, :expired}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/auth/google_auth.ex:87:26: The pattern {'error', 'expired'} can never match the type {'error','invalid_api_key' | 'invalid_token' | 'no_refresh_token' | {'refresh_decode_failed',#{'__exception__':='true', '__struct__':='Elixir.Jason.DecodeError', 'data':=binary(), 'position':=integer(), 'token':=_}} | {'refresh_failed',_} | {'refresh_request_failed',#{'__exception__':='true', '__struct__':='Elixir.HTTPoison.Error', 'id':='nil', 'reason':=_}} | {'unexpected_status',integer()} | {'validation_request_failed',#{'__exception__':='true', '__struct__':='Elixir.HTTPoison.Error', 'id':='nil', 'reason':=_}} | {'refresh_failed',integer(),_}}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/gemini.ex:529:18: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         {:failed_to_cache_credentials, atom()} | {:failed_to_create_credential_dir, atom()}}\n        | {:ok, _}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/gemini.ex:615:5: Expression produces a value of type {'error',{'failed_to_cache_credentials',atom()} | {'failed_to_create_credential_dir',atom()}} | {'ok',_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom()}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/openai.ex:366:18: Expression produces a value of type 'ok' | {'error',atom()}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:error,\n         {:failed_to_cache_credentials, atom()} | {:failed_to_create_credential_dir, atom()}}\n        | {:ok, _}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/openai.ex:448:5: Expression produces a value of type {'error',{'failed_to_cache_credentials',atom()} | {'failed_to_create_credential_dir',atom()}} | {'ok',_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, %{:config => %{}, :credentials => %{:test => true}, :type => :test}}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/test_provider.ex:14:7: The inferred return type of initialize_auth/1 ({'ok',#{'config':=#{}, 'credentials':=#{'test':='true'}, 'type':='test'}}) has nothing in common with {'error',_} | {'ok',#{'config':=map(), 'credentials':=map(), 'type':='api_key' | 'oauth' | 'service_account'}}, which is the expected return type for the callback of the 'Elixir.TheMaestro.Providers.LLMProvider' behaviour
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        {:ok,\n         [\n           %{\n             :context_length => 4096 | 8192,\n             :cost_tier => <<_::32>>,\n             :description => <<_::224, _::size(48)>>,\n             :function_calling => true,\n             :id => <<_::96>>,\n             :multimodal => boolean(),\n             :name => <<_::96>>\n           },\n           ...\n         ]}\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/providers/test_provider.ex:123:7: The inferred return type of list_models/1 ({'ok',[#{'context_length':=4096 | 8192, 'cost_tier':=<<_:32>>, 'description':=<<_:224,_:_*48>>, 'function_calling':='true', 'id':=<<_:96>>, 'multimodal':=boolean(), 'name':=<<_:96>>},...]}) has nothing in common with {'error',_} | {'ok',[#{'context_length':='nil' | integer(), 'cost_tier':='balanced' | 'economy' | 'premium', 'description':=binary(), 'function_calling':=boolean(), 'id':=binary(), 'multimodal':=boolean(), 'name':=binary()}]}, which is the expected return type for the callback of the 'Elixir.TheMaestro.Providers.LLMProvider' behaviour
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_) :: none()\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/sessions.ex:25: Invalid type specification for function 'Elixir.TheMaestro.Sessions':create_conversation_session/1.
+ The success typing is 'Elixir.TheMaestro.Sessions':create_conversation_session(_) -> none()
+ But the spec is 'Elixir.TheMaestro.Sessions':create_conversation_session(map()) -> {'ok','Elixir.TheMaestro.Sessions.ConversationSession':t()} | {'error','Elixir.Ecto.Changeset':t()}
+ The return types do not overlap
+________________________________________________________________________________
+lib/the_maestro/sessions.ex:27:7:no_return
+Function create_conversation_session/0 has no local return.
+________________________________________________________________________________
+lib/the_maestro/sessions.ex:27:7:no_return
+Function create_conversation_session/1 has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(\n        %TheMaestro.Sessions.ConversationSession{\n          :__meta__ => %Ecto.Schema.Metadata{\n            :context => nil,\n            :prefix => nil,\n            :schema => TheMaestro.Sessions.ConversationSession,\n            :source =>\n              <<99, 111, 110, 118, 101, 114, 115, 97, 116, 105, 111, 110, 95, 115, 101, 115, 115,\n                105, 111, 110, 115>>,\n            :state => :built\n          },\n          :agent_id => nil,\n          :id => nil,\n          :inserted_at => nil,\n          :message_count => 0,\n          :session_data => nil,\n          :session_name => nil,\n          :updated_at => nil,\n          :user_id => nil\n        },\n        _attrs :: any()\n      ) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/sessions.ex:28:5: The call 'Elixir.TheMaestro.Sessions.ConversationSession':changeset(#{'__meta__'=>#{'__struct__'=>'Elixir.Ecto.Schema.Metadata', 'context'=>'nil', 'prefix'=>'nil', 'schema'=>'Elixir.TheMaestro.Sessions.ConversationSession', 'source'=><<99,111,110,118,101,114,115,97,116,105,111,110,95,115,101,115,115,105,111,110,115>>, 'state'=>'built'}, '__struct__'=>'Elixir.TheMaestro.Sessions.ConversationSession', 'agent_id'=>'nil', 'id'=>'nil', 'inserted_at'=>'nil', 'message_count'=>0, 'session_data'=>'nil', 'session_name'=>'nil', 'updated_at'=>'nil', 'user_id'=>'nil'},_attrs@1::any()) breaks the contract (t() | 'Elixir.Ecto.Changeset':t(),map()) -> 'Elixir.Ecto.Changeset':t()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/api_key_handler.ex:179:7: The variable _ can never match since previous clauses completely covered the type 'anthropic' | 'google' | 'openai'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, :back_to_provider}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/auth_flow.ex:185:37: The pattern {'error', 'back_to_provider'} can never match the type {'error',<<_:64,_:_*8>>}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%TheMaestro.Models.Model{:name => _name}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/cli.ex:71: The pattern #{'__struct__':='Elixir.TheMaestro.Models.Model', 'name':=_name@1} can never match the type binary()
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:18:7:no_return
+Function main/0 has no local return.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:18:7:no_return
+Function main/1 has no local return.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:40:8:no_return
+Function initialize_tui/1 has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%TheMaestro.Models.Model{:id => _id}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/cli.ex:72:11: The pattern #{'__struct__':='Elixir.TheMaestro.Models.Model', 'id':=_id@1} can never match the type binary()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/cli.ex:74:11: The variable _ can never match since previous clauses completely covered the type binary()
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:118:8:unused_fun
+Function run_tui/0 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:193:8:unused_fun
+Function render_interface/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:244:8:unused_fun
+Function render_conversation_history/3 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:268:8:unused_fun
+Function get_input/0 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:296:8:unused_fun
+Function handle_user_input/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:335:8:unused_fun
+Function get_agent_response/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:358:8:unused_fun
+Function get_session_agent_id/0 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:405:8:unused_fun
+Function ensure_agent_exists/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:429:8:unused_fun
+Function get_provider_module/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:452:8:unused_fun
+Function cleanup_and_exit/0 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:467:8:unused_fun
+Function subscribe_to_agent_messages/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:471:8:unused_fun
+Function handle_status_update/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:479:8:unused_fun
+Function handle_tool_call_start/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:506:8:unused_fun
+Function handle_tool_call_end/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:543:8:unused_fun
+Function handle_stream_chunk/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:551:8:unused_fun
+Function handle_processing_complete/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:555:8:unused_fun
+Function render_status_line/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:561:8:unused_fun
+Function get_tool_emoji/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:572:8:unused_fun
+Function limit_conversation_history/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:572:8:unused_fun
+Function limit_conversation_history/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:587:8:unused_fun
+Function format_tool_result_for_display/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:617:8:unused_fun
+Function get_terminal_size/0 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:631:8:unused_fun
+Function center_text/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:645:8:unused_fun
+Function truncate_text/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:653:8:unused_fun
+Function message_color/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:659:8:unused_fun
+Function format_message_type/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:722:8:no_return
+Function get_mcp_server_status/0 has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, _servers}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/cli.ex:724:13: The pattern {'ok', _servers@1} can never match the type [binary()]
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, __reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/cli.ex:729:16: The pattern {'error', __reason@1} can never match the type [binary()]
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:788:8:unused_fun
+Function detect_mcp_server_for_tui/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:797:8:unused_fun
+Function format_mcp_tool_result_for_tui/3 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:830:8:unused_fun
+Function format_mcp_result_summary/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:842:8:unused_fun
+Function render_mcp_panel/2 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:886:8:unused_fun
+Function show_mcp_status_info/1 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:933:8:unused_fun
+Function show_tui_help/0 will never be called.
+________________________________________________________________________________
+lib/the_maestro/tui/cli.ex:955:8:unused_fun
+Function format_timestamp/1 will never be called.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, atom() | {:timeout, binary() | [binary()]}}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/embedded_server.ex:226:18: Expression produces a value of type 'ok' | {'error',atom() | {'timeout',binary() | [binary()]}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:eof | binary() | string() | {:error, _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/menu_helpers.ex:264:8: Expression produces a value of type 'eof' | binary() | string() | {'error',_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/menu_helpers.ex:313:9: Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/menu_helpers.ex:318:9: Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%TheMaestro.Models.Model{:name => _name}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/model_selection.ex:343: The pattern #{'__struct__':='Elixir.TheMaestro.Models.Model', 'name':=_name@1} can never match the type binary()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/model_selection.ex:285:17: The variable _ can never match since previous clauses completely covered the type binary() | #{'__struct__':='Elixir.TheMaestro.Models.Model', 'capabilities':=[binary()], 'context_length':='nil' | non_neg_integer(), 'cost_tier':='balanced' | 'economy' | 'nil' | 'premium', 'description':='nil' | binary(), 'function_calling':=boolean(), 'id':=binary(), 'multimodal':=boolean(), 'name':=binary(), 'provider':=atom()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%TheMaestro.Models.Model{:id => _id}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/model_selection.ex:344:13: The pattern #{'__struct__':='Elixir.TheMaestro.Models.Model', 'id':=_id@1} can never match the type binary()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/model_selection.ex:346:13: The variable _ can never match since previous clauses completely covered the type binary()
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/model_selection.ex:426:11: The variable _ can never match since previous clauses completely covered the type binary() | #{'__struct__':='Elixir.TheMaestro.Models.Model', 'capabilities':=[binary()], 'context_length':='nil' | non_neg_integer(), 'cost_tier':='balanced' | 'economy' | 'nil' | 'premium', 'description':='nil' | binary(), 'function_calling':=boolean(), 'id':=binary(), 'multimodal':=boolean(), 'name':=binary(), 'provider':=atom()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/model_selection.ex:442:9: The variable _ can never match since previous clauses completely covered the type binary() | #{'__struct__':='Elixir.TheMaestro.Models.Model', 'capabilities':=[binary()], 'context_length':='nil' | non_neg_integer(), 'cost_tier':='balanced' | 'economy' | 'nil' | 'premium', 'description':='nil' | binary(), 'function_calling':=boolean(), 'id':=binary(), 'multimodal':=boolean(), 'name':=binary(), 'provider':=atom()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(%{:device_code => _device_code}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/oauth_handler.ex:234:7: The pattern #{'device_code':=_device_code@1} can never match the type #{'auth_url':=nonempty_binary(), 'code_verifier':=binary(), 'provider':='anthropic' | 'google' | 'openai', 'state':=binary(), 'polling_fn'=>fun(() -> any())}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, _reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/oauth_handler.ex:391:18: The pattern {'error', _reason@1} can never match since previous clauses completely covered the type {'error','pending'}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:cancelled) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro/tui/security_confirmation.ex:191:20: The pattern 'cancelled' can never match the type 'always_allow_tool' | 'always_trust_server' | 'block_tool' | 'execute_once'
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(atom() | :ets.tid()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/controllers/cli_auth_controller.ex:55:5: Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(atom() | :ets.tid()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/controllers/cli_auth_controller.ex:101:5: Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(atom() | :ets.tid()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/controllers/cli_auth_controller.ex:114:5: Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(atom() | :ets.tid()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/controllers/cli_auth_controller.ex:145:5: Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(atom() | :ets.tid()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/controllers/cli_auth_controller.ex:200:5: Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(atom() | :ets.tid()) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/controllers/cli_auth_controller.ex:235:5: Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_provider :: atom(), :device_flow, %{:auth_code => _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/controllers/providers_controller.ex:119:19: The call 'Elixir.TheMaestro.Providers.Auth':authenticate(_provider@1::atom(),'device_flow',#{'auth_code':=_}) breaks the contract ('Elixir.TheMaestro.Providers.Auth.ProviderAuth':provider(),'Elixir.TheMaestro.Providers.Auth.ProviderAuth':auth_method(),map()) -> {'ok',auth_result()} | {'error',term()}
+________________________________________________________________________________
+lib/the_maestro_web/controllers/providers_controller.ex:215:8:no_return
+Function initiate_device_flow_auth/3 has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_provider :: atom(), :device_flow, %{}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/controllers/providers_controller.ex:220:19: The call 'Elixir.TheMaestro.Providers.Auth':authenticate(_provider@1::atom(),'device_flow',#{}) breaks the contract ('Elixir.TheMaestro.Providers.Auth.ProviderAuth':provider(),'Elixir.TheMaestro.Providers.Auth.ProviderAuth':auth_method(),map()) -> {'ok',auth_result()} | {'error',term()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(_provider :: atom(), :device_flow, %{:auth_code => _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/controllers/providers_controller.ex:250:19: The call 'Elixir.TheMaestro.Providers.Auth':authenticate(_provider@1::atom(),'device_flow',#{'auth_code':=_}) breaks the contract ('Elixir.TheMaestro.Providers.Auth.ProviderAuth':provider(),'Elixir.TheMaestro.Providers.Auth.ProviderAuth':auth_method(),map()) -> {'ok',auth_result()} | {'error',term()}
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, {:already_registered, pid()}}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/live/agent_live.ex:38:24: Expression produces a value of type 'ok' | {'error',{'already_registered',pid()}}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:ok | {:error, _}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/live/agent_live.ex:288:24: Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a(:variable_) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/live/agent_live.ex:1013:8: The variable _ can never match since previous clauses completely covered the type 'anthropic' | 'google'
+________________________________________________________________________________
+lib/the_maestro_web/live/agent_live.ex:1017:8:no_return
+Function get_mcp_server_status/0 has no local return.
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, _servers}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/live/agent_live.ex:1019:13: The pattern {'ok', _servers@1} can never match the type [binary()]
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:error, __reason}) :: :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/live/agent_live.ex:1024:16: The pattern {'error', __reason@1} can never match the type [binary()]
+________________________________________________________________________________
+Please file a bug in https://github.com/jeremyjh/dialyxir/issues with this message.
+
+Unknown error occurred: %Protocol.UndefinedError{protocol: Enumerable, value: "@spec a({:ok, %{:auth_url => _auth_url, :code_verifier => _code_verifier, :state => _state}}) ::\n        :ok\ndef a() do\n  :ok\nend", description: ""}
+
+
+Legacy warning:
+lib/the_maestro_web/live/provider_selection_live.ex:122: The pattern {'ok', #{'auth_url':=_auth_url@2, 'code_verifier':=_code_verifier@1, 'state':=_state@1}} can never match the type {'error',_}
+________________________________________________________________________________
+done (warnings were emitted)
+Halting VM with exit status 2

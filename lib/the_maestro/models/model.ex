@@ -31,10 +31,10 @@ defmodule TheMaestro.Models.Model do
   @type t :: %__MODULE__{
           id: String.t(),
           name: String.t(),
-          description: String.t(),
-          provider: atom(),
-          context_length: non_neg_integer(),
-          cost_tier: :economy | :balanced | :premium,
+          description: String.t() | nil,
+          provider: atom() | nil,
+          context_length: non_neg_integer() | nil,
+          cost_tier: :economy | :balanced | :premium | nil,
           multimodal: boolean(),
           function_calling: boolean(),
           capabilities: [String.t()]
@@ -184,12 +184,14 @@ defmodule TheMaestro.Models.Model do
 
   # Private helper functions
 
+  @spec get_key(map(), [atom() | String.t()], any()) :: any()
   defp get_key(map, keys, default \\ nil) do
     Enum.find_value(keys, default, fn key ->
       Map.get(map, key)
     end)
   end
 
+  @spec maybe_set_default_capabilities(t()) :: t()
   defp maybe_set_default_capabilities(%__MODULE__{capabilities: caps} = model)
        when caps == [] or is_nil(caps) do
     %{model | capabilities: ["text"]}
@@ -197,6 +199,7 @@ defmodule TheMaestro.Models.Model do
 
   defp maybe_set_default_capabilities(model), do: model
 
+  @spec maybe_set_default_context_length(t()) :: t()
   defp maybe_set_default_context_length(%__MODULE__{context_length: nil} = model) do
     %{model | context_length: 8192}
   end

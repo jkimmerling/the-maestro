@@ -10,7 +10,8 @@ defmodule TheMaestro.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      escript: escript()
+      escript: escript(),
+      dialyzer: dialyzer()
     ]
   end
 
@@ -85,6 +86,7 @@ defmodule TheMaestro.MixProject do
       {:dns_cluster, "~> 0.1.1"},
       {:bandit, "~> 1.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       # LLM Provider Dependencies
       {:gemini_ex, "~> 0.2"},
       {:goth, "~> 1.3"},
@@ -98,6 +100,25 @@ defmodule TheMaestro.MixProject do
       {:mock, "~> 0.3", only: :test},
       # TUI Dependencies - simple terminal interface without native deps
       {:io_ansi_table, "~> 1.0"}
+    ]
+  end
+
+  # Dialyzer configuration for static analysis
+  defp dialyzer do
+    [
+      # Build PLT files for Dialyzer (Platform independent Learning Tool)
+      plt_add_apps: [:mix, :ex_unit],
+      plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
+      # Only analyze our own code, not dependencies
+      paths: ["_build/#{Mix.env()}/lib/the_maestro/ebin"],
+      # Flags for Dialyzer analysis
+      flags: [
+        :unmatched_returns,
+        :error_handling,
+        :no_opaque
+      ],
+      # Ignore warnings file to track baseline while adding specs
+      ignore_warnings: ".dialyzer_ignore.exs"
     ]
   end
 

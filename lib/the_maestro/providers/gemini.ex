@@ -853,11 +853,99 @@ defmodule TheMaestro.Providers.Gemini do
           :tool -> "model"
         end
 
+      parts = convert_message_content_to_parts(message)
+
       %{
         role: role,
-        parts: [%{text: message.content}]
+        parts: parts
       }
     end)
+  end
+
+  # Convert message content to Gemini-compatible parts
+  # Supports both simple text content and multimodal parts
+  defp convert_message_content_to_parts(message) do
+    cond do
+      # If message already has parts (multimodal), use them directly
+      Map.has_key?(message, :parts) and is_list(message.parts) ->
+        message.parts
+
+      # If message has content array (like Claude/OpenAI format), convert to parts
+      Map.has_key?(message, :content) and is_list(message.content) ->
+        convert_content_array_to_parts(message.content)
+
+      # Standard text content
+      Map.has_key?(message, :content) and is_binary(message.content) ->
+        [%{text: message.content}]
+
+      # Fallback for unexpected format
+      true ->
+        [%{text: ""}]
+    end
+  end
+
+  # Convert content array format to Gemini parts
+  defp convert_content_array_to_parts(content_array) do
+    Enum.map(content_array, fn item ->
+      case item do
+        # Text content
+        %{type: "text", text: text} ->
+          %{text: text}
+
+        %{"type" => "text", "text" => text} ->
+          %{text: text}
+
+        # Image content (OpenAI format)
+        %{type: "image_url", image_url: %{url: data_url}} ->
+          parse_data_url_to_inline_data(data_url)
+
+        %{"type" => "image_url", "image_url" => %{"url" => data_url}} ->
+          parse_data_url_to_inline_data(data_url)
+
+        # Image content (Claude format)
+        %{type: "image", source: %{type: "base64", media_type: mime_type, data: data}} ->
+          %{inlineData: %{mimeType: mime_type, data: data}}
+
+        %{
+          "type" => "image",
+          "source" => %{"type" => "base64", "media_type" => mime_type, "data" => data}
+        } ->
+          %{inlineData: %{mimeType: mime_type, data: data}}
+
+        # Document content (Claude format)
+        %{type: "document", source: %{type: "base64", media_type: mime_type, data: data}} ->
+          %{inlineData: %{mimeType: mime_type, data: data}}
+
+        %{
+          "type" => "document",
+          "source" => %{"type" => "base64", "media_type" => mime_type, "data" => data}
+        } ->
+          %{inlineData: %{mimeType: mime_type, data: data}}
+
+        # Already in Gemini inline_data format
+        %{inlineData: _} ->
+          item
+
+        %{"inlineData" => _} ->
+          item
+
+        # Fallback - convert to text
+        _ ->
+          %{text: "[Unsupported content type]"}
+      end
+    end)
+  end
+
+  # Parse data URL (data:mime/type;base64,data) to inline_data format
+  defp parse_data_url_to_inline_data(data_url) do
+    case Regex.run(~r/^data:([^;]+);base64,(.+)$/, data_url) do
+      [_, mime_type, base64_data] ->
+        %{inlineData: %{mimeType: mime_type, data: base64_data}}
+
+      _ ->
+        # Invalid data URL, convert to text fallback
+        %{text: "[Invalid image data]"}
+    end
   end
 
   defp build_system_instruction_with_tools(tools) do

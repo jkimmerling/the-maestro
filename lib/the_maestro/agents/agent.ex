@@ -37,11 +37,13 @@ defmodule TheMaestro.Agents.Agent do
 
   ## Fields
     - `type`: Either :user or :assistant
+    - `role`: Either :user or :assistant (for LLM compatibility)
     - `content`: The text content of the message
     - `timestamp`: When the message was created
   """
   @type message :: %{
           type: :user | :assistant,
+          role: :user | :assistant,
           content: String.t(),
           timestamp: DateTime.t()
         }
@@ -279,7 +281,7 @@ defmodule TheMaestro.Agents.Agent do
     }
 
     # Broadcast that we're thinking
-    broadcast_status_update(state.agent_id, :thinking)
+    _ = broadcast_status_update(state.agent_id, :thinking)
 
     # Attempt to get response from LLM provider
     case get_llm_response_with_streaming(thinking_state, message) do
@@ -299,7 +301,7 @@ defmodule TheMaestro.Agents.Agent do
         }
 
         # Broadcast completion
-        broadcast_processing_complete(state.agent_id, assistant_message)
+        _ = broadcast_processing_complete(state.agent_id, assistant_message)
 
         {:reply, {:ok, assistant_message}, final_state}
 
@@ -322,7 +324,7 @@ defmodule TheMaestro.Agents.Agent do
         }
 
         # Broadcast completion even for errors
-        broadcast_processing_complete(state.agent_id, error_message)
+        _ = broadcast_processing_complete(state.agent_id, error_message)
 
         {:reply, {:ok, error_message}, error_state}
     end
@@ -373,7 +375,7 @@ defmodule TheMaestro.Agents.Agent do
         }
 
         # Broadcast that session was restored
-        broadcast_session_restored(current_state.agent_id, session_name)
+        _ = broadcast_session_restored(current_state.agent_id, session_name)
 
         {:reply, :ok, updated_state}
 
@@ -498,12 +500,12 @@ defmodule TheMaestro.Agents.Agent do
     tool_results =
       Enum.map(tool_calls, fn tool_call ->
         # Broadcast tool call start
-        broadcast_tool_call_start(state.agent_id, tool_call)
+        _ = broadcast_tool_call_start(state.agent_id, tool_call)
 
         result = execute_tool_call(tool_call)
 
         # Broadcast tool call end
-        broadcast_tool_call_end(state.agent_id, tool_call, result)
+        _ = broadcast_tool_call_end(state.agent_id, tool_call, result)
 
         result
       end)
@@ -675,6 +677,7 @@ defmodule TheMaestro.Agents.Agent do
 
   # Provider Resolution
 
+  @spec resolve_llm_provider(keyword()) :: module()
   defp resolve_llm_provider(opts) do
     cond do
       # Explicit module provided
@@ -695,6 +698,7 @@ defmodule TheMaestro.Agents.Agent do
     end
   end
 
+  @spec resolve_provider_by_name(atom() | term()) :: module()
   defp resolve_provider_by_name(provider_name) when is_atom(provider_name) do
     providers = Application.get_env(:the_maestro, :providers, %{})
 
@@ -710,6 +714,7 @@ defmodule TheMaestro.Agents.Agent do
 
   defp resolve_provider_by_name(_), do: TheMaestro.Providers.Gemini
 
+  @spec get_default_model_for_provider(module()) :: Model.t()
   defp get_default_model_for_provider(provider_module) do
     providers = Application.get_env(:the_maestro, :providers, %{})
     # Convert keyword list to map if needed
@@ -730,12 +735,14 @@ defmodule TheMaestro.Agents.Agent do
     |> Model.enrich_with_provider_info(provider_atom)
   end
 
+  @spec find_provider_by_module(map(), module()) :: {atom(), map()} | nil
   defp find_provider_by_module(providers_map, target_module) do
     Enum.find(providers_map, fn {_name, config} ->
       Map.get(config, :module) == target_module
     end)
   end
 
+  @spec module_to_provider_atom(module()) :: atom()
   defp module_to_provider_atom(TheMaestro.Providers.Anthropic), do: :anthropic
   defp module_to_provider_atom(TheMaestro.Providers.Gemini), do: :google
   defp module_to_provider_atom(TheMaestro.Providers.OpenAI), do: :openai
@@ -743,6 +750,7 @@ defmodule TheMaestro.Agents.Agent do
 
   # Streaming and status broadcasting functions
 
+  @spec broadcast_status_update(String.t(), atom()) :: :ok | {:error, term()}
   defp broadcast_status_update(agent_id, status) do
     Phoenix.PubSub.broadcast(
       TheMaestro.PubSub,
@@ -751,6 +759,7 @@ defmodule TheMaestro.Agents.Agent do
     )
   end
 
+  @spec broadcast_stream_chunk(String.t(), term()) :: :ok | {:error, term()}
   defp broadcast_stream_chunk(agent_id, chunk) do
     Phoenix.PubSub.broadcast(
       TheMaestro.PubSub,
@@ -759,6 +768,7 @@ defmodule TheMaestro.Agents.Agent do
     )
   end
 
+  @spec broadcast_tool_call_start(String.t(), map()) :: :ok | {:error, term()}
   defp broadcast_tool_call_start(agent_id, tool_call) do
     Phoenix.PubSub.broadcast(
       TheMaestro.PubSub,
@@ -771,6 +781,8 @@ defmodule TheMaestro.Agents.Agent do
     )
   end
 
+  @spec broadcast_tool_call_end(String.t(), map(), {:ok, term()} | {:error, term()}) ::
+          :ok | {:error, term()}
   defp broadcast_tool_call_end(agent_id, tool_call, result) do
     Phoenix.PubSub.broadcast(
       TheMaestro.PubSub,
@@ -783,6 +795,7 @@ defmodule TheMaestro.Agents.Agent do
     )
   end
 
+  @spec broadcast_processing_complete(String.t(), message()) :: :ok | {:error, term()}
   defp broadcast_processing_complete(agent_id, final_response) do
     Phoenix.PubSub.broadcast(
       TheMaestro.PubSub,
@@ -791,6 +804,7 @@ defmodule TheMaestro.Agents.Agent do
     )
   end
 
+  @spec broadcast_session_restored(String.t(), String.t()) :: :ok | {:error, term()}
   defp broadcast_session_restored(agent_id, session_name) do
     Phoenix.PubSub.broadcast(
       TheMaestro.PubSub,
