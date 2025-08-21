@@ -99,7 +99,26 @@ defmodule TheMaestro.MixProject do
       # Testing Dependencies
       {:mock, "~> 0.3", only: :test},
       # TUI Dependencies - simple terminal interface without native deps
-      {:io_ansi_table, "~> 1.0"}
+      {:io_ansi_table, "~> 1.0"},
+      # Multimodal Processing Dependencies
+      # Image Processing and OCR
+      {:tesseract_ocr, "~> 0.1.5"},
+      {:mogrify, "~> 0.9.3"},
+      {:image, "~> 0.54"},
+      {:ex_image_info, "~> 0.2.4"},
+      # Audio Processing and Speech-to-Text
+      {:bumblebee, "~> 0.6.0"},
+      {:nx, "~> 0.9"},
+      {:exla, "~> 0.9"},
+      # Document Processing
+      {:porcelain, "~> 2.0"},
+      {:ex_pdf_reader, "~> 0.1.0"},
+      # Video Processing
+      {:ffmpex, "~> 0.10.0"},
+      # Code Analysis
+      {:ex_tree_sitter, "~> 0.0.3"},
+      # General utilities for multimodal processing
+      {:temp, "~> 0.4"}
     ]
   end
 
