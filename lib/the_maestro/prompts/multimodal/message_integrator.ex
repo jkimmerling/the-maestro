@@ -87,13 +87,14 @@ defmodule TheMaestro.Prompts.MultiModal.MessageIntegrator do
     case ProviderAdapter.format_for_provider(content_items, prompt_text, provider) do
       {:ok, formatted_message} ->
         # Convert provider role format to system role format
-        system_role = case role do
-          :user -> :user
-          :assistant -> :assistant
-          :system -> :system
-          :tool -> :tool
-          _ -> :user
-        end
+        system_role =
+          case role do
+            :user -> :user
+            :assistant -> :assistant
+            :system -> :system
+            :tool -> :tool
+            _ -> :user
+          end
 
         enhanced_message = Map.put(formatted_message, :role, system_role)
         {:ok, enhanced_message}
@@ -111,10 +112,11 @@ defmodule TheMaestro.Prompts.MultiModal.MessageIntegrator do
   """
   @spec add_content_descriptions(String.t(), [ContentItem.t()]) :: String.t()
   def add_content_descriptions(text_content, content_items) do
-    descriptions = Enum.map(content_items, fn item ->
-      file_info = if item.file_path, do: " (#{item.file_path})", else: ""
-      "[#{String.upcase(to_string(item.type))}: #{item.mime_type}#{file_info}]"
-    end)
+    descriptions =
+      Enum.map(content_items, fn item ->
+        file_info = if item.file_path, do: " (#{item.file_path})", else: ""
+        "[#{String.upcase(to_string(item.type))}: #{item.mime_type}#{file_info}]"
+      end)
 
     [text_content | descriptions]
     |> Enum.filter(&(&1 && &1 != ""))
@@ -126,11 +128,12 @@ defmodule TheMaestro.Prompts.MultiModal.MessageIntegrator do
   @spec integrate_for_gemini(message(), [ContentItem.t()]) :: map()
   defp integrate_for_gemini(message, content_items) do
     # Gemini uses parts format
-    text_parts = if message.content && message.content != "" do
-      [%{text: message.content}]
-    else
-      []
-    end
+    text_parts =
+      if message.content && message.content != "" do
+        [%{text: message.content}]
+      else
+        []
+      end
 
     media_parts = ProviderAdapter.content_to_parts(content_items, :gemini)
 
@@ -142,11 +145,12 @@ defmodule TheMaestro.Prompts.MultiModal.MessageIntegrator do
   @spec integrate_for_openai(message(), [ContentItem.t()]) :: map()
   defp integrate_for_openai(message, content_items) do
     # OpenAI uses content array format
-    content_array = if message.content && message.content != "" do
-      [%{type: "text", text: message.content}]
-    else
-      []
-    end
+    content_array =
+      if message.content && message.content != "" do
+        [%{type: "text", text: message.content}]
+      else
+        []
+      end
 
     media_content = ProviderAdapter.content_to_parts(content_items, :openai)
 
@@ -158,11 +162,12 @@ defmodule TheMaestro.Prompts.MultiModal.MessageIntegrator do
   @spec integrate_for_claude(message(), [ContentItem.t()]) :: map()
   defp integrate_for_claude(message, content_items) do
     # Claude uses content array format similar to OpenAI
-    content_array = if message.content && message.content != "" do
-      [%{type: "text", text: message.content}]
-    else
-      []
-    end
+    content_array =
+      if message.content && message.content != "" do
+        [%{type: "text", text: message.content}]
+      else
+        []
+      end
 
     media_content = ProviderAdapter.content_to_parts(content_items, :claude)
 
@@ -175,36 +180,43 @@ defmodule TheMaestro.Prompts.MultiModal.MessageIntegrator do
 
   @spec convert_role_to_gemini(map()) :: map()
   defp convert_role_to_gemini(message) do
-    gemini_role = case message.role do
-      :user -> "user"
-      :assistant -> "model"
-      :system -> "user"  # Gemini doesn't have system role
-      :tool -> "model"   # Tool results as model responses
-    end
+    gemini_role =
+      case message.role do
+        :user -> "user"
+        :assistant -> "model"
+        # Gemini doesn't have system role
+        :system -> "user"
+        # Tool results as model responses
+        :tool -> "model"
+      end
 
     Map.put(message, :role, gemini_role)
   end
 
   @spec convert_role_to_openai(map()) :: map()
   defp convert_role_to_openai(message) do
-    openai_role = case message.role do
-      :user -> "user"
-      :assistant -> "assistant"
-      :system -> "system"
-      :tool -> "tool"
-    end
+    openai_role =
+      case message.role do
+        :user -> "user"
+        :assistant -> "assistant"
+        :system -> "system"
+        :tool -> "tool"
+      end
 
     Map.put(message, :role, openai_role)
   end
 
   @spec convert_role_to_claude(map()) :: map()
   defp convert_role_to_claude(message) do
-    claude_role = case message.role do
-      :user -> "user"
-      :assistant -> "assistant"
-      :system -> "user"  # Claude handles system differently
-      :tool -> "user"    # Tool results as user messages
-    end
+    claude_role =
+      case message.role do
+        :user -> "user"
+        :assistant -> "assistant"
+        # Claude handles system differently
+        :system -> "user"
+        # Tool results as user messages
+        :tool -> "user"
+      end
 
     Map.put(message, :role, claude_role)
   end

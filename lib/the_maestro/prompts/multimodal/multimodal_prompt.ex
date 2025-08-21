@@ -21,10 +21,12 @@ defmodule TheMaestro.Prompts.MultiModal.MultiModalPrompt do
   @typedoc """
   Input content specification.
   """
-  @type content_input :: 
-          String.t() |  # file path or base64 data
-          ContentItem.t() | # pre-processed content item
-          %{type: atom(), content: String.t(), mime_type: String.t()}
+  # file path or base64 data
+  @type content_input ::
+          String.t()
+          # pre-processed content item
+          | ContentItem.t()
+          | %{type: atom(), content: String.t(), mime_type: String.t()}
 
   @doc """
   Creates a multimodal prompt from mixed content types and text.
@@ -68,8 +70,13 @@ defmodule TheMaestro.Prompts.MultiModal.MultiModalPrompt do
 
     with :ok <- validate_inputs(content_inputs, max_items),
          {:ok, content_items} <- process_content_inputs(content_inputs, validate_files),
-         {:ok, message} <- MessageIntegrator.create_multimodal_message(
-                             content_items, prompt_text, provider, role) do
+         {:ok, message} <-
+           MessageIntegrator.create_multimodal_message(
+             content_items,
+             prompt_text,
+             provider,
+             role
+           ) do
       {:ok, message}
     else
       {:error, reason} -> {:error, reason}
@@ -119,7 +126,8 @@ defmodule TheMaestro.Prompts.MultiModal.MultiModalPrompt do
   - `{:ok, ContentItem.t()}` - Successfully processed content item
   - `{:error, reason}` - Error processing content
   """
-  @spec process_base64(String.t(), String.t(), map()) :: {:ok, ContentItem.t()} | {:error, String.t()}
+  @spec process_base64(String.t(), String.t(), map()) ::
+          {:ok, ContentItem.t()} | {:error, String.t()}
   def process_base64(base64_data, mime_type, metadata \\ %{}) do
     ContentProcessor.process_base64(base64_data, mime_type, metadata)
   end
@@ -147,8 +155,12 @@ defmodule TheMaestro.Prompts.MultiModal.MultiModalPrompt do
     validate_files = Keyword.get(opts, :validate_files, true)
 
     with {:ok, content_items} <- process_content_inputs(content_inputs, validate_files),
-         {:ok, enhanced_message} <- MessageIntegrator.integrate_multimodal_content(
-                                      message, content_items, provider) do
+         {:ok, enhanced_message} <-
+           MessageIntegrator.integrate_multimodal_content(
+             message,
+             content_items,
+             provider
+           ) do
       {:ok, enhanced_message}
     else
       {:error, reason} -> {:error, reason}
@@ -190,16 +202,18 @@ defmodule TheMaestro.Prompts.MultiModal.MultiModalPrompt do
   @spec estimate_token_usage([ContentItem.t()], String.t(), atom()) :: non_neg_integer()
   def estimate_token_usage(content_items, prompt_text, _provider) do
     # Basic text estimation (4 chars per token)
-    text_tokens = if prompt_text do
-      div(String.length(prompt_text), 4)
-    else
-      0
-    end
+    text_tokens =
+      if prompt_text do
+        div(String.length(prompt_text), 4)
+      else
+        0
+      end
 
     # Content item estimation
-    content_tokens = Enum.reduce(content_items, 0, fn item, acc ->
-      acc + estimate_item_tokens(item)
-    end)
+    content_tokens =
+      Enum.reduce(content_items, 0, fn item, acc ->
+        acc + estimate_item_tokens(item)
+      end)
 
     text_tokens + content_tokens
   end

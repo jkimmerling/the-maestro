@@ -889,33 +889,49 @@ defmodule TheMaestro.Providers.Gemini do
     Enum.map(content_array, fn item ->
       case item do
         # Text content
-        %{type: "text", text: text} -> %{text: text}
-        %{"type" => "text", "text" => text} -> %{text: text}
+        %{type: "text", text: text} ->
+          %{text: text}
+
+        %{"type" => "text", "text" => text} ->
+          %{text: text}
 
         # Image content (OpenAI format)
-        %{type: "image_url", image_url: %{url: data_url}} -> 
+        %{type: "image_url", image_url: %{url: data_url}} ->
           parse_data_url_to_inline_data(data_url)
-        %{"type" => "image_url", "image_url" => %{"url" => data_url}} -> 
+
+        %{"type" => "image_url", "image_url" => %{"url" => data_url}} ->
           parse_data_url_to_inline_data(data_url)
 
         # Image content (Claude format)
         %{type: "image", source: %{type: "base64", media_type: mime_type, data: data}} ->
           %{inlineData: %{mimeType: mime_type, data: data}}
-        %{"type" => "image", "source" => %{"type" => "base64", "media_type" => mime_type, "data" => data}} ->
+
+        %{
+          "type" => "image",
+          "source" => %{"type" => "base64", "media_type" => mime_type, "data" => data}
+        } ->
           %{inlineData: %{mimeType: mime_type, data: data}}
 
         # Document content (Claude format)
         %{type: "document", source: %{type: "base64", media_type: mime_type, data: data}} ->
           %{inlineData: %{mimeType: mime_type, data: data}}
-        %{"type" => "document", "source" => %{"type" => "base64", "media_type" => mime_type, "data" => data}} ->
+
+        %{
+          "type" => "document",
+          "source" => %{"type" => "base64", "media_type" => mime_type, "data" => data}
+        } ->
           %{inlineData: %{mimeType: mime_type, data: data}}
 
         # Already in Gemini inline_data format
-        %{inlineData: _} -> item
-        %{"inlineData" => _} -> item
+        %{inlineData: _} ->
+          item
+
+        %{"inlineData" => _} ->
+          item
 
         # Fallback - convert to text
-        _ -> %{text: "[Unsupported content type]"}
+        _ ->
+          %{text: "[Unsupported content type]"}
       end
     end)
   end

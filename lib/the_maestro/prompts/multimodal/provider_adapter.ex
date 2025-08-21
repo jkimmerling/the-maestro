@@ -37,7 +37,7 @@ defmodule TheMaestro.Prompts.MultiModal.ProviderAdapter do
       iex> ProviderAdapter.format_for_provider([content_item], "Analyze this", :gemini)
       {:ok, %{role: "user", parts: [%{text: "Analyze this"}, %{inline_data: ...}]}}
   """
-  @spec format_for_provider([ContentItem.t()], String.t(), provider()) :: 
+  @spec format_for_provider([ContentItem.t()], String.t(), provider()) ::
           {:ok, map()} | {:error, String.t()}
   def format_for_provider(content_items, prompt_text, provider) do
     case provider do
@@ -92,11 +92,12 @@ defmodule TheMaestro.Prompts.MultiModal.ProviderAdapter do
 
   @spec format_for_gemini([ContentItem.t()], String.t()) :: map()
   defp format_for_gemini(content_items, prompt_text) do
-    parts = if prompt_text && prompt_text != "" do
-      [%{text: prompt_text}]
-    else
-      []
-    end
+    parts =
+      if prompt_text && prompt_text != "" do
+        [%{text: prompt_text}]
+      else
+        []
+      end
 
     media_parts = content_items_to_gemini_parts(content_items)
 
@@ -137,11 +138,12 @@ defmodule TheMaestro.Prompts.MultiModal.ProviderAdapter do
 
   @spec format_for_openai([ContentItem.t()], String.t()) :: map()
   defp format_for_openai(content_items, prompt_text) do
-    content = if prompt_text && prompt_text != "" do
-      [%{type: "text", text: prompt_text}]
-    else
-      []
-    end
+    content =
+      if prompt_text && prompt_text != "" do
+        [%{type: "text", text: prompt_text}]
+      else
+        []
+      end
 
     media_content = content_items_to_openai_parts(content_items)
 
@@ -174,6 +176,7 @@ defmodule TheMaestro.Prompts.MultiModal.ProviderAdapter do
   defp content_item_to_openai_part(%ContentItem{type: type, file_path: file_path}) do
     # OpenAI doesn't support other multimodal types, convert to text
     file_description = if file_path, do: file_path, else: "content"
+
     %{
       type: "text",
       text: "[#{String.upcase(to_string(type))} CONTENT: #{file_description}]"
@@ -184,11 +187,12 @@ defmodule TheMaestro.Prompts.MultiModal.ProviderAdapter do
 
   @spec format_for_claude([ContentItem.t()], String.t()) :: map()
   defp format_for_claude(content_items, prompt_text) do
-    content = if prompt_text && prompt_text != "" do
-      [%{type: "text", text: prompt_text}]
-    else
-      []
-    end
+    content =
+      if prompt_text && prompt_text != "" do
+        [%{type: "text", text: prompt_text}]
+      else
+        []
+      end
 
     media_content = content_items_to_claude_parts(content_items)
 
@@ -220,7 +224,11 @@ defmodule TheMaestro.Prompts.MultiModal.ProviderAdapter do
     }
   end
 
-  defp content_item_to_claude_part(%ContentItem{type: :document, data: data, mime_type: mime_type}) 
+  defp content_item_to_claude_part(%ContentItem{
+         type: :document,
+         data: data,
+         mime_type: mime_type
+       })
        when mime_type == "application/pdf" do
     %{
       type: "document",
@@ -235,6 +243,7 @@ defmodule TheMaestro.Prompts.MultiModal.ProviderAdapter do
   defp content_item_to_claude_part(%ContentItem{type: type, file_path: file_path}) do
     # For unsupported types, convert to text description
     file_description = if file_path, do: file_path, else: "content"
+
     %{
       type: "text",
       text: "[#{String.upcase(to_string(type))} CONTENT: #{file_description}]"

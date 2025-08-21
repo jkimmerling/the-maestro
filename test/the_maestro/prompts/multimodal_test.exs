@@ -2,16 +2,26 @@ defmodule TheMaestro.Prompts.MultiModalTest do
   use ExUnit.Case, async: true
 
   alias TheMaestro.Prompts.MultiModal
-  alias TheMaestro.Prompts.MultiModal.{ContentItem, ContentProcessor, ProviderAdapter, MessageIntegrator}
+
+  alias TheMaestro.Prompts.MultiModal.{
+    ContentItem,
+    ContentProcessor,
+    ProviderAdapter,
+    MessageIntegrator
+  }
 
   # Create test files for real file processing tests
   setup_all do
     # Create temporary directory for test files
-    test_dir = "/tmp/multimodal_test_#{:rand.uniform(1000000)}"
+    test_dir = "/tmp/multimodal_test_#{:rand.uniform(1_000_000)}"
     File.mkdir_p!(test_dir)
 
     # Create test image file (1x1 PNG)
-    png_data = Base.decode64!("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    png_data =
+      Base.decode64!(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+      )
+
     image_path = Path.join(test_dir, "test_image.png")
     File.write!(image_path, png_data)
 
@@ -20,7 +30,9 @@ defmodule TheMaestro.Prompts.MultiModalTest do
     File.write!(text_path, "This is a test document with some content.")
 
     # Create test PDF (minimal PDF structure)
-    pdf_data = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000010 00000 n \n0000000053 00000 n \n0000000125 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n198\n%%EOF"
+    pdf_data =
+      "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000010 00000 n \n0000000053 00000 n \n0000000125 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n198\n%%EOF"
+
     pdf_path = Path.join(test_dir, "test_document.pdf")
     File.write!(pdf_path, pdf_data)
 
@@ -91,7 +103,9 @@ defmodule TheMaestro.Prompts.MultiModalTest do
     end
 
     test "creates content item with all fields" do
-      item = ContentItem.new(:image, "binary_data", "image/png", "/path/to/file.png", %{source: "test"})
+      item =
+        ContentItem.new(:image, "binary_data", "image/png", "/path/to/file.png", %{source: "test"})
+
       assert ContentItem.valid?(item)
       assert item.type == :image
       assert item.data == "binary_data"
@@ -152,7 +166,8 @@ defmodule TheMaestro.Prompts.MultiModalTest do
 
     test "validates file before processing" do
       # Test file size validation
-      assert ContentProcessor.validate_file("/dev/null") == {:error, "File is not a regular file (type: device)"}
+      assert ContentProcessor.validate_file("/dev/null") ==
+               {:error, "File is not a regular file (type: device)"}
     end
 
     test "processes base64 content" do
@@ -169,7 +184,7 @@ defmodule TheMaestro.Prompts.MultiModalTest do
     test "detects MIME types from file content" do
       # Test PNG magic number detection
       png_header = <<0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, "rest of data">>
-      temp_file = "/tmp/test_magic_#{:rand.uniform(1000000)}.unknown"
+      temp_file = "/tmp/test_magic_#{:rand.uniform(1_000_000)}.unknown"
       File.write!(temp_file, png_header)
 
       {:ok, content_item} = ContentProcessor.process_file(temp_file)
@@ -186,24 +201,30 @@ defmodule TheMaestro.Prompts.MultiModalTest do
         ContentItem.from_text("Analyze this image"),
         ContentItem.new(:image, png_data, "image/png", "/test/image.png")
       ]
+
       %{content_items: content_items}
     end
 
     test "formats for Gemini provider", %{content_items: content_items} do
-      {:ok, message} = ProviderAdapter.format_for_provider(content_items, "Please analyze", :gemini)
+      {:ok, message} =
+        ProviderAdapter.format_for_provider(content_items, "Please analyze", :gemini)
 
       assert message.role == "user"
-      assert length(message.parts) == 3  # prompt text + 2 content items
+      # prompt text + 2 content items
+      assert length(message.parts) == 3
 
       [text_part, text_item_part, image_part] = message.parts
       assert text_part.text == "Please analyze"
       assert text_item_part.text == "Analyze this image"
       assert image_part.inline_data.mime_type == "image/png"
-      assert image_part.inline_data.data == Base.encode64(content_items |> Enum.at(1) |> Map.get(:data))
+
+      assert image_part.inline_data.data ==
+               Base.encode64(content_items |> Enum.at(1) |> Map.get(:data))
     end
 
     test "formats for OpenAI provider", %{content_items: content_items} do
-      {:ok, message} = ProviderAdapter.format_for_provider(content_items, "Please analyze", :openai)
+      {:ok, message} =
+        ProviderAdapter.format_for_provider(content_items, "Please analyze", :openai)
 
       assert message.role == "user"
       assert length(message.content) == 3
@@ -218,7 +239,8 @@ defmodule TheMaestro.Prompts.MultiModalTest do
     end
 
     test "formats for Claude provider", %{content_items: content_items} do
-      {:ok, message} = ProviderAdapter.format_for_provider(content_items, "Please analyze", :claude)
+      {:ok, message} =
+        ProviderAdapter.format_for_provider(content_items, "Please analyze", :claude)
 
       assert message.role == "user"
       assert length(message.content) == 3
@@ -254,7 +276,8 @@ defmodule TheMaestro.Prompts.MultiModalTest do
       message = %{role: :user, content: "Look at this image"}
       content_items = [ContentItem.new(:image, "image_data", "image/png")]
 
-      {:ok, enhanced_message} = MessageIntegrator.integrate_multimodal_content(message, content_items, :gemini)
+      {:ok, enhanced_message} =
+        MessageIntegrator.integrate_multimodal_content(message, content_items, :gemini)
 
       assert enhanced_message.role == "user"
       assert length(enhanced_message.parts) == 2
@@ -263,19 +286,24 @@ defmodule TheMaestro.Prompts.MultiModalTest do
     end
 
     test "creates new multimodal message" do
-      content_items = [ContentItem.from_text("Hello"), ContentItem.new(:image, "data", "image/png")]
+      content_items = [
+        ContentItem.from_text("Hello"),
+        ContentItem.new(:image, "data", "image/png")
+      ]
 
-      {:ok, message} = MessageIntegrator.create_multimodal_message(content_items, "Analyze", :gemini)
+      {:ok, message} =
+        MessageIntegrator.create_multimodal_message(content_items, "Analyze", :gemini)
 
       assert message.role == :user
-      assert length(message.parts) == 3  # prompt + 2 content items
+      # prompt + 2 content items
+      assert length(message.parts) == 3
     end
 
     test "adds content descriptions for non-multimodal providers" do
       content_items = [ContentItem.new(:image, "data", "image/png", "/test.png")]
-      
+
       description = MessageIntegrator.add_content_descriptions("Original text", content_items)
-      
+
       assert String.contains?(description, "Original text")
       assert String.contains?(description, "[IMAGE: image/png (/test.png)]")
     end
@@ -283,20 +311,25 @@ defmodule TheMaestro.Prompts.MultiModalTest do
 
   # Full integration tests with real files
   describe "Full multimodal integration with real files" do
-    test "creates multimodal prompt from file paths", %{image_path: image_path, text_path: text_path} do
-      {:ok, message} = MultiModal.create_multimodal_prompt(
-        [image_path, text_path],
-        "Analyze these files",
-        :gemini
-      )
+    test "creates multimodal prompt from file paths", %{
+      image_path: image_path,
+      text_path: text_path
+    } do
+      {:ok, message} =
+        MultiModal.create_multimodal_prompt(
+          [image_path, text_path],
+          "Analyze these files",
+          :gemini
+        )
 
       assert message.role == :user
-      assert length(message.parts) >= 3  # prompt + image + text
-      
+      # prompt + image + text
+      assert length(message.parts) >= 3
+
       # Should have text parts and inline_data parts
       text_parts = Enum.filter(message.parts, &Map.has_key?(&1, :text))
       media_parts = Enum.filter(message.parts, &Map.has_key?(&1, :inline_data))
-      
+
       assert length(text_parts) >= 1
       assert length(media_parts) >= 1
     end
@@ -305,32 +338,40 @@ defmodule TheMaestro.Prompts.MultiModalTest do
       base64_data = Base.encode64("pdf content")
       content_item = ContentItem.from_text("Text item")
 
-      {:ok, message} = MultiModal.create_multimodal_prompt(
-        [image_path, %{type: :document, content: base64_data, mime_type: "application/pdf"}, content_item],
-        "Analyze all content",
-        :claude
-      )
+      {:ok, message} =
+        MultiModal.create_multimodal_prompt(
+          [
+            image_path,
+            %{type: :document, content: base64_data, mime_type: "application/pdf"},
+            content_item
+          ],
+          "Analyze all content",
+          :claude
+        )
 
       assert message.role == :user
-      assert length(message.content) >= 4  # prompt + image + pdf + text
+      # prompt + image + pdf + text
+      assert length(message.content) >= 4
     end
 
     test "enhances existing message with file content", %{image_path: image_path} do
       original_message = %{role: :user, content: "Please review"}
 
-      {:ok, enhanced_message} = MultiModal.enhance_message(
-        original_message,
-        [image_path],
-        :openai
-      )
+      {:ok, enhanced_message} =
+        MultiModal.enhance_message(
+          original_message,
+          [image_path],
+          :openai
+        )
 
       assert enhanced_message.role == "user"
-      assert length(enhanced_message.content) >= 2  # original text + image
-      
+      # original text + image
+      assert length(enhanced_message.content) >= 2
+
       # Should have both text and image_url content
       text_content = Enum.filter(enhanced_message.content, &(&1.type == "text"))
       image_content = Enum.filter(enhanced_message.content, &(&1.type == "image_url"))
-      
+
       assert length(text_content) >= 1
       assert length(image_content) == 1
     end
@@ -342,7 +383,8 @@ defmodule TheMaestro.Prompts.MultiModalTest do
       tokens = MultiModal.estimate_token_usage([image_item, text_item], "Analyze both", :gemini)
 
       # Should account for prompt text, text content, and image
-      assert tokens > 1000  # At least 1000 for the image
+      # At least 1000 for the image
+      assert tokens > 1000
     end
 
     test "supports different providers for the same content", %{image_path: image_path} do
@@ -366,11 +408,13 @@ defmodule TheMaestro.Prompts.MultiModalTest do
 
     test "handles file validation errors gracefully" do
       # Test with non-existent file
-      {:error, error_msg} = MultiModal.create_multimodal_prompt(
-        ["/nonexistent/file.png"],
-        "Analyze this",
-        :gemini
-      )
+      {:error, error_msg} =
+        MultiModal.create_multimodal_prompt(
+          ["/nonexistent/file.png"],
+          "Analyze this",
+          :gemini
+        )
+
       assert String.contains?(error_msg, "Error processing input")
       assert String.contains?(error_msg, "Cannot access file")
     end
@@ -378,13 +422,15 @@ defmodule TheMaestro.Prompts.MultiModalTest do
     test "validates input limits" do
       # Test max content items limit
       large_input_list = for i <- 1..25, do: "/fake/file#{i}.png"
-      
-      {:error, error_msg} = MultiModal.create_multimodal_prompt(
-        large_input_list,
-        "Analyze",
-        :gemini,
-        max_content_items: 20
-      )
+
+      {:error, error_msg} =
+        MultiModal.create_multimodal_prompt(
+          large_input_list,
+          "Analyze",
+          :gemini,
+          max_content_items: 20
+        )
+
       assert String.contains?(error_msg, "Too many content items")
     end
   end
@@ -413,23 +459,24 @@ defmodule TheMaestro.Prompts.MultiModalTest do
     end
 
     test "handles directory instead of file" do
-      temp_dir = "/tmp/test_dir_#{:rand.uniform(1000000)}"
+      temp_dir = "/tmp/test_dir_#{:rand.uniform(1_000_000)}"
       File.mkdir_p!(temp_dir)
-      
+
       {:error, error_msg} = ContentProcessor.process_file(temp_dir)
       assert String.contains?(error_msg, "File is not a regular file")
-      
+
       File.rmdir!(temp_dir)
     end
 
     test "handles very large files" do
-      large_data = String.duplicate("a", 51 * 1024 * 1024)  # 51MB
-      temp_file = "/tmp/large_file_#{:rand.uniform(1000000)}.txt"
+      # 51MB
+      large_data = String.duplicate("a", 51 * 1024 * 1024)
+      temp_file = "/tmp/large_file_#{:rand.uniform(1_000_000)}.txt"
       File.write!(temp_file, large_data)
-      
+
       {:error, error_msg} = ContentProcessor.process_file(temp_file)
       assert String.contains?(error_msg, "exceeds maximum allowed size")
-      
+
       File.rm!(temp_file)
     end
 
@@ -451,7 +498,7 @@ defmodule TheMaestro.Prompts.MultiModalTest do
   describe "ProviderAdapter edge cases" do
     test "handles unsupported content type for provider" do
       content_items = [ContentItem.new(:audio, "audio_data", "audio/wav")]
-      
+
       # OpenAI should handle unsupported types gracefully by adding text descriptions
       {:ok, message} = ProviderAdapter.format_for_provider(content_items, "Test", :openai)
       assert message.role == "user"
@@ -461,7 +508,7 @@ defmodule TheMaestro.Prompts.MultiModalTest do
 
     test "handles empty content items list" do
       {:ok, message} = ProviderAdapter.format_for_provider([], "Just text", :gemini)
-      
+
       assert message.role == "user"
       assert length(message.parts) == 1
       assert List.first(message.parts).text == "Just text"
@@ -473,21 +520,22 @@ defmodule TheMaestro.Prompts.MultiModalTest do
     end
   end
 
-  # Additional MessageIntegrator tests  
+  # Additional MessageIntegrator tests
   describe "MessageIntegrator edge cases" do
     test "handles message with existing content" do
       message = %{role: :user, content: "existing text"}
       content_items = [ContentItem.from_text("new content")]
-      
-      {:ok, enhanced_message} = MessageIntegrator.integrate_multimodal_content(message, content_items, :gemini)
-      
+
+      {:ok, enhanced_message} =
+        MessageIntegrator.integrate_multimodal_content(message, content_items, :gemini)
+
       assert enhanced_message.role == "user"
       assert length(enhanced_message.parts) >= 2
     end
 
     test "handles non-multimodal provider fallback" do
       content_items = [ContentItem.new(:image, "data", "image/png", "/test.png")]
-      
+
       description = MessageIntegrator.add_content_descriptions("Text", content_items)
       assert String.contains?(description, "Text")
       assert String.contains?(description, "[IMAGE:")
@@ -495,9 +543,10 @@ defmodule TheMaestro.Prompts.MultiModalTest do
 
     test "creates message with text-only content" do
       content_items = [ContentItem.from_text("Hello"), ContentItem.from_text("World")]
-      
-      {:ok, message} = MessageIntegrator.create_multimodal_message(content_items, "Prompt", :gemini)
-      
+
+      {:ok, message} =
+        MessageIntegrator.create_multimodal_message(content_items, "Prompt", :gemini)
+
       assert message.role == :user
       assert length(message.parts) >= 3
     end
@@ -507,13 +556,15 @@ defmodule TheMaestro.Prompts.MultiModalTest do
   describe "MultiModalPrompt edge cases" do
     test "validates maximum content items" do
       large_input_list = for i <- 1..25, do: ContentItem.from_text("item #{i}")
-      
-      {:error, error_msg} = MultiModal.create_multimodal_prompt(
-        large_input_list,
-        "Test",
-        :gemini,
-        max_content_items: 20
-      )
+
+      {:error, error_msg} =
+        MultiModal.create_multimodal_prompt(
+          large_input_list,
+          "Test",
+          :gemini,
+          max_content_items: 20
+        )
+
       assert String.contains?(error_msg, "Too many content items")
     end
 
@@ -527,9 +578,9 @@ defmodule TheMaestro.Prompts.MultiModalTest do
         ContentItem.from_text("Text item"),
         %{type: :text, content: "Legacy text", mime_type: "text/plain"}
       ]
-      
+
       {:ok, message} = MultiModal.create_multimodal_prompt(content_inputs, "Mixed", :gemini)
-      
+
       assert message.role == :user
       assert length(message.parts) >= 3
     end
@@ -540,9 +591,9 @@ defmodule TheMaestro.Prompts.MultiModalTest do
         ContentItem.new(:image, "image_data", "image/png"),
         ContentItem.new(:document, "doc_data", "application/pdf")
       ]
-      
+
       tokens = MultiModal.estimate_token_usage(content_items, "Analyze these", :gemini)
-      
+
       # Should be: text (3 chars / 4) + text (10 chars / 4) + image (1000) + document (1500) = ~2503 tokens
       assert tokens > 2500
       assert tokens < 3000
@@ -556,13 +607,13 @@ defmodule TheMaestro.Prompts.MultiModalTest do
     end
 
     test "processes file with validation disabled" do
-      temp_file = "/tmp/test_no_validation_#{:rand.uniform(1000000)}.txt"
+      temp_file = "/tmp/test_no_validation_#{:rand.uniform(1_000_000)}.txt"
       File.write!(temp_file, "test content")
-      
+
       {:ok, content_item} = MultiModal.process_file(temp_file, false)
       assert content_item.type == :document
       assert content_item.data == "test content"
-      
+
       File.rm!(temp_file)
     end
   end

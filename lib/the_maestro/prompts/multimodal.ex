@@ -189,8 +189,9 @@ defmodule TheMaestro.Prompts.MultiModal do
 
   def content_to_parts(content) when is_list(content) do
     # Convert legacy format to ContentItems and format for Gemini (default)
-    content_items = Enum.map(content, &legacy_item_to_content_item/1)
-    |> Enum.filter(&(&1 != nil))
+    content_items =
+      Enum.map(content, &legacy_item_to_content_item/1)
+      |> Enum.filter(&(&1 != nil))
 
     ProviderAdapter.content_to_parts(content_items, :gemini)
   end
@@ -200,8 +201,8 @@ defmodule TheMaestro.Prompts.MultiModal do
   """
   @spec valid_content_item?(map()) :: boolean()
   def valid_content_item?(%{type: type, content: content})
-      when type in [:text, :image, :audio, :video, :document, :file] and 
-           is_binary(content) and byte_size(content) > 0 do
+      when type in [:text, :image, :audio, :video, :document, :file] and
+             is_binary(content) and byte_size(content) > 0 do
     true
   end
 
@@ -214,26 +215,33 @@ defmodule TheMaestro.Prompts.MultiModal do
     ContentItem.from_text(text)
   end
 
-  defp legacy_item_to_content_item(%{type: type, content: data, mime_type: mime_type}) 
+  defp legacy_item_to_content_item(%{type: type, content: data, mime_type: mime_type})
        when type in [:image, :audio, :video, :document, :file] and is_binary(mime_type) do
     # For legacy content, decode base64 data since legacy format assumes base64 content
-    decoded_data = case Base.decode64(data) do
-      {:ok, decoded} -> decoded
-      :error -> data  # If not base64, use as-is
-    end
+    decoded_data =
+      case Base.decode64(data) do
+        {:ok, decoded} -> decoded
+        # If not base64, use as-is
+        :error -> data
+      end
+
     ContentItem.new(type, decoded_data, mime_type)
   end
 
-  defp legacy_item_to_content_item(%{type: type, content: data}) 
+  defp legacy_item_to_content_item(%{type: type, content: data})
        when type in [:image, :audio, :video, :document, :file] do
     # Infer MIME type for legacy compatibility
     mime_type = infer_legacy_mime_type(type)
+
     if mime_type do
       # For legacy content, decode base64 data since legacy format assumes base64 content
-      decoded_data = case Base.decode64(data) do
-        {:ok, decoded} -> decoded
-        :error -> data  # If not base64, use as-is
-      end
+      decoded_data =
+        case Base.decode64(data) do
+          {:ok, decoded} -> decoded
+          # If not base64, use as-is
+          :error -> data
+        end
+
       ContentItem.new(type, decoded_data, mime_type)
     else
       nil

@@ -39,13 +39,14 @@ defmodule TheMaestro.Prompts.MultiModal.ContentProcessor do
     with {:ok, data} <- read_file_safely(file_path),
          {:ok, mime_type} <- determine_mime_type(file_path, data),
          content_type <- classify_content_type(mime_type) do
-      content_item = ContentItem.new(
-        content_type,
-        data,
-        mime_type,
-        file_path,
-        %{original_size: byte_size(data)}
-      )
+      content_item =
+        ContentItem.new(
+          content_type,
+          data,
+          mime_type,
+          file_path,
+          %{original_size: byte_size(data)}
+        )
 
       {:ok, content_item}
     else
@@ -71,19 +72,21 @@ defmodule TheMaestro.Prompts.MultiModal.ContentProcessor do
   - `{:ok, ContentItem.t()}` - Successfully processed content item
   - `{:error, reason}` - Error decoding or processing the content
   """
-  @spec process_base64(String.t(), String.t(), map()) :: {:ok, ContentItem.t()} | {:error, String.t()}
+  @spec process_base64(String.t(), String.t(), map()) ::
+          {:ok, ContentItem.t()} | {:error, String.t()}
   def process_base64(base64_data, mime_type, metadata \\ %{}) do
     case Base.decode64(base64_data) do
       {:ok, binary_data} ->
         content_type = classify_content_type(mime_type)
-        
-        content_item = ContentItem.new(
-          content_type,
-          binary_data,
-          mime_type,
-          nil,
-          Map.put(metadata, :source, :base64)
-        )
+
+        content_item =
+          ContentItem.new(
+            content_type,
+            binary_data,
+            mime_type,
+            nil,
+            Map.put(metadata, :source, :base64)
+          )
 
         {:ok, content_item}
 
@@ -139,7 +142,7 @@ defmodule TheMaestro.Prompts.MultiModal.ContentProcessor do
   defp determine_mime_type(file_path, data) do
     # First try to determine from file extension
     extension_mime = mime_type_from_extension(file_path)
-    
+
     # Then try to verify with file content (magic numbers)
     case detect_mime_from_content(data) do
       {:ok, content_mime} ->
@@ -171,7 +174,6 @@ defmodule TheMaestro.Prompts.MultiModal.ContentProcessor do
       ".svg" -> "image/svg+xml"
       ".tiff" -> "image/tiff"
       ".tif" -> "image/tiff"
-
       # Documents
       ".pdf" -> "application/pdf"
       ".doc" -> "application/msword"
@@ -180,7 +182,6 @@ defmodule TheMaestro.Prompts.MultiModal.ContentProcessor do
       ".md" -> "text/markdown"
       ".html" -> "text/html"
       ".htm" -> "text/html"
-
       # Audio
       ".mp3" -> "audio/mpeg"
       ".wav" -> "audio/wav"
@@ -188,7 +189,6 @@ defmodule TheMaestro.Prompts.MultiModal.ContentProcessor do
       ".aac" -> "audio/aac"
       ".ogg" -> "audio/ogg"
       ".m4a" -> "audio/mp4"
-
       # Video
       ".mp4" -> "video/mp4"
       ".avi" -> "video/x-msvideo"
@@ -196,13 +196,11 @@ defmodule TheMaestro.Prompts.MultiModal.ContentProcessor do
       ".mkv" -> "video/x-matroska"
       ".webm" -> "video/webm"
       ".wmv" -> "video/x-ms-wmv"
-
       # Archives
       ".zip" -> "application/zip"
       ".tar" -> "application/x-tar"
       ".gz" -> "application/gzip"
       ".7z" -> "application/x-7z-compressed"
-
       # Default
       _ -> "application/octet-stream"
     end
@@ -265,13 +263,27 @@ defmodule TheMaestro.Prompts.MultiModal.ContentProcessor do
   @spec classify_content_type(String.t()) :: ContentItem.content_type()
   defp classify_content_type(mime_type) do
     cond do
-      String.starts_with?(mime_type, "image/") -> :image
-      String.starts_with?(mime_type, "video/") -> :video
-      String.starts_with?(mime_type, "audio/") -> :audio
-      String.starts_with?(mime_type, "text/") -> :document
-      mime_type in ["application/pdf", "application/msword", 
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] -> :document
-      true -> :file
+      String.starts_with?(mime_type, "image/") ->
+        :image
+
+      String.starts_with?(mime_type, "video/") ->
+        :video
+
+      String.starts_with?(mime_type, "audio/") ->
+        :audio
+
+      String.starts_with?(mime_type, "text/") ->
+        :document
+
+      mime_type in [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ] ->
+        :document
+
+      true ->
+        :file
     end
   end
 end
