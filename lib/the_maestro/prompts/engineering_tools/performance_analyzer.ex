@@ -330,17 +330,18 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzer do
     # Real performance analysis based on prompt characteristics and context
     base_complexity = analyze_prompt_complexity(prompt)
     context_multiplier = get_context_complexity_multiplier(context)
-    
+
     # Calculate expected response times based on prompt characteristics
     base_time = calculate_base_response_time(prompt, base_complexity)
     adjusted_time = base_time * context_multiplier
-    
+
     # Generate realistic distribution around the calculated time
-    sample_times = if Enum.empty?(historical_data) do
-      generate_realistic_response_times(adjusted_time, base_complexity)
-    else
-      blend_with_historical_data(adjusted_time, historical_data)
-    end
+    sample_times =
+      if Enum.empty?(historical_data) do
+        generate_realistic_response_times(adjusted_time, base_complexity)
+      else
+        blend_with_historical_data(adjusted_time, historical_data)
+      end
 
     mean = Enum.sum(sample_times) / length(sample_times)
     sorted = Enum.sort(sample_times)
@@ -348,7 +349,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzer do
     p95 = Enum.at(sorted, round(length(sorted) * 0.95) - 1)
     p99 = Enum.at(sorted, round(length(sorted) * 0.99) - 1)
 
-    variance = Enum.reduce(sample_times, 0, fn x, acc -> acc + :math.pow(x - mean, 2) end) / length(sample_times)
+    variance =
+      Enum.reduce(sample_times, 0, fn x, acc -> acc + :math.pow(x - mean, 2) end) /
+        length(sample_times)
+
     std_dev = :math.sqrt(variance)
 
     %{
@@ -931,23 +935,33 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzer do
 
   defp analyze_prompt_complexity(prompt) do
     word_count = prompt |> String.split() |> length()
-    sentence_count = prompt |> String.split([".","!","?"]) |> length()
+    sentence_count = prompt |> String.split([".", "!", "?"]) |> length()
     instruction_complexity = count_complex_instructions(prompt)
     parameter_complexity = count_template_parameters(prompt)
-    
+
     base_score = word_count / 100.0
     sentence_multiplier = sentence_count / 10.0
-    instruction_multiplier = 1.0 + (instruction_complexity * 0.3)
-    parameter_multiplier = 1.0 + (parameter_complexity * 0.2)
-    
+    instruction_multiplier = 1.0 + instruction_complexity * 0.3
+    parameter_multiplier = 1.0 + parameter_complexity * 0.2
+
     complexity = base_score * sentence_multiplier * instruction_multiplier * parameter_multiplier
-    min(complexity, 10.0) # Cap at 10.0
+    # Cap at 10.0
+    min(complexity, 10.0)
   end
 
   defp count_complex_instructions(prompt) do
-    complex_words = ["analyze", "evaluate", "compare", "synthesize", "create", "design", "implement"]
+    complex_words = [
+      "analyze",
+      "evaluate",
+      "compare",
+      "synthesize",
+      "create",
+      "design",
+      "implement"
+    ]
+
     complex_words
-    |> Enum.map(fn word -> 
+    |> Enum.map(fn word ->
       prompt |> String.downcase() |> String.contains?(word)
     end)
     |> Enum.count(& &1)
@@ -959,56 +973,61 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzer do
 
   defp get_context_complexity_multiplier(context) do
     base_multiplier = 1.0
-    
+
     # Environment complexity
-    env_multiplier = case Map.get(context, :environment, :development) do
-      :production -> 1.2
-      :staging -> 1.1
-      _ -> 1.0
-    end
-    
+    env_multiplier =
+      case Map.get(context, :environment, :development) do
+        :production -> 1.2
+        :staging -> 1.1
+        _ -> 1.0
+      end
+
     # Expected load complexity
-    load_multiplier = case Map.get(context, :expected_load, 100) do
-      load when load > 10000 -> 1.5
-      load when load > 1000 -> 1.3
-      load when load > 100 -> 1.1
-      _ -> 1.0
-    end
-    
+    load_multiplier =
+      case Map.get(context, :expected_load, 100) do
+        load when load > 10_000 -> 1.5
+        load when load > 1000 -> 1.3
+        load when load > 100 -> 1.1
+        _ -> 1.0
+      end
+
     # Provider complexity
-    provider_multiplier = case Map.get(context, :provider, :openai) do
-      :anthropic -> 0.9  # Generally faster
-      :openai -> 1.0
-      :gemini -> 1.1
-      _ -> 1.2  # Unknown providers assumed slower
-    end
-    
+    provider_multiplier =
+      case Map.get(context, :provider, :openai) do
+        # Generally faster
+        :anthropic -> 0.9
+        :openai -> 1.0
+        :gemini -> 1.1
+        # Unknown providers assumed slower
+        _ -> 1.2
+      end
+
     base_multiplier * env_multiplier * load_multiplier * provider_multiplier
   end
 
   defp calculate_base_response_time(prompt, complexity) do
     # Base time calculation based on prompt characteristics
     word_count = prompt |> String.split() |> length()
-    
+
     # Base time: ~50ms per 100 words + complexity factor
-    base_time = (word_count / 100.0) * 50.0
+    base_time = word_count / 100.0 * 50.0
     complexity_time = complexity * 20.0
-    
+
     base_time + complexity_time
   end
 
   defp generate_realistic_response_times(target_time, complexity) do
     # Generate a realistic distribution of response times
     # Higher complexity = higher variability
-    variability_factor = 0.1 + (complexity / 10.0 * 0.3)
-    
+    variability_factor = 0.1 + complexity / 10.0 * 0.3
+
     1..20
     |> Enum.map(fn _ ->
       # Normal distribution approximation using Box-Muller transform
       u1 = :rand.uniform()
       u2 = :rand.uniform()
       z = :math.sqrt(-2.0 * :math.log(u1)) * :math.cos(2.0 * :math.pi() * u2)
-      
+
       variation = target_time * variability_factor * z
       max(10.0, target_time + variation)
     end)
@@ -1016,14 +1035,15 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzer do
 
   defp blend_with_historical_data(target_time, historical_data) do
     # Extract response times from historical data
-    historical_times = historical_data
-    |> Enum.map(&Map.get(&1, :response_time, 100))
-    |> Enum.take(10)
-    
+    historical_times =
+      historical_data
+      |> Enum.map(&Map.get(&1, :response_time, 100))
+      |> Enum.take(10)
+
     # Blend target time with historical average
     historical_avg = Enum.sum(historical_times) / length(historical_times)
     blended_target = (target_time + historical_avg) / 2.0
-    
+
     # Generate distribution around blended target
     generate_realistic_response_times(blended_target, 3.0)
   end

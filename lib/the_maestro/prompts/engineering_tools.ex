@@ -868,8 +868,15 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   end
 
   defp load_domain_templates(:e_commerce) do
-    ["product_catalog", "user_management", "payment_processing", "inventory_management", 
-     "order_fulfillment", "customer_support", "analytics_reporting"]
+    [
+      "product_catalog",
+      "user_management",
+      "payment_processing",
+      "inventory_management",
+      "order_fulfillment",
+      "customer_support",
+      "analytics_reporting"
+    ]
   end
 
   defp load_domain_templates(_),

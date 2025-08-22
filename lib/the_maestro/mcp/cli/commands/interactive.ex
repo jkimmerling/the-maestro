@@ -255,7 +255,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
       "config" -> handle_config_command(args, state)
       "set" -> handle_set_command(args, state)
       "get" -> handle_get_command(args, state)
-      
       # Prompt Engineering Commands
       "prompt" -> handle_prompt_command(args, state)
       "template" -> handle_template_command(args, state)
@@ -264,7 +263,6 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
       "workspace" -> handle_workspace_command(args, state)
       "analyze" -> handle_analyze_command(args, state)
       "docs" -> handle_docs_command(args, state)
-      
       "exit" -> {:exit, :user_exit}
       "quit" -> {:exit, :user_exit}
       "q" -> {:exit, :user_exit}
@@ -566,14 +564,17 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
 
   defp execute_prompt_engineering_command(command, args, state) do
     # Build command string for PromptCLI
-    command_string = case args do
-      [] -> "#{command} help"
-      [subcommand | rest] -> 
-        case rest do
-          [] -> "#{command} #{subcommand}"
-          [name | _] -> "#{command} #{subcommand} #{name}"
-        end
-    end
+    command_string =
+      case args do
+        [] ->
+          "#{command} help"
+
+        [subcommand | rest] ->
+          case rest do
+            [] -> "#{command} #{subcommand}"
+            [name | _] -> "#{command} #{subcommand} #{name}"
+          end
+      end
 
     # Create context with user info
     context = %{
@@ -718,7 +719,11 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
     IO.puts("  call <tool> [args]   - Call a tool on current server")
     IO.puts("")
     IO.puts("Prompt Engineering Commands:")
-    IO.puts("  prompt <action> [name] [options] - Manage prompts (create, list, show, edit, delete)")
+
+    IO.puts(
+      "  prompt <action> [name] [options] - Manage prompts (create, list, show, edit, delete)"
+    )
+
     IO.puts("  template <action> [name] [options] - Manage templates (create, list, show)")
     IO.puts("  experiment <action> [name] [options] - Manage experiments (create, run, status)")
     IO.puts("  workspace <action> [name] [options] - Manage workspaces (create, list, switch)")

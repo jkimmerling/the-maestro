@@ -16,7 +16,7 @@ defmodule TheMaestro.Repo.Migrations.CreateExperimentTables do
       add :end_date, :utc_datetime
       add :created_by, :string
       add :metadata, :map
-      
+
       timestamps()
     end
 
@@ -34,7 +34,7 @@ defmodule TheMaestro.Repo.Migrations.CreateExperimentTables do
       add :user_context, :map
       add :metrics, :map
       add :executed_at, :utc_datetime
-      
+
       timestamps()
     end
 
@@ -49,7 +49,7 @@ defmodule TheMaestro.Repo.Migrations.CreateExperimentTables do
       add :confidence_interval, :map
       add :statistical_significance, :boolean
       add :calculated_at, :utc_datetime
-      
+
       timestamps()
     end
 
@@ -62,7 +62,7 @@ defmodule TheMaestro.Repo.Migrations.CreateExperimentTables do
       add :segment_size, :integer
       add :performance_metrics, :map
       add :statistical_analysis, :map
-      
+
       timestamps()
     end
 
@@ -76,7 +76,7 @@ defmodule TheMaestro.Repo.Migrations.CreateExperimentTables do
       add :last_execution_at, :utc_datetime
       add :completion_percentage, :float, default: 0.0
       add :estimated_completion, :utc_datetime
-      
+
       timestamps()
     end
 
@@ -92,7 +92,7 @@ defmodule TheMaestro.Repo.Migrations.CreateExperimentTables do
     create index(:experiment_metrics, [:metric_type])
     create index(:user_segments, [:experiment_id])
     create index(:experiment_progress, [:experiment_id])
-    
+
     # Composite indexes for common queries
     create index(:experiment_executions, [:experiment_id, :variant_name, :executed_at])
     create index(:experiment_metrics, [:experiment_id, :metric_type, :calculated_at])

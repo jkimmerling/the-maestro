@@ -53,7 +53,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
     @foreign_key_type :binary_id
 
     schema "prompt_templates" do
-      field :template_id, :string  # Common ID across all versions
+      # Common ID across all versions
+      field :template_id, :string
       field :name, :string
       field :description, :string
       field :category, :string
@@ -74,10 +75,20 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
     def changeset(template, attrs) do
       template
       |> cast(attrs, [
-        :template_id, :name, :description, :category, :template_content,
-        :parameters, :usage_examples, :performance_metrics,
-        :version, :parent_version, :created_by, :tags,
-        :validation_rules, :optimization_suggestions
+        :template_id,
+        :name,
+        :description,
+        :category,
+        :template_content,
+        :parameters,
+        :usage_examples,
+        :performance_metrics,
+        :version,
+        :parent_version,
+        :created_by,
+        :tags,
+        :validation_rules,
+        :optimization_suggestions
       ])
       |> validate_required([:template_id, :name, :template_content, :category, :created_by])
       |> validate_length(:name, min: 1, max: 255)
@@ -202,13 +213,15 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
 
     defp extract_modifier_value(modifier, prefix) do
       value = String.trim_leading(modifier, prefix) |> String.trim()
-      
+
       # Remove surrounding quotes if present
       cond do
         String.starts_with?(value, "\"") and String.ends_with?(value, "\"") ->
           String.slice(value, 1..-2//1)
+
         String.starts_with?(value, "'") and String.ends_with?(value, "'") ->
           String.slice(value, 1..-2//1)
+
         true ->
           value
       end
@@ -409,7 +422,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
         parameters = TemplateParameters.define_template_parameters(prompt)
 
         template_id = generate_template_id()
-        
+
         attrs = %{
           template_id: template_id,
           name: metadata.name,
@@ -427,9 +440,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
           optimization_suggestions: generate_optimization_suggestions(prompt)
         }
 
-        {:ok, template} = %PromptTemplate{}
-        |> PromptTemplate.changeset(attrs)
-        |> Repo.insert()
+        {:ok, template} =
+          %PromptTemplate{}
+          |> PromptTemplate.changeset(attrs)
+          |> Repo.insert()
 
         optimize_template_for_reuse(template)
     end
@@ -503,9 +517,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
   def update_template(template, new_content) do
     # Create a new version as a separate database record
     new_parameters = TemplateParameters.define_template_parameters(new_content)
-    
+
     attrs = %{
-      template_id: template.template_id,  # Keep the same template_id
+      # Keep the same template_id
+      template_id: template.template_id,
       name: template.name,
       description: template.description,
       category: template.category,
@@ -521,9 +536,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
       optimization_suggestions: generate_optimization_suggestions(new_content)
     }
 
-    {:ok, new_template} = %PromptTemplate{}
-    |> PromptTemplate.changeset(attrs)
-    |> Repo.insert()
+    {:ok, new_template} =
+      %PromptTemplate{}
+      |> PromptTemplate.changeset(attrs)
+      |> Repo.insert()
 
     new_template
   end
@@ -535,7 +551,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
   def get_template_version_history(id) do
     # First, find the template to get its template_id
     case Repo.get(PromptTemplate, id) do
-      nil -> []
+      nil ->
+        []
+
       template ->
         # Now find all versions with the same template_id
         from(t in PromptTemplate,
@@ -730,23 +748,26 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
     # Identify sections that appear to be required based on structure
     sections = []
 
-    sections = if String.contains?(prompt, ["## Context", "Context:"]) do
-      sections ++ [:context]
-    else
-      sections
-    end
+    sections =
+      if String.contains?(prompt, ["## Context", "Context:"]) do
+        sections ++ [:context]
+      else
+        sections
+      end
 
-    sections = if String.contains?(prompt, ["## Task", "Task:", "Your task"]) do
-      sections ++ [:task]
-    else
-      sections
-    end
+    sections =
+      if String.contains?(prompt, ["## Task", "Task:", "Your task"]) do
+        sections ++ [:task]
+      else
+        sections
+      end
 
-    sections = if String.contains?(prompt, ["## Output", "Format:", "Provide"]) do
-      sections ++ [:output_specification]
-    else
-      sections
-    end
+    sections =
+      if String.contains?(prompt, ["## Output", "Format:", "Provide"]) do
+        sections ++ [:output_specification]
+      else
+        sections
+      end
 
     sections
   end
@@ -763,23 +784,26 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
   defp extract_content_guidelines(prompt) do
     guidelines = []
 
-    guidelines = if String.contains?(prompt, ["specific", "detailed", "comprehensive"]) do
-      guidelines ++ [:require_specificity]
-    else
-      guidelines
-    end
+    guidelines =
+      if String.contains?(prompt, ["specific", "detailed", "comprehensive"]) do
+        guidelines ++ [:require_specificity]
+      else
+        guidelines
+      end
 
-    guidelines = if String.contains?(prompt, ["example", "Example"]) do
-      guidelines ++ [:include_examples]
-    else
-      guidelines
-    end
+    guidelines =
+      if String.contains?(prompt, ["example", "Example"]) do
+        guidelines ++ [:include_examples]
+      else
+        guidelines
+      end
 
-    guidelines = if String.contains?(prompt, ["step", "steps", "process"]) do
-      guidelines ++ [:structured_output]
-    else
-      guidelines
-    end
+    guidelines =
+      if String.contains?(prompt, ["step", "steps", "process"]) do
+        guidelines ++ [:structured_output]
+      else
+        guidelines
+      end
 
     guidelines
   end
@@ -789,34 +813,39 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
     suggestions = []
 
     # Check for redundancy
-    suggestions = if has_redundant_content?(prompt) do
-      suggestions ++ ["Consider reducing redundant content to improve clarity and conciseness"]
-    else
-      suggestions
-    end
+    suggestions =
+      if has_redundant_content?(prompt) do
+        suggestions ++ ["Consider reducing redundant content to improve clarity and conciseness"]
+      else
+        suggestions
+      end
 
     # Check for clarity issues
-    suggestions = if has_clarity_issues?(prompt) do
-      suggestions ++ ["Improve prompt clarity by using more specific language and examples"]
-    else
-      suggestions
-    end
+    suggestions =
+      if has_clarity_issues?(prompt) do
+        suggestions ++ ["Improve prompt clarity by using more specific language and examples"]
+      else
+        suggestions
+      end
 
     # Check for length optimization
-    suggestions = if String.length(prompt) > 2000 do
-      suggestions ++ ["Consider shortening the prompt while maintaining essential information"]
-    else
-      suggestions
-    end
+    suggestions =
+      if String.length(prompt) > 2000 do
+        suggestions ++ ["Consider shortening the prompt while maintaining essential information"]
+      else
+        suggestions
+      end
 
     suggestions
   end
 
   defp has_redundant_content?(prompt) do
     # Check for repeated phrases and words
-    words = String.split(prompt, ~r/\s+/) 
+    words =
+      String.split(prompt, ~r/\s+/)
       |> Enum.map(&String.downcase/1)
-      |> Enum.map(fn w -> String.replace(w, ~r/[^\w]/, "") end) # Remove punctuation
+      # Remove punctuation
+      |> Enum.map(fn w -> String.replace(w, ~r/[^\w]/, "") end)
       |> Enum.reject(&(&1 == ""))
 
     word_count = length(words)
@@ -824,10 +853,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
 
     # If less than 80% unique words, consider it redundant
     unique_ratio = unique_words / word_count
-    
+
     # Debug info for development
     # IO.puts("Word count: #{word_count}, Unique: #{unique_words}, Ratio: #{unique_ratio}")
-    
+
     unique_ratio < 0.8
   end
 
@@ -844,7 +873,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
   defp optimize_template_for_reuse(template) do
     # Add additional optimization suggestions based on reusability analysis
     reusability_suggestions = analyze_reusability(template.template_content)
-    
+
     # Merge with existing optimization suggestions
     all_suggestions = template.optimization_suggestions ++ reusability_suggestions
 
@@ -857,32 +886,34 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
     # Check parameterization opportunities
     hardcoded_values = find_hardcoded_values(template_content)
 
-    suggestions = if length(hardcoded_values) > 0 do
-      suggestions ++
-        [
-          %{
-            type: :parameterize_hardcoded_values,
-            description: "Consider parameterizing: #{Enum.join(hardcoded_values, ", ")}",
-            impact: :medium
-          }
-        ]
-    else
-      suggestions
-    end
+    suggestions =
+      if length(hardcoded_values) > 0 do
+        suggestions ++
+          [
+            %{
+              type: :parameterize_hardcoded_values,
+              description: "Consider parameterizing: #{Enum.join(hardcoded_values, ", ")}",
+              impact: :medium
+            }
+          ]
+      else
+        suggestions
+      end
 
     # Check for modularity opportunities
-    suggestions = if String.length(template_content) > 1000 && not has_section_structure?(template_content) do
-      suggestions ++
-        [
-          %{
-            type: :add_modular_structure,
-            description: "Consider breaking into smaller, reusable sections",
-            impact: :high
-          }
-        ]
-    else
-      suggestions
-    end
+    suggestions =
+      if String.length(template_content) > 1000 && not has_section_structure?(template_content) do
+        suggestions ++
+          [
+            %{
+              type: :add_modular_structure,
+              description: "Consider breaking into smaller, reusable sections",
+              impact: :high
+            }
+          ]
+      else
+        suggestions
+      end
 
     suggestions
   end
@@ -915,57 +946,61 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
     String.contains?(template_content, ["##", "**", "###", "---"])
   end
 
-  defp is_parameter_conditionally_required?(template_content, param_name) do
+  defp parameter_conditionally_required?(template_content, param_name) do
     # Check if parameter is inside a conditional block like {{#if condition}}{{param | required}}{{/if}}
-    conditional_pattern = ~r/\{\{#if\s+\w+\}\}.*?\{\{#{param_name}\s*\|.*?required.*?\}\}.*?\{\{\/if\}\}/s
+    conditional_pattern =
+      ~r/\{\{#if\s+\w+\}\}.*?\{\{#{param_name}\s*\|.*?required.*?\}\}.*?\{\{\/if\}\}/s
+
     Regex.match?(conditional_pattern, template_content)
   end
 
   defp should_validate_conditional_param?(template_content, param_name, parameters) do
     # Find the condition for this parameter
     # Look for patterns like {{#if include_context}}...{{context | required}}...{{/if}}
-    conditional_pattern = ~r/\{\{#if\s+(\w+)\}\}.*?\{\{#{param_name}\s*\|.*?required.*?\}\}.*?\{\{\/if\}\}/s
-    
+    conditional_pattern =
+      ~r/\{\{#if\s+(\w+)\}\}.*?\{\{#{param_name}\s*\|.*?required.*?\}\}.*?\{\{\/if\}\}/s
+
     case Regex.run(conditional_pattern, template_content) do
       [_, condition_param] ->
         # Check if the condition parameter is truthy
         condition_value = Map.get(parameters, condition_param)
-        is_truthy_value?(condition_value)
+        truthy_value?(condition_value)
+
       _ ->
         # If we can't find the pattern, default to requiring validation
         true
     end
   end
 
-  defp is_truthy_value?(nil), do: false
-  defp is_truthy_value?(false), do: false
-  defp is_truthy_value?("false"), do: false
-  defp is_truthy_value?(0), do: false
-  defp is_truthy_value?(""), do: false
-  defp is_truthy_value?(_), do: true
+  defp truthy_value?(nil), do: false
+  defp truthy_value?(false), do: false
+  defp truthy_value?("false"), do: false
+  defp truthy_value?(0), do: false
+  defp truthy_value?(""), do: false
+  defp truthy_value?(_), do: true
 
   defp validate_required_parameters!(template, parameters) do
     # Get unconditionally required parameters
     unconditional_missing =
       template.parameters.required_parameters
-      |> Enum.filter(fn param -> 
+      |> Enum.filter(fn param ->
         # Check if this parameter is inside a conditional block
-        not is_parameter_conditionally_required?(template.template_content, param)
+        not parameter_conditionally_required?(template.template_content, param)
       end)
       |> Enum.reject(fn param -> Map.has_key?(parameters, param) end)
-    
+
     # Check conditionally required parameters
-    conditional_missing = 
+    conditional_missing =
       template.parameters.required_parameters
       |> Enum.filter(fn param ->
-        is_parameter_conditionally_required?(template.template_content, param)
+        parameter_conditionally_required?(template.template_content, param)
       end)
       |> Enum.filter(fn param ->
         # Only check if the condition is true
         should_validate_conditional_param?(template.template_content, param, parameters)
       end)
       |> Enum.reject(fn param -> Map.has_key?(parameters, param) end)
-    
+
     missing = unconditional_missing ++ conditional_missing
 
     if length(missing) > 0 do
@@ -1165,7 +1200,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManager do
       String.length(content) < 10 ->
         raise ArgumentError, "Instantiated prompt is too short"
 
-      String.length(content) > 10000 ->
+      String.length(content) > 10_000 ->
         raise ArgumentError, "Instantiated prompt is too long"
 
       true ->

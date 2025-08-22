@@ -1,7 +1,7 @@
 defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
   @moduledoc """
   Git integration for prompt engineering tools.
-  
+
   Provides Git hooks and CI/CD integration for automatic prompt versioning,
   testing, and validation in development workflows.
   """
@@ -15,13 +15,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
 
   @doc """
   Install Git hooks for prompt engineering workflows.
-  
+
   Installs pre-commit, pre-push, and post-merge hooks to automatically
   handle prompt versioning and validation.
   """
   def install_git_hooks(project_path \\ ".") do
     hooks_dir = Path.join([project_path, ".git", "hooks"])
-    
+
     case File.mkdir_p(hooks_dir) do
       :ok ->
         hooks = [
@@ -30,18 +30,20 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
           {"post-merge", generate_post_merge_hook()},
           {"prepare-commit-msg", generate_prepare_commit_msg_hook()}
         ]
-        
-        install_results = Enum.map(hooks, fn {hook_name, hook_content} ->
-          install_single_hook(hooks_dir, hook_name, hook_content)
-        end)
-        
+
+        install_results =
+          Enum.map(hooks, fn {hook_name, hook_content} ->
+            install_single_hook(hooks_dir, hook_name, hook_content)
+          end)
+
         case Enum.all?(install_results, &match?(:ok, &1)) do
           true ->
             {:ok, "Git hooks installed successfully. Prompt engineering workflow activated."}
+
           false ->
             {:error, "Some hooks failed to install: #{inspect(install_results)}"}
         end
-        
+
       {:error, reason} ->
         {:error, "Failed to create hooks directory: #{reason}"}
     end
@@ -53,24 +55,28 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
   def uninstall_git_hooks(project_path \\ ".") do
     hooks_dir = Path.join([project_path, ".git", "hooks"])
     hook_names = ["pre-commit", "pre-push", "post-merge", "prepare-commit-msg"]
-    
-    results = Enum.map(hook_names, fn hook_name ->
-      hook_path = Path.join(hooks_dir, hook_name)
-      
-      case File.read(hook_path) do
-        {:ok, content} ->
-          if String.contains?(content, "# Maestro Prompt Engineering Hook") do
-            File.rm(hook_path)
-          else
-            {:error, "Hook not managed by Maestro"}
-          end
-        {:error, :enoent} ->
-          :ok  # Hook doesn't exist, that's fine
-        {:error, reason} ->
-          {:error, reason}
-      end
-    end)
-    
+
+    results =
+      Enum.map(hook_names, fn hook_name ->
+        hook_path = Path.join(hooks_dir, hook_name)
+
+        case File.read(hook_path) do
+          {:ok, content} ->
+            if String.contains?(content, "# Maestro Prompt Engineering Hook") do
+              File.rm(hook_path)
+            else
+              {:error, "Hook not managed by Maestro"}
+            end
+
+          {:error, :enoent} ->
+            # Hook doesn't exist, that's fine
+            :ok
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      end)
+
     case Enum.all?(results, &match?(:ok, &1)) do
       true -> {:ok, "Git hooks uninstalled successfully"}
       false -> {:error, "Some hooks failed to uninstall: #{inspect(results)}"}
@@ -79,7 +85,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
 
   @doc """
   Set up CI/CD integration configuration.
-  
+
   Generates configuration files for popular CI/CD platforms to automatically
   run prompt tests and validations.
   """
@@ -87,12 +93,16 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
     case platform do
       :github_actions ->
         setup_github_actions(project_path)
+
       :gitlab_ci ->
         setup_gitlab_ci(project_path)
+
       :jenkins ->
         setup_jenkins(project_path)
+
       :circleci ->
         setup_circleci(project_path)
+
       _ ->
         {:error, "Unsupported CI/CD platform: #{platform}"}
     end
@@ -100,21 +110,22 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
 
   @doc """
   Validate prompt changes in Git workflow.
-  
+
   Used by Git hooks to validate prompt changes before commit/push.
   """
   def validate_prompt_changes(staged_files \\ nil) do
     files = staged_files || get_staged_files()
     prompt_files = filter_prompt_files(files)
-    
+
     if Enum.empty?(prompt_files) do
       {:ok, "No prompt files to validate"}
     else
       validation_results = Enum.map(prompt_files, &validate_prompt_file/1)
-      
+
       case Enum.filter(validation_results, &match?({:error, _}, &1)) do
         [] ->
           {:ok, "All prompt files valid"}
+
         errors ->
           error_messages = Enum.map(errors, fn {:error, msg} -> msg end)
           {:error, "Prompt validation failed:\n" <> Enum.join(error_messages, "\n")}
@@ -132,16 +143,18 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
       timeout: 30_000,
       test_categories: [:syntax, :performance, :quality, :integration]
     }
-    
+
     config = Map.merge(default_config, test_config)
-    
-    test_results = Enum.map(config.test_categories, fn category ->
-      run_test_category(category, config)
-    end)
-    
+
+    test_results =
+      Enum.map(config.test_categories, fn category ->
+        run_test_category(category, config)
+      end)
+
     case Enum.all?(test_results, &match?({:ok, _}, &1)) do
       true ->
         {:ok, "All prompt tests passed"}
+
       false ->
         failed_tests = Enum.filter(test_results, &match?({:error, _}, &1))
         {:error, "Some prompt tests failed: #{inspect(failed_tests)}"}
@@ -152,13 +165,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
 
   defp install_single_hook(hooks_dir, hook_name, hook_content) do
     hook_path = Path.join(hooks_dir, hook_name)
-    
+
     case File.write(hook_path, hook_content) do
       :ok ->
         case File.chmod(hook_path, 0o755) do
           :ok -> :ok
           {:error, reason} -> {:error, "Failed to make hook executable: #{reason}"}
         end
+
       {:error, reason} ->
         {:error, "Failed to write hook: #{reason}"}
     end
@@ -357,17 +371,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
 
   defp setup_github_actions(project_path) do
     workflow_dir = Path.join([project_path, ".github", "workflows"])
-    
+
     case File.mkdir_p(workflow_dir) do
       :ok ->
         workflow_content = generate_github_workflow()
         workflow_path = Path.join(workflow_dir, "prompt-engineering.yml")
-        
+
         case File.write(workflow_path, workflow_content) do
           :ok -> {:ok, "GitHub Actions workflow created: #{workflow_path}"}
           {:error, reason} -> {:error, "Failed to write workflow: #{reason}"}
         end
-        
+
       {:error, reason} ->
         {:error, "Failed to create workflow directory: #{reason}"}
     end
@@ -454,26 +468,29 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
 
   defp setup_gitlab_ci(project_path) do
     gitlab_ci_path = Path.join(project_path, ".gitlab-ci.yml")
-    
+
     # Read existing file or create new one
     case File.read(gitlab_ci_path) do
-      {:ok, content} -> 
+      {:ok, content} ->
         existing_content = content <> "\n\n"
+
         if String.contains?(existing_content, "prompt-engineering") do
           {:ok, "GitLab CI prompt engineering configuration already exists"}
         else
           update_gitlab_ci(gitlab_ci_path, existing_content)
         end
-      {:error, :enoent} -> 
+
+      {:error, :enoent} ->
         update_gitlab_ci(gitlab_ci_path, "")
-      {:error, reason} -> 
+
+      {:error, reason} ->
         {:error, "Failed to read .gitlab-ci.yml: #{reason}"}
     end
   end
 
   defp update_gitlab_ci(gitlab_ci_path, existing_content) do
     new_content = existing_content <> generate_gitlab_ci_config()
-    
+
     case File.write(gitlab_ci_path, new_content) do
       :ok -> {:ok, "GitLab CI configuration added to .gitlab-ci.yml"}
       {:error, reason} -> {:error, "Failed to write .gitlab-ci.yml: #{reason}"}
@@ -531,9 +548,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
 
   defp setup_jenkins(project_path) do
     jenkinsfile_path = Path.join(project_path, "Jenkinsfile")
-    
+
     jenkins_content = generate_jenkinsfile()
-    
+
     case File.write(jenkinsfile_path, jenkins_content) do
       :ok -> {:ok, "Jenkinsfile created with prompt engineering pipeline"}
       {:error, reason} -> {:error, "Failed to write Jenkinsfile: #{reason}"}
@@ -619,17 +636,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
 
   defp setup_circleci(project_path) do
     circleci_dir = Path.join([project_path, ".circleci"])
-    
+
     case File.mkdir_p(circleci_dir) do
       :ok ->
         config_content = generate_circleci_config()
         config_path = Path.join(circleci_dir, "config.yml")
-        
+
         case File.write(config_path, config_content) do
           :ok -> {:ok, "CircleCI configuration created: #{config_path}"}
           {:error, reason} -> {:error, "Failed to write CircleCI config: #{reason}"}
         end
-        
+
       {:error, reason} ->
         {:error, "Failed to create CircleCI directory: #{reason}"}
     end
@@ -711,12 +728,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
         cond do
           String.ends_with?(file_path, ".json") ->
             validate_json_prompt(file_path, content)
+
           String.ends_with?(file_path, ".md") ->
             validate_markdown_prompt(file_path, content)
+
           true ->
             validate_text_prompt(file_path, content)
         end
-        
+
       {:error, reason} ->
         {:error, "Failed to read #{file_path}: #{reason}"}
     end
@@ -728,12 +747,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
         cond do
           not is_map(data) ->
             {:error, "#{file_path}: JSON must be an object"}
+
           not Map.has_key?(data, "metadata") ->
             {:error, "#{file_path}: Missing metadata field"}
+
           true ->
             validate_metadata(file_path, data["metadata"])
         end
-        
+
       {:error, reason} ->
         {:error, "#{file_path}: Invalid JSON - #{reason}"}
     end
@@ -760,7 +781,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
   defp validate_metadata(file_path, metadata) do
     required_fields = ["version", "author", "created_at"]
     missing_fields = Enum.filter(required_fields, &(not Map.has_key?(metadata, &1)))
-    
+
     case missing_fields do
       [] -> {:ok, "#{file_path}: Valid metadata"}
       fields -> {:error, "#{file_path}: Missing metadata fields: #{Enum.join(fields, ", ")}"}
@@ -776,7 +797,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
     # Mock performance test results
     mock_results = %{overall_score: 0.95}
     threshold = Map.get(config, :performance_threshold, 0.8)
-    
+
     if mock_results.overall_score >= threshold do
       {:ok, "Performance tests passed (#{mock_results.overall_score})"}
     else
@@ -792,7 +813,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.GitIntegration do
   defp run_test_category(:integration, _config) do
     # Mock integration test results
     mock_results = %{passed: 15, failed: 0, total: 15}
-    
+
     if mock_results.failed == 0 do
       {:ok, "Integration tests passed: #{mock_results.passed}/#{mock_results.total}"}
     else

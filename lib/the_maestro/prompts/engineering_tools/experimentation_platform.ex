@@ -41,7 +41,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
             description: String.t(),
             hypothesis: String.t() | nil,
             experiment_name: String.t(),
-            experiment_type: :ab_test | :multivariate | :factorial | :sequential | :multi_armed_bandit,
+            experiment_type:
+              :ab_test | :multivariate | :factorial | :sequential | :multi_armed_bandit,
             baseline_prompt: String.t(),
             variant_prompts: list(),
             variants: list(),
@@ -197,31 +198,38 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
     Analyzes experiment results for statistical significance.
     """
     @spec analyze_experiment_results(PromptExperiment.t(), list(map())) :: map()
-    def analyze_experiment_results(%PromptExperiment{} = experiment, results_data) when is_list(results_data) do
+    def analyze_experiment_results(%PromptExperiment{} = experiment, results_data)
+        when is_list(results_data) do
       # Calculate descriptive statistics for each variant
       descriptive_stats = calculate_descriptive_statistics(results_data)
-      
+
       # Perform hypothesis testing
       hypothesis_testing = perform_hypothesis_testing(results_data, experiment)
-      
+
       # Calculate confidence intervals
       confidence_intervals = calculate_confidence_intervals(results_data)
-      
+
       # Analyze effect sizes
       effect_size_analysis = analyze_effect_sizes(results_data)
-      
+
       # Assess statistical significance
       statistical_significance = assess_statistical_significance(hypothesis_testing)
-      
+
       # Evaluate practical significance
       practical_significance = evaluate_practical_significance(effect_size_analysis, experiment)
-      
+
       # Perform power analysis
       power_analysis = perform_power_analysis(results_data, effect_size_analysis)
-      
+
       # Generate recommendations
-      recommendation = generate_recommendation(statistical_significance, practical_significance, effect_size_analysis, power_analysis)
-      
+      recommendation =
+        generate_recommendation(
+          statistical_significance,
+          practical_significance,
+          effect_size_analysis,
+          power_analysis
+        )
+
       %{
         descriptive_statistics: descriptive_stats,
         hypothesis_testing: hypothesis_testing,
@@ -233,41 +241,48 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
         recommendation: recommendation
       }
     end
-    
+
     # Handle map format for backward compatibility
-    def analyze_experiment_results(%PromptExperiment{} = experiment, results_data) when is_map(results_data) do
+    def analyze_experiment_results(%PromptExperiment{} = experiment, results_data)
+        when is_map(results_data) do
       # Convert map format to list format
       results_list = Map.values(results_data)
       analyze_experiment_results(experiment, results_list)
     end
-    
+
     # Private helper functions for statistical analysis
-    
+
     defp calculate_descriptive_statistics(results_data) do
       # Group results by variant_id and aggregate
       results_data
       |> Enum.group_by(fn result -> result[:variant_id] || result["variant_id"] end)
       |> Enum.reduce(%{}, fn {variant_id, variant_results}, acc ->
-        total_sample_size = Enum.reduce(variant_results, 0, fn result, sum ->
-          sum + (result[:sample_size] || result["sample_size"] || 0)
-        end)
-        
+        total_sample_size =
+          Enum.reduce(variant_results, 0, fn result, sum ->
+            sum + (result[:sample_size] || result["sample_size"] || 0)
+          end)
+
         # Calculate weighted mean across all results for this variant
-        weighted_conversion_sum = Enum.reduce(variant_results, 0, fn result, sum ->
-          sample_size = result[:sample_size] || result["sample_size"] || 0
-          conversion_rate = result[:conversion_rate] || result["conversion_rate"] || 0.0
-          sum + (conversion_rate * sample_size)
-        end)
-        
-        weighted_quality_sum = Enum.reduce(variant_results, 0, fn result, sum ->
-          sample_size = result[:sample_size] || result["sample_size"] || 0
-          quality_score = result[:quality_score] || result["quality_score"] || 0.0
-          sum + (quality_score * sample_size)
-        end)
-        
-        mean_conversion = if total_sample_size > 0, do: weighted_conversion_sum / total_sample_size, else: 0.0
-        mean_quality = if total_sample_size > 0, do: weighted_quality_sum / total_sample_size, else: 0.0
-        
+        weighted_conversion_sum =
+          Enum.reduce(variant_results, 0, fn result, sum ->
+            sample_size = result[:sample_size] || result["sample_size"] || 0
+            conversion_rate = result[:conversion_rate] || result["conversion_rate"] || 0.0
+            sum + conversion_rate * sample_size
+          end)
+
+        weighted_quality_sum =
+          Enum.reduce(variant_results, 0, fn result, sum ->
+            sample_size = result[:sample_size] || result["sample_size"] || 0
+            quality_score = result[:quality_score] || result["quality_score"] || 0.0
+            sum + quality_score * sample_size
+          end)
+
+        mean_conversion =
+          if total_sample_size > 0, do: weighted_conversion_sum / total_sample_size, else: 0.0
+
+        mean_quality =
+          if total_sample_size > 0, do: weighted_quality_sum / total_sample_size, else: 0.0
+
         metrics = %{
           conversion_rate: %{
             mean: mean_conversion,
@@ -278,30 +293,43 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
             sample_size: total_sample_size
           }
         }
-        
+
         Map.put(acc, variant_id, metrics)
       end)
     end
-    
+
     defp perform_hypothesis_testing(results_data, _experiment) do
       # Perform two-sample t-test for comparing variants
-      control_data = Enum.find(results_data, fn r -> (r[:variant_id] || r["variant_id"]) |> String.contains?("control") end)
-      treatment_data = Enum.find(results_data, fn r -> (r[:variant_id] || r["variant_id"]) |> String.contains?("treatment") end)
-      
+      control_data =
+        Enum.find(results_data, fn r ->
+          (r[:variant_id] || r["variant_id"]) |> String.contains?("control")
+        end)
+
+      treatment_data =
+        Enum.find(results_data, fn r ->
+          (r[:variant_id] || r["variant_id"]) |> String.contains?("treatment")
+        end)
+
       if control_data && treatment_data do
-        control_conversion = control_data[:conversion_rate] || control_data["conversion_rate"] || 0.0
-        treatment_conversion = treatment_data[:conversion_rate] || treatment_data["conversion_rate"] || 0.0
-        control_quality = control_data[:quality_score] || control_data["quality_score"] || 0.0  
-        treatment_quality = treatment_data[:quality_score] || treatment_data["quality_score"] || 0.0
-        
+        control_conversion =
+          control_data[:conversion_rate] || control_data["conversion_rate"] || 0.0
+
+        treatment_conversion =
+          treatment_data[:conversion_rate] || treatment_data["conversion_rate"] || 0.0
+
+        control_quality = control_data[:quality_score] || control_data["quality_score"] || 0.0
+
+        treatment_quality =
+          treatment_data[:quality_score] || treatment_data["quality_score"] || 0.0
+
         # Calculate t-statistics and p-values
         conversion_rate_diff = treatment_conversion - control_conversion
         quality_score_diff = treatment_quality - control_quality
-        
+
         # Simplified p-value calculation (in real implementation, would use proper statistical test)
         p_value_conversion = if abs(conversion_rate_diff) > 0.02, do: 0.01, else: 0.15
         p_value_quality = if abs(quality_score_diff) > 0.05, do: 0.02, else: 0.20
-        
+
         %{
           test_type: :two_sample_t_test,
           p_values: %{
@@ -309,10 +337,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
             quality_score: p_value_quality
           },
           test_statistics: %{
-            conversion_rate: conversion_rate_diff / 0.01, # Simplified t-statistic
+            # Simplified t-statistic
+            conversion_rate: conversion_rate_diff / 0.01,
             quality_score: quality_score_diff / 0.02
           },
-          degrees_of_freedom: 1998 # Simplified: n1 + n2 - 2
+          # Simplified: n1 + n2 - 2
+          degrees_of_freedom: 1998
         }
       else
         %{
@@ -323,21 +353,34 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
         }
       end
     end
-    
+
     defp calculate_confidence_intervals(results_data) do
-      control_data = Enum.find(results_data, fn r -> (r[:variant_id] || r["variant_id"]) |> String.contains?("control") end)
-      treatment_data = Enum.find(results_data, fn r -> (r[:variant_id] || r["variant_id"]) |> String.contains?("treatment") end)
-      
+      control_data =
+        Enum.find(results_data, fn r ->
+          (r[:variant_id] || r["variant_id"]) |> String.contains?("control")
+        end)
+
+      treatment_data =
+        Enum.find(results_data, fn r ->
+          (r[:variant_id] || r["variant_id"]) |> String.contains?("treatment")
+        end)
+
       if control_data && treatment_data do
-        control_conversion = control_data[:conversion_rate] || control_data["conversion_rate"] || 0.0
-        treatment_conversion = treatment_data[:conversion_rate] || treatment_data["conversion_rate"] || 0.0
+        control_conversion =
+          control_data[:conversion_rate] || control_data["conversion_rate"] || 0.0
+
+        treatment_conversion =
+          treatment_data[:conversion_rate] || treatment_data["conversion_rate"] || 0.0
+
         control_quality = control_data[:quality_score] || control_data["quality_score"] || 0.0
-        treatment_quality = treatment_data[:quality_score] || treatment_data["quality_score"] || 0.0
-        
+
+        treatment_quality =
+          treatment_data[:quality_score] || treatment_data["quality_score"] || 0.0
+
         # Simplified confidence interval calculation (margin of error ~1.96 * std_error)
         margin_conversion = 0.01
         margin_quality = 0.02
-        
+
         %{
           conversion_rate: %{
             control: %{
@@ -346,11 +389,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
             },
             treatment: %{
               lower: treatment_conversion - margin_conversion,
-              upper: treatment_conversion + margin_conversion  
+              upper: treatment_conversion + margin_conversion
             },
             difference: %{
-              lower: (treatment_conversion - control_conversion) - margin_conversion * 2,
-              upper: (treatment_conversion - control_conversion) + margin_conversion * 2
+              lower: treatment_conversion - control_conversion - margin_conversion * 2,
+              upper: treatment_conversion - control_conversion + margin_conversion * 2
             }
           },
           quality_score: %{
@@ -363,8 +406,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
               upper: treatment_quality + margin_quality
             },
             difference: %{
-              lower: (treatment_quality - control_quality) - margin_quality * 2,
-              upper: (treatment_quality - control_quality) + margin_quality * 2
+              lower: treatment_quality - control_quality - margin_quality * 2,
+              upper: treatment_quality - control_quality + margin_quality * 2
             }
           }
         }
@@ -377,34 +420,55 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
           },
           quality_score: %{
             control: %{lower: 0.7, upper: 0.9},
-            treatment: %{lower: 0.7, upper: 0.9}, 
+            treatment: %{lower: 0.7, upper: 0.9},
             difference: %{lower: -0.1, upper: 0.1}
           }
         }
       end
     end
-    
+
     defp analyze_effect_sizes(results_data) do
-      control_data = Enum.find(results_data, fn r -> (r[:variant_id] || r["variant_id"]) |> String.contains?("control") end)
-      treatment_data = Enum.find(results_data, fn r -> (r[:variant_id] || r["variant_id"]) |> String.contains?("treatment") end)
-      
+      control_data =
+        Enum.find(results_data, fn r ->
+          (r[:variant_id] || r["variant_id"]) |> String.contains?("control")
+        end)
+
+      treatment_data =
+        Enum.find(results_data, fn r ->
+          (r[:variant_id] || r["variant_id"]) |> String.contains?("treatment")
+        end)
+
       if control_data && treatment_data do
-        control_conversion = control_data[:conversion_rate] || control_data["conversion_rate"] || 0.0
-        treatment_conversion = treatment_data[:conversion_rate] || treatment_data["conversion_rate"] || 0.0
+        control_conversion =
+          control_data[:conversion_rate] || control_data["conversion_rate"] || 0.0
+
+        treatment_conversion =
+          treatment_data[:conversion_rate] || treatment_data["conversion_rate"] || 0.0
+
         control_quality = control_data[:quality_score] || control_data["quality_score"] || 0.0
-        treatment_quality = treatment_data[:quality_score] || treatment_data["quality_score"] || 0.0
-        
+
+        treatment_quality =
+          treatment_data[:quality_score] || treatment_data["quality_score"] || 0.0
+
         # Calculate Cohen's d (simplified)
-        pooled_std_conversion = 0.02 # Simplified standard deviation
+        # Simplified standard deviation
+        pooled_std_conversion = 0.02
         pooled_std_quality = 0.05
-        
+
         cohens_d_conversion = (treatment_conversion - control_conversion) / pooled_std_conversion
         cohens_d_quality = (treatment_quality - control_quality) / pooled_std_quality
-        
+
         # Calculate relative improvement
-        rel_improvement_conversion = if control_conversion > 0, do: (treatment_conversion - control_conversion) / control_conversion, else: 0.0
-        rel_improvement_quality = if control_quality > 0, do: (treatment_quality - control_quality) / control_quality, else: 0.0
-        
+        rel_improvement_conversion =
+          if control_conversion > 0,
+            do: (treatment_conversion - control_conversion) / control_conversion,
+            else: 0.0
+
+        rel_improvement_quality =
+          if control_quality > 0,
+            do: (treatment_quality - control_quality) / control_quality,
+            else: 0.0
+
         %{
           cohens_d: %{
             conversion_rate: cohens_d_conversion,
@@ -419,18 +483,20 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
             quality_score: treatment_quality - control_quality
           },
           effect_magnitude: %{
-            conversion_rate: cond do
-              abs(cohens_d_conversion) >= 0.8 -> :large
-              abs(cohens_d_conversion) >= 0.5 -> :medium
-              abs(cohens_d_conversion) >= 0.2 -> :small
-              true -> :negligible
-            end,
-            quality_score: cond do
-              abs(cohens_d_quality) >= 0.8 -> :large
-              abs(cohens_d_quality) >= 0.5 -> :medium
-              abs(cohens_d_quality) >= 0.2 -> :small
-              true -> :negligible
-            end
+            conversion_rate:
+              cond do
+                abs(cohens_d_conversion) >= 0.8 -> :large
+                abs(cohens_d_conversion) >= 0.5 -> :medium
+                abs(cohens_d_conversion) >= 0.2 -> :small
+                true -> :negligible
+              end,
+            quality_score:
+              cond do
+                abs(cohens_d_quality) >= 0.8 -> :large
+                abs(cohens_d_quality) >= 0.5 -> :medium
+                abs(cohens_d_quality) >= 0.2 -> :small
+                true -> :negligible
+              end
           }
         }
       else
@@ -442,15 +508,16 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
         }
       end
     end
-    
+
     defp assess_statistical_significance(hypothesis_testing) do
       p_values = hypothesis_testing.p_values
       alpha = 0.05
-      
-      significant_metrics = []
-      |> maybe_add_metric(:conversion_rate, p_values.conversion_rate < alpha)
-      |> maybe_add_metric(:quality_score, p_values.quality_score < alpha)
-      
+
+      significant_metrics =
+        []
+        |> maybe_add_metric(:conversion_rate, p_values.conversion_rate < alpha)
+        |> maybe_add_metric(:quality_score, p_values.quality_score < alpha)
+
       %{
         is_significant: length(significant_metrics) > 0,
         significant_metrics: significant_metrics,
@@ -458,16 +525,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
         alpha: alpha
       }
     end
-    
+
     defp maybe_add_metric(list, metric, true), do: [metric | list]
     defp maybe_add_metric(list, _metric, false), do: list
-    
+
     defp evaluate_practical_significance(effect_size_analysis, _experiment) do
       conversion_magnitude = effect_size_analysis.effect_magnitude.conversion_rate
       quality_magnitude = effect_size_analysis.effect_magnitude.quality_score
-      
-      practically_significant = conversion_magnitude in [:medium, :large] or quality_magnitude in [:medium, :large]
-      
+
+      practically_significant =
+        conversion_magnitude in [:medium, :large] or quality_magnitude in [:medium, :large]
+
       %{
         is_practically_significant: practically_significant,
         minimum_detectable_effect: 0.02,
@@ -492,38 +560,43 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
             expected_improvement: effect_size_analysis.absolute_difference.quality_score
           }
         },
-        cost_benefit_ratio: calculate_cost_benefit_ratio(effect_size_analysis, practically_significant)
+        cost_benefit_ratio:
+          calculate_cost_benefit_ratio(effect_size_analysis, practically_significant)
       }
     end
-    
+
     defp perform_power_analysis(results_data, effect_size_analysis) do
       # Simplified power analysis
-      total_sample_size = Enum.reduce(results_data, 0, fn r, acc -> 
-        acc + (r[:sample_size] || r["sample_size"] || 0) 
-      end)
-      
-      effect_size = max(
-        abs(effect_size_analysis.cohens_d.conversion_rate),
-        abs(effect_size_analysis.cohens_d.quality_score)
-      )
-      
+      total_sample_size =
+        Enum.reduce(results_data, 0, fn r, acc ->
+          acc + (r[:sample_size] || r["sample_size"] || 0)
+        end)
+
+      effect_size =
+        max(
+          abs(effect_size_analysis.cohens_d.conversion_rate),
+          abs(effect_size_analysis.cohens_d.quality_score)
+        )
+
       # Simplified power calculation
-      observed_power = cond do
-        effect_size >= 0.8 and total_sample_size >= 1000 -> 0.90
-        effect_size >= 0.5 and total_sample_size >= 500 -> 0.80
-        effect_size >= 0.2 and total_sample_size >= 200 -> 0.65
-        true -> 0.50
-      end
-      
+      observed_power =
+        cond do
+          effect_size >= 0.8 and total_sample_size >= 1000 -> 0.90
+          effect_size >= 0.5 and total_sample_size >= 500 -> 0.80
+          effect_size >= 0.2 and total_sample_size >= 200 -> 0.65
+          true -> 0.50
+        end
+
       sample_size_adequacy = if observed_power >= 0.8, do: :adequate, else: :insufficient
-      
-      recommended_sample_size = cond do
-        effect_size >= 0.8 -> 200
-        effect_size >= 0.5 -> 500 
-        effect_size >= 0.2 -> 1000
-        true -> 2000
-      end
-      
+
+      recommended_sample_size =
+        cond do
+          effect_size >= 0.8 -> 200
+          effect_size >= 0.5 -> 500
+          effect_size >= 0.2 -> 1000
+          true -> 2000
+        end
+
       %{
         observed_power: observed_power,
         sample_size_adequacy: sample_size_adequacy,
@@ -532,39 +605,60 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
         effect_size_used: effect_size
       }
     end
-    
-    defp generate_recommendation(statistical_significance, practical_significance, _effect_size_analysis, power_analysis) do
+
+    defp generate_recommendation(
+           statistical_significance,
+           practical_significance,
+           _effect_size_analysis,
+           power_analysis
+         ) do
       is_statistically_significant = statistical_significance.is_significant
       is_practically_significant = practical_significance.is_practically_significant
       adequate_power = power_analysis.sample_size_adequacy == :adequate
-      
-      {decision, confidence_level, rationale, next_steps} = cond do
-        is_statistically_significant and is_practically_significant and adequate_power ->
-          {:implement_treatment, :high, 
-           "Strong statistical and practical significance with adequate power",
-           ["Implement treatment variant", "Monitor performance in production", "Plan gradual rollout"]}
-           
-        is_statistically_significant and is_practically_significant and not adequate_power ->
-          {:collect_more_data, :medium,
-           "Significant results but insufficient statistical power",
-           ["Increase sample size", "Continue experiment", "Validate with larger dataset"]}
-           
-        is_statistically_significant and not is_practically_significant ->
-          {:no_implementation, :medium,
-           "Statistically significant but not practically meaningful",
-           ["Consider cost-benefit analysis", "Look for larger effect opportunities", "Archive results"]}
-           
-        not is_statistically_significant and adequate_power ->
-          {:no_implementation, :high,
-           "No statistical significance with adequate power to detect effects",
-           ["Conclude no meaningful difference", "Try alternative approaches", "Archive experiment"]}
-           
-        true ->
-          {:collect_more_data, :low,
-           "Inconclusive results - insufficient data or power",
-           ["Increase sample size significantly", "Extend experiment duration", "Consider experimental redesign"]}
-      end
-      
+
+      {decision, confidence_level, rationale, next_steps} =
+        cond do
+          is_statistically_significant and is_practically_significant and adequate_power ->
+            {:implement_treatment, :high,
+             "Strong statistical and practical significance with adequate power",
+             [
+               "Implement treatment variant",
+               "Monitor performance in production",
+               "Plan gradual rollout"
+             ]}
+
+          is_statistically_significant and is_practically_significant and not adequate_power ->
+            {:collect_more_data, :medium,
+             "Significant results but insufficient statistical power",
+             ["Increase sample size", "Continue experiment", "Validate with larger dataset"]}
+
+          is_statistically_significant and not is_practically_significant ->
+            {:no_implementation, :medium,
+             "Statistically significant but not practically meaningful",
+             [
+               "Consider cost-benefit analysis",
+               "Look for larger effect opportunities",
+               "Archive results"
+             ]}
+
+          not is_statistically_significant and adequate_power ->
+            {:no_implementation, :high,
+             "No statistical significance with adequate power to detect effects",
+             [
+               "Conclude no meaningful difference",
+               "Try alternative approaches",
+               "Archive experiment"
+             ]}
+
+          true ->
+            {:collect_more_data, :low, "Inconclusive results - insufficient data or power",
+             [
+               "Increase sample size significantly",
+               "Extend experiment duration",
+               "Consider experimental redesign"
+             ]}
+        end
+
       %{
         decision: decision,
         confidence_level: confidence_level,
@@ -575,15 +669,18 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
     defp calculate_revenue_impact(effect_size_analysis) do
       conversion_improvement = effect_size_analysis.absolute_difference.conversion_rate
+
       %{
         estimated_lift: conversion_improvement * 100,
         confidence_level: :medium,
-        potential_revenue: conversion_improvement * 10000 # Simplified calculation
+        # Simplified calculation
+        potential_revenue: conversion_improvement * 10_000
       }
     end
 
     defp calculate_user_impact(effect_size_analysis) do
       quality_improvement = effect_size_analysis.absolute_difference.quality_score
+
       %{
         user_satisfaction_lift: quality_improvement * 100,
         engagement_impact: :positive,
@@ -601,8 +698,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
     defp calculate_cost_benefit_ratio(effect_size_analysis, practically_significant) do
       benefit = effect_size_analysis.absolute_difference.conversion_rate * 1000
-      cost = if(practically_significant, do: 100, else: 500) # Implementation cost estimate
-      
+      # Implementation cost estimate
+      cost = if(practically_significant, do: 100, else: 500)
+
       %{
         ratio: benefit / max(cost, 1),
         benefit_score: benefit,
@@ -712,7 +810,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
     # Process variants with traffic allocation
     processed_variants = process_variants_with_allocation(validated_config)
-    
+
     %PromptExperiment{
       experiment_id: experiment_id,
       name: Map.get(validated_config, :name, "Untitled Experiment"),
@@ -720,7 +818,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
       hypothesis: Map.get(validated_config, :hypothesis, nil),
       experiment_name: Map.get(validated_config, :name, "Untitled Experiment"),
       experiment_type: determine_experiment_type(validated_config),
-      baseline_prompt: Map.get(validated_config, :base_prompt) || Map.get(validated_config, :baseline),
+      baseline_prompt:
+        Map.get(validated_config, :base_prompt) || Map.get(validated_config, :baseline),
       variant_prompts: processed_variants,
       variants: processed_variants,
       experiment_configuration: %{
@@ -897,7 +996,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
   # Private helper functions
 
-  defp generate_experiment_id, do: "exp_" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
+  defp generate_experiment_id,
+    do: "exp_" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 
   defp validate_experiment_configuration(config) do
     # Make most fields optional for flexibility
@@ -911,14 +1011,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
     # Validate that variations/variants exist (either one is fine)
     variations = Map.get(config, :variations, []) ++ Map.get(config, :variants, [])
+
     if length(variations) == 0 and not Map.has_key?(config, :experiment_type) do
       # Allow empty variations if experiment_type is explicitly set
-      raise ArgumentError, "Invalid experiment configuration: Must provide either variations or variants"
+      raise ArgumentError,
+            "Invalid experiment configuration: Must provide either variations or variants"
     end
 
     # Validate that success_metrics is a list if provided
     success_metrics = Map.get(config, :success_metrics, [])
-    if Map.has_key?(config, :success_metrics) and (not is_list(success_metrics)) do
+
+    if Map.has_key?(config, :success_metrics) and not is_list(success_metrics) do
       raise ArgumentError, "success_metrics must be a list if provided"
     end
 
@@ -932,11 +1035,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
     else
       # Check for multivariate pattern (parameter_combinations in variations)
       variations = Map.get(config, :variations, [])
+
       if has_parameter_combinations?(variations) do
         :multivariate
       else
         variant_count = length(Map.get(config, :variants, variations))
-        
+
         cond do
           variant_count == 1 -> :ab_test
           variant_count > 1 and variant_count <= 4 -> :multivariate
@@ -949,19 +1053,22 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
   defp calculate_statistical_power(config, _statistical_params) do
     sample_size = Map.get(config, :sample_size, 1000)
-    variant_count = length(Map.get(config, :variants, [])) + 1 # +1 for control
-    
+    # +1 for control
+    variant_count = length(Map.get(config, :variants, [])) + 1
+
     required_sample_size_per_variant = div(sample_size, max(variant_count, 1))
-    total_required_samples = required_sample_size_per_variant * max(variant_count, 2) # Ensure total > per_variant
-    estimated_duration_days = div(total_required_samples, 100) # Assuming 100 samples per day
-    
+    # Ensure total > per_variant
+    total_required_samples = required_sample_size_per_variant * max(variant_count, 2)
+    # Assuming 100 samples per day
+    estimated_duration_days = div(total_required_samples, 100)
+
     %{
       required_sample_size_per_variant: required_sample_size_per_variant,
       total_required_samples: total_required_samples,
       estimated_duration_days: max(estimated_duration_days, 1)
     }
   end
-  
+
   defp calculate_statistical_parameters(config) do
     sample_size = Map.get(config, :sample_size, 1000)
     confidence_level = Map.get(config, :confidence_level, 0.95)
@@ -1080,7 +1187,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
       data_lineage_tracking: true
     }
   end
-  
+
   defp setup_tracking_config(_config) do
     %{
       metrics_collection: %{
@@ -1090,13 +1197,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
       },
       data_retention: %{
         experiment_data: "1_year",
-        user_interactions: "6_months", 
+        user_interactions: "6_months",
         performance_metrics: "90_days",
         anonymized_analytics: "indefinite"
       },
       events_to_track: [
         "experiment_started",
-        "variant_selected", 
+        "variant_selected",
         "user_interaction",
         "response_generated",
         "metrics_recorded"
@@ -1131,20 +1238,22 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
     tests = []
 
     # T-test for continuous metrics
-    tests = if has_continuous_metrics?(experiment.success_metrics) do
-      t_test_result = perform_t_test(baseline_data, List.first(variant_data || [[]]))
-      [t_test_result | tests]
-    else
-      tests
-    end
+    tests =
+      if has_continuous_metrics?(experiment.success_metrics) do
+        t_test_result = perform_t_test(baseline_data, List.first(variant_data || [[]]))
+        [t_test_result | tests]
+      else
+        tests
+      end
 
     # Chi-square test for categorical metrics
-    tests = if has_categorical_metrics?(experiment.success_metrics) do
-      chi_square_result = perform_chi_square_test(all_groups)
-      [chi_square_result | tests]
-    else
-      tests
-    end
+    tests =
+      if has_categorical_metrics?(experiment.success_metrics) do
+        chi_square_result = perform_chi_square_test(all_groups)
+        [chi_square_result | tests]
+      else
+        tests
+      end
 
     tests
   end
@@ -1295,11 +1404,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
   defp perform_segment_analysis(experiment_data, experiment_config) do
     # Real segment analysis using database data
     alias TheMaestro.Prompts.EngineeringTools.ExperimentSchemas
-    
+
     experiment_id = experiment_config[:id] || experiment_config["id"]
-    
+
     case ExperimentSchemas.load_user_segments(experiment_id) do
-      {:ok, [_|_] = segments} ->
+      {:ok, [_ | _] = segments} ->
         # Convert database segments to analysis format
         Enum.map(segments, fn segment ->
           %{
@@ -1311,7 +1420,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
             recommendations: generate_segment_recommendations(segment)
           }
         end)
-        
+
       {:ok, []} ->
         # No segments found, create basic analysis from experiment data
         [
@@ -1324,7 +1433,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
             recommendations: ["Apply results to all users"]
           }
         ]
-        
+
       {:error, _reason} ->
         # Fallback to basic analysis
         [
@@ -1489,7 +1598,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
   defp load_experiment(experiment_id) do
     # Load experiment from real database
     alias TheMaestro.Prompts.EngineeringTools.ExperimentSchemas
-    
+
     ExperimentSchemas.load_experiment_with_relations(experiment_id)
   end
 
@@ -2116,7 +2225,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
   @doc """
   Executes a single iteration of an experiment with a given user context.
-  
+
   This function:
   - Selects a variant based on traffic allocation
   - Anonymizes user context for privacy
@@ -2127,19 +2236,19 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
   def execute_experiment_iteration(experiment, user_context) do
     # Anonymize user context for privacy
     anonymized_context = anonymize_user_context(user_context)
-    
+
     # Select variant based on traffic allocation and session consistency
     selected_variant = select_variant_for_user(experiment, user_context)
-    
+
     # Initialize performance tracking
     performance_tracking = initialize_performance_tracking()
-    
+
     # Session anonymization for privacy
     _session_id = user_context[:session_id] || "anonymous"
-    
+
     # Construct prompt used (baseline + variant changes)
     prompt_used = construct_prompt_from_variant(experiment.baseline_prompt, selected_variant)
-    
+
     # Create execution record
     %ExperimentExecution{
       execution_id: generate_execution_id(),
@@ -2162,21 +2271,21 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
   @doc """
   Tracks experiment execution data for analysis.
-  
+
   This function stores execution data for later analysis and reporting.
   """
   @spec track_experiment_execution(ExperimentExecution.t()) :: :ok | {:error, term()}
   def track_experiment_execution(execution) do
     # Store experiment execution to database with real persistence
-    
+
     # Validate execution data
     if valid_execution_data?(execution) do
       # Store execution metrics to database
       store_execution_metrics(execution)
-      
+
       # Update experiment progress tracking in database
       update_experiment_progress(execution.experiment_id, execution)
-      
+
       :ok
     else
       {:error, :invalid_execution_data}
@@ -2187,7 +2296,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
   defp anonymize_user_context(user_context) do
     %{
-      user_id: nil,  # Remove PII
+      # Remove PII
+      user_id: nil,
       session_id: hash_session_id(user_context[:session_id]),
       request_id: user_context[:request_id],
       timestamp: DateTime.utc_now(),
@@ -2202,19 +2312,19 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
   defp select_variant_for_user(experiment, user_context) do
     session_id = user_context[:session_id] || "anonymous"
-    
+
     # Use session_id to ensure consistent variant selection
     session_hash = :erlang.phash2(session_id)
-    
+
     # Get variants from either field, handle both formats
     variants = experiment.variants || experiment.variant_prompts || []
-    
+
     # Handle case where variants might be nil or empty
     case variants do
       variants_list when is_list(variants_list) and length(variants_list) > 0 ->
         variant_index = rem(session_hash, length(variants_list))
         selected = Enum.at(variants_list, variant_index)
-        
+
         # Normalize the variant format
         %{
           variant_id: selected[:variant_id] || generate_variant_id_for_index(variant_index),
@@ -2222,11 +2332,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
           configuration: selected[:changes] || selected[:configuration] || %{},
           traffic_allocation: 1.0 / length(variants_list)
         }
+
       _ ->
         # Create a default variant if none exist
         %{
           variant_id: "default",
-          name: "Default Variant", 
+          name: "Default Variant",
           configuration: %{},
           traffic_allocation: 1.0
         }
@@ -2262,65 +2373,80 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
   end
 
   defp hash_session_id(nil), do: nil
+
   defp hash_session_id(session_id) when is_binary(session_id) do
     :crypto.hash(:sha256, session_id) |> Base.encode16(case: :lower)
   end
 
   defp valid_execution_data?(execution) do
     execution.experiment_id != nil and
-    execution.execution_id != nil and
-    execution.user_context != nil
+      execution.execution_id != nil and
+      execution.user_context != nil
   end
 
   defp store_execution_metrics(execution) do
     # Store execution metrics to real database
     alias TheMaestro.Prompts.EngineeringTools.ExperimentSchemas
-    
+
     case ExperimentSchemas.store_execution_metrics(execution) do
-      {:ok, _stored_execution} -> :ok
-      {:error, changeset} -> 
+      {:ok, _stored_execution} ->
+        :ok
+
+      {:error, changeset} ->
         require Logger
         Logger.error("Failed to store execution metrics: #{inspect(changeset.errors)}")
-        :ok  # Don't fail the experiment for storage issues
+        # Don't fail the experiment for storage issues
+        :ok
     end
   end
 
   defp update_experiment_progress(experiment_id, execution) do
     # Update experiment progress tracking in real database
     alias TheMaestro.Prompts.EngineeringTools.ExperimentSchemas
-    
+
     case ExperimentSchemas.update_experiment_progress(experiment_id, execution) do
-      {:ok, _progress} -> :ok
+      {:ok, _progress} ->
+        :ok
+
       {:error, changeset} ->
         require Logger
         Logger.error("Failed to update experiment progress: #{inspect(changeset.errors)}")
-        :ok  # Don't fail the experiment for tracking issues
+        # Don't fail the experiment for tracking issues
+        :ok
     end
   end
 
   defp generate_segment_recommendations(segment) do
     success_rate = segment.statistical_analysis[:success_rate] || 0.0
-    
+
     cond do
       success_rate > 0.8 ->
-        ["High-performing segment - prioritize for feature rollout",
-         "Consider expanding similar segments",
-         "Use as benchmark for other segments"]
-         
+        [
+          "High-performing segment - prioritize for feature rollout",
+          "Consider expanding similar segments",
+          "Use as benchmark for other segments"
+        ]
+
       success_rate > 0.6 ->
-        ["Good performance - monitor closely during rollout",
-         "Consider A/B testing additional improvements",
-         "Document success factors for replication"]
-         
+        [
+          "Good performance - monitor closely during rollout",
+          "Consider A/B testing additional improvements",
+          "Document success factors for replication"
+        ]
+
       success_rate > 0.4 ->
-        ["Mixed results - investigate underlying factors",
-         "Consider targeted improvements for this segment",
-         "May benefit from different variant approach"]
-         
+        [
+          "Mixed results - investigate underlying factors",
+          "Consider targeted improvements for this segment",
+          "May benefit from different variant approach"
+        ]
+
       true ->
-        ["Underperforming segment - requires investigation",
-         "Consider alternative approaches or exclusion",
-         "Analyze user feedback and behavior patterns"]
+        [
+          "Underperforming segment - requires investigation",
+          "Consider alternative approaches or exclusion",
+          "Analyze user feedback and behavior patterns"
+        ]
     end
   end
 
@@ -2332,6 +2458,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
         Enum.reduce(config, baseline_prompt, fn {key, value}, prompt ->
           String.replace(prompt, "{{#{key}}}", to_string(value))
         end)
+
       _ ->
         # If no configuration, return baseline
         baseline_prompt || ""
@@ -2342,17 +2469,18 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
     # Get variants from config
     variations = Map.get(config, :variations, [])
     variants = Map.get(config, :variants, [])
-    
+
     # Check if we have parameter combinations (multivariate)
     parameter_combinations = extract_parameter_combinations(variations)
-    
+
     cond do
       not Enum.empty?(parameter_combinations) ->
         # Process multivariate experiments with parameter combinations
         allocation_per_variant = 1.0 / max(length(parameter_combinations), 1)
-        
+
         Enum.with_index(parameter_combinations, fn combination, index ->
           variant_id = "variant_#{index + 1}"
+
           %{
             variant_id: variant_id,
             name: "Variant #{index + 1}",
@@ -2362,21 +2490,27 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
             traffic_allocation: allocation_per_variant
           }
         end)
-        
+
       not Enum.empty?(variations) ->
         # Process regular variations
         allocation_per_variant = 1.0 / max(length(variations), 1)
-        
+
         Enum.with_index(variations, fn variant, index ->
           variant_id = "variant_#{index + 1}"
+
           case variant do
             variant_map when is_map(variant_map) ->
               variant_map
               |> Map.put(:variant_id, variant_id)
-              |> Map.put(:prompt, construct_variant_prompt(config[:base_prompt], variant_map[:changes] || %{}))
+              |> Map.put(
+                :prompt,
+                construct_variant_prompt(config[:base_prompt], variant_map[:changes] || %{})
+              )
               |> Map.put(:traffic_allocation, allocation_per_variant)
+
             variant_string when is_binary(variant_string) ->
               changes = %{param: variant_string}
+
               %{
                 variant_id: variant_id,
                 name: "Variant #{index + 1}",
@@ -2384,8 +2518,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
                 changes: changes,
                 traffic_allocation: allocation_per_variant
               }
+
             _ ->
               changes = %{param: "#{variant}"}
+
               %{
                 variant_id: variant_id,
                 name: "Variant #{index + 1}",
@@ -2395,21 +2531,27 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
               }
           end
         end)
-        
+
       not Enum.empty?(variants) ->
         # Process regular variants
         allocation_per_variant = 1.0 / max(length(variants), 1)
-        
+
         Enum.with_index(variants, fn variant, index ->
           variant_id = "variant_#{index + 1}"
+
           case variant do
             variant_map when is_map(variant_map) ->
               variant_map
               |> Map.put(:variant_id, variant_id)
-              |> Map.put(:prompt, construct_variant_prompt(config[:base_prompt], variant_map[:changes] || %{}))
+              |> Map.put(
+                :prompt,
+                construct_variant_prompt(config[:base_prompt], variant_map[:changes] || %{})
+              )
               |> Map.put(:traffic_allocation, allocation_per_variant)
+
             variant_string when is_binary(variant_string) ->
               changes = %{param: variant_string}
+
               %{
                 variant_id: variant_id,
                 name: "Variant #{index + 1}",
@@ -2417,8 +2559,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
                 changes: changes,
                 traffic_allocation: allocation_per_variant
               }
+
             _ ->
               changes = %{param: "#{variant}"}
+
               %{
                 variant_id: variant_id,
                 name: "Variant #{index + 1}",
@@ -2428,10 +2572,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
               }
           end
         end)
-        
+
       true ->
         # Handle multivariate experiment creation if no variants but type is multivariate
         experiment_type = Map.get(config, :experiment_type)
+
         if experiment_type == :multivariate do
           create_multivariate_variants(config)
         else
@@ -2442,14 +2587,15 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
   defp create_multivariate_variants(config) do
     # Create 12 variants for multivariate test as expected by the test
-    factors = Map.get(config, :factors, [
-      %{factor: "tone", levels: ["formal", "casual", "friendly"]},
-      %{factor: "length", levels: ["short", "medium", "long", "detailed"]}
-    ])
-    
+    factors =
+      Map.get(config, :factors, [
+        %{factor: "tone", levels: ["formal", "casual", "friendly"]},
+        %{factor: "length", levels: ["short", "medium", "long", "detailed"]}
+      ])
+
     # Generate all combinations
     combinations = generate_factor_combinations(factors)
-    
+
     Enum.with_index(combinations, fn combination, index ->
       %{
         name: "Variant #{index + 1}",
@@ -2461,12 +2607,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
 
   defp generate_factor_combinations(factors) do
     case factors do
-      [] -> [%{}]
+      [] ->
+        [%{}]
+
       [factor | rest] ->
         rest_combinations = generate_factor_combinations(rest)
         levels = factor[:levels] || factor["levels"] || []
         factor_name = factor[:factor] || factor["factor"] || "param"
-        
+
         for level <- levels, combination <- rest_combinations do
           Map.put(combination, String.to_atom(factor_name), level)
         end
@@ -2487,9 +2635,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
   defp extract_parameter_combinations(variations) when is_list(variations) do
     Enum.flat_map(variations, fn variation ->
       case variation do
-        %{parameter_combinations: combinations} when is_list(combinations) -> 
+        %{parameter_combinations: combinations} when is_list(combinations) ->
           combinations
-        _ -> 
+
+        _ ->
           []
       end
     end)
@@ -2504,11 +2653,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
         Enum.reduce(changes, prompt, fn {key, value}, acc ->
           String.replace(acc, "{{#{key}}}", to_string(value))
         end)
+
       _ ->
         # If no base prompt, create a simple prompt with the changes
-        change_descriptions = Enum.map_join(changes, ", ", fn {key, value} ->
-          "#{key}: #{value}"
-        end)
+        change_descriptions =
+          Enum.map_join(changes, ", ", fn {key, value} ->
+            "#{key}: #{value}"
+          end)
+
         "Prompt with #{change_descriptions}"
     end
   end

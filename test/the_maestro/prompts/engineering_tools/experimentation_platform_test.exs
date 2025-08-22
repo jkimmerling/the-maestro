@@ -363,7 +363,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatformTest do
           %{name: "conversion_rate", weight: 0.6, target: 0.1},
           %{name: "quality_score", weight: 0.4, target: 0.8}
         ],
-        experiment_configuration: %{confidence_level: 0.95, sample_size: 1000, power: 0.8, minimum_detectable_effect: 0.05, allocation_strategy: :random}
+        experiment_configuration: %{
+          confidence_level: 0.95,
+          sample_size: 1000,
+          power: 0.8,
+          minimum_detectable_effect: 0.05,
+          allocation_strategy: :random
+        }
       }
 
       results_data = [

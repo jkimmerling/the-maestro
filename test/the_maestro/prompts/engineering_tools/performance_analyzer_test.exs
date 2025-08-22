@@ -2,6 +2,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
   use ExUnit.Case, async: true
 
   alias TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzer
+
   alias TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzer.{
     PerformanceAnalysis,
     PerformanceMetrics,
@@ -12,7 +13,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
     setup do
       prompt = "You are a {{role | default: assistant}}. Help with {{task | required}}."
       execution_context = %{provider: :openai, model: "gpt-4", environment: :production}
-      
+
       historical_data = [
         %{
           timestamp: DateTime.utc_now() |> DateTime.add(-7, :day),
@@ -36,11 +37,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
         }
       ]
 
-      {:ok, prompt: prompt, execution_context: execution_context, historical_data: historical_data}
+      {:ok,
+       prompt: prompt, execution_context: execution_context, historical_data: historical_data}
     end
 
-    test "returns a valid PerformanceAnalysis struct", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "returns a valid PerformanceAnalysis struct", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       assert %PerformanceAnalysis{} = analysis
       assert is_binary(analysis.prompt_id)
@@ -59,8 +66,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       assert is_map(analysis.cost_analysis)
     end
 
-    test "analyzes response quality metrics", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "analyzes response quality metrics", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       quality_metrics = analysis.response_quality_metrics
 
@@ -75,8 +87,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       assert quality_metrics.consistency_score <= 1
     end
 
-    test "analyzes response time metrics", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "analyzes response time metrics", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       response_time_metrics = analysis.response_time_metrics
 
@@ -93,8 +110,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       assert response_time_metrics.std_dev >= 0
     end
 
-    test "analyzes latency patterns", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "analyzes latency patterns", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       latency_analysis = analysis.latency_analysis
 
@@ -111,8 +133,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       assert is_map(latency_analysis.latency_trends)
     end
 
-    test "analyzes token efficiency", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "analyzes token efficiency", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       token_efficiency = analysis.token_efficiency
 
@@ -127,8 +154,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       assert is_list(token_efficiency.token_waste_indicators)
     end
 
-    test "analyzes resource utilization", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "analyzes resource utilization", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       resource_utilization = analysis.resource_utilization
 
@@ -143,8 +175,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       assert is_number(resource_utilization.cache_hit_rate)
     end
 
-    test "identifies performance bottlenecks", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "identifies performance bottlenecks", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       bottleneck_analysis = analysis.bottleneck_analysis
 
@@ -157,8 +194,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       assert is_list(bottleneck_analysis.resolution_priorities)
     end
 
-    test "generates optimization recommendations", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "generates optimization recommendations", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       recommendations = analysis.optimization_recommendations
 
@@ -169,7 +211,19 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       Enum.each(recommendations, fn recommendation ->
         assert %OptimizationSuggestion{} = recommendation
         assert is_binary(recommendation.suggestion_id)
-        assert recommendation.optimization_type in [:token_efficiency, :response_time, :resource_usage, :caching, :architectural, :context_chunking, :batching, :token_optimization, :token_reduction]
+
+        assert recommendation.optimization_type in [
+                 :token_efficiency,
+                 :response_time,
+                 :resource_usage,
+                 :caching,
+                 :architectural,
+                 :context_chunking,
+                 :batching,
+                 :token_optimization,
+                 :token_reduction
+               ]
+
         assert is_binary(recommendation.description)
         assert recommendation.predicted_impact in [:low, :medium, :high]
         assert recommendation.implementation_difficulty in [:easy, :moderate, :difficult, :hard]
@@ -180,16 +234,26 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       end)
     end
 
-    test "calculates performance score", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "calculates performance score", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       assert is_number(analysis.performance_score)
       assert analysis.performance_score >= 0.0
       assert analysis.performance_score <= 1.0
     end
 
-    test "provides historical comparison when data available", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+    test "provides historical comparison when data available", %{
+      prompt: prompt,
+      execution_context: execution_context,
+      historical_data: historical_data
+    } do
+      analysis =
+        PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       historical_comparison = analysis.historical_comparison
 
@@ -233,11 +297,28 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
         analysis_timestamp: DateTime.utc_now(),
         response_time_metrics: %{mean: 1000, median: 950, p95: 1500, p99: 2000, std_dev: 200},
         response_quality_metrics: %{average_quality_score: 0.85, consistency_score: 0.9},
-        latency_analysis: %{average_response_time: 1000, median_response_time: 950, p95_response_time: 1500},
+        latency_analysis: %{
+          average_response_time: 1000,
+          median_response_time: 950,
+          p95_response_time: 1500
+        },
         success_rate_analysis: %{overall_success_rate: 0.9, success_rate_by_provider: %{}},
-        token_efficiency: %{input_tokens: 50, output_tokens: 150, efficiency_ratio: 0.75, token_waste_indicators: []},
-        resource_utilization: %{cpu_usage: 0.5, memory_usage: 0.3, network_io: 100, cache_hit_rate: 0.8},
-        bottleneck_analysis: %{identified_bottlenecks: ["slow_response"], severity_scores: %{"slow_response" => 0.8}},
+        token_efficiency: %{
+          input_tokens: 50,
+          output_tokens: 150,
+          efficiency_ratio: 0.75,
+          token_waste_indicators: []
+        },
+        resource_utilization: %{
+          cpu_usage: 0.5,
+          memory_usage: 0.3,
+          network_io: 100,
+          cache_hit_rate: 0.8
+        },
+        bottleneck_analysis: %{
+          identified_bottlenecks: ["slow_response"],
+          severity_scores: %{"slow_response" => 0.8}
+        },
         optimization_recommendations: [],
         performance_score: 0.75,
         historical_comparison: %{comparison_available: false},
@@ -258,7 +339,19 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       Enum.each(suggestions, fn suggestion ->
         assert %OptimizationSuggestion{} = suggestion
         assert is_binary(suggestion.suggestion_id)
-        assert suggestion.optimization_type in [:token_efficiency, :response_time, :resource_usage, :caching, :architectural, :context_chunking, :batching, :token_optimization, :token_reduction]
+
+        assert suggestion.optimization_type in [
+                 :token_efficiency,
+                 :response_time,
+                 :resource_usage,
+                 :caching,
+                 :architectural,
+                 :context_chunking,
+                 :batching,
+                 :token_optimization,
+                 :token_reduction
+               ]
+
         assert is_binary(suggestion.description)
         assert suggestion.predicted_impact in [:low, :medium, :high]
         assert suggestion.implementation_difficulty in [:easy, :moderate, :difficult, :hard]

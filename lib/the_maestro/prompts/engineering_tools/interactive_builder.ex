@@ -193,7 +193,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
         %{type: :if, condition: String.trim(condition), content: String.trim(content)}
       end)
 
-    # Extract unless statements  
+    # Extract unless statements
     unless_statements =
       Regex.scan(~r/\{\{#unless\s+([^}]+)\}\}(.*?)\{\{\/unless\}\}/s, prompt)
       |> Enum.map(fn [_full, condition, content] ->
@@ -427,10 +427,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
   defp check_structure(prompt) do
     has_headers = String.contains?(prompt, ["##", "**", "###"])
     has_lists = String.contains?(prompt, ["-", "*", "1.", "2."])
-    
+
     # Check for unstructured prompts - either too short and vague, or too long without structure
-    is_unstructured = (not has_headers and not has_lists) and 
-                     (String.length(prompt) > 50 or contains_vague_terms?(prompt))
+    is_unstructured =
+      not has_headers and not has_lists and
+        (String.length(prompt) > 50 or contains_vague_terms?(prompt))
 
     if is_unstructured do
       [
@@ -445,7 +446,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
       []
     end
   end
-  
+
   defp contains_vague_terms?(prompt) do
     vague_terms = ["something", "things", "stuff", "do", "make", "good", "bad"]
     Enum.any?(vague_terms, fn term -> String.contains?(String.downcase(prompt), term) end)
@@ -502,24 +503,36 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
         count >= 2 && String.length(word) > 3 &&
           not Enum.member?(["the", "and", "that", "this", "with", "from"], word)
       end)
-      |> Enum.map(fn {word, _count} -> 
+      |> Enum.map(fn {word, _count} ->
         # Find the original case version
         Enum.find(words, fn w -> String.downcase(w) == word end) || word
       end)
       |> Enum.take(3)
-      
+
     repeated_concepts
   end
 
   defp check_performance(prompt) do
     # Check for excessive verbosity (lots of adverbs, redundant adjectives)
-    verbose_indicators = ["extremely", "very", "quite", "exceptionally", "meticulously", 
-                         "comprehensively", "thoroughly", "extensively", "exhaustive", 
-                         "complete", "detailed"]
-    verbose_count = Enum.count(verbose_indicators, fn indicator -> 
-      String.contains?(String.downcase(prompt), indicator) 
-    end)
-    
+    verbose_indicators = [
+      "extremely",
+      "very",
+      "quite",
+      "exceptionally",
+      "meticulously",
+      "comprehensively",
+      "thoroughly",
+      "extensively",
+      "exhaustive",
+      "complete",
+      "detailed"
+    ]
+
+    verbose_count =
+      Enum.count(verbose_indicators, fn indicator ->
+        String.contains?(String.downcase(prompt), indicator)
+      end)
+
     length_suggestions =
       if String.length(prompt) > 3000 or verbose_count >= 3 do
         [
@@ -588,8 +601,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
     # Check for unclosed template tags - look for {{ not followed by }}
     open_brackets = length(Regex.scan(~r/\{\{/, prompt))
     close_brackets = length(Regex.scan(~r/\}\}/, prompt))
-    
-    unclosed_errors = 
+
+    unclosed_errors =
       if open_brackets > close_brackets do
         [%{type: :template_syntax_error, message: "Unclosed template tags detected"}]
       else
@@ -598,7 +611,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
 
     # Check for nested template tags (not supported in basic implementation)
     nested = Regex.scan(~r/\{\{[^}]*\{\{/, prompt)
-    nested_errors = 
+
+    nested_errors =
       if length(nested) > 0 do
         [%{type: :template_syntax_error, message: "Nested template tags detected"}]
       else
@@ -608,7 +622,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
     # Check for malformed conditionals
     if_count = length(Regex.scan(~r/\{\{#if\s+[^}]+\}\}/, prompt))
     endif_count = length(Regex.scan(~r/\{\{\/if\}\}/, prompt))
-    conditional_errors = 
+
+    conditional_errors =
       if if_count != endif_count do
         [%{type: :template_syntax_error, message: "Mismatched if/endif tags"}]
       else
@@ -726,11 +741,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
     # Update collaboration state to reflect changes
     current_collab = session.collaboration_state || %{}
     participants = Map.get(current_collab, :participants, [])
-    
-    updated_collab = Map.merge(current_collab, %{
-      requires_sync: length(participants) > 1,
-      last_edit_by: "current_user"
-    })
+
+    updated_collab =
+      Map.merge(current_collab, %{
+        requires_sync: length(participants) > 1,
+        last_edit_by: "current_user"
+      })
 
     %{session | collaboration_state: updated_collab}
   end

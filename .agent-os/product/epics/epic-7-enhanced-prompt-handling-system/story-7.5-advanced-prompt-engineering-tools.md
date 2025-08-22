@@ -534,7 +534,6 @@
     ```
 
 16. **Integration with Development Workflows**: IDE and development tool integration:
-    - VS Code extension for prompt development
     - Git hooks for prompt version control
     - CI/CD integration for prompt testing
     - Slack/Teams integration for collaboration

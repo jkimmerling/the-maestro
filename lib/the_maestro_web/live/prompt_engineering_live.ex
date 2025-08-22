@@ -1,13 +1,13 @@
 defmodule TheMaestroWeb.PromptEngineeringLive do
   @moduledoc """
   LiveView for Prompt Engineering Tools interface.
-  
+
   Provides a web-based interface for managing prompts, templates, experiments,
   and all other prompt engineering functionality.
   """
-  
+
   use TheMaestroWeb, :live_view
-  
+
   # Mock modules - would be implemented in full system
   # alias TheMaestro.Prompts.EngineeringTools.{...}
 
@@ -46,6 +46,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
 
   def handle_event("create_prompt", %{"prompt" => prompt_params}, socket) do
     {:ok, prompt} = create_prompt(prompt_params)
+
     {:noreply,
      socket
      |> assign(:success_message, "Prompt '#{prompt.name}' created successfully")
@@ -56,6 +57,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
   def handle_event("delete_prompt", %{"id" => prompt_id}, socket) do
     {:ok, _} = delete_prompt(prompt_id)
     updated_prompts = Enum.reject(socket.assigns.prompts, &(&1.id == prompt_id))
+
     {:noreply,
      socket
      |> assign(:success_message, "Prompt deleted successfully")
@@ -66,6 +68,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
   def handle_event("run_experiment", %{"id" => experiment_id}, socket) do
     socket = assign(socket, :loading, true)
     {:ok, results} = run_experiment(experiment_id)
+
     {:noreply,
      socket
      |> assign(:loading, false)
@@ -76,6 +79,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
   def handle_event("generate_report", _params, socket) do
     socket = assign(socket, :loading, true)
     {:ok, report_path} = generate_documentation_report()
+
     {:noreply,
      socket
      |> assign(:loading, false)
@@ -103,31 +107,31 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
           </.button>
         </:actions>
       </.header>
-
-      <!-- Status Messages -->
+      
+    <!-- Status Messages -->
       <div :if={@error_message} class="alert alert-error mb-4">
         <div class="flex items-center justify-between">
-          <span>❌ <%= @error_message %></span>
+          <span>❌ {@error_message}</span>
           <button phx-click="clear_message" class="text-red-800 hover:text-red-900">×</button>
         </div>
       </div>
-      
+
       <div :if={@success_message} class="alert alert-success mb-4">
         <div class="flex items-center justify-between">
-          <span>✅ <%= @success_message %></span>
+          <span>✅ {@success_message}</span>
           <button phx-click="clear_message" class="text-green-800 hover:text-green-900">×</button>
         </div>
       </div>
-
-      <!-- Loading Indicator -->
+      
+    <!-- Loading Indicator -->
       <div :if={@loading} class="loading-indicator mb-4">
         <div class="flex items-center space-x-2">
           <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
           <span>Processing...</span>
         </div>
       </div>
-
-      <!-- Navigation Tabs -->
+      
+    <!-- Navigation Tabs -->
       <div class="tabs mb-6">
         <.tab_button active={@active_tab == "dashboard"} tab="dashboard">
           📊 Dashboard
@@ -148,29 +152,29 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
           📈 Analytics
         </.tab_button>
       </div>
-
-      <!-- Tab Content -->
+      
+    <!-- Tab Content -->
       <div class="tab-content">
         <div :if={@active_tab == "dashboard"}>
           <.dashboard_view assigns={assigns} />
         </div>
-        
+
         <div :if={@active_tab == "prompts"}>
           <.prompts_view assigns={assigns} />
         </div>
-        
+
         <div :if={@active_tab == "templates"}>
           <.templates_view assigns={assigns} />
         </div>
-        
+
         <div :if={@active_tab == "experiments"}>
           <.experiments_view assigns={assigns} />
         </div>
-        
+
         <div :if={@active_tab == "workspaces"}>
           <.workspaces_view assigns={assigns} />
         </div>
-        
+
         <div :if={@active_tab == "analytics"}>
           <.analytics_view assigns={assigns} />
         </div>
@@ -183,7 +187,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
   attr :active, :boolean, required: true
   attr :tab, :string, required: true
   slot :inner_block, required: true
-  
+
   defp tab_button(assigns) do
     ~H"""
     <button
@@ -191,10 +195,10 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
       phx-value-tab={@tab}
       class={[
         "tab-button px-4 py-2 mr-2 rounded-lg transition-colors",
-        @active && "bg-blue-600 text-white" || "bg-gray-200 hover:bg-gray-300"
+        (@active && "bg-blue-600 text-white") || "bg-gray-200 hover:bg-gray-300"
       ]}
     >
-      <%= render_slot(@inner_block) %>
+      {render_slot(@inner_block)}
     </button>
     """
   end
@@ -214,7 +218,11 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
     <div class="recent-activity mt-8">
       <h3 class="text-xl font-semibold mb-4">Recent Activity</h3>
       <div class="activity-list space-y-2">
-        <.activity_item icon="📝" text="Created prompt 'Code Review Assistant'" time="2 minutes ago" />
+        <.activity_item
+          icon="📝"
+          text="Created prompt 'Code Review Assistant'"
+          time="2 minutes ago"
+        />
         <.activity_item icon="🧪" text="Experiment 'A/B Test v2.1' completed" time="15 minutes ago" />
         <.activity_item icon="📋" text="Updated template 'Bug Analysis'" time="1 hour ago" />
         <.activity_item icon="🏗️" text="Workspace 'ML Project' synchronized" time="2 hours ago" />
@@ -255,20 +263,19 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
       <div class="prompts-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div :for={prompt <- @prompts} class="prompt-card bg-white rounded-lg shadow-md p-6">
           <div class="flex justify-between items-start mb-3">
-            <h3 class="font-semibold text-lg"><%= prompt.name %></h3>
-            <span class="text-sm text-gray-500"><%= prompt.category %></span>
+            <h3 class="font-semibold text-lg">{prompt.name}</h3>
+            <span class="text-sm text-gray-500">{prompt.category}</span>
           </div>
-          
-          <p class="text-gray-600 mb-4 line-clamp-3"><%= prompt.description || "No description" %></p>
-          
+
+          <p class="text-gray-600 mb-4 line-clamp-3">{prompt.description || "No description"}</p>
+
           <div class="flex justify-between items-center">
             <span class="text-xs text-gray-500">
-              Updated <%= format_date(prompt.updated_at) %>
+              Updated {format_date(prompt.updated_at)}
             </span>
             <div class="flex space-x-2">
               <.button class="bg-blue-600 hover:bg-blue-700">Edit</.button>
-              <.button 
-                 
+              <.button
                 class="bg-red-600 hover:bg-red-700"
                 phx-click="delete_prompt"
                 phx-value-id={prompt.id}
@@ -284,7 +291,9 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
       <div :if={Enum.empty?(@prompts)} class="empty-state text-center py-12">
         <div class="text-6xl mb-4">📝</div>
         <h3 class="text-xl font-semibold mb-2">No Prompts Yet</h3>
-        <p class="text-gray-600 mb-4">Create your first prompt to get started with prompt engineering.</p>
+        <p class="text-gray-600 mb-4">
+          Create your first prompt to get started with prompt engineering.
+        </p>
         <.button class="bg-green-600 hover:bg-green-700">
           📝 Create Your First Prompt
         </.button>
@@ -313,7 +322,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
           <p class="text-gray-600 mb-4">Template for conducting thorough code reviews</p>
           <div class="flex justify-between items-center">
             <span class="text-sm text-gray-500">Software Engineering</span>
-            <.button  class="bg-purple-600 hover:bg-purple-700">Use Template</.button>
+            <.button class="bg-purple-600 hover:bg-purple-700">Use Template</.button>
           </div>
         </div>
 
@@ -325,7 +334,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
           <p class="text-gray-600 mb-4">Systematic approach to analyzing and fixing bugs</p>
           <div class="flex justify-between items-center">
             <span class="text-sm text-gray-500">Software Engineering</span>
-            <.button  class="bg-purple-600 hover:bg-purple-700">Use Template</.button>
+            <.button class="bg-purple-600 hover:bg-purple-700">Use Template</.button>
           </div>
         </div>
 
@@ -337,7 +346,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
           <p class="text-gray-600 mb-4">Template for summarizing data analysis results</p>
           <div class="flex justify-between items-center">
             <span class="text-sm text-gray-500">Data Science</span>
-            <.button  class="bg-purple-600 hover:bg-purple-700">Use Template</.button>
+            <.button class="bg-purple-600 hover:bg-purple-700">Use Template</.button>
           </div>
         </div>
       </div>
@@ -357,35 +366,38 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
       </div>
 
       <div class="experiments-list space-y-4">
-        <div :for={experiment <- @experiments} class="experiment-card bg-white rounded-lg shadow-md p-6">
+        <div
+          :for={experiment <- @experiments}
+          class="experiment-card bg-white rounded-lg shadow-md p-6"
+        >
           <div class="flex justify-between items-start">
             <div>
-              <h3 class="font-semibold text-lg mb-2"><%= experiment.name %></h3>
-              <p class="text-gray-600 mb-3"><%= experiment.description %></p>
+              <h3 class="font-semibold text-lg mb-2">{experiment.name}</h3>
+              <p class="text-gray-600 mb-3">{experiment.description}</p>
               <div class="flex items-center space-x-4">
-                <span class="text-sm">Status: 
+                <span class="text-sm">
+                  Status:
                   <span class={[
                     "px-2 py-1 rounded text-xs font-medium",
-                    experiment.status == "running" && "bg-blue-100 text-blue-800" || 
-                    experiment.status == "completed" && "bg-green-100 text-green-800" ||
-                    "bg-gray-100 text-gray-800"
+                    (experiment.status == "running" && "bg-blue-100 text-blue-800") ||
+                      (experiment.status == "completed" && "bg-green-100 text-green-800") ||
+                      "bg-gray-100 text-gray-800"
                   ]}>
-                    <%= experiment.status %>
+                    {experiment.status}
                   </span>
                 </span>
-                <span class="text-sm text-gray-500">Variants: <%= experiment.variants %></span>
+                <span class="text-sm text-gray-500">Variants: {experiment.variants}</span>
               </div>
             </div>
             <div class="flex space-x-2">
-              <.button 
-                 
+              <.button
                 class="bg-orange-600 hover:bg-orange-700"
                 phx-click="run_experiment"
                 phx-value-id={experiment.id}
               >
                 🧪 Run
               </.button>
-              <.button  class="bg-blue-600 hover:bg-blue-700">📊 Results</.button>
+              <.button class="bg-blue-600 hover:bg-blue-700">📊 Results</.button>
             </div>
           </div>
         </div>
@@ -394,7 +406,9 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
       <div :if={Enum.empty?(@experiments)} class="empty-state text-center py-12">
         <div class="text-6xl mb-4">🧪</div>
         <h3 class="text-xl font-semibold mb-2">No Experiments</h3>
-        <p class="text-gray-600 mb-4">Start experimenting with different prompt variations to optimize performance.</p>
+        <p class="text-gray-600 mb-4">
+          Start experimenting with different prompt variations to optimize performance.
+        </p>
         <.button class="bg-orange-600 hover:bg-orange-700">
           🧪 Create First Experiment
         </.button>
@@ -423,7 +437,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
           <p class="text-gray-600 mb-4">Main development workspace for prompt engineering</p>
           <div class="flex justify-between items-center">
             <span class="text-sm text-gray-500">5 prompts • 3 experiments</span>
-            <.button  class="bg-indigo-600 hover:bg-indigo-700">Open</.button>
+            <.button class="bg-indigo-600 hover:bg-indigo-700">Open</.button>
           </div>
         </div>
 
@@ -435,7 +449,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
           <p class="text-gray-600 mb-4">Machine learning focused prompt development</p>
           <div class="flex justify-between items-center">
             <span class="text-sm text-gray-500">8 prompts • 2 experiments</span>
-            <.button  class="bg-indigo-600 hover:bg-indigo-700">Open</.button>
+            <.button class="bg-indigo-600 hover:bg-indigo-700">Open</.button>
           </div>
         </div>
       </div>
@@ -514,10 +528,10 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
     <div class="stats-card bg-white rounded-lg shadow-md p-6">
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm text-gray-600 mb-1"><%= @title %></p>
-          <p class="text-2xl font-bold"><%= @value %></p>
+          <p class="text-sm text-gray-600 mb-1">{@title}</p>
+          <p class="text-2xl font-bold">{@value}</p>
         </div>
-        <div class="text-3xl"><%= @icon %></div>
+        <div class="text-3xl">{@icon}</div>
       </div>
     </div>
     """
@@ -526,11 +540,11 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
   defp activity_item(assigns) do
     ~H"""
     <div class="activity-item flex items-center space-x-3 p-3 bg-white rounded-lg shadow-sm">
-      <span class="text-2xl"><%= @icon %></span>
+      <span class="text-2xl">{@icon}</span>
       <div class="flex-1">
-        <p class="text-sm"><%= @text %></p>
+        <p class="text-sm">{@text}</p>
       </div>
-      <span class="text-xs text-gray-500"><%= @time %></span>
+      <span class="text-xs text-gray-500">{@time}</span>
     </div>
     """
   end
@@ -552,13 +566,14 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
 
   defp create_prompt(_params) do
     # Mock implementation
-    {:ok, %{
-      id: "prompt_#{System.unique_integer()}",
-      name: "New Prompt",
-      description: "A newly created prompt",
-      category: "general",
-      updated_at: DateTime.utc_now()
-    }}
+    {:ok,
+     %{
+       id: "prompt_#{System.unique_integer()}",
+       name: "New Prompt",
+       description: "A newly created prompt",
+       category: "general",
+       updated_at: DateTime.utc_now()
+     }}
   end
 
   defp delete_prompt(_id) do
@@ -594,7 +609,7 @@ defmodule TheMaestroWeb.PromptEngineeringLive do
         updated_at: DateTime.utc_now()
       },
       %{
-        id: "prompt_2", 
+        id: "prompt_2",
         name: "Bug Analysis Helper",
         description: "Systematic bug analysis and resolution",
         category: "software_engineering",

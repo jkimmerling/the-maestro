@@ -3,7 +3,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
   Ecto schemas for experiment data persistence.
   Provides real database integration for ExperimentationPlatform.
   """
-  
+
   use Ecto.Schema
   import Ecto.Changeset
   import Ecto.Query, warn: false
@@ -11,6 +11,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
 
   # Main experiment schema
   defmodule Experiment do
+    @moduledoc """
+    Schema for experiment definitions and configurations.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -30,27 +33,53 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
       field :created_by, :string
       field :metadata, :map
 
-      has_many :executions, TheMaestro.Prompts.EngineeringTools.ExperimentSchemas.ExperimentExecution, foreign_key: :experiment_id
-      has_many :metrics, TheMaestro.Prompts.EngineeringTools.ExperimentSchemas.ExperimentMetric, foreign_key: :experiment_id
-      has_many :segments, TheMaestro.Prompts.EngineeringTools.ExperimentSchemas.UserSegment, foreign_key: :experiment_id
-      has_one :progress, TheMaestro.Prompts.EngineeringTools.ExperimentSchemas.ExperimentProgress, foreign_key: :experiment_id
+      has_many :executions,
+               TheMaestro.Prompts.EngineeringTools.ExperimentSchemas.ExperimentExecution,
+               foreign_key: :experiment_id
+
+      has_many :metrics, TheMaestro.Prompts.EngineeringTools.ExperimentSchemas.ExperimentMetric,
+        foreign_key: :experiment_id
+
+      has_many :segments, TheMaestro.Prompts.EngineeringTools.ExperimentSchemas.UserSegment,
+        foreign_key: :experiment_id
+
+      has_one :progress, TheMaestro.Prompts.EngineeringTools.ExperimentSchemas.ExperimentProgress,
+        foreign_key: :experiment_id
 
       timestamps()
     end
 
     def changeset(experiment, attrs) do
       experiment
-      |> cast(attrs, [:name, :description, :status, :experiment_type, :configuration,
-                      :variants, :baseline_configuration, :start_date, :end_date, 
-                      :created_by, :metadata])
+      |> cast(attrs, [
+        :name,
+        :description,
+        :status,
+        :experiment_type,
+        :configuration,
+        :variants,
+        :baseline_configuration,
+        :start_date,
+        :end_date,
+        :created_by,
+        :metadata
+      ])
       |> validate_required([:name, :experiment_type])
       |> validate_inclusion(:status, ["draft", "running", "paused", "completed", "terminated"])
-      |> validate_inclusion(:experiment_type, ["a_b_test", "multivariate", "performance", "quality"])
+      |> validate_inclusion(:experiment_type, [
+        "a_b_test",
+        "multivariate",
+        "performance",
+        "quality"
+      ])
     end
   end
 
   # Experiment execution schema
   defmodule ExperimentExecution do
+    @moduledoc """
+    Schema for experiment execution records and results.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -76,9 +105,19 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
 
     def changeset(execution, attrs) do
       execution
-      |> cast(attrs, [:experiment_id, :variant_name, :prompt_content, :input_data,
-                      :output_data, :execution_time_ms, :success, :error_message,
-                      :user_context, :metrics, :executed_at])
+      |> cast(attrs, [
+        :experiment_id,
+        :variant_name,
+        :prompt_content,
+        :input_data,
+        :output_data,
+        :execution_time_ms,
+        :success,
+        :error_message,
+        :user_context,
+        :metrics,
+        :executed_at
+      ])
       |> validate_required([:experiment_id, :variant_name, :executed_at])
       |> foreign_key_constraint(:experiment_id)
     end
@@ -86,6 +125,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
 
   # Experiment metrics schema
   defmodule ExperimentMetric do
+    @moduledoc """
+    Schema for experiment metrics and measurements.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -108,9 +150,16 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
 
     def changeset(metric, attrs) do
       metric
-      |> cast(attrs, [:experiment_id, :variant_name, :metric_type, :metric_value,
-                      :sample_size, :confidence_interval, :statistical_significance,
-                      :calculated_at])
+      |> cast(attrs, [
+        :experiment_id,
+        :variant_name,
+        :metric_type,
+        :metric_value,
+        :sample_size,
+        :confidence_interval,
+        :statistical_significance,
+        :calculated_at
+      ])
       |> validate_required([:experiment_id, :metric_type, :metric_value, :calculated_at])
       |> foreign_key_constraint(:experiment_id)
     end
@@ -118,6 +167,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
 
   # User segment schema
   defmodule UserSegment do
+    @moduledoc """
+    Schema for user segmentation in experiments.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -138,8 +190,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
 
     def changeset(segment, attrs) do
       segment
-      |> cast(attrs, [:experiment_id, :segment_name, :segment_criteria,
-                      :segment_size, :performance_metrics, :statistical_analysis])
+      |> cast(attrs, [
+        :experiment_id,
+        :segment_name,
+        :segment_criteria,
+        :segment_size,
+        :performance_metrics,
+        :statistical_analysis
+      ])
       |> validate_required([:experiment_id, :segment_name])
       |> foreign_key_constraint(:experiment_id)
     end
@@ -147,6 +205,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
 
   # Experiment progress schema
   defmodule ExperimentProgress do
+    @moduledoc """
+    Schema for tracking experiment progress and status.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -168,11 +229,20 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
 
     def changeset(progress, attrs) do
       progress
-      |> cast(attrs, [:experiment_id, :total_executions, :successful_executions,
-                      :failed_executions, :last_execution_at, :completion_percentage,
-                      :estimated_completion])
+      |> cast(attrs, [
+        :experiment_id,
+        :total_executions,
+        :successful_executions,
+        :failed_executions,
+        :last_execution_at,
+        :completion_percentage,
+        :estimated_completion
+      ])
       |> validate_required([:experiment_id])
-      |> validate_number(:completion_percentage, greater_than_or_equal_to: 0.0, less_than_or_equal_to: 100.0)
+      |> validate_number(:completion_percentage,
+        greater_than_or_equal_to: 0.0,
+        less_than_or_equal_to: 100.0
+      )
       |> foreign_key_constraint(:experiment_id)
     end
   end
@@ -203,12 +273,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
   """
   def load_experiment_with_relations(experiment_id) do
     case Repo.get(Experiment, experiment_id) do
-      nil -> 
+      nil ->
         {:error, "Experiment not found"}
+
       experiment ->
-        experiment_with_relations = experiment
-        |> Repo.preload([:executions, :metrics, :segments, :progress])
-        
+        experiment_with_relations =
+          experiment
+          |> Repo.preload([:executions, :metrics, :segments, :progress])
+
         {:ok, experiment_with_relations}
     end
   end
@@ -241,25 +313,31 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
   """
   def update_experiment_progress(experiment_id, execution_data) do
     # Get or create progress record
-    progress = case Repo.get_by(ExperimentProgress, experiment_id: experiment_id) do
-      nil ->
-        %ExperimentProgress{experiment_id: experiment_id}
-      existing_progress ->
-        existing_progress
-    end
+    progress =
+      case Repo.get_by(ExperimentProgress, experiment_id: experiment_id) do
+        nil ->
+          %ExperimentProgress{experiment_id: experiment_id}
+
+        existing_progress ->
+          existing_progress
+      end
 
     # Calculate updated metrics
     total_executions = progress.total_executions + 1
-    successful_executions = if execution_data.success do
-      progress.successful_executions + 1
-    else
-      progress.successful_executions
-    end
-    failed_executions = if execution_data.success do
-      progress.failed_executions
-    else
-      progress.failed_executions + 1
-    end
+
+    successful_executions =
+      if execution_data.success do
+        progress.successful_executions + 1
+      else
+        progress.successful_executions
+      end
+
+    failed_executions =
+      if execution_data.success do
+        progress.failed_executions
+      else
+        progress.failed_executions + 1
+      end
 
     # Update progress
     progress_attrs = %{
@@ -302,16 +380,18 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
   Loads user segments for an experiment from the database.
   """
   def load_user_segments(experiment_id) do
-    segments = from(s in UserSegment,
-      where: s.experiment_id == ^experiment_id,
-      order_by: [desc: s.segment_size]
-    )
-    |> Repo.all()
+    segments =
+      from(s in UserSegment,
+        where: s.experiment_id == ^experiment_id,
+        order_by: [desc: s.segment_size]
+      )
+      |> Repo.all()
 
     case segments do
       [] ->
         # Generate default segments if none exist
         create_default_user_segments(experiment_id)
+
       existing_segments ->
         {:ok, existing_segments}
     end
@@ -322,15 +402,16 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
   """
   def create_default_user_segments(experiment_id) do
     # Get execution data to analyze user patterns
-    executions = from(e in ExperimentExecution,
-      where: e.experiment_id == ^experiment_id,
-      select: %{variant_name: e.variant_name, user_context: e.user_context, success: e.success}
-    )
-    |> Repo.all()
+    executions =
+      from(e in ExperimentExecution,
+        where: e.experiment_id == ^experiment_id,
+        select: %{variant_name: e.variant_name, user_context: e.user_context, success: e.success}
+      )
+      |> Repo.all()
 
     if length(executions) > 0 do
       segments = generate_segments_from_executions(experiment_id, executions)
-      
+
       # Store segments in database
       Enum.each(segments, fn segment_attrs ->
         %UserSegment{}
@@ -373,53 +454,58 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
         sample_size: total_executions
       }
     }
+
     segments = [all_users_segment | segments]
 
     # Success-based segments
-    segments = if length(successful_executions) > 0 do
-      success_segment = %{
-        experiment_id: experiment_id,
-        segment_name: "successful_users",
-        segment_criteria: %{type: "success", value: true},
-        segment_size: length(successful_executions),
-        performance_metrics: calculate_segment_performance(successful_executions),
-        statistical_analysis: %{
-          success_rate: 1.0,
-          sample_size: length(successful_executions)
+    segments =
+      if length(successful_executions) > 0 do
+        success_segment = %{
+          experiment_id: experiment_id,
+          segment_name: "successful_users",
+          segment_criteria: %{type: "success", value: true},
+          segment_size: length(successful_executions),
+          performance_metrics: calculate_segment_performance(successful_executions),
+          statistical_analysis: %{
+            success_rate: 1.0,
+            sample_size: length(successful_executions)
+          }
         }
-      }
-      [success_segment | segments]
-    else
-      segments
-    end
 
-    segments = if length(failed_executions) > 0 do
-      failed_segment = %{
-        experiment_id: experiment_id,
-        segment_name: "failed_users",
-        segment_criteria: %{type: "success", value: false},
-        segment_size: length(failed_executions),
-        performance_metrics: calculate_segment_performance(failed_executions),
-        statistical_analysis: %{
-          success_rate: 0.0,
-          sample_size: length(failed_executions)
+        [success_segment | segments]
+      else
+        segments
+      end
+
+    segments =
+      if length(failed_executions) > 0 do
+        failed_segment = %{
+          experiment_id: experiment_id,
+          segment_name: "failed_users",
+          segment_criteria: %{type: "success", value: false},
+          segment_size: length(failed_executions),
+          performance_metrics: calculate_segment_performance(failed_executions),
+          statistical_analysis: %{
+            success_rate: 0.0,
+            sample_size: length(failed_executions)
+          }
         }
-      }
-      [failed_segment | segments]
-    else
-      segments
-    end
+
+        [failed_segment | segments]
+      else
+        segments
+      end
 
     segments
   end
 
   defp calculate_segment_performance(executions) do
     total_count = length(executions)
-    
+
     if total_count > 0 do
       success_count = Enum.count(executions, & &1.success)
       success_rate = success_count / total_count
-      
+
       %{
         success_rate: success_rate,
         total_executions: total_count,
@@ -441,29 +527,31 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentSchemas do
   """
   def get_experiment_statistics(experiment_id) do
     # Get basic execution counts
-    execution_stats = from(e in ExperimentExecution,
-      where: e.experiment_id == ^experiment_id,
-      group_by: [e.variant_name, e.success],
-      select: %{
-        variant_name: e.variant_name,
-        success: e.success,
-        count: count(e.id)
-      }
-    )
-    |> Repo.all()
+    execution_stats =
+      from(e in ExperimentExecution,
+        where: e.experiment_id == ^experiment_id,
+        group_by: [e.variant_name, e.success],
+        select: %{
+          variant_name: e.variant_name,
+          success: e.success,
+          count: count(e.id)
+        }
+      )
+      |> Repo.all()
 
     # Get performance metrics
-    performance_stats = from(e in ExperimentExecution,
-      where: e.experiment_id == ^experiment_id,
-      group_by: e.variant_name,
-      select: %{
-        variant_name: e.variant_name,
-        avg_execution_time: avg(e.execution_time_ms),
-        total_executions: count(e.id),
-        success_rate: fragment("SUM(CASE WHEN ? THEN 1 ELSE 0 END) * 1.0 / COUNT(*)", e.success)
-      }
-    )
-    |> Repo.all()
+    performance_stats =
+      from(e in ExperimentExecution,
+        where: e.experiment_id == ^experiment_id,
+        group_by: e.variant_name,
+        select: %{
+          variant_name: e.variant_name,
+          avg_execution_time: avg(e.execution_time_ms),
+          total_executions: count(e.id),
+          success_rate: fragment("SUM(CASE WHEN ? THEN 1 ELSE 0 END) * 1.0 / COUNT(*)", e.success)
+        }
+      )
+      |> Repo.all()
 
     %{
       execution_counts: execution_stats,

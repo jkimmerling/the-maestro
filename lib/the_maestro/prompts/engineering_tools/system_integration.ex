@@ -1,7 +1,7 @@
 defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
   @moduledoc """
   System Integration module for Epic 7 Story 7.5 - Advanced Prompt Engineering Tools.
-  
+
   This module provides comprehensive integration between all components:
   - CLI integration with main MCP system
   - Web interface integration with LiveView
@@ -24,7 +24,6 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
          {:ok, web_integration} <- setup_web_integration(environment),
          {:ok, workflow_integration} <- setup_workflow_integration(environment),
          {:ok, vscode_integration} <- setup_vscode_integration(environment) do
-      
       system_state = %{
         environment: environment,
         cli: cli_integration,
@@ -34,7 +33,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
         status: :active,
         initialized_at: DateTime.utc_now()
       }
-      
+
       {:ok, system_state}
     else
       {:error, reason} -> {:error, "System initialization failed: #{reason}"}
@@ -46,17 +45,21 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
   """
   @spec setup_environment(map()) :: {:ok, map()}
   def setup_environment(config) do
-    user_context = Map.merge(%{
-      user_id: "system",
-      skill_level: :intermediate,
-      project_context: %{
-        domain: :general,
-        type: :prompt_engineering
-      }
-    }, config)
+    user_context =
+      Map.merge(
+        %{
+          user_id: "system",
+          skill_level: :intermediate,
+          project_context: %{
+            domain: :general,
+            type: :prompt_engineering
+          }
+        },
+        config
+      )
 
     environment = EngineeringTools.initialize_engineering_environment(user_context)
-    
+
     {:ok, environment}
   end
 
@@ -154,13 +157,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
   @spec system_status_report() :: String.t()
   def system_status_report do
     health = verify_system_health()
-    
+
     """
     Epic 7 Story 7.5 - Advanced Prompt Engineering Tools
     System Integration Status Report
-    
+
     Generated: #{DateTime.utc_now() |> DateTime.to_string()}
-    
+
     🖥️  CLI Integration: #{status_emoji(health.cli_integration.status)}
     ├── Prompt Commands: #{status_emoji(health.cli_integration.prompt_commands)}
     ├── Template Commands: #{status_emoji(health.cli_integration.template_commands)}
@@ -169,25 +172,25 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
     ├── Analyze Commands: #{status_emoji(health.cli_integration.analyze_commands)}
     ├── Interactive Mode: #{status_emoji(health.cli_integration.interactive_mode)}
     └── Help System: #{status_emoji(health.cli_integration.help_system)}
-    
+
     🌐 Web Interface: #{status_emoji(health.web_interface.status)}
     ├── LiveView Module: #{status_emoji(health.web_interface.liveview_active)}
     ├── Dashboard: #{status_emoji(health.web_interface.dashboard_active)}
     ├── Real-time Features: #{status_emoji(health.web_interface.real_time_features)}
     └── Route Configuration: #{status_emoji(health.web_interface.routes_configured)}
-    
+
     ⚙️  Development Workflows: #{status_emoji(health.development_workflows.status)}
     ├── Git Integration: #{status_emoji(health.development_workflows.git_hooks)}
     ├── CI/CD Templates: #{status_emoji(health.development_workflows.ci_cd_templates)}
     └── Automation Tools: #{status_emoji(health.development_workflows.automation_tools)}
-    
+
     🔧 VS Code Extension: #{status_emoji(health.vscode_extension.status)}
     ├── Extension Files: #{status_emoji(health.vscode_extension.extension_files)}
     ├── TypeScript Compilation: #{status_emoji(health.vscode_extension.typescript_compiled)}
     ├── Language Support: #{status_emoji(health.vscode_extension.language_support)}
     ├── Command Integration: #{status_emoji(health.vscode_extension.command_integration)}
     └── Snippet Support: #{status_emoji(health.vscode_extension.snippet_support)}
-    
+
     Overall System Status: #{status_emoji(health.overall_status)}
     """
   end
@@ -205,7 +208,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
     }
 
     success_rate = calculate_test_success_rate(test_results)
-    
+
     Map.put(test_results, :summary, %{
       success_rate: success_rate,
       overall_status: if(success_rate >= 0.9, do: :pass, else: :fail),
@@ -286,6 +289,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
     # Check if interactive module has prompt engineering commands
     try do
       module_exists = Code.ensure_loaded?(TheMaestro.MCP.CLI.Commands.Interactive)
+
       if module_exists do
         :active
       else
@@ -313,7 +317,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
 
   defp verify_liveview_module do
     try do
-      Code.ensure_loaded?(TheMaestroWeb.PromptEngineeringLive) && :active || :inactive
+      (Code.ensure_loaded?(TheMaestroWeb.PromptEngineeringLive) && :active) || :inactive
     rescue
       _ -> :inactive
     end
@@ -323,6 +327,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
     # Check if route is configured in router
     try do
       router_source = File.read!("lib/the_maestro_web/router.ex")
+
       if String.contains?(router_source, "PromptEngineeringLive") do
         :active
       else
@@ -335,7 +340,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
 
   defp verify_git_integration do
     try do
-      Code.ensure_loaded?(GitIntegration) && :active || :inactive
+      (Code.ensure_loaded?(GitIntegration) && :active) || :inactive
     rescue
       _ -> :inactive
     end
@@ -356,6 +361,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
 
   defp verify_vscode_files do
     extension_path = "extensions/vscode-maestro-prompt-engineering"
+
     required_files = [
       "package.json",
       "src/extension.ts",
@@ -367,9 +373,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
       "snippets/template.json"
     ]
 
-    files_exist = Enum.all?(required_files, fn file ->
-      File.exists?(Path.join(extension_path, file))
-    end)
+    files_exist =
+      Enum.all?(required_files, fn file ->
+        File.exists?(Path.join(extension_path, file))
+      end)
 
     if files_exist, do: :active, else: :inactive
   end
@@ -377,8 +384,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
   defp verify_package_json do
     try do
       package_path = "extensions/vscode-maestro-prompt-engineering/package.json"
+
       if File.exists?(package_path) do
         content = File.read!(package_path)
+
         if String.contains?(content, "maestro-prompt-engineering") do
           :active
         else
@@ -395,6 +404,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
   defp verify_typescript_compilation do
     try do
       out_path = "extensions/vscode-maestro-prompt-engineering/out"
+
       if File.exists?(out_path) && File.dir?(out_path) do
         extension_js_exists = File.exists?(Path.join(out_path, "extension.js"))
         if extension_js_exists, do: :active, else: :inactive
@@ -457,9 +467,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
       vscode_extension: verify_vscode_health()
     }
 
-    all_active = health
-                 |> Map.values()
-                 |> Enum.all?(fn component -> component.status == :active end)
+    all_active =
+      health
+      |> Map.values()
+      |> Enum.all?(fn component -> component.status == :active end)
 
     if all_active, do: :active, else: :partial
   end
@@ -479,7 +490,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
       test_workspace_operations(),
       test_interactive_mode()
     ]
-    
+
     %{
       tests_run: length(tests),
       tests_passed: Enum.count(tests, &(&1.status == :pass)),
@@ -493,7 +504,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
       test_liveview_mounting(),
       test_real_time_features()
     ]
-    
+
     %{
       tests_run: length(tests),
       tests_passed: Enum.count(tests, &(&1.status == :pass)),
@@ -506,7 +517,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
       test_git_hook_installation(),
       test_ci_cd_template_generation()
     ]
-    
+
     %{
       tests_run: length(tests),
       tests_passed: Enum.count(tests, &(&1.status == :pass)),
@@ -521,7 +532,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
       test_language_configuration(),
       test_snippet_availability()
     ]
-    
+
     %{
       tests_run: length(tests),
       tests_passed: Enum.count(tests, &(&1.status == :pass)),
@@ -543,8 +554,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
   defp test_template_management_workflow do
     try do
       case CLI.handle_command("template list", %{}) do
-        {:ok, _} -> %{test: "template_management", status: :pass, message: "Template management works"}
-        _ -> %{test: "template_management", status: :fail, message: "Template management failed"}
+        {:ok, _} ->
+          %{test: "template_management", status: :pass, message: "Template management works"}
+
+        _ ->
+          %{test: "template_management", status: :fail, message: "Template management failed"}
       end
     rescue
       error -> %{test: "template_management", status: :error, message: "Error: #{inspect(error)}"}
@@ -554,8 +568,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
   defp test_experiment_workflow do
     try do
       case CLI.handle_command("experiment help", %{}) do
-        {:ok, _} -> %{test: "experiment_workflow", status: :pass, message: "Experiment workflow works"}
-        _ -> %{test: "experiment_workflow", status: :fail, message: "Experiment workflow failed"}
+        {:ok, _} ->
+          %{test: "experiment_workflow", status: :pass, message: "Experiment workflow works"}
+
+        _ ->
+          %{test: "experiment_workflow", status: :fail, message: "Experiment workflow failed"}
       end
     rescue
       error -> %{test: "experiment_workflow", status: :error, message: "Error: #{inspect(error)}"}
@@ -565,11 +582,15 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
   defp test_workspace_operations do
     try do
       case CLI.handle_command("workspace help", %{}) do
-        {:ok, _} -> %{test: "workspace_operations", status: :pass, message: "Workspace operations work"}
-        _ -> %{test: "workspace_operations", status: :fail, message: "Workspace operations failed"}
+        {:ok, _} ->
+          %{test: "workspace_operations", status: :pass, message: "Workspace operations work"}
+
+        _ ->
+          %{test: "workspace_operations", status: :fail, message: "Workspace operations failed"}
       end
     rescue
-      error -> %{test: "workspace_operations", status: :error, message: "Error: #{inspect(error)}"}
+      error ->
+        %{test: "workspace_operations", status: :error, message: "Error: #{inspect(error)}"}
     end
   end
 
@@ -630,7 +651,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
       if function_exported?(GitIntegration, :setup_github_actions, 1) do
         %{test: "ci_cd_templates", status: :pass, message: "CI/CD template generation available"}
       else
-        %{test: "ci_cd_templates", status: :fail, message: "CI/CD template generation not available"}
+        %{
+          test: "ci_cd_templates",
+          status: :fail,
+          message: "CI/CD template generation not available"
+        }
       end
     rescue
       error -> %{test: "ci_cd_templates", status: :error, message: "Error: #{inspect(error)}"}
@@ -644,7 +669,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
     ]
 
     all_exist = Enum.all?(required_files, &File.exists?/1)
-    
+
     if all_exist do
       %{test: "extension_files", status: :pass, message: "Extension file structure complete"}
     else
@@ -654,9 +679,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
 
   defp test_typescript_compilation do
     out_file = "extensions/vscode-maestro-prompt-engineering/out/extension.js"
-    
+
     if File.exists?(out_file) do
-      %{test: "typescript_compilation", status: :pass, message: "TypeScript compilation successful"}
+      %{
+        test: "typescript_compilation",
+        status: :pass,
+        message: "TypeScript compilation successful"
+      }
     else
       %{test: "typescript_compilation", status: :fail, message: "TypeScript compilation failed"}
     end
@@ -664,7 +693,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
 
   defp test_language_configuration do
     config_file = "extensions/vscode-maestro-prompt-engineering/language-configuration.json"
-    
+
     if File.exists?(config_file) do
       %{test: "language_config", status: :pass, message: "Language configuration available"}
     else
@@ -679,7 +708,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
     ]
 
     all_exist = Enum.all?(snippet_files, &File.exists?/1)
-    
+
     if all_exist do
       %{test: "snippets", status: :pass, message: "Code snippets available"}
     else
@@ -688,15 +717,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.SystemIntegration do
   end
 
   defp calculate_test_success_rate(test_results) do
-    total_tests = test_results.cli_tests.tests_run + 
-                  test_results.web_tests.tests_run + 
-                  test_results.workflow_tests.tests_run + 
-                  test_results.vscode_tests.tests_run
+    total_tests =
+      test_results.cli_tests.tests_run +
+        test_results.web_tests.tests_run +
+        test_results.workflow_tests.tests_run +
+        test_results.vscode_tests.tests_run
 
-    total_passed = test_results.cli_tests.tests_passed + 
-                   test_results.web_tests.tests_passed + 
-                   test_results.workflow_tests.tests_passed + 
-                   test_results.vscode_tests.tests_passed
+    total_passed =
+      test_results.cli_tests.tests_passed +
+        test_results.web_tests.tests_passed +
+        test_results.workflow_tests.tests_passed +
+        test_results.vscode_tests.tests_passed
 
     if total_tests > 0, do: total_passed / total_tests, else: 0.0
   end

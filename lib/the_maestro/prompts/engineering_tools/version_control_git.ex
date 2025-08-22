@@ -1,7 +1,7 @@
 defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   @moduledoc """
   Real Git integration for prompt engineering version control.
-  
+
   Provides actual Git operations for versioning, branching, merging,
   and history tracking of prompts and templates.
   """
@@ -25,11 +25,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
             # Set initial configuration
             setup_initial_config(path, config)
             {:ok, path}
-          
+
           {:error, reason} ->
             {:error, "Failed to initialize Git repository: #{reason}"}
         end
-      
+
       {:error, reason} ->
         {:error, "Failed to create directory: #{reason}"}
     end
@@ -38,26 +38,25 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   @doc """
   Creates a real commit with current changes.
   """
-  @spec commit(repo_path, String.t(), String.t(), map()) :: 
-    {:ok, String.t()} | {:error, String.t()}
+  @spec commit(repo_path, String.t(), String.t(), map()) ::
+          {:ok, String.t()} | {:error, String.t()}
   def commit(repo_path, message, author, options \\ %{}) do
     with :ok <- validate_repository(repo_path),
          {:ok, _} <- set_author_info(repo_path, author),
          {:ok, _} <- stage_all_changes(repo_path),
          {:ok, has_changes} <- check_staged_changes(repo_path) do
-      
       if has_changes do
         case run_git_command(repo_path, ["commit", "-m", message]) do
           {:ok, output} ->
             commit_hash = extract_commit_hash(output)
-            
+
             # Add tags if specified
             if options[:tag] do
               create_tag(repo_path, options[:tag], commit_hash)
             end
-            
+
             {:ok, commit_hash}
-          
+
           {:error, reason} ->
             {:error, "Commit failed: #{reason}"}
         end
@@ -95,13 +94,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   def create_branch(repo_path, branch_name, from_commit \\ nil) do
     with :ok <- validate_repository(repo_path),
          false <- branch_exists?(repo_path, branch_name) do
-      
-      args = if from_commit do
-        ["checkout", "-b", branch_name, from_commit]
-      else
-        ["checkout", "-b", branch_name]
-      end
-      
+      args =
+        if from_commit do
+          ["checkout", "-b", branch_name, from_commit]
+        else
+          ["checkout", "-b", branch_name]
+        end
+
       run_git_command(repo_path, args)
     else
       true -> {:error, "Branch '#{branch_name}' already exists"}
@@ -130,12 +129,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   def merge_branch(repo_path, source_branch, options \\ %{}) do
     with :ok <- validate_repository(repo_path),
          true <- branch_exists?(repo_path, source_branch) do
-      
       merge_args = ["merge"]
       merge_args = if options[:no_ff], do: merge_args ++ ["--no-ff"], else: merge_args
       merge_args = if options[:squash], do: merge_args ++ ["--squash"], else: merge_args
       merge_args = merge_args ++ [source_branch]
-      
+
       case run_git_command(repo_path, merge_args) do
         {:ok, output} ->
           # Check for merge conflicts
@@ -145,7 +143,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
           else
             {:ok, output}
           end
-        
+
         {:error, reason} ->
           {:error, "Merge failed: #{reason}"}
       end
@@ -162,13 +160,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   def create_tag(repo_path, tag_name, commit_hash \\ nil) do
     with :ok <- validate_repository(repo_path),
          false <- tag_exists?(repo_path, tag_name) do
-      
-      args = if commit_hash do
-        ["tag", tag_name, commit_hash]
-      else
-        ["tag", tag_name]
-      end
-      
+      args =
+        if commit_hash do
+          ["tag", tag_name, commit_hash]
+        else
+          ["tag", tag_name]
+        end
+
       run_git_command(repo_path, args)
     else
       true -> {:error, "Tag '#{tag_name}' already exists"}
@@ -179,20 +177,20 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   @doc """
   Shows commit history for current branch or specified branch.
   """
-  @spec show_history(repo_path, String.t() | nil, map()) :: {:ok, list(map())} | {:error, String.t()}
+  @spec show_history(repo_path, String.t() | nil, map()) ::
+          {:ok, list(map())} | {:error, String.t()}
   def show_history(repo_path, branch \\ nil, options \\ %{}) do
     with :ok <- validate_repository(repo_path) do
-      
       # Build log command arguments
       args = ["log", "--oneline", "--graph"]
       args = if options[:limit], do: args ++ ["-n", "#{options[:limit]}"], else: args
       args = if branch, do: args ++ [branch], else: args
-      
+
       case run_git_command(repo_path, args) do
         {:ok, output} ->
           commits = parse_git_log(output)
           {:ok, commits}
-        
+
         {:error, reason} ->
           {:error, "Failed to get history: #{reason}"}
       end
@@ -205,17 +203,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   @spec diff(repo_path, String.t(), String.t() | nil) :: {:ok, String.t()} | {:error, String.t()}
   def diff(repo_path, from_ref, to_ref \\ nil) do
     with :ok <- validate_repository(repo_path) do
-      
-      args = if to_ref do
-        ["diff", from_ref, to_ref]
-      else
-        ["diff", from_ref]
-      end
-      
+      args =
+        if to_ref do
+          ["diff", from_ref, to_ref]
+        else
+          ["diff", from_ref]
+        end
+
       case run_git_command(repo_path, args) do
         {:ok, output} ->
           {:ok, output}
-        
+
         {:error, reason} ->
           {:error, "Failed to generate diff: #{reason}"}
       end
@@ -229,12 +227,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   def revert_commit(repo_path, commit_hash, author) do
     with :ok <- validate_repository(repo_path),
          {:ok, _} <- set_author_info(repo_path, author) do
-      
       case run_git_command(repo_path, ["revert", "--no-edit", commit_hash]) do
         {:ok, output} ->
           revert_hash = extract_commit_hash(output)
           {:ok, revert_hash}
-        
+
         {:error, reason} ->
           {:error, "Revert failed: #{reason}"}
       end
@@ -247,18 +244,18 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   @spec status(repo_path) :: {:ok, map()} | {:error, String.t()}
   def status(repo_path) do
     with :ok <- validate_repository(repo_path) do
-      
       with {:ok, status_output} <- run_git_command(repo_path, ["status", "--porcelain"]),
            {:ok, branch_output} <- run_git_command(repo_path, ["branch", "--show-current"]) do
-        
         status_info = %{
           current_branch: String.trim(branch_output),
           modified_files: parse_status_output(status_output),
-          has_staged_changes: String.contains?(status_output, "M ") or String.contains?(status_output, "A "),
-          has_unstaged_changes: String.contains?(status_output, " M") or String.contains?(status_output, "??"),
+          has_staged_changes:
+            String.contains?(status_output, "M ") or String.contains?(status_output, "A "),
+          has_unstaged_changes:
+            String.contains?(status_output, " M") or String.contains?(status_output, "??"),
           clean: String.trim(status_output) == ""
         }
-        
+
         {:ok, status_info}
       end
     end
@@ -272,14 +269,15 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
     with :ok <- validate_repository(repo_path) do
       case run_git_command(repo_path, ["branch", "--list"]) do
         {:ok, output} ->
-          branches = output
-          |> String.split("\n")
-          |> Enum.map(&String.trim/1)
-          |> Enum.filter(&(&1 != ""))
-          |> Enum.map(&String.replace(&1, ~r/^\*\s*/, ""))
-          
+          branches =
+            output
+            |> String.split("\n")
+            |> Enum.map(&String.trim/1)
+            |> Enum.filter(&(&1 != ""))
+            |> Enum.map(&String.replace(&1, ~r/^\*\s*/, ""))
+
           {:ok, branches}
-        
+
         {:error, reason} ->
           {:error, "Failed to list branches: #{reason}"}
       end
@@ -294,13 +292,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
     with :ok <- validate_repository(repo_path) do
       case run_git_command(repo_path, ["tag", "--list"]) do
         {:ok, output} ->
-          tags = output
-          |> String.split("\n")
-          |> Enum.map(&String.trim/1)
-          |> Enum.filter(&(&1 != ""))
-          
+          tags =
+            output
+            |> String.split("\n")
+            |> Enum.map(&String.trim/1)
+            |> Enum.filter(&(&1 != ""))
+
           {:ok, tags}
-        
+
         {:error, reason} ->
           {:error, "Failed to list tags: #{reason}"}
       end
@@ -311,11 +310,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
 
   defp run_git_command(repo_path, args) do
     try do
-      {output, exit_code} = System.cmd("git", args, [
-        cd: repo_path,
-        stderr_to_stdout: true
-      ])
-      
+      {output, exit_code} =
+        System.cmd("git", args,
+          cd: repo_path,
+          stderr_to_stdout: true
+        )
+
       case exit_code do
         0 -> {:ok, output}
         _ -> {:error, output}
@@ -336,6 +336,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
 
   defp validate_file_exists(repo_path, file_path) do
     full_path = Path.join(repo_path, file_path)
+
     if File.exists?(full_path) do
       :ok
     else
@@ -348,12 +349,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
     if initial_branch = config[:initial_branch] do
       run_git_command(repo_path, ["checkout", "-b", initial_branch])
     end
-    
+
     # Set user info if specified
     if author = config[:author] do
       set_author_info(repo_path, author)
     end
-    
+
     # Create initial README if requested
     if config[:create_readme] do
       readme_path = Path.join(repo_path, "README.md")
@@ -370,10 +371,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
              {:ok, _} <- run_git_command(repo_path, ["config", "user.email", email]) do
           {:ok, "Author configured"}
         end
-      
+
       name when is_binary(name) ->
         run_git_command(repo_path, ["config", "user.name", name])
-      
+
       _ ->
         {:error, "Invalid author format"}
     end
@@ -381,8 +382,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
 
   defp check_staged_changes(repo_path) do
     case run_git_command(repo_path, ["diff", "--cached", "--quiet"]) do
-      {:ok, _} -> {:ok, false}  # No staged changes
-      {:error, _} -> {:ok, true}  # Has staged changes (exit code 1 means diff found)
+      # No staged changes
+      {:ok, _} -> {:ok, false}
+      # Has staged changes (exit code 1 means diff found)
+      {:error, _} -> {:ok, true}
     end
   end
 
@@ -406,7 +409,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
         output
         |> String.split("\n")
         |> Enum.filter(&(&1 != ""))
-      
+
       {:error, _} ->
         []
     end
@@ -415,8 +418,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
   defp extract_commit_hash(commit_output) do
     # Extract commit hash from commit output
     case Regex.run(~r/\[[\w\s]+\s+(\w{7,})\]/, commit_output) do
-      [_, hash] -> hash
-      _ -> 
+      [_, hash] ->
+        hash
+
+      _ ->
         # Try alternative format
         case Regex.run(~r/^(\w{7,})/, commit_output) do
           [_, hash] -> hash
@@ -441,6 +446,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
           message: String.trim(message),
           short_hash: String.slice(hash, 0, 7)
         }
+
       _ ->
         %{
           commit_hash: "unknown",
@@ -466,6 +472,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControlGit do
           staged: parse_status_code(staged),
           unstaged: parse_status_code(unstaged)
         }
+
       _ ->
         %{file: line, staged: :unknown, unstaged: :unknown}
     end

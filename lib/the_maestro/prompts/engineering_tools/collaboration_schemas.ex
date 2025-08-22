@@ -11,6 +11,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
 
   # Collaboration Session Schema
   defmodule CollaborationSession do
+    @moduledoc """
+    Schema for collaboration sessions and shared workspaces.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -37,9 +40,20 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
     @doc false
     def changeset(session, attrs) do
       session
-      |> cast(attrs, [:session_id, :participants, :collaboration_mode, :permissions, 
-                     :real_time_sync, :change_tracking, :comment_system, :approval_workflow,
-                     :conflict_resolution, :session_status, :created_by, :expires_at])
+      |> cast(attrs, [
+        :session_id,
+        :participants,
+        :collaboration_mode,
+        :permissions,
+        :real_time_sync,
+        :change_tracking,
+        :comment_system,
+        :approval_workflow,
+        :conflict_resolution,
+        :session_status,
+        :created_by,
+        :expires_at
+      ])
       |> validate_required([:session_id, :created_by])
       |> validate_inclusion(:collaboration_mode, ["asynchronous", "synchronous", "review_only"])
       |> validate_inclusion(:conflict_resolution, ["manual", "auto_merge", "last_wins"])
@@ -50,6 +64,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
 
   # Session Change Schema
   defmodule SessionChange do
+    @moduledoc """
+    Schema for tracking changes made during collaboration sessions.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -73,8 +90,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
     @doc false
     def changeset(change, attrs) do
       change
-      |> cast(attrs, [:change_id, :session_id, :user_id, :change_type, :content, 
-                     :position, :metadata, :parent_change_id, :status])
+      |> cast(attrs, [
+        :change_id,
+        :session_id,
+        :user_id,
+        :change_type,
+        :content,
+        :position,
+        :metadata,
+        :parent_change_id,
+        :status
+      ])
       |> validate_required([:change_id, :session_id, :user_id, :change_type])
       |> validate_inclusion(:change_type, ["edit", "add", "delete", "move", "format"])
       |> validate_inclusion(:status, ["pending", "applied", "reverted", "conflicted"])
@@ -84,6 +110,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
 
   # Session Comment Schema
   defmodule SessionComment do
+    @moduledoc """
+    Schema for comments and discussions in collaboration sessions.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -107,8 +136,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
     @doc false
     def changeset(comment, attrs) do
       comment
-      |> cast(attrs, [:comment_id, :session_id, :user_id, :content, :position, 
-                     :comment_type, :resolved, :parent_comment_id, :metadata])
+      |> cast(attrs, [
+        :comment_id,
+        :session_id,
+        :user_id,
+        :content,
+        :position,
+        :comment_type,
+        :resolved,
+        :parent_comment_id,
+        :metadata
+      ])
       |> validate_required([:comment_id, :session_id, :user_id, :content])
       |> validate_inclusion(:comment_type, ["general", "suggestion", "question", "approval"])
       |> unique_constraint(:comment_id)
@@ -117,6 +155,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
 
   # Approval Workflow Schema
   defmodule ApprovalWorkflow do
+    @moduledoc """
+    Schema for managing approval workflows and processes.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -139,8 +180,16 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
     @doc false
     def changeset(workflow, attrs) do
       workflow
-      |> cast(attrs, [:workflow_id, :session_id, :approver_ids, :approval_threshold,
-                     :workflow_status, :created_by, :due_date, :metadata])
+      |> cast(attrs, [
+        :workflow_id,
+        :session_id,
+        :approver_ids,
+        :approval_threshold,
+        :workflow_status,
+        :created_by,
+        :due_date,
+        :metadata
+      ])
       |> validate_required([:workflow_id, :session_id, :created_by])
       |> validate_inclusion(:workflow_status, ["pending", "approved", "rejected", "needs_changes"])
       |> validate_number(:approval_threshold, greater_than: 0)
@@ -150,6 +199,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
 
   # Session Approval Schema
   defmodule SessionApproval do
+    @moduledoc """
+    Schema for tracking approvals and rejections in collaboration sessions.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -179,6 +231,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
 
   # Session Sync Schema
   defmodule SessionSync do
+    @moduledoc """
+    Schema for real-time synchronization state and conflicts.
+    """
     use Ecto.Schema
     import Ecto.Changeset
 
@@ -200,8 +255,15 @@ defmodule TheMaestro.Prompts.EngineeringTools.CollaborationSchemas do
     @doc false
     def changeset(sync, attrs) do
       sync
-      |> cast(attrs, [:sync_id, :session_id, :participants_synced, :sync_status,
-                     :changes_synced, :conflicts_detected, :sync_metadata])
+      |> cast(attrs, [
+        :sync_id,
+        :session_id,
+        :participants_synced,
+        :sync_status,
+        :changes_synced,
+        :conflicts_detected,
+        :sync_metadata
+      ])
       |> validate_required([:sync_id, :session_id])
       |> validate_inclusion(:sync_status, ["pending", "in_progress", "completed", "failed"])
       |> validate_number(:changes_synced, greater_than_or_equal_to: 0)

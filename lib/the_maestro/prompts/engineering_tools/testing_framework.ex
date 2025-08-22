@@ -604,7 +604,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
             case expected_complexity do
               :low -> 1000
               :medium -> 3000
-              :high -> 10000
+              :high -> 10_000
             end
         }
       }

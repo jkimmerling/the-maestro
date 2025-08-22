@@ -96,23 +96,23 @@ defmodule TheMaestro.MCP.CLI do
 
   @doc """
   Handle a command string for interactive CLI/TUI mode.
-  
+
   This function allows commands to be executed interactively within
   the TUI or when called programmatically with a command string.
   """
   def handle_command(command_string, _context \\ %{}) do
     args = String.split(command_string, ~r/\s+/, trim: true)
-    
+
     case parse_args(args) do
       {command, subcommand, options} ->
         execute_command(command, subcommand, options)
-        
+
       {:ok, :help} ->
         :ok
-        
+
       {:ok, :version} ->
         :ok
-        
+
       {:error, reason} ->
         print_error(reason)
         {:error, reason}
@@ -500,20 +500,23 @@ defmodule TheMaestro.MCP.CLI do
     end
   end
 
-  defp execute_command(command, subcommand, options) when command in [:prompt, :template, :experiment, :session, :workspace, :analyze, :docs] do
+  defp execute_command(command, subcommand, options)
+       when command in [:prompt, :template, :experiment, :session, :workspace, :analyze, :docs] do
     try do
       # Convert args format for the PromptCLI
-      args_list = case options[:args] do
-        nil -> []
-        list when is_list(list) -> list
-        _ -> []
-      end
+      args_list =
+        case options[:args] do
+          nil -> []
+          list when is_list(list) -> list
+          _ -> []
+        end
 
       # Build command string for PromptCLI
-      command_string = case args_list do
-        [] -> "#{command} #{subcommand}"
-        [name | _] -> "#{command} #{subcommand} #{name}"
-      end
+      command_string =
+        case args_list do
+          [] -> "#{command} #{subcommand}"
+          [name | _] -> "#{command} #{subcommand} #{name}"
+        end
 
       # Create context with options
       context = %{
@@ -526,6 +529,7 @@ defmodule TheMaestro.MCP.CLI do
           unless quiet?(options[:options] || %{}) do
             IO.puts(result)
           end
+
           :ok
 
         {:error, reason} ->
