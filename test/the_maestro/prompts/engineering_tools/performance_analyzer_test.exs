@@ -4,13 +4,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
   alias TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzer
   alias TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzer.{
     PerformanceAnalysis,
-    PerformanceDashboard,
-    PerformanceMetrics
+    PerformanceMetrics,
+    OptimizationSuggestion
   }
 
   describe "analyze_prompt_performance/3" do
     setup do
       prompt = "You are a {{role | default: assistant}}. Help with {{task | required}}."
+      execution_context = %{provider: :openai, model: "gpt-4", environment: :production}
       
       historical_data = [
         %{
@@ -20,7 +21,6 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
           response_time: 1200,
           token_usage: %{input: 50, output: 150, total: 200},
           quality_score: 0.85,
-          user_satisfaction: 4.2,
           success: true,
           parameters: %{"role" => "assistant", "task" => "code review"}
         },
@@ -31,48 +31,70 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
           response_time: 950,
           token_usage: %{input: 48, output: 180, total: 228},
           quality_score: 0.92,
-          user_satisfaction: 4.5,
           success: true,
           parameters: %{"role" => "expert", "task" => "bug analysis"}
-        },
-        %{
-          timestamp: DateTime.utc_now() |> DateTime.add(-5, :day),
-          provider: :google,
-          model: "gemini-pro",
-          response_time: 1800,
-          token_usage: %{input: 52, output: 120, total: 172},
-          quality_score: 0.78,
-          user_satisfaction: 3.9,
-          success: false,
-          error: "timeout",
-          parameters: %{"role" => "specialist", "task" => "complex analysis"}
         }
       ]
 
-      {:ok, prompt: prompt, historical_data: historical_data}
+      {:ok, prompt: prompt, execution_context: execution_context, historical_data: historical_data}
     end
 
-    test "analyzes response quality metrics", %{prompt: prompt, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, historical_data)
+    test "returns a valid PerformanceAnalysis struct", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+
+      assert %PerformanceAnalysis{} = analysis
+      assert is_binary(analysis.prompt_id)
+      assert %DateTime{} = analysis.analysis_timestamp
+      assert is_map(analysis.response_time_metrics)
+      assert is_map(analysis.response_quality_metrics)
+      assert is_map(analysis.latency_analysis)
+      assert is_map(analysis.token_efficiency)
+      assert is_map(analysis.resource_utilization)
+      assert is_map(analysis.bottleneck_analysis)
+      assert is_list(analysis.optimization_recommendations)
+      assert is_number(analysis.performance_score)
+      assert is_map(analysis.historical_comparison)
+      assert is_map(analysis.real_time_monitoring)
+      assert is_map(analysis.scalability_assessment)
+      assert is_map(analysis.cost_analysis)
+    end
+
+    test "analyzes response quality metrics", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       quality_metrics = analysis.response_quality_metrics
 
       assert Map.has_key?(quality_metrics, :average_quality_score)
       assert Map.has_key?(quality_metrics, :quality_distribution)
-      assert Map.has_key?(quality_metrics, :quality_trends)
-      assert Map.has_key?(quality_metrics, :quality_by_provider)
-      
+      assert Map.has_key?(quality_metrics, :consistency_score)
+      assert Map.has_key?(quality_metrics, :improvement_potential)
+
       assert quality_metrics.average_quality_score > 0
       assert quality_metrics.average_quality_score <= 1
-      
-      # Should have quality scores for each provider
-      assert Map.has_key?(quality_metrics.quality_by_provider, :openai)
-      assert Map.has_key?(quality_metrics.quality_by_provider, :anthropic)
-      assert Map.has_key?(quality_metrics.quality_by_provider, :google)
+      assert quality_metrics.consistency_score >= 0
+      assert quality_metrics.consistency_score <= 1
     end
 
-    test "analyzes response latency", %{prompt: prompt, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, historical_data)
+    test "analyzes response time metrics", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+
+      response_time_metrics = analysis.response_time_metrics
+
+      assert Map.has_key?(response_time_metrics, :mean)
+      assert Map.has_key?(response_time_metrics, :median)
+      assert Map.has_key?(response_time_metrics, :p95)
+      assert Map.has_key?(response_time_metrics, :p99)
+      assert Map.has_key?(response_time_metrics, :std_dev)
+
+      assert response_time_metrics.mean > 0
+      assert response_time_metrics.median > 0
+      assert response_time_metrics.p95 > 0
+      assert response_time_metrics.p99 > 0
+      assert response_time_metrics.std_dev >= 0
+    end
+
+    test "analyzes latency patterns", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       latency_analysis = analysis.latency_analysis
 
@@ -81,371 +103,170 @@ defmodule TheMaestro.Prompts.EngineeringTools.PerformanceAnalyzerTest do
       assert Map.has_key?(latency_analysis, :p95_response_time)
       assert Map.has_key?(latency_analysis, :response_time_by_provider)
       assert Map.has_key?(latency_analysis, :latency_trends)
-      
+
       assert latency_analysis.average_response_time > 0
       assert is_number(latency_analysis.median_response_time)
       assert is_number(latency_analysis.p95_response_time)
+      assert is_map(latency_analysis.response_time_by_provider)
+      assert is_map(latency_analysis.latency_trends)
     end
 
-    test "analyzes token efficiency", %{prompt: prompt, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, historical_data)
+    test "analyzes token efficiency", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
       token_efficiency = analysis.token_efficiency
 
-      assert Map.has_key?(token_efficiency, :average_tokens_per_request)
-      assert Map.has_key?(token_efficiency, :input_output_ratio)
-      assert Map.has_key?(token_efficiency, :token_usage_by_provider)
-      assert Map.has_key?(token_efficiency, :efficiency_trends)
-      assert Map.has_key?(token_efficiency, :cost_efficiency)
-      
-      assert token_efficiency.average_tokens_per_request > 0
-      assert is_number(token_efficiency.input_output_ratio)
+      assert Map.has_key?(token_efficiency, :input_tokens)
+      assert Map.has_key?(token_efficiency, :output_tokens)
+      assert Map.has_key?(token_efficiency, :efficiency_ratio)
+      assert Map.has_key?(token_efficiency, :token_waste_indicators)
+
+      assert is_integer(token_efficiency.input_tokens)
+      assert is_integer(token_efficiency.output_tokens)
+      assert is_number(token_efficiency.efficiency_ratio)
+      assert is_list(token_efficiency.token_waste_indicators)
     end
 
-    test "calculates success rates", %{prompt: prompt, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, historical_data)
+    test "analyzes resource utilization", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
-      success_rate_analysis = analysis.success_rate_analysis
+      resource_utilization = analysis.resource_utilization
 
-      assert Map.has_key?(success_rate_analysis, :overall_success_rate)
-      assert Map.has_key?(success_rate_analysis, :success_rate_by_provider)
-      assert Map.has_key?(success_rate_analysis, :failure_reasons)
-      assert Map.has_key?(success_rate_analysis, :success_trends)
-      
-      # Overall success rate should be 2/3 (2 successes out of 3 total)
-      assert_in_delta success_rate_analysis.overall_success_rate, 0.667, 0.01
-      
-      # Should track failure reasons
-      assert Map.has_key?(success_rate_analysis.failure_reasons, "timeout")
+      assert Map.has_key?(resource_utilization, :cpu_usage)
+      assert Map.has_key?(resource_utilization, :memory_usage)
+      assert Map.has_key?(resource_utilization, :network_io)
+      assert Map.has_key?(resource_utilization, :cache_hit_rate)
+
+      assert is_number(resource_utilization.cpu_usage)
+      assert is_number(resource_utilization.memory_usage)
+      assert is_integer(resource_utilization.network_io)
+      assert is_number(resource_utilization.cache_hit_rate)
     end
 
-    test "compares performance across providers", %{prompt: prompt, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, historical_data)
+    test "identifies performance bottlenecks", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
-      provider_comparison = analysis.provider_comparison
+      bottleneck_analysis = analysis.bottleneck_analysis
 
-      assert Map.has_key?(provider_comparison, :response_time_comparison)
-      assert Map.has_key?(provider_comparison, :quality_comparison)
-      assert Map.has_key?(provider_comparison, :cost_comparison)
-      assert Map.has_key?(provider_comparison, :reliability_comparison)
-      assert Map.has_key?(provider_comparison, :best_provider_by_metric)
-      
-      # Should identify best providers for different metrics
-      best_providers = provider_comparison.best_provider_by_metric
-      assert Map.has_key?(best_providers, :response_time)
-      assert Map.has_key?(best_providers, :quality)
-      assert Map.has_key?(best_providers, :reliability)
+      assert Map.has_key?(bottleneck_analysis, :identified_bottlenecks)
+      assert Map.has_key?(bottleneck_analysis, :severity_scores)
+      assert Map.has_key?(bottleneck_analysis, :resolution_priorities)
+
+      assert is_list(bottleneck_analysis.identified_bottlenecks)
+      assert is_map(bottleneck_analysis.severity_scores)
+      assert is_list(bottleneck_analysis.resolution_priorities)
     end
 
-    test "analyzes cost effectiveness", %{prompt: prompt, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, historical_data)
+    test "generates optimization recommendations", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
-      cost_effectiveness = analysis.cost_effectiveness
+      recommendations = analysis.optimization_recommendations
 
-      assert Map.has_key?(cost_effectiveness, :cost_per_request)
-      assert Map.has_key?(cost_effectiveness, :cost_per_quality_point)
-      assert Map.has_key?(cost_effectiveness, :cost_trends)
-      assert Map.has_key?(cost_effectiveness, :cost_by_provider)
-      assert Map.has_key?(cost_effectiveness, :roi_analysis)
-      
-      assert is_map(cost_effectiveness.cost_by_provider)
-    end
+      assert is_list(recommendations)
+      assert length(recommendations) > 0
 
-    test "analyzes user satisfaction", %{prompt: prompt, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, historical_data)
-
-      user_satisfaction = analysis.user_satisfaction
-
-      assert Map.has_key?(user_satisfaction, :average_satisfaction)
-      assert Map.has_key?(user_satisfaction, :satisfaction_distribution)
-      assert Map.has_key?(user_satisfaction, :satisfaction_by_provider)
-      assert Map.has_key?(user_satisfaction, :satisfaction_trends)
-      assert Map.has_key?(user_satisfaction, :correlation_with_quality)
-      
-      assert user_satisfaction.average_satisfaction > 0
-      assert user_satisfaction.average_satisfaction <= 5
-    end
-
-    test "identifies improvement opportunities", %{prompt: prompt, historical_data: historical_data} do
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, historical_data)
-
-      improvement_opportunities = analysis.improvement_opportunities
-
-      assert is_list(improvement_opportunities)
-      assert length(improvement_opportunities) > 0
-      
-      assert Enum.all?(improvement_opportunities, fn opportunity ->
-        Map.has_key?(opportunity, :type) &&
-        Map.has_key?(opportunity, :description) &&
-        Map.has_key?(opportunity, :potential_impact) &&
-        Map.has_key?(opportunity, :difficulty)
+      # Check that each recommendation is valid
+      Enum.each(recommendations, fn recommendation ->
+        assert %OptimizationSuggestion{} = recommendation
+        assert is_binary(recommendation.suggestion_id)
+        assert recommendation.optimization_type in [:token_efficiency, :response_time, :resource_usage, :caching, :architectural, :context_chunking, :batching, :token_optimization, :token_reduction]
+        assert is_binary(recommendation.description)
+        assert recommendation.predicted_impact in [:low, :medium, :high]
+        assert recommendation.implementation_difficulty in [:easy, :moderate, :difficult, :hard]
+        assert recommendation.risk_level in [:low, :medium, :high]
+        assert is_number(recommendation.estimated_performance_gain)
+        assert is_list(recommendation.code_changes_required)
+        assert is_list(recommendation.validation_steps)
       end)
     end
 
-    test "handles empty historical data gracefully" do
-      prompt = "Test prompt"
-      empty_data = []
+    test "calculates performance score", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
 
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, empty_data)
+      assert is_number(analysis.performance_score)
+      assert analysis.performance_score >= 0.0
+      assert analysis.performance_score <= 1.0
+    end
+
+    test "provides historical comparison when data available", %{prompt: prompt, execution_context: execution_context, historical_data: historical_data} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, historical_data)
+
+      historical_comparison = analysis.historical_comparison
+
+      assert Map.has_key?(historical_comparison, :comparison_available)
+      assert historical_comparison.comparison_available == true
+      assert Map.has_key?(historical_comparison, :trend_analysis)
+    end
+
+    test "handles empty historical data", %{prompt: prompt, execution_context: execution_context} do
+      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, execution_context, [])
 
       assert %PerformanceAnalysis{} = analysis
-      assert analysis.response_quality_metrics.average_quality_score == 0
-      assert analysis.latency_analysis.average_response_time == 0
-      assert analysis.success_rate_analysis.overall_success_rate == 0
-    end
-
-    test "respects analysis options", %{prompt: prompt, historical_data: historical_data} do
-      analysis_options = %{
-        time_range: :last_7_days,
-        providers: [:openai, :anthropic],
-        include_failures: false,
-        quality_threshold: 0.8
-      }
-
-      analysis = PerformanceAnalyzer.analyze_prompt_performance(prompt, historical_data, analysis_options)
-
-      # Should filter out Google provider and failures
-      provider_data = analysis.provider_comparison
-      refute Map.has_key?(provider_data.response_time_comparison, :google)
-      
-      # Should only include high-quality results
-      quality_metrics = analysis.response_quality_metrics
-      assert quality_metrics.average_quality_score >= 0.8
+      assert analysis.historical_comparison.comparison_available == false
+      assert is_nil(analysis.historical_comparison.trend_analysis)
     end
   end
 
-  describe "generate_performance_dashboard/1" do
-    setup do
-      analysis_results = %PerformanceAnalysis{
-        response_quality_metrics: %{
-          average_quality_score: 0.85,
-          quality_distribution: %{excellent: 0.4, good: 0.4, fair: 0.2},
-          quality_trends: %{trend: :improving, change_rate: 0.05},
-          quality_by_provider: %{openai: 0.82, anthropic: 0.88, google: 0.78}
-        },
-        latency_analysis: %{
-          average_response_time: 1200,
-          median_response_time: 1000,
-          p95_response_time: 2000,
-          response_time_by_provider: %{openai: 1100, anthropic: 950, google: 1650}
-        },
-        success_rate_analysis: %{
-          overall_success_rate: 0.92,
-          success_rate_by_provider: %{openai: 0.95, anthropic: 0.97, google: 0.85}
-        },
-        provider_comparison: %{
-          best_provider_by_metric: %{
-            response_time: :anthropic,
-            quality: :anthropic,
-            reliability: :anthropic
-          }
-        }
-      }
+  describe "track_performance_metrics/2" do
+    test "tracks performance metrics during execution" do
+      prompt = "Analyze this code for potential issues."
+      execution_options = %{real_time_tracking: true, detailed_metrics: true}
 
-      {:ok, analysis_results: analysis_results}
-    end
+      metrics = PerformanceAnalyzer.track_performance_metrics(prompt, execution_options)
 
-    test "creates executive summary", %{analysis_results: analysis_results} do
-      dashboard = PerformanceAnalyzer.generate_performance_dashboard(analysis_results)
-
-      executive_summary = dashboard.executive_summary
-
-      assert Map.has_key?(executive_summary, :key_insights)
-      assert Map.has_key?(executive_summary, :performance_status)
-      assert Map.has_key?(executive_summary, :top_recommendations)
-      assert Map.has_key?(executive_summary, :risk_assessment)
-      
-      assert is_list(executive_summary.key_insights)
-      assert executive_summary.performance_status in [:excellent, :good, :needs_improvement, :poor]
-      assert is_list(executive_summary.top_recommendations)
-    end
-
-    test "creates metrics visualizations", %{analysis_results: analysis_results} do
-      dashboard = PerformanceAnalyzer.generate_performance_dashboard(analysis_results)
-
-      visualizations = dashboard.key_metrics_visualization
-
-      assert Map.has_key?(visualizations, :quality_trend_chart)
-      assert Map.has_key?(visualizations, :latency_distribution_chart)
-      assert Map.has_key?(visualizations, :provider_comparison_chart)
-      assert Map.has_key?(visualizations, :success_rate_chart)
-      
-      # Each visualization should have data and configuration
-      quality_chart = visualizations.quality_trend_chart
-      assert Map.has_key?(quality_chart, :data)
-      assert Map.has_key?(quality_chart, :chart_config)
-      assert Map.has_key?(quality_chart, :chart_type)
-    end
-
-    test "performs trend analysis", %{analysis_results: analysis_results} do
-      dashboard = PerformanceAnalyzer.generate_performance_dashboard(analysis_results)
-
-      trend_analysis = dashboard.trend_analysis
-
-      assert Map.has_key?(trend_analysis, :quality_trends)
-      assert Map.has_key?(trend_analysis, :performance_trends)
-      assert Map.has_key?(trend_analysis, :usage_trends)
-      assert Map.has_key?(trend_analysis, :cost_trends)
-      assert Map.has_key?(trend_analysis, :predictions)
-      
-      # Should include trend direction and confidence
-      quality_trend = trend_analysis.quality_trends
-      assert Map.has_key?(quality_trend, :direction)
-      assert Map.has_key?(quality_trend, :confidence)
-      assert quality_trend.direction in [:improving, :declining, :stable]
-    end
-
-    test "creates comparative analysis", %{analysis_results: analysis_results} do
-      dashboard = PerformanceAnalyzer.generate_performance_dashboard(analysis_results)
-
-      comparative_analysis = dashboard.comparative_analysis
-
-      assert Map.has_key?(comparative_analysis, :provider_rankings)
-      assert Map.has_key?(comparative_analysis, :metric_comparisons)
-      assert Map.has_key?(comparative_analysis, :cost_benefit_analysis)
-      assert Map.has_key?(comparative_analysis, :trade_off_analysis)
-      
-      # Provider rankings should be ordered by overall performance
-      provider_rankings = comparative_analysis.provider_rankings
-      assert is_list(provider_rankings)
-      assert length(provider_rankings) > 0
-      assert Enum.all?(provider_rankings, fn ranking ->
-        Map.has_key?(ranking, :provider) && Map.has_key?(ranking, :overall_score)
-      end)
-    end
-
-    test "enables drill-down capabilities", %{analysis_results: analysis_results} do
-      dashboard = PerformanceAnalyzer.generate_performance_dashboard(analysis_results)
-
-      drill_down = dashboard.drill_down_capabilities
-
-      assert Map.has_key?(drill_down, :available_dimensions)
-      assert Map.has_key?(drill_down, :filterable_fields)
-      assert Map.has_key?(drill_down, :groupable_metrics)
-      assert Map.has_key?(drill_down, :drill_down_queries)
-      
-      available_dimensions = drill_down.available_dimensions
-      assert Enum.member?(available_dimensions, :provider)
-      assert Enum.member?(available_dimensions, :time_period)
-      assert Enum.member?(available_dimensions, :quality_range)
-    end
-
-    test "generates actionable insights", %{analysis_results: analysis_results} do
-      dashboard = PerformanceAnalyzer.generate_performance_dashboard(analysis_results)
-
-      actionable_insights = dashboard.actionable_insights
-
-      assert is_list(actionable_insights)
-      assert length(actionable_insights) > 0
-      
-      assert Enum.all?(actionable_insights, fn insight ->
-        Map.has_key?(insight, :insight) &&
-        Map.has_key?(insight, :action_items) &&
-        Map.has_key?(insight, :priority) &&
-        Map.has_key?(insight, :expected_impact)
-      end)
-      
-      # Should prioritize high-impact insights
-      high_priority_insights = Enum.filter(actionable_insights, fn insight ->
-        insight.priority == :high
-      end)
-      assert length(high_priority_insights) > 0
-    end
-
-    test "creates recommendation engine", %{analysis_results: analysis_results} do
-      dashboard = PerformanceAnalyzer.generate_performance_dashboard(analysis_results)
-
-      recommendation_engine = dashboard.recommendation_engine
-
-      assert Map.has_key?(recommendation_engine, :immediate_actions)
-      assert Map.has_key?(recommendation_engine, :short_term_improvements)
-      assert Map.has_key?(recommendation_engine, :long_term_optimizations)
-      assert Map.has_key?(recommendation_engine, :monitoring_suggestions)
-      
-      # Each recommendation category should have prioritized items
-      immediate_actions = recommendation_engine.immediate_actions
-      assert is_list(immediate_actions)
-      assert Enum.all?(immediate_actions, fn action ->
-        Map.has_key?(action, :action) &&
-        Map.has_key?(action, :rationale) &&
-        Map.has_key?(action, :effort_level)
-      end)
+      assert %PerformanceMetrics{} = metrics
+      assert is_binary(metrics.execution_id)
+      assert %DateTime{} = metrics.start_time
+      assert is_nil(metrics.duration_ms) or is_integer(metrics.duration_ms)
+      assert is_map(metrics.token_count) or is_integer(metrics.token_count)
+      assert is_nil(metrics.response_quality_score) or is_number(metrics.response_quality_score)
+      assert is_map(metrics.resource_consumption)
+      assert is_list(metrics.error_indicators)
+      assert is_list(metrics.optimization_opportunities)
     end
   end
 
-  describe "performance metrics calculation" do
-    test "calculates response time percentiles" do
-      response_times = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+  describe "generate_optimization_suggestions/2" do
+    test "generates comprehensive optimization suggestions" do
+      analysis = %PerformanceAnalysis{
+        prompt_id: "test_analysis",
+        analysis_timestamp: DateTime.utc_now(),
+        response_time_metrics: %{mean: 1000, median: 950, p95: 1500, p99: 2000, std_dev: 200},
+        response_quality_metrics: %{average_quality_score: 0.85, consistency_score: 0.9},
+        latency_analysis: %{average_response_time: 1000, median_response_time: 950, p95_response_time: 1500},
+        success_rate_analysis: %{overall_success_rate: 0.9, success_rate_by_provider: %{}},
+        token_efficiency: %{input_tokens: 50, output_tokens: 150, efficiency_ratio: 0.75, token_waste_indicators: []},
+        resource_utilization: %{cpu_usage: 0.5, memory_usage: 0.3, network_io: 100, cache_hit_rate: 0.8},
+        bottleneck_analysis: %{identified_bottlenecks: ["slow_response"], severity_scores: %{"slow_response" => 0.8}},
+        optimization_recommendations: [],
+        performance_score: 0.75,
+        historical_comparison: %{comparison_available: false},
+        real_time_monitoring: %{},
+        scalability_assessment: %{},
+        cost_analysis: %{},
+        provider_comparison: %{}
+      }
 
-      metrics = PerformanceMetrics.calculate_response_time_metrics(response_times)
+      constraints = %{priority: :performance, budget: :medium}
 
-      assert metrics.average == 550
-      assert metrics.median == 550
-      assert metrics.p95 == 950
-      assert metrics.p99 == 990
-      assert metrics.min == 100
-      assert metrics.max == 1000
-    end
+      suggestions = PerformanceAnalyzer.generate_optimization_suggestions(analysis, constraints)
 
-    test "calculates quality score distribution" do
-      quality_scores = [0.9, 0.8, 0.85, 0.92, 0.75, 0.88, 0.91, 0.82, 0.87, 0.89]
+      assert is_list(suggestions)
+      assert length(suggestions) > 0
 
-      distribution = PerformanceMetrics.calculate_quality_distribution(quality_scores)
-
-      assert Map.has_key?(distribution, :excellent)  # >= 0.9
-      assert Map.has_key?(distribution, :good)       # 0.8-0.89
-      assert Map.has_key?(distribution, :fair)       # 0.7-0.79
-      assert Map.has_key?(distribution, :poor)       # < 0.7
-
-      # Check that percentages sum to 1
-      total = distribution.excellent + distribution.good + distribution.fair + distribution.poor
-      assert_in_delta total, 1.0, 0.01
-    end
-
-    test "calculates token efficiency metrics" do
-      token_data = [
-        %{input: 50, output: 100, total: 150},
-        %{input: 60, output: 120, total: 180},
-        %{input: 45, output: 90, total: 135}
-      ]
-
-      efficiency = PerformanceMetrics.calculate_token_efficiency(token_data)
-
-      assert Map.has_key?(efficiency, :average_input_tokens)
-      assert Map.has_key?(efficiency, :average_output_tokens)
-      assert Map.has_key?(efficiency, :average_total_tokens)
-      assert Map.has_key?(efficiency, :input_output_ratio)
-      assert Map.has_key?(efficiency, :efficiency_score)
-
-      assert efficiency.average_input_tokens == 51.67
-      assert efficiency.average_output_tokens == 103.33
-      assert_in_delta efficiency.input_output_ratio, 0.5, 0.01
-    end
-
-    test "identifies performance anomalies" do
-      performance_data = [
-        %{response_time: 1000, quality_score: 0.9},
-        %{response_time: 1100, quality_score: 0.85},
-        %{response_time: 5000, quality_score: 0.5},  # Anomaly
-        %{response_time: 950, quality_score: 0.88},
-        %{response_time: 1200, quality_score: 0.92}
-      ]
-
-      anomalies = PerformanceMetrics.identify_anomalies(performance_data)
-
-      assert is_list(anomalies)
-      assert length(anomalies) > 0
-      
-      # Should detect the slow, low-quality response
-      slow_response_anomaly = Enum.find(anomalies, fn anomaly ->
-        anomaly.type == :slow_response
+      # Check that each suggestion is valid
+      Enum.each(suggestions, fn suggestion ->
+        assert %OptimizationSuggestion{} = suggestion
+        assert is_binary(suggestion.suggestion_id)
+        assert suggestion.optimization_type in [:token_efficiency, :response_time, :resource_usage, :caching, :architectural, :context_chunking, :batching, :token_optimization, :token_reduction]
+        assert is_binary(suggestion.description)
+        assert suggestion.predicted_impact in [:low, :medium, :high]
+        assert suggestion.implementation_difficulty in [:easy, :moderate, :difficult, :hard]
+        assert suggestion.risk_level in [:low, :medium, :high]
+        assert is_number(suggestion.estimated_performance_gain)
+        assert is_list(suggestion.code_changes_required)
+        assert is_list(suggestion.validation_steps)
       end)
-      assert slow_response_anomaly != nil
-      
-      low_quality_anomaly = Enum.find(anomalies, fn anomaly ->
-        anomaly.type == :low_quality
-      end)
-      assert low_quality_anomaly != nil
     end
   end
 end

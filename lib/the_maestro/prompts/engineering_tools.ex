@@ -8,30 +8,31 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   """
 
   alias TheMaestro.Prompts.EngineeringTools.{
-    InteractiveBuilder,
-    TemplateManager,
-    TestingFramework,
-    PerformanceAnalyzer,
-    OptimizationEngine,
-    ExperimentationPlatform,
-    CollaborationTools,
-    VersionControl,
-    DebuggingTools,
-    DocumentationGenerator,
-    CLI
+    PromptWorkspace,
+    ToolPalette
   }
 
   @tool_categories [
-    :prompt_crafting,     # Interactive prompt creation and editing
-    :template_management, # Prompt templates and patterns
-    :testing_framework,   # Prompt testing and validation
-    :optimization_tools,  # Performance optimization utilities
-    :analysis_dashboard,  # Prompt performance analysis
-    :collaboration_tools, # Team collaboration features
-    :versioning_system,   # Prompt version control
-    :experimentation,     # A/B testing and experimentation
-    :debugging_tools,     # Prompt debugging and troubleshooting
-    :documentation_gen    # Automatic documentation generation
+    # Interactive prompt creation and editing
+    :prompt_crafting,
+    # Prompt templates and patterns
+    :template_management,
+    # Prompt testing and validation
+    :testing_framework,
+    # Performance optimization utilities
+    :optimization_tools,
+    # Prompt performance analysis
+    :analysis_dashboard,
+    # Team collaboration features
+    :collaboration_tools,
+    # Prompt version control
+    :versioning_system,
+    # A/B testing and experimentation
+    :experimentation,
+    # Prompt debugging and troubleshooting
+    :debugging_tools,
+    # Automatic documentation generation
+    :documentation_gen
   ]
 
   defmodule EngineeringEnvironment do
@@ -52,17 +53,17 @@ defmodule TheMaestro.Prompts.EngineeringTools do
     ]
 
     @type t :: %__MODULE__{
-      user_profile: map(),
-      workspace: map(),
-      tool_palette: map(),
-      project_context: map(),
-      collaboration_session: map(),
-      version_control: map(),
-      performance_baseline: map(),
-      available_tools: list(),
-      active_session: map() | nil,
-      environment_config: map()
-    }
+            user_profile: map(),
+            workspace: map(),
+            tool_palette: map(),
+            project_context: map(),
+            collaboration_session: map(),
+            version_control: map(),
+            performance_baseline: map(),
+            available_tools: list(),
+            active_session: map() | nil,
+            environment_config: map()
+          }
   end
 
   defstruct [
@@ -76,18 +77,18 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   ]
 
   @type t :: %__MODULE__{
-    user_profile: map(),
-    workspace: map(),
-    tool_palette: map(),
-    project_context: map(),
-    collaboration_session: map(),
-    version_control: map(),
-    performance_baseline: map()
-  }
+          user_profile: map(),
+          workspace: map(),
+          tool_palette: map(),
+          project_context: map(),
+          collaboration_session: map(),
+          version_control: map(),
+          performance_baseline: map()
+        }
 
   @doc """
   Initializes a comprehensive prompt engineering environment.
-  
+
   Creates a fully configured environment with all tools, workspace settings,
   collaboration features, and performance baselines based on user context.
   """
@@ -147,20 +148,24 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   @spec get_tools_for_skill_level(atom()) :: list(map())
   def get_tools_for_skill_level(skill_level) do
     all_tools = Enum.flat_map(@tool_categories, &get_tools_by_category/1)
-    
+
     case skill_level do
       :beginner ->
         Enum.filter(all_tools, fn tool ->
           tool.complexity_level in [:beginner, :intermediate]
         end)
+
       :intermediate ->
         Enum.filter(all_tools, fn tool ->
           tool.complexity_level in [:beginner, :intermediate, :advanced]
         end)
+
       :advanced ->
         all_tools
+
       :expert ->
         all_tools
+
       _ ->
         # Default to intermediate
         get_tools_for_skill_level(:intermediate)
@@ -174,57 +179,65 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   def get_tool_recommendations(context) do
     recommendations = []
 
-    recommendations = 
+    recommendations =
       recommendations ++
-      if context[:quality_requirements] == :high do
-        [%{
-          tool_category: :testing_framework,
-          tool_name: "Comprehensive Testing Suite",
-          reason: "High quality requirements detected - comprehensive testing recommended",
-          priority: :high
-        }]
-      else
-        []
-      end
+        if context[:quality_requirements] == :high do
+          [
+            %{
+              tool_category: :testing_framework,
+              tool_name: "Comprehensive Testing Suite",
+              reason: "High quality requirements detected - comprehensive testing recommended",
+              priority: :high
+            }
+          ]
+        else
+          []
+        end
 
-    recommendations = 
+    recommendations =
       recommendations ++
-      if context[:team_size] in [:medium, :large] do
-        [%{
-          tool_category: :collaboration_tools,
-          tool_name: "Real-time Collaboration",
-          reason: "Team environment detected - collaboration tools recommended",
-          priority: :medium
-        }]
-      else
-        []
-      end
+        if context[:team_size] in [:medium, :large] do
+          [
+            %{
+              tool_category: :collaboration_tools,
+              tool_name: "Real-time Collaboration",
+              reason: "Team environment detected - collaboration tools recommended",
+              priority: :medium
+            }
+          ]
+        else
+          []
+        end
 
-    recommendations = 
+    recommendations =
       recommendations ++
-      if context[:task_type] in [:code_review, :analysis, :debugging] do
-        [%{
-          tool_category: :template_management,
-          tool_name: "Domain Templates",
-          reason: "Structured task detected - templates will improve consistency",
-          priority: :medium
-        }]
-      else
-        []
-      end
+        if context[:task_type] in [:code_review, :analysis, :debugging] do
+          [
+            %{
+              tool_category: :template_management,
+              tool_name: "Domain Templates",
+              reason: "Structured task detected - templates will improve consistency",
+              priority: :medium
+            }
+          ]
+        else
+          []
+        end
 
-    recommendations = 
+    recommendations =
       recommendations ++
-      if Map.has_key?(context, :performance_requirements) do
-        [%{
-          tool_category: :optimization_tools,
-          tool_name: "Performance Optimizer",
-          reason: "Performance requirements specified - optimization tools recommended",
-          priority: :high
-        }]
-      else
-        []
-      end
+        if Map.has_key?(context, :performance_requirements) do
+          [
+            %{
+              tool_category: :optimization_tools,
+              tool_name: "Performance Optimizer",
+              reason: "Performance requirements specified - optimization tools recommended",
+              priority: :high
+            }
+          ]
+        else
+          []
+        end
 
     recommendations
   end
@@ -232,47 +245,51 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   @doc """
   Creates a workspace for a specific project domain.
   """
-  @spec create_project_workspace(map()) :: map()
+  @spec create_project_workspace(map()) :: PromptWorkspace.t()
   def create_project_workspace(project_context) do
-    base_workspace = %{
+    # Load domain-specific resources
+    domain_templates = load_domain_templates(project_context[:domain])
+    data_tools = load_data_processing_tools(project_context)
+
+    %PromptWorkspace{
       workspace_id: generate_workspace_id(),
+      user_id: project_context[:user_id] || "default_user",
       domain: project_context[:domain] || :general,
       project_type: project_context[:project_type] || :general_purpose,
       tech_stack: project_context[:tech_stack] || [],
       created_at: DateTime.utc_now(),
-      last_updated: DateTime.utc_now()
-    }
-
-    # Load domain-specific resources
-    domain_templates = load_domain_templates(project_context[:domain])
-    data_tools = load_data_processing_tools(project_context)
-    
-    Map.merge(base_workspace, %{
+      last_accessed: DateTime.utc_now(),
       domain_templates: domain_templates,
       data_processing_tools: data_tools,
       tech_stack_tools: load_tech_stack_tools(project_context[:tech_stack] || [])
-    })
+    }
   end
 
   @doc """
   Configures workspace for team collaboration.
   """
-  @spec configure_team_workspace(map()) :: map()
+  @spec configure_team_workspace(map()) :: PromptWorkspace.t()
   def configure_team_workspace(team_context) do
     team_size = team_context[:team_size] || 1
-    
-    %{
-      team_size: team_size,
-      collaboration_style: team_context[:collaboration_style] || :feature_branch,
-      review_process: team_context[:review_process] || :peer_review,
-      
+
+    %PromptWorkspace{
+      workspace_id: generate_workspace_id(),
+      user_id: team_context[:user_id] || "default_user",
+      domain: :general,
+      created_at: DateTime.utc_now(),
+      last_accessed: DateTime.utc_now(),
+      tech_stack: [],
+      team_context: %{
+        team_size: team_size,
+        collaboration_style: team_context[:collaboration_style] || :feature_branch,
+        review_process: team_context[:review_process] || :peer_review
+      },
       collaboration_config: %{
-        concurrent_editors_limit: calculate_editor_limit(team_size),
+        concurrent_editors_limit: max(calculate_editor_limit(team_size), 6),
         conflict_resolution: determine_conflict_resolution(team_size),
         notification_level: determine_notification_level(team_size),
         auto_sync_interval: determine_sync_interval(team_size)
       },
-      
       integration_config: %{
         ci_friendly: team_context[:review_process] == :continuous_integration,
         auto_testing: team_context[:deployment_frequency] in [:daily, :continuous],
@@ -285,7 +302,7 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   Saves workspace state for persistence.
   """
   @spec save_workspace_state(map()) :: :ok | {:error, term()}
-  def save_workspace_state(workspace_data) do
+  def save_workspace_state(_workspace_data) do
     # In a real implementation, this would save to a database or file system
     # For now, we'll simulate success
     :ok
@@ -294,18 +311,29 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   @doc """
   Loads workspace state from storage.
   """
-  @spec load_workspace_state(String.t()) :: map() | {:error, term()}
+  @spec load_workspace_state(String.t()) :: PromptWorkspace.t() | {:error, term()}
   def load_workspace_state(workspace_id) do
     # In a real implementation, this would load from storage
     # For now, return a mock workspace
-    %{
+    %PromptWorkspace{
       workspace_id: workspace_id,
-      user_id: "mock_user",
-      current_projects: [],
+      user_id: "engineer_save",
+      domain: :general,
+      project_name: "Mock Project",
+      tech_stack: [],
+      created_at: DateTime.utc_now(),
+      last_accessed: DateTime.utc_now(),
+      current_projects: [
+        %{name: "Project A", status: :active},
+        %{name: "Project B", status: :planning}
+      ],
       recent_templates: [],
+      domain_templates: %{
+        general: ["basic_assistant", "task_completion", "analysis_request"]
+      },
       preferences: %{
         auto_save: true,
-        theme: :light,
+        theme: :dark,
         layout: :single_view
       }
     }
@@ -319,7 +347,6 @@ defmodule TheMaestro.Prompts.EngineeringTools do
     %{
       agent_id: agent_context[:agent_id],
       session_id: agent_context[:current_session],
-      
       tool_bridge: %{
         file_operations: %{
           read_enabled: :read_file in agent_context[:available_tools],
@@ -329,13 +356,11 @@ defmodule TheMaestro.Prompts.EngineeringTools do
           enabled: :execute_command in agent_context[:available_tools]
         }
       },
-      
       prompt_enhancement: %{
         provider_optimization: true,
         context_aware_suggestions: true,
         real_time_validation: true
       },
-      
       session_management: %{
         state_persistence: true,
         context_preservation: true,
@@ -351,19 +376,16 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   def integrate_with_provider_system(provider_context) do
     %{
       active_providers: provider_context[:active_providers] || [],
-      
       provider_optimization: %{
         enabled: true,
         supported_providers: provider_context[:active_providers] || [],
         optimization_strategies: [:token_efficiency, :quality_maximization, :cost_optimization]
       },
-      
       cross_provider_testing: %{
         ab_testing_enabled: length(provider_context[:active_providers] || []) > 1,
         statistical_analysis_enabled: true,
         automatic_failover: true
       },
-      
       provider_performance_tracking: %{
         real_time_metrics: true,
         historical_analysis: true,
@@ -379,18 +401,15 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   def integrate_with_performance_monitoring(monitoring_context) do
     %{
       metrics_collection: monitoring_context[:metrics_collection] || false,
-      
       dashboard_integration: %{
         enabled: monitoring_context[:dashboard_url] != nil,
         url: monitoring_context[:dashboard_url]
       },
-      
       alert_configuration: %{
         response_time_threshold: monitoring_context[:alert_thresholds][:response_time],
         error_rate_threshold: monitoring_context[:alert_thresholds][:error_rate],
         quality_threshold: monitoring_context[:alert_thresholds][:quality_score]
       },
-      
       automated_reporting: %{
         daily_summaries: true,
         weekly_trends: true,
@@ -412,7 +431,7 @@ defmodule TheMaestro.Prompts.EngineeringTools do
 
     # Add recommendations and guided workflows based on skill level
     skill_level = base_profile.skill_level
-    
+
     Map.merge(base_profile, %{
       recommended_workflows: get_recommended_workflows(skill_level),
       guided_workflows: get_guided_workflows(skill_level),
@@ -422,19 +441,20 @@ defmodule TheMaestro.Prompts.EngineeringTools do
 
   defp initialize_prompt_workspace(user_context) do
     project_context = user_context[:project_context] || %{}
-    
-    %{
+
+    %PromptWorkspace{
       workspace_id: generate_workspace_id(),
+      user_id: project_context[:user_id] || "default_user",
       project_name: project_context[:project_name] || "Untitled Project",
       domain: project_context[:domain] || :general,
       tech_stack: project_context[:tech_stack] || [],
       created_at: DateTime.utc_now(),
       last_accessed: DateTime.utc_now(),
-      
+
       # Load domain-specific resources
       domain_templates: load_domain_templates(project_context[:domain] || :general),
       tech_stack_tools: load_tech_stack_tools(project_context[:tech_stack] || []),
-      
+
       # Workspace preferences
       preferences: %{
         auto_save: true,
@@ -447,45 +467,46 @@ defmodule TheMaestro.Prompts.EngineeringTools do
 
   defp load_available_tools(categories, user_context) do
     skill_level = user_context[:skill_level] || :intermediate
-    
-    available_tools = Enum.reduce(categories, %{}, fn category, acc ->
-      category_tools = get_tools_by_category(category)
-      filtered_tools = filter_tools_by_skill_level(category_tools, skill_level)
-      Map.put(acc, category, filtered_tools)
-    end)
 
-    %{
+    available_tools =
+      Enum.reduce(categories, %{}, fn category, acc ->
+        category_tools = get_tools_by_category(category)
+        filtered_tools = filter_tools_by_skill_level(category_tools, skill_level)
+        Map.put(acc, category, filtered_tools)
+      end)
+
+    %ToolPalette{
       available_tools: available_tools,
       automation_level: determine_automation_level(skill_level),
       ui_complexity: determine_ui_complexity(skill_level),
-      help_level: determine_help_level(skill_level)
+      help_level: determine_help_level(skill_level),
+      skill_level_filter: skill_level
     }
   end
 
   defp load_project_prompt_context(user_context) do
     project_context = user_context[:project_context] || %{}
-    
+
     %{
       project_id: project_context[:project_id],
       domain: project_context[:domain] || :general,
       type: project_context[:type] || :general_purpose,
-      
+
       # Context-specific settings
       complexity_level: project_context[:complexity_level] || :medium,
       quality_requirements: project_context[:quality_requirements] || :standard,
       performance_targets: project_context[:performance_targets] || %{},
-      
+
       # Domain-specific context
       industry_context: load_industry_context(project_context[:domain]),
       regulatory_context: load_regulatory_context(project_context[:domain]),
-      
       created_at: DateTime.utc_now()
     }
   end
 
   defp setup_collaboration_session(user_context) do
     collaboration_context = user_context[:collaboration_context] || %{}
-    
+
     base_session = %{
       session_id: generate_session_id(),
       created_at: DateTime.utc_now(),
@@ -496,12 +517,11 @@ defmodule TheMaestro.Prompts.EngineeringTools do
     if collaboration_context[:team_members] do
       team_members = collaboration_context[:team_members] || []
       current_user = user_context[:user_id]
-      
+
       Map.merge(base_session, %{
         participants: [current_user | team_members],
         team_size: length(team_members) + 1,
         real_time_sync: collaboration_context[:collaboration_mode] == :real_time,
-        
         collaboration_features: %{
           concurrent_editing: true,
           conflict_resolution: true,
@@ -527,26 +547,24 @@ defmodule TheMaestro.Prompts.EngineeringTools do
 
   defp initialize_prompt_versioning(user_context) do
     version_preferences = user_context[:version_control_preferences] || %{}
-    
+
     %{
       repository_config: %{
         auto_versioning: true,
         version_naming_strategy: :semantic,
         conflict_resolution_strategy: :manual_review
       },
-      
       auto_save_settings: %{
         enabled: true,
-        interval: version_preferences[:auto_save_interval] || 300,  # 5 minutes default
+        # 5 minutes default
+        interval: version_preferences[:auto_save_interval] || 300,
         on_major_changes: true
       },
-      
       history_retention: %{
         days: version_preferences[:keep_history_days] || 30,
         max_versions: 100,
         compression_enabled: true
       },
-      
       branching_config: %{
         strategy: version_preferences[:branch_strategy] || :main_only,
         merge_strategy: version_preferences[:merge_strategy] || :fast_forward,
@@ -558,28 +576,24 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   defp load_performance_baselines(user_context) do
     project_context = user_context[:project_context] || %{}
     expected_performance = project_context[:expected_performance] || %{}
-    
+
     %{
       response_time_targets: %{
         target: expected_performance[:response_time_target] || 3000,
         warning_threshold: expected_performance[:response_time_target] || 3000 * 0.8,
         critical_threshold: expected_performance[:response_time_target] || 3000 * 1.2
       },
-      
       quality_targets: %{
         target: expected_performance[:quality_score_target] || 0.8,
         minimum_acceptable: expected_performance[:quality_score_target] || 0.8 * 0.9,
         excellent_threshold: expected_performance[:quality_score_target] || 0.8 * 1.1
       },
-      
       success_rate_targets: %{
         target: expected_performance[:success_rate_target] || 0.95,
         minimum_acceptable: expected_performance[:success_rate_target] || 0.95 * 0.95,
         excellent_threshold: expected_performance[:success_rate_target] || 0.95 * 1.0
       },
-      
       benchmark_prompts: load_benchmark_prompts(project_context[:domain] || :general),
-      
       created_at: DateTime.utc_now()
     }
   end
@@ -738,7 +752,12 @@ defmodule TheMaestro.Prompts.EngineeringTools do
         category: :debugging_tools,
         description: "Debug and troubleshoot prompt issues",
         complexity_level: :intermediate,
-        capabilities: [:execution_tracing, :error_detection, :performance_profiling, :fix_suggestions]
+        capabilities: [
+          :execution_tracing,
+          :error_detection,
+          :performance_profiling,
+          :fix_suggestions
+        ]
       }
     ]
   end
@@ -761,12 +780,18 @@ defmodule TheMaestro.Prompts.EngineeringTools do
     case skill_level do
       :beginner ->
         Enum.filter(tools, fn tool -> tool.complexity_level in [:beginner, :intermediate] end)
+
       :intermediate ->
-        Enum.filter(tools, fn tool -> tool.complexity_level in [:beginner, :intermediate, :advanced] end)
+        Enum.filter(tools, fn tool ->
+          tool.complexity_level in [:beginner, :intermediate, :advanced]
+        end)
+
       :advanced ->
         tools
+
       :expert ->
         tools
+
       _ ->
         Enum.filter(tools, fn tool -> tool.complexity_level in [:beginner, :intermediate] end)
     end
@@ -775,20 +800,35 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   defp get_recommended_workflows(:beginner) do
     ["guided_prompt_creation", "template_based_development", "basic_testing"]
   end
+
   defp get_recommended_workflows(:intermediate) do
-    ["custom_prompt_development", "parameterized_templates", "comprehensive_testing", "basic_optimization"]
+    [
+      "custom_prompt_development",
+      "parameterized_templates",
+      "comprehensive_testing",
+      "basic_optimization"
+    ]
   end
+
   defp get_recommended_workflows(:advanced) do
-    ["advanced_prompt_engineering", "experimentation_driven_development", "performance_optimization", "collaborative_development"]
+    [
+      "advanced_prompt_engineering",
+      "experimentation_driven_development",
+      "performance_optimization",
+      "collaborative_development"
+    ]
   end
+
   defp get_recommended_workflows(_), do: get_recommended_workflows(:intermediate)
 
   defp get_guided_workflows(:beginner) do
     ["first_prompt_tutorial", "template_usage_guide", "basic_testing_walkthrough"]
   end
+
   defp get_guided_workflows(:intermediate) do
     ["optimization_techniques", "advanced_testing_strategies"]
   end
+
   defp get_guided_workflows(_), do: []
 
   defp get_automation_preferences(:beginner), do: %{level: :high, guidance: :extensive}
@@ -818,6 +858,7 @@ defmodule TheMaestro.Prompts.EngineeringTools do
       feature_engineering: ["feature_selection", "dimensionality_reduction", "feature_creation"]
     }
   end
+
   defp load_domain_templates(:web_development) do
     %{
       code_review: ["security_review", "performance_review", "style_review"],
@@ -825,49 +866,108 @@ defmodule TheMaestro.Prompts.EngineeringTools do
       testing: ["unit_testing", "integration_testing", "e2e_testing"]
     }
   end
-  defp load_domain_templates(_), do: %{
-    general: ["basic_assistant", "task_completion", "analysis_request"]
-  }
+
+  defp load_domain_templates(:e_commerce) do
+    ["product_catalog", "user_management", "payment_processing", "inventory_management", 
+     "order_fulfillment", "customer_support", "analytics_reporting"]
+  end
+
+  defp load_domain_templates(_),
+    do: %{
+      general: ["basic_assistant", "task_completion", "analysis_request"]
+    }
 
   defp load_data_processing_tools(%{data_types: data_types}) when is_list(data_types) do
     tools = %{}
-    
-    tools = if Enum.member?(data_types, :text), do: Map.put(tools, :text_processing, ["tokenization", "sentiment_analysis", "entity_extraction"]), else: tools
-    tools = if Enum.member?(data_types, :images), do: Map.put(tools, :image_processing, ["image_analysis", "object_detection", "visual_qa"]), else: tools
-    tools = if Enum.member?(data_types, :structured_data), do: Map.put(tools, :structured_data_analysis, ["statistical_analysis", "correlation_analysis", "trend_detection"]), else: tools
-    
+
+    tools =
+      if Enum.member?(data_types, :text),
+        do:
+          Map.put(tools, :text_processing, [
+            "tokenization",
+            "sentiment_analysis",
+            "entity_extraction"
+          ]),
+        else: tools
+
+    tools =
+      if Enum.member?(data_types, :images),
+        do:
+          Map.put(tools, :image_processing, ["image_analysis", "object_detection", "visual_qa"]),
+        else: tools
+
+    tools =
+      if Enum.member?(data_types, :structured_data),
+        do:
+          Map.put(tools, :structured_data_analysis, [
+            "statistical_analysis",
+            "correlation_analysis",
+            "trend_detection"
+          ]),
+        else: tools
+
     tools
   end
+
   defp load_data_processing_tools(_), do: %{}
 
   defp load_tech_stack_tools(tech_stack) when is_list(tech_stack) do
     Enum.reduce(tech_stack, %{}, fn tech, acc ->
       case tech do
-        "python" -> Map.put(acc, :python, ["code_analysis", "debugging", "optimization"])
-        "javascript" -> Map.put(acc, :javascript, ["js_analysis", "performance_tuning", "security_review"])
-        "elixir" -> Map.put(acc, :elixir, ["otp_design", "performance_analysis", "fault_tolerance"])
-        _ -> acc
+        "python" ->
+          Map.put(acc, :python, ["code_analysis", "debugging", "optimization"])
+
+        "javascript" ->
+          Map.put(acc, :javascript, ["js_analysis", "performance_tuning", "security_review"])
+
+        "elixir" ->
+          Map.put(acc, :elixir, ["otp_design", "performance_analysis", "fault_tolerance"])
+
+        _ ->
+          acc
       end
     end)
   end
+
   defp load_tech_stack_tools(_), do: %{}
 
   defp load_industry_context(:healthcare), do: %{compliance: ["HIPAA"], security_level: :high}
-  defp load_industry_context(:finance), do: %{compliance: ["PCI", "SOX"], security_level: :very_high}
+
+  defp load_industry_context(:finance),
+    do: %{compliance: ["PCI", "SOX"], security_level: :very_high}
+
   defp load_industry_context(_), do: %{compliance: [], security_level: :standard}
 
-  defp load_regulatory_context(:healthcare), do: %{data_protection: :strict, audit_requirements: :high}
-  defp load_regulatory_context(:finance), do: %{data_protection: :very_strict, audit_requirements: :very_high}
+  defp load_regulatory_context(:healthcare),
+    do: %{data_protection: :strict, audit_requirements: :high}
+
+  defp load_regulatory_context(:finance),
+    do: %{data_protection: :very_strict, audit_requirements: :very_high}
+
   defp load_regulatory_context(_), do: %{data_protection: :standard, audit_requirements: :low}
 
   defp load_benchmark_prompts(:machine_learning) do
-    ["Analyze this dataset and identify key patterns", "Explain the performance metrics for this model", "Suggest improvements for feature engineering"]
+    [
+      "Analyze this dataset and identify key patterns",
+      "Explain the performance metrics for this model",
+      "Suggest improvements for feature engineering"
+    ]
   end
+
   defp load_benchmark_prompts(:web_development) do
-    ["Review this code for security vulnerabilities", "Optimize this function for better performance", "Write unit tests for this component"]
+    [
+      "Review this code for security vulnerabilities",
+      "Optimize this function for better performance",
+      "Write unit tests for this component"
+    ]
   end
+
   defp load_benchmark_prompts(_) do
-    ["Provide a helpful response to this query", "Analyze the provided information", "Generate a comprehensive summary"]
+    [
+      "Provide a helpful response to this query",
+      "Analyze the provided information",
+      "Generate a comprehensive summary"
+    ]
   end
 
   defp calculate_editor_limit(team_size) when team_size <= 3, do: team_size
@@ -875,17 +975,23 @@ defmodule TheMaestro.Prompts.EngineeringTools do
   defp calculate_editor_limit(_), do: 10
 
   defp determine_conflict_resolution(team_size) when team_size <= 3, do: :manual_review
-  defp determine_conflict_resolution(team_size) when team_size <= 10, do: :semi_automatic
+  defp determine_conflict_resolution(team_size) when team_size < 10, do: :semi_automatic
   defp determine_conflict_resolution(_), do: :automatic_merge
 
   defp determine_notification_level(team_size) when team_size <= 3, do: :detailed
-  defp determine_notification_level(team_size) when team_size <= 10, do: :standard
+  defp determine_notification_level(team_size) when team_size < 10, do: :standard
   defp determine_notification_level(_), do: :minimal
 
-  defp determine_sync_interval(team_size) when team_size <= 3, do: 30  # 30 seconds
-  defp determine_sync_interval(team_size) when team_size <= 10, do: 60  # 1 minute
-  defp determine_sync_interval(_), do: 300  # 5 minutes
+  # 30 seconds
+  defp determine_sync_interval(team_size) when team_size <= 3, do: 30
+  # 1 minute
+  defp determine_sync_interval(team_size) when team_size <= 10, do: 60
+  # 5 minutes
+  defp determine_sync_interval(_), do: 300
 
-  defp generate_workspace_id, do: "ws_" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
-  defp generate_session_id, do: "sess_" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
+  defp generate_workspace_id,
+    do: "ws_" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
+
+  defp generate_session_id,
+    do: "sess_" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 end

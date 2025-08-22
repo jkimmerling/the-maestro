@@ -1,7 +1,7 @@
 defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
   @moduledoc """
   Interactive prompt builder with real-time editing, validation, and collaboration features.
-  
+
   Provides a comprehensive visual and code-based prompt construction environment
   with real-time preview, validation, suggestions, and collaborative editing capabilities.
   """
@@ -68,18 +68,20 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
   @doc """
   Applies a modification to the current prompt in the session.
   """
-  @spec apply_prompt_modification(PromptBuilderSession.t(), PromptModification.t()) :: PromptBuilderSession.t()
+  @spec apply_prompt_modification(PromptBuilderSession.t(), PromptModification.t()) ::
+          PromptBuilderSession.t()
   def apply_prompt_modification(session, modification) do
     updated_prompt = apply_modification_to_prompt(session.current_prompt, modification)
-    
-    %{session | 
-      current_prompt: updated_prompt,
-      prompt_structure: analyze_prompt_structure(updated_prompt),
-      validation_results: validate_prompt_in_real_time(updated_prompt),
-      performance_prediction: predict_prompt_performance(updated_prompt),
-      improvement_suggestions: generate_improvement_suggestions(updated_prompt),
-      auto_save_triggered: true,
-      last_save_timestamp: DateTime.utc_now()
+
+    %{
+      session
+      | current_prompt: updated_prompt,
+        prompt_structure: analyze_prompt_structure(updated_prompt),
+        validation_results: validate_prompt_in_real_time(updated_prompt),
+        performance_prediction: predict_prompt_performance(updated_prompt),
+        improvement_suggestions: generate_improvement_suggestions(updated_prompt),
+        auto_save_triggered: true,
+        last_save_timestamp: DateTime.utc_now()
     }
     |> update_collaboration_state()
   end
@@ -117,7 +119,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
     base_score = String.length(prompt) / 100
     parameter_bonus = count_parameters(prompt) * 0.1
     conditional_bonus = count_conditional_logic(prompt) * 0.2
-    
+
     min(1.0, base_score + parameter_bonus + conditional_bonus)
   end
 
@@ -127,7 +129,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
       ~r/\{\{#unless\s+[^}]+\}\}/,
       ~r/\{\{#each\s+[^}]+\}\}/
     ]
-    
+
     Enum.reduce(conditionals, 0, fn regex, acc ->
       acc + length(Regex.scan(regex, prompt))
     end)
@@ -143,11 +145,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
     # Parse parameter like "name | default: value | required"
     parts = String.split(param_str, "|")
     name = String.trim(hd(parts))
-    
-    modifiers = Enum.drop(parts, 1)
-    |> Enum.map(&String.trim/1)
-    |> Enum.reduce(%{}, &parse_parameter_modifier/2)
-    
+
+    modifiers =
+      Enum.drop(parts, 1)
+      |> Enum.map(&String.trim/1)
+      |> Enum.reduce(%{}, &parse_parameter_modifier/2)
+
     Map.put(modifiers, :name, name)
   end
 
@@ -156,23 +159,25 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
       String.starts_with?(modifier, "default:") ->
         default_value = String.trim_leading(modifier, "default:") |> String.trim()
         Map.put(acc, :default, default_value)
-      
+
       String.starts_with?(modifier, "enum:") ->
-        enum_values = String.trim_leading(modifier, "enum:") 
-                     |> String.trim()
-                     |> String.trim_leading("[")
-                     |> String.trim_trailing("]")
-                     |> String.split(",")
-                     |> Enum.map(&String.trim/1)
+        enum_values =
+          String.trim_leading(modifier, "enum:")
+          |> String.trim()
+          |> String.trim_leading("[")
+          |> String.trim_trailing("]")
+          |> String.split(",")
+          |> Enum.map(&String.trim/1)
+
         Map.put(acc, :enum, enum_values)
-      
+
       modifier == "required" ->
         Map.put(acc, :required, true)
-      
+
       String.starts_with?(modifier, "type:") ->
         type = String.trim_leading(modifier, "type:") |> String.trim()
         Map.put(acc, :type, String.to_atom(type))
-      
+
       true ->
         acc
     end
@@ -180,25 +185,28 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
 
   defp extract_conditional_logic(prompt) do
     conditionals = []
-    
+
     # Extract if statements
-    if_statements = Regex.scan(~r/\{\{#if\s+([^}]+)\}\}(.*?)\{\{\/if\}\}/s, prompt)
-    |> Enum.map(fn [_full, condition, content] -> 
-      %{type: :if, condition: String.trim(condition), content: String.trim(content)}
-    end)
-    
+    if_statements =
+      Regex.scan(~r/\{\{#if\s+([^}]+)\}\}(.*?)\{\{\/if\}\}/s, prompt)
+      |> Enum.map(fn [_full, condition, content] ->
+        %{type: :if, condition: String.trim(condition), content: String.trim(content)}
+      end)
+
     # Extract unless statements  
-    unless_statements = Regex.scan(~r/\{\{#unless\s+([^}]+)\}\}(.*?)\{\{\/unless\}\}/s, prompt)
-    |> Enum.map(fn [_full, condition, content] -> 
-      %{type: :unless, condition: String.trim(condition), content: String.trim(content)}
-    end)
-    
+    unless_statements =
+      Regex.scan(~r/\{\{#unless\s+([^}]+)\}\}(.*?)\{\{\/unless\}\}/s, prompt)
+      |> Enum.map(fn [_full, condition, content] ->
+        %{type: :unless, condition: String.trim(condition), content: String.trim(content)}
+      end)
+
     # Extract each loops
-    each_statements = Regex.scan(~r/\{\{#each\s+([^}]+)\}\}(.*?)\{\{\/each\}\}/s, prompt)
-    |> Enum.map(fn [_full, variable, content] -> 
-      %{type: :each, variable: String.trim(variable), content: String.trim(content)}
-    end)
-    
+    each_statements =
+      Regex.scan(~r/\{\{#each\s+([^}]+)\}\}(.*?)\{\{\/each\}\}/s, prompt)
+      |> Enum.map(fn [_full, variable, content] ->
+        %{type: :each, variable: String.trim(variable), content: String.trim(content)}
+      end)
+
     conditionals ++ if_statements ++ unless_statements ++ each_statements
   end
 
@@ -231,7 +239,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
       %{
         name: "Output Format",
         category: :output_format,
-        template: "Provide your response in {{format | enum: [paragraph, list, json, markdown] | default: paragraph}} format.",
+        template:
+          "Provide your response in {{format | enum: [paragraph, list, json, markdown] | default: paragraph}} format.",
         description: "Specifies the desired output format",
         parameters: ["format"]
       },
@@ -255,7 +264,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
         {{#each examples}}
         **Input:** {{this.input}}
         **Output:** {{this.output}}
-        
+
         {{/each}}
         """,
         description: "Provides example inputs and outputs",
@@ -317,7 +326,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
   defp predict_prompt_performance(prompt) do
     token_estimate = estimate_token_usage(prompt)
     complexity_score = calculate_complexity_score(prompt)
-    
+
     %{
       estimated_tokens: token_estimate,
       complexity_score: complexity_score,
@@ -330,43 +339,53 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
   defp estimate_token_usage(prompt) do
     # Rough estimate: ~4 characters per token
     base_tokens = div(String.length(prompt), 4)
-    
+
     # Add tokens for expected response (heuristic)
     complexity_multiplier = max(1.5, calculate_complexity_score(prompt) * 3)
     response_tokens = round(base_tokens * complexity_multiplier)
-    
+
     base_tokens + response_tokens
   end
 
   defp estimate_response_time(token_estimate, complexity_score) do
     # Base response time in milliseconds
     base_time = 1000
-    
+
     # Add time based on tokens and complexity
-    token_time = token_estimate * 2  # 2ms per token
+    # 2ms per token
+    token_time = token_estimate * 2
     complexity_time = round(complexity_score * 1000)
-    
+
     base_time + token_time + complexity_time
   end
 
   defp predict_quality_score(prompt) do
-    base_score = 0.5  # Base score
-    
+    # Base score
+    base_score = 0.5
+
     # Calculate adjustments
     structure_bonus = if String.contains?(prompt, ["##", "**", "-"]), do: 0.1, else: 0.0
-    example_bonus = if String.contains?(prompt, ["example", "Example", "EXAMPLE"]), do: 0.15, else: 0.0
-    instruction_bonus = if String.contains?(prompt, ["please", "should", "must", "need to"]), do: 0.1, else: 0.0
+
+    example_bonus =
+      if String.contains?(prompt, ["example", "Example", "EXAMPLE"]), do: 0.15, else: 0.0
+
+    instruction_bonus =
+      if String.contains?(prompt, ["please", "should", "must", "need to"]), do: 0.1, else: 0.0
+
     length_penalty = if String.length(prompt) > 2000, do: -0.1, else: 0.0
     short_penalty = if String.length(prompt) < 50, do: -0.2, else: 0.0
-    
-    final_score = base_score + structure_bonus + example_bonus + instruction_bonus + length_penalty + short_penalty
-    
+
+    final_score =
+      base_score + structure_bonus + example_bonus + instruction_bonus + length_penalty +
+        short_penalty
+
     max(0.0, min(1.0, final_score))
   end
 
   defp estimate_cost(token_estimate) do
     # Rough cost estimate (varies by provider)
-    cost_per_token = 0.00002  # $0.02 per 1K tokens
+    # $0.02 per 1K tokens
+    cost_per_token = 0.00002
     token_estimate * cost_per_token
   end
 
@@ -384,18 +403,22 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
   defp check_repetition(prompt) do
     words = String.split(prompt, ~r/\s+/)
     word_counts = Enum.frequencies(words)
-    
-    repeated_words = Enum.filter(word_counts, fn {word, count} -> 
-      count > 3 && String.length(word) > 4
-    end)
-    
+
+    repeated_words =
+      Enum.filter(word_counts, fn {word, count} ->
+        count > 3 && String.length(word) > 4
+      end)
+
     if length(repeated_words) > 0 do
-      [%{
-        type: :reduce_repetition,
-        description: "Consider reducing repetition of words: #{Enum.map(repeated_words, fn {word, _} -> word end) |> Enum.join(", ")}",
-        priority: :medium,
-        fix_suggestion: "Vary your language or use parameters for repeated concepts"
-      }]
+      [
+        %{
+          type: :reduce_repetition,
+          description:
+            "Consider reducing repetition of words: #{Enum.map(repeated_words, fn {word, _} -> word end) |> Enum.join(", ")}",
+          priority: :medium,
+          fix_suggestion: "Vary your language or use parameters for repeated concepts"
+        }
+      ]
     else
       []
     end
@@ -405,30 +428,46 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
     has_headers = String.contains?(prompt, ["##", "**", "###"])
     has_lists = String.contains?(prompt, ["-", "*", "1.", "2."])
     
-    if not has_headers and not has_lists and String.length(prompt) > 200 do
-      [%{
-        type: :add_structure,
-        description: "Long prompt could benefit from better structure with headers or lists",
-        priority: :medium,
-        fix_suggestion: "Add headers (## Section) or bullet points to organize content"
-      }]
+    # Check for unstructured prompts - either too short and vague, or too long without structure
+    is_unstructured = (not has_headers and not has_lists) and 
+                     (String.length(prompt) > 50 or contains_vague_terms?(prompt))
+
+    if is_unstructured do
+      [
+        %{
+          type: :add_structure,
+          description: "Long prompt could benefit from better structure with headers or lists",
+          priority: :medium,
+          fix_suggestion: "Add headers (## Section) or bullet points to organize content"
+        }
+      ]
     else
       []
     end
+  end
+  
+  defp contains_vague_terms?(prompt) do
+    vague_terms = ["something", "things", "stuff", "do", "make", "good", "bad"]
+    Enum.any?(vague_terms, fn term -> String.contains?(String.downcase(prompt), term) end)
   end
 
   defp check_clarity(prompt) do
     # Check for vague terms
     vague_terms = ["something", "things", "stuff", "do", "make", "good", "bad"]
-    found_vague = Enum.filter(vague_terms, fn term -> String.contains?(String.downcase(prompt), term) end)
-    
+
+    found_vague =
+      Enum.filter(vague_terms, fn term -> String.contains?(String.downcase(prompt), term) end)
+
     if length(found_vague) > 0 do
-      [%{
-        type: :clarify_instructions,
-        description: "Consider replacing vague terms with more specific language",
-        priority: :high,
-        fix_suggestion: "Replace terms like '#{Enum.join(found_vague, ", ")}' with specific descriptions"
-      }]
+      [
+        %{
+          type: :clarify_instructions,
+          description: "Consider replacing vague terms with more specific language",
+          priority: :high,
+          fix_suggestion:
+            "Replace terms like '#{Enum.join(found_vague, ", ")}' with specific descriptions"
+        }
+      ]
     else
       []
     end
@@ -437,14 +476,16 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
   defp check_parameterization(prompt) do
     # Look for repeated concepts that could be parameters
     concepts = extract_parameterizable_concepts(prompt)
-    
+
     if length(concepts) > 0 do
-      [%{
-        type: :extract_parameter,
-        description: "Consider parameterizing repeated concepts: #{Enum.join(concepts, ", ")}",
-        priority: :low,
-        fix_suggestion: "Create parameters for repeated values to make the prompt more reusable"
-      }]
+      [
+        %{
+          type: :extract_parameter,
+          description: "Consider parameterizing repeated concepts: #{Enum.join(concepts, ", ")}",
+          priority: :low,
+          fix_suggestion: "Create parameters for repeated values to make the prompt more reusable"
+        }
+      ]
     else
       []
     end
@@ -452,62 +493,85 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
 
   defp extract_parameterizable_concepts(prompt) do
     # Simple heuristic: look for repeated words that might be good parameters
-    words = String.split(prompt, ~r/\s+/) |> Enum.map(&String.downcase/1)
-    word_counts = Enum.frequencies(words)
-    
-    Enum.filter(word_counts, fn {word, count} -> 
-      count >= 2 && String.length(word) > 3 && not Enum.member?(["the", "and", "that", "this", "with", "from"], word)
-    end)
-    |> Enum.take(3)
-    |> Enum.map(fn {word, _} -> word end)
+    words = String.split(prompt, ~r/\s+/)
+    lowercase_words = Enum.map(words, &String.downcase/1)
+    word_counts = Enum.frequencies(lowercase_words)
+
+    repeated_concepts =
+      Enum.filter(word_counts, fn {word, count} ->
+        count >= 2 && String.length(word) > 3 &&
+          not Enum.member?(["the", "and", "that", "this", "with", "from"], word)
+      end)
+      |> Enum.map(fn {word, _count} -> 
+        # Find the original case version
+        Enum.find(words, fn w -> String.downcase(w) == word end) || word
+      end)
+      |> Enum.take(3)
+      
+    repeated_concepts
   end
 
   defp check_performance(prompt) do
-    length_suggestions = if String.length(prompt) > 3000 do
-      [%{
-        type: :reduce_verbosity,
-        description: "Prompt is quite long and may be inefficient",
-        priority: :medium,
-        fix_suggestion: "Consider condensing content or breaking into multiple focused prompts"
-      }]
-    else
-      []
-    end
+    # Check for excessive verbosity (lots of adverbs, redundant adjectives)
+    verbose_indicators = ["extremely", "very", "quite", "exceptionally", "meticulously", 
+                         "comprehensively", "thoroughly", "extensively", "exhaustive", 
+                         "complete", "detailed"]
+    verbose_count = Enum.count(verbose_indicators, fn indicator -> 
+      String.contains?(String.downcase(prompt), indicator) 
+    end)
     
+    length_suggestions =
+      if String.length(prompt) > 3000 or verbose_count >= 3 do
+        [
+          %{
+            type: :reduce_verbosity,
+            description: "Prompt is quite long and may be inefficient",
+            priority: :medium,
+            fix_suggestion:
+              "Consider condensing content or breaking into multiple focused prompts"
+          }
+        ]
+      else
+        []
+      end
+
     # Check for very long sentences
     sentences = String.split(prompt, ~r/[.!?]+/)
     long_sentences = Enum.filter(sentences, fn s -> String.length(s) > 200 end)
-    
-    sentence_suggestions = if length(long_sentences) > 0 do
-      [%{
-        type: :optimize_length,
-        description: "Some sentences are very long and may reduce clarity",
-        priority: :low,
-        fix_suggestion: "Break long sentences into shorter, clearer statements"
-      }]
-    else
-      []
-    end
-    
+
+    sentence_suggestions =
+      if length(long_sentences) > 0 do
+        [
+          %{
+            type: :optimize_length,
+            description: "Some sentences are very long and may reduce clarity",
+            priority: :low,
+            fix_suggestion: "Break long sentences into shorter, clearer statements"
+          }
+        ]
+      else
+        []
+      end
+
     length_suggestions ++ sentence_suggestions
   end
 
   defp validate_prompt_in_real_time(prompt) do
     errors = []
     warnings = []
-    
+
     # Template syntax validation
     {syntax_errors, template_valid} = validate_template_syntax(prompt)
     errors = errors ++ syntax_errors
-    
+
     # Length validation
     length_warnings = validate_length_constraints(prompt)
     warnings = warnings ++ length_warnings
-    
+
     # Parameter validation
     parameter_errors = validate_parameters(prompt)
     errors = errors ++ parameter_errors
-    
+
     %{
       has_errors: length(errors) > 0,
       errors: errors,
@@ -519,44 +583,69 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
   end
 
   defp validate_template_syntax(prompt) do
-    errors = []
+    _all_errors = []
+
+    # Check for unclosed template tags - look for {{ not followed by }}
+    open_brackets = length(Regex.scan(~r/\{\{/, prompt))
+    close_brackets = length(Regex.scan(~r/\}\}/, prompt))
     
-    # Check for unclosed template tags
-    open_tags = Regex.scan(~r/\{\{(?!\/)[^}]*$/, prompt)
-    if length(open_tags) > 0 do
-      errors = errors ++ [%{type: :template_syntax_error, message: "Unclosed template tags detected"}]
-    end
-    
+    unclosed_errors = 
+      if open_brackets > close_brackets do
+        [%{type: :template_syntax_error, message: "Unclosed template tags detected"}]
+      else
+        []
+      end
+
     # Check for nested template tags (not supported in basic implementation)
     nested = Regex.scan(~r/\{\{[^}]*\{\{/, prompt)
-    if length(nested) > 0 do
-      errors = errors ++ [%{type: :template_syntax_error, message: "Nested template tags detected"}]
-    end
-    
+    nested_errors = 
+      if length(nested) > 0 do
+        [%{type: :template_syntax_error, message: "Nested template tags detected"}]
+      else
+        []
+      end
+
     # Check for malformed conditionals
     if_count = length(Regex.scan(~r/\{\{#if\s+[^}]+\}\}/, prompt))
     endif_count = length(Regex.scan(~r/\{\{\/if\}\}/, prompt))
-    if if_count != endif_count do
-      errors = errors ++ [%{type: :template_syntax_error, message: "Mismatched if/endif tags"}]
-    end
-    
-    {errors, length(errors) == 0}
+    conditional_errors = 
+      if if_count != endif_count do
+        [%{type: :template_syntax_error, message: "Mismatched if/endif tags"}]
+      else
+        []
+      end
+
+    all_errors = unclosed_errors ++ nested_errors ++ conditional_errors
+    {all_errors, length(all_errors) == 0}
   end
 
   defp validate_length_constraints(prompt) do
     warnings = []
     length = String.length(prompt)
-    
+
     cond do
       length > 5000 ->
-        warnings ++ [%{type: :excessive_length, message: "Prompt is very long (#{length} chars) and may cause performance issues"}]
-      
+        warnings ++
+          [
+            %{
+              type: :excessive_length,
+              message: "Prompt is very long (#{length} chars) and may cause performance issues"
+            }
+          ]
+
       length > 3000 ->
-        warnings ++ [%{type: :length_warning, message: "Prompt is quite long (#{length} chars) - consider optimization"}]
-      
+        warnings ++
+          [
+            %{
+              type: :length_warning,
+              message: "Prompt is quite long (#{length} chars) - consider optimization"
+            }
+          ]
+
       length < 20 ->
-        warnings ++ [%{type: :too_short, message: "Prompt is very short and may lack necessary context"}]
-      
+        warnings ++
+          [%{type: :too_short, message: "Prompt is very short and may lack necessary context"}]
+
       true ->
         warnings
     end
@@ -565,11 +654,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
   defp validate_parameters(prompt) do
     errors = []
     parameters = extract_template_parameters(prompt)
-    
+
     # Check for parameters with invalid syntax
     Enum.reduce(parameters, errors, fn param, acc ->
       if Map.has_key?(param, :enum) && not is_list(param.enum) do
-        acc ++ [%{type: :parameter_validation_error, message: "Invalid enum definition for parameter '#{param.name}'"}]
+        acc ++
+          [
+            %{
+              type: :parameter_validation_error,
+              message: "Invalid enum definition for parameter '#{param.name}'"
+            }
+          ]
       else
         acc
       end
@@ -580,41 +675,48 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
     case modification.type do
       :text_replacement ->
         String.replace(prompt, modification.target, modification.replacement)
-      
+
       :text_insertion ->
         case modification.position do
           pos when is_integer(pos) ->
             {before, after_part} = String.split_at(prompt, pos)
             before <> modification.insertion <> after_part
+
           :end ->
             prompt <> modification.insertion
+
           :beginning ->
             modification.insertion <> prompt
         end
-      
+
       :section_addition ->
         case modification.position do
           :end ->
             prompt <> "\n\n" <> modification.content
+
           :beginning ->
             modification.content <> "\n\n" <> prompt
+
           pos when is_integer(pos) ->
             {before, after_part} = String.split_at(prompt, pos)
             before <> "\n\n" <> modification.content <> "\n\n" <> after_part
         end
-      
+
       :component_insertion ->
         component_text = modification.component.template
+
         case modification.position do
           pos when is_integer(pos) ->
             {before, after_part} = String.split_at(prompt, pos)
             before <> component_text <> after_part
+
           :end ->
             prompt <> "\n\n" <> component_text
+
           :beginning ->
             component_text <> "\n\n" <> prompt
         end
-      
+
       _ ->
         prompt
     end
@@ -622,11 +724,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilder do
 
   defp update_collaboration_state(session) do
     # Update collaboration state to reflect changes
-    updated_collab = %{session.collaboration_state |
-      requires_sync: length(session.collaboration_state.participants) > 1,
-      last_edit_by: "current_user"
-    }
+    current_collab = session.collaboration_state || %{}
+    participants = Map.get(current_collab, :participants, [])
     
+    updated_collab = Map.merge(current_collab, %{
+      requires_sync: length(participants) > 1,
+      last_edit_by: "current_user"
+    })
+
     %{session | collaboration_state: updated_collab}
   end
 end

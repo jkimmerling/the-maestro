@@ -2,6 +2,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
   use ExUnit.Case, async: true
 
   alias TheMaestro.Prompts.EngineeringTools.InteractiveBuilder
+
   alias TheMaestro.Prompts.EngineeringTools.InteractiveBuilder.{
     PromptBuilderSession,
     PromptModification
@@ -85,7 +86,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
       updated_session = InteractiveBuilder.apply_prompt_modification(session, modification)
 
       assert String.contains?(updated_session.current_prompt, "You must be concise.")
-      assert updated_session.prompt_structure.sections_count > session.prompt_structure.sections_count
+
+      assert updated_session.prompt_structure.sections_count >
+               session.prompt_structure.sections_count
     end
 
     test "updates validation results after modification", %{session: session} do
@@ -110,7 +113,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
 
       updated_session = InteractiveBuilder.apply_prompt_modification(session, modification)
 
-      assert updated_session.performance_prediction.estimated_tokens > session.performance_prediction.estimated_tokens
+      assert updated_session.performance_prediction.estimated_tokens >
+               session.performance_prediction.estimated_tokens
+
       assert updated_session.performance_prediction.complexity_score >= 0
     end
 
@@ -144,12 +149,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
 
     test "updates collaboration state when other users present", %{session: session} do
       # Setup collaboration state with other participants
-      collaborative_session = %{session | 
-        collaboration_state: %{
-          participants: ["user1", "user2"],
-          active_editors: ["user1"],
-          requires_sync: false
-        }
+      collaborative_session = %{
+        session
+        | collaboration_state: %{
+            participants: ["user1", "user2"],
+            active_editors: ["user1"],
+            requires_sync: false
+          }
       }
 
       modification = %PromptModification{
@@ -158,7 +164,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
         position: 13
       }
 
-      updated_session = InteractiveBuilder.apply_prompt_modification(collaborative_session, modification)
+      updated_session =
+        InteractiveBuilder.apply_prompt_modification(collaborative_session, modification)
 
       assert updated_session.collaboration_state.requires_sync == true
       assert updated_session.collaboration_state.last_edit_by == "current_user"
@@ -168,7 +175,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
   describe "real-time validation" do
     test "validates template syntax" do
       session = InteractiveBuilder.create_prompt_builder_session()
-      
+
       modification = %PromptModification{
         type: :text_insertion,
         insertion: "Hello {{name}}, please {{action | required}}",
@@ -183,7 +190,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
 
     test "detects invalid template syntax" do
       session = InteractiveBuilder.create_prompt_builder_session()
-      
+
       modification = %PromptModification{
         type: :text_insertion,
         insertion: "Hello {{unclosed_template and {{nested {{invalid}}",
@@ -193,16 +200,18 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
       updated_session = InteractiveBuilder.apply_prompt_modification(session, modification)
 
       assert updated_session.validation_results.has_errors == true
-      assert Enum.any?(updated_session.validation_results.errors, fn e -> 
-        e.type == :template_syntax_error 
-      end)
+
+      assert Enum.any?(updated_session.validation_results.errors, fn e ->
+               e.type == :template_syntax_error
+             end)
     end
 
     test "validates prompt length constraints" do
       session = InteractiveBuilder.create_prompt_builder_session()
-      
+
       # Create a very long prompt
       long_text = String.duplicate("This is a very long prompt. ", 1000)
+
       modification = %PromptModification{
         type: :text_insertion,
         insertion: long_text,
@@ -212,9 +221,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
       updated_session = InteractiveBuilder.apply_prompt_modification(session, modification)
 
       assert updated_session.validation_results.length_warnings != []
-      assert Enum.any?(updated_session.validation_results.length_warnings, fn w -> 
-        w.type == :excessive_length 
-      end)
+
+      assert Enum.any?(updated_session.validation_results.length_warnings, fn w ->
+               w.type == :excessive_length
+             end)
     end
   end
 
@@ -224,17 +234,19 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
       session = InteractiveBuilder.create_prompt_builder_session(unstructured_prompt)
 
       suggestions = session.improvement_suggestions
-      
+
       assert Enum.any?(suggestions, fn s -> s.type == :add_structure end)
       assert Enum.any?(suggestions, fn s -> s.type == :clarify_instructions end)
     end
 
     test "suggests parameter extraction for repeated patterns" do
-      parametrizable_prompt = "You are a Python developer. Write Python code using Python best practices."
+      parametrizable_prompt =
+        "You are a Python developer. Write Python code using Python best practices."
+
       session = InteractiveBuilder.create_prompt_builder_session(parametrizable_prompt)
 
       suggestions = session.improvement_suggestions
-      
+
       assert Enum.any?(suggestions, fn s -> s.type == :extract_parameter end)
       assert Enum.any?(suggestions, fn s -> String.contains?(s.description, "Python") end)
     end
@@ -245,10 +257,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
       meticulously careful, exceptionally precise assistant that always provides 
       complete, exhaustive, fully comprehensive responses with extensive detail.
       """
+
       session = InteractiveBuilder.create_prompt_builder_session(verbose_prompt)
 
       suggestions = session.improvement_suggestions
-      
+
       assert Enum.any?(suggestions, fn s -> s.type == :reduce_verbosity end)
       assert Enum.any?(suggestions, fn s -> s.type == :optimize_length end)
     end
@@ -259,19 +272,20 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
       session = InteractiveBuilder.create_prompt_builder_session()
 
       components = session.available_components
-      
+
       assert is_list(components)
       assert length(components) > 0
-      assert Enum.all?(components, fn c -> 
-        Map.has_key?(c, :name) && Map.has_key?(c, :template) && Map.has_key?(c, :category)
-      end)
+
+      assert Enum.all?(components, fn c ->
+               Map.has_key?(c, :name) && Map.has_key?(c, :template) && Map.has_key?(c, :category)
+             end)
     end
 
     test "components include standard categories" do
       session = InteractiveBuilder.create_prompt_builder_session()
 
       component_categories = Enum.map(session.available_components, & &1.category)
-      
+
       assert Enum.member?(component_categories, :role_definition)
       assert Enum.member?(component_categories, :task_specification)
       assert Enum.member?(component_categories, :output_format)
@@ -280,11 +294,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.InteractiveBuilderTest do
 
     test "can insert component into prompt" do
       session = InteractiveBuilder.create_prompt_builder_session()
-      
-      role_component = Enum.find(session.available_components, fn c -> 
-        c.category == :role_definition 
-      end)
-      
+
+      role_component =
+        Enum.find(session.available_components, fn c ->
+          c.category == :role_definition
+        end)
+
       modification = %PromptModification{
         type: :component_insertion,
         component: role_component,

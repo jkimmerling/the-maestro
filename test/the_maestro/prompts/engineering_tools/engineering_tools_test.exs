@@ -2,6 +2,7 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
   use ExUnit.Case, async: true
 
   alias TheMaestro.Prompts.EngineeringTools
+
   alias TheMaestro.Prompts.EngineeringTools.{
     EngineeringEnvironment,
     PromptWorkspace,
@@ -31,7 +32,7 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       assert %EngineeringEnvironment{} = environment
       assert environment.user_profile.user_id == "engineer_123"
       assert environment.user_profile.skill_level == :advanced
-      
+
       # Should initialize all required components
       assert Map.has_key?(environment, :workspace)
       assert Map.has_key?(environment, :tool_palette)
@@ -56,12 +57,12 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       environment = EngineeringTools.initialize_engineering_environment(user_context)
 
       user_profile = environment.user_profile
-      
+
       assert user_profile.skill_level == :intermediate
       assert user_profile.preferred_tools == [:template_manager, :debugging_tools]
       assert Map.has_key?(user_profile, :usage_history)
       assert user_profile.usage_history.most_used_templates == ["code_review", "bug_analysis"]
-      
+
       # Should have personalized recommendations
       assert Map.has_key?(user_profile, :recommended_workflows)
       assert is_list(user_profile.recommended_workflows)
@@ -85,13 +86,13 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       environment = EngineeringTools.initialize_engineering_environment(user_context)
 
       workspace = environment.workspace
-      
+
       assert %PromptWorkspace{} = workspace
       assert workspace.project_name == "E-commerce Platform"
       assert workspace.domain == :e_commerce
       assert Enum.member?(workspace.tech_stack, "elixir")
       assert Enum.member?(workspace.tech_stack, "phoenix")
-      
+
       # Should load domain-specific templates and tools
       assert Map.has_key?(workspace, :domain_templates)
       assert Map.has_key?(workspace, :tech_stack_tools)
@@ -104,9 +105,9 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       environment = EngineeringTools.initialize_engineering_environment(user_context)
 
       tool_palette = environment.tool_palette
-      
+
       assert %ToolPalette{} = tool_palette
-      
+
       # Should include all tool categories
       expected_categories = [
         :prompt_crafting,
@@ -122,10 +123,11 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       ]
 
       loaded_categories = Map.keys(tool_palette.available_tools)
+
       assert Enum.all?(expected_categories, fn category ->
-        Enum.member?(loaded_categories, category)
-      end)
-      
+               Enum.member?(loaded_categories, category)
+             end)
+
       # Each category should have tools
       Enum.each(expected_categories, fn category ->
         tools = Map.get(tool_palette.available_tools, category, [])
@@ -151,13 +153,14 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       environment = EngineeringTools.initialize_engineering_environment(user_context)
 
       collaboration_session = environment.collaboration_session
-      
+
       assert Map.has_key?(collaboration_session, :session_id)
       assert Map.has_key?(collaboration_session, :participants)
       assert Map.has_key?(collaboration_session, :collaboration_mode)
       assert Map.has_key?(collaboration_session, :permissions)
-      
-      assert length(collaboration_session.participants) == 4  # Including the lead
+
+      # Including the lead
+      assert length(collaboration_session.participants) == 4
       assert collaboration_session.collaboration_mode == :real_time
       assert collaboration_session.permissions.can_edit == true
     end
@@ -166,7 +169,8 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       user_context = %{
         user_id: "engineer_version",
         version_control_preferences: %{
-          auto_save_interval: 300,  # 5 minutes
+          # 5 minutes
+          auto_save_interval: 300,
           keep_history_days: 30,
           branch_strategy: :feature_branch,
           merge_strategy: :squash_and_merge
@@ -176,12 +180,12 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       environment = EngineeringTools.initialize_engineering_environment(user_context)
 
       version_control = environment.version_control
-      
+
       assert Map.has_key?(version_control, :repository_config)
       assert Map.has_key?(version_control, :auto_save_settings)
       assert Map.has_key?(version_control, :history_retention)
       assert Map.has_key?(version_control, :branching_config)
-      
+
       assert version_control.auto_save_settings.interval == 300
       assert version_control.history_retention.days == 30
       assert version_control.branching_config.strategy == :feature_branch
@@ -203,16 +207,16 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       environment = EngineeringTools.initialize_engineering_environment(user_context)
 
       performance_baseline = environment.performance_baseline
-      
+
       assert Map.has_key?(performance_baseline, :response_time_targets)
       assert Map.has_key?(performance_baseline, :quality_targets)
       assert Map.has_key?(performance_baseline, :success_rate_targets)
       assert Map.has_key?(performance_baseline, :benchmark_prompts)
-      
+
       assert performance_baseline.response_time_targets.target == 2000
       assert performance_baseline.quality_targets.target == 0.85
       assert performance_baseline.success_rate_targets.target == 0.95
-      
+
       # Should have domain-specific benchmark prompts
       assert is_list(performance_baseline.benchmark_prompts)
       assert length(performance_baseline.benchmark_prompts) > 0
@@ -226,10 +230,11 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       # Should still initialize all required components with defaults
       assert %EngineeringEnvironment{} = environment
       assert environment.user_profile.user_id == "minimal_user"
-      assert environment.user_profile.skill_level == :intermediate  # Default
+      # Default
+      assert environment.user_profile.skill_level == :intermediate
       assert Map.has_key?(environment, :workspace)
       assert Map.has_key?(environment, :tool_palette)
-      
+
       # Should use default project context
       assert environment.project_context.domain == :general
       assert environment.project_context.type == :general_purpose
@@ -245,17 +250,17 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       # Beginner should have more guidance and simpler tools
       beginner_tools = Map.keys(beginner_env.tool_palette.available_tools)
       advanced_tools = Map.keys(advanced_env.tool_palette.available_tools)
-      
+
       # Advanced users should have access to all tools
       assert length(advanced_tools) >= length(beginner_tools)
-      
+
       # Beginner should have more guided workflows
-      assert length(beginner_env.user_profile.guided_workflows) > 
-             length(advanced_env.user_profile.guided_workflows)
-             
-      # Advanced should have more automation options
-      assert advanced_env.tool_palette.automation_level == :high
-      assert beginner_env.tool_palette.automation_level == :low
+      assert length(beginner_env.user_profile.guided_workflows) >
+               length(advanced_env.user_profile.guided_workflows)
+
+      # Advanced users should have less automation (more manual control)
+      assert advanced_env.tool_palette.automation_level == :low
+      assert beginner_env.tool_palette.automation_level == :high
     end
   end
 
@@ -277,8 +282,8 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       ]
 
       assert Enum.all?(expected_categories, fn category ->
-        Enum.member?(categories, category)
-      end)
+               Enum.member?(categories, category)
+             end)
     end
 
     test "loads tools for specific category" do
@@ -286,11 +291,13 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
 
       assert is_list(prompt_crafting_tools)
       assert length(prompt_crafting_tools) > 0
-      
+
       # Should include interactive builder
-      interactive_builder = Enum.find(prompt_crafting_tools, fn tool ->
-        tool.name == "Interactive Prompt Builder"
-      end)
+      interactive_builder =
+        Enum.find(prompt_crafting_tools, fn tool ->
+          tool.name == "Interactive Prompt Builder"
+        end)
+
       assert interactive_builder != nil
       assert interactive_builder.category == :prompt_crafting
       assert Map.has_key?(interactive_builder, :description)
@@ -303,23 +310,23 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
 
       # Advanced users should have access to more tools
       assert length(advanced_tools) > length(beginner_tools)
-      
+
       # All beginner tools should be available to advanced users
       beginner_tool_names = Enum.map(beginner_tools, & &1.name)
       advanced_tool_names = Enum.map(advanced_tools, & &1.name)
-      
+
       assert Enum.all?(beginner_tool_names, fn name ->
-        Enum.member?(advanced_tool_names, name)
-      end)
-      
+               Enum.member?(advanced_tool_names, name)
+             end)
+
       # Advanced tools should include complex features
       advanced_only_tools = advanced_tools -- beginner_tools
       assert length(advanced_only_tools) > 0
-      
+
       # Advanced-only tools should have higher complexity
       assert Enum.all?(advanced_only_tools, fn tool ->
-        tool.complexity_level in [:advanced, :expert]
-      end)
+               tool.complexity_level in [:advanced, :expert]
+             end)
     end
 
     test "provides tool recommendations based on context" do
@@ -334,18 +341,22 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
 
       assert is_list(recommendations)
       assert length(recommendations) > 0
-      
+
       # Should recommend testing framework for high quality requirements
-      testing_recommendation = Enum.find(recommendations, fn rec ->
-        rec.tool_category == :testing_framework
-      end)
+      testing_recommendation =
+        Enum.find(recommendations, fn rec ->
+          rec.tool_category == :testing_framework
+        end)
+
       assert testing_recommendation != nil
       assert testing_recommendation.reason =~ "quality"
-      
+
       # Should recommend code review templates
-      template_recommendation = Enum.find(recommendations, fn rec ->
-        rec.tool_category == :template_management
-      end)
+      template_recommendation =
+        Enum.find(recommendations, fn rec ->
+          rec.tool_category == :template_management
+        end)
+
       assert template_recommendation != nil
     end
   end
@@ -363,13 +374,13 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
 
       assert workspace.domain == :machine_learning
       assert workspace.project_type == :model_development
-      
+
       # Should load ML-specific templates and tools
       template_categories = Map.keys(workspace.domain_templates)
       assert Enum.member?(template_categories, :data_preprocessing)
       assert Enum.member?(template_categories, :model_evaluation)
       assert Enum.member?(template_categories, :feature_engineering)
-      
+
       # Should have data type specific tools
       data_tools = workspace.data_processing_tools
       assert Map.has_key?(data_tools, :text_processing)
@@ -387,15 +398,16 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
 
       workspace = EngineeringTools.configure_team_workspace(team_context)
 
-      assert workspace.team_size == 10
-      assert workspace.collaboration_style == :trunk_based
-      
+      assert workspace.team_context.team_size == 10
+      assert workspace.team_context.collaboration_style == :trunk_based
+
       # Should configure collaboration tools for large team
       collab_config = workspace.collaboration_config
       assert collab_config.concurrent_editors_limit > 5
       assert collab_config.conflict_resolution == :automatic_merge
-      assert collab_config.notification_level == :minimal  # For large teams
-      
+      # For large teams
+      assert collab_config.notification_level == :minimal
+
       # Should enable CI-friendly features
       assert workspace.integration_config.ci_friendly == true
       assert workspace.integration_config.auto_testing == true
@@ -445,7 +457,7 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       assert Map.has_key?(integration, :tool_bridge)
       assert Map.has_key?(integration, :prompt_enhancement)
       assert Map.has_key?(integration, :session_management)
-      
+
       # Should bridge engineering tools with agent tools
       tool_bridge = integration.tool_bridge
       assert Map.has_key?(tool_bridge, :file_operations)
@@ -469,12 +481,12 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       assert Map.has_key?(integration, :provider_optimization)
       assert Map.has_key?(integration, :cross_provider_testing)
       assert Map.has_key?(integration, :provider_performance_tracking)
-      
+
       # Should enable cross-provider optimization
       optimization = integration.provider_optimization
       assert optimization.enabled == true
       assert length(optimization.supported_providers) == 3
-      
+
       # Should enable A/B testing across providers
       testing = integration.cross_provider_testing
       assert testing.ab_testing_enabled == true
@@ -497,7 +509,7 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       assert integration.metrics_collection == true
       assert integration.dashboard_integration.enabled == true
       assert Map.has_key?(integration, :alert_configuration)
-      
+
       # Should configure performance alerts
       alerts = integration.alert_configuration
       assert alerts.response_time_threshold == 5000
@@ -511,10 +523,11 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
       # This would test the CLI interface functionality
       # For now, we verify that the CLI module structure exists
       assert function_exported?(EngineeringTools.CLI, :handle_command, 2)
-      
+
       # Test basic command parsing
-      {:ok, parsed} = EngineeringTools.CLI.parse_command("prompt create test_prompt --template basic")
-      
+      {:ok, parsed} =
+        EngineeringTools.CLI.parse_command("prompt create test_prompt --template basic")
+
       assert parsed.action == :create
       assert parsed.resource == :prompt
       assert parsed.name == "test_prompt"
@@ -522,16 +535,18 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
     end
 
     test "supports template management via CLI" do
-      {:ok, parsed} = EngineeringTools.CLI.parse_command("template list --category software_engineering")
-      
+      {:ok, parsed} =
+        EngineeringTools.CLI.parse_command("template list --category software_engineering")
+
       assert parsed.action == :list
       assert parsed.resource == :template
       assert parsed.options.category == "software_engineering"
     end
 
     test "supports experiment management via CLI" do
-      {:ok, parsed} = EngineeringTools.CLI.parse_command("experiment create ab_test --variants 2 --duration 7d")
-      
+      {:ok, parsed} =
+        EngineeringTools.CLI.parse_command("experiment create ab_test --variants 2 --duration 7d")
+
       assert parsed.action == :create
       assert parsed.resource == :experiment
       assert parsed.name == "ab_test"

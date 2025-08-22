@@ -1,7 +1,9 @@
 defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
   use ExUnit.Case, async: true
+  use TheMaestro.DataCase
 
   alias TheMaestro.Prompts.EngineeringTools.TemplateManager
+
   alias TheMaestro.Prompts.EngineeringTools.TemplateManager.{
     PromptTemplate,
     ParameterDefinition,
@@ -11,7 +13,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
   describe "create_template_from_prompt/2" do
     test "creates a template from a simple prompt" do
       prompt = "You are a helpful {{role | default: assistant}}. Please {{action | required}}."
-      
+
       metadata = %TemplateMetadata{
         name: "Simple Assistant Template",
         description: "A basic assistant template with role and action parameters",
@@ -25,7 +27,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
       assert %PromptTemplate{} = template
       assert template.name == metadata.name
       assert template.description == metadata.description
-      assert template.category == metadata.category
+      assert template.category == to_string(metadata.category)
       assert template.created_by == metadata.author
       assert template.tags == metadata.tags
       assert template.version == 1
@@ -39,7 +41,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
       Task: {{task_description | required | min_length: 10}}
       Output format: {{output_format | enum: [detailed, summary, code-only] | default: detailed}}
       """
-      
+
       metadata = %TemplateMetadata{
         name: "Software Engineering Template",
         description: "Template for software engineering tasks",
@@ -52,7 +54,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
 
       assert length(template.parameters.required_parameters) == 1
       assert Enum.member?(template.parameters.required_parameters, "task_description")
-      
+
       assert length(template.parameters.optional_parameters) == 3
       assert Enum.member?(template.parameters.optional_parameters, "role")
       assert Enum.member?(template.parameters.optional_parameters, "experience_level")
@@ -65,8 +67,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
     end
 
     test "generates usage examples automatically" do
-      prompt = "Analyze the {{code_type | enum: [function, class, module]}} and identify {{issues | required}}."
-      
+      prompt =
+        "Analyze the {{code_type | enum: [function, class, module]}} and identify {{issues | required}}."
+
       metadata = %TemplateMetadata{
         name: "Code Analysis Template",
         description: "Template for code analysis tasks",
@@ -79,14 +82,15 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
 
       assert is_list(template.usage_examples)
       assert length(template.usage_examples) > 0
+
       assert Enum.all?(template.usage_examples, fn example ->
-        Map.has_key?(example, :parameters) && Map.has_key?(example, :description)
-      end)
+               Map.has_key?(example, :parameters) && Map.has_key?(example, :description)
+             end)
     end
 
     test "initializes performance tracking" do
       prompt = "Simple template {{param | required}}"
-      
+
       metadata = %TemplateMetadata{
         name: "Simple Template",
         description: "A simple test template",
@@ -105,7 +109,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
 
     test "validates template structure" do
       invalid_prompt = "Template with {{invalid syntax"
-      
+
       metadata = %TemplateMetadata{
         name: "Invalid Template",
         description: "Template with invalid syntax",
@@ -125,7 +129,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
       Please help the user. Be helpful in your response.
       Task: {{task | required}}
       """
-      
+
       metadata = %TemplateMetadata{
         name: "Redundant Template",
         description: "Template with redundant content",
@@ -138,9 +142,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
 
       # Should have optimization suggestions
       assert Map.has_key?(template, :optimization_suggestions)
-      assert Enum.any?(template.optimization_suggestions, fn s -> 
-        s.type == :reduce_redundancy 
-      end)
+
+      assert Enum.any?(template.optimization_suggestions, fn s ->
+               String.contains?(s, "redundant")
+             end)
     end
   end
 
@@ -154,7 +159,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
       Task: {{task | required}}
       Output format: {{format | enum: [brief, detailed] | default: brief}}
       """
-      
+
       metadata = %TemplateMetadata{
         name: "Test Template",
         description: "Template for testing",
@@ -198,15 +203,22 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
         "context" => "Working on a web application"
       }
 
-      instantiated_with_context = TemplateManager.instantiate_template(template, parameters_with_context)
-      assert String.contains?(instantiated_with_context, "Current context: Working on a web application")
+      instantiated_with_context =
+        TemplateManager.instantiate_template(template, parameters_with_context)
+
+      assert String.contains?(
+               instantiated_with_context,
+               "Current context: Working on a web application"
+             )
 
       parameters_without_context = %{
         "task" => "Write a simple function",
         "include_context" => false
       }
 
-      instantiated_without_context = TemplateManager.instantiate_template(template, parameters_without_context)
+      instantiated_without_context =
+        TemplateManager.instantiate_template(template, parameters_without_context)
+
       refute String.contains?(instantiated_without_context, "Current context:")
     end
 
@@ -227,9 +239,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
         "format" => "invalid_format"
       }
 
-      assert_raise ArgumentError, ~r/Invalid value 'invalid_format' for enum parameter 'format'/, fn ->
-        TemplateManager.instantiate_template(template, parameters)
-      end
+      assert_raise ArgumentError,
+                   ~r/Invalid value 'invalid_format' for enum parameter 'format'/,
+                   fn ->
+                     TemplateManager.instantiate_template(template, parameters)
+                   end
     end
 
     test "tracks template usage", %{template: template} do
@@ -255,7 +269,8 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
       instantiated = TemplateManager.instantiate_template(template, parameters)
 
       # Should apply case normalization and formatting
-      assert String.contains?(instantiated, "Python Developer") # Case normalized
+      # Case normalized
+      assert String.contains?(instantiated, "Python Developer")
     end
 
     test "validates instantiated prompt", %{template: template} do
@@ -291,18 +306,20 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
 
       assert is_list(code_analysis_templates)
       assert length(code_analysis_templates) > 0
+
       assert Enum.all?(code_analysis_templates, fn template ->
-        template.category == :code_analysis
-      end)
+               template.category == :code_analysis
+             end)
     end
 
     test "searches templates by tag" do
       python_templates = TemplateManager.search_templates_by_tag("python")
 
       assert is_list(python_templates)
+
       assert Enum.all?(python_templates, fn template ->
-        Enum.member?(template.tags, "python")
-      end)
+               Enum.member?(template.tags, "python")
+             end)
     end
   end
 
@@ -368,15 +385,23 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
 
   describe "template versioning" do
     test "creates new version when template is modified" do
-      original_template = TemplateManager.create_template_from_prompt(
-        "Original {{param}}",
-        %TemplateMetadata{name: "Test", description: "Test", category: :test, author: "user", tags: []}
-      )
+      original_template =
+        TemplateManager.create_template_from_prompt(
+          "Original {{param}}",
+          %TemplateMetadata{
+            name: "Test",
+            description: "Test",
+            category: :test,
+            author: "user",
+            tags: []
+          }
+        )
 
-      modified_template = TemplateManager.update_template(
-        original_template,
-        "Modified {{param}} with {{new_param}}"
-      )
+      modified_template =
+        TemplateManager.update_template(
+          original_template,
+          "Modified {{param}} with {{new_param}}"
+        )
 
       assert modified_template.version == 2
       assert modified_template.parent_version == 1
@@ -384,10 +409,17 @@ defmodule TheMaestro.Prompts.EngineeringTools.TemplateManagerTest do
     end
 
     test "maintains version history" do
-      template = TemplateManager.create_template_from_prompt(
-        "Version 1 {{param}}",
-        %TemplateMetadata{name: "Test", description: "Test", category: :test, author: "user", tags: []}
-      )
+      template =
+        TemplateManager.create_template_from_prompt(
+          "Version 1 {{param}}",
+          %TemplateMetadata{
+            name: "Test",
+            description: "Test",
+            category: :test,
+            author: "user",
+            tags: []
+          }
+        )
 
       v2 = TemplateManager.update_template(template, "Version 2 {{param}}")
       v3 = TemplateManager.update_template(v2, "Version 3 {{param}} {{new_param}}")

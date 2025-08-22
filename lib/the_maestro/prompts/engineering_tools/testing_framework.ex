@@ -187,11 +187,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
       }
     ]
 
-    cases_with_parameters = if parameter_testing do
-      base_cases ++ generate_parameter_test_cases(prompt)
-    else
-      base_cases
-    end
+    cases_with_parameters =
+      if parameter_testing do
+        base_cases ++ generate_parameter_test_cases(prompt)
+      else
+        base_cases
+      end
 
     if edge_cases do
       cases_with_parameters ++ generate_basic_edge_cases(prompt)
@@ -202,7 +203,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
 
   defp generate_parameter_test_cases(prompt) do
     parameters = extract_prompt_parameters(prompt)
-    
+
     Enum.flat_map(parameters, fn param ->
       generate_parameter_variations(param)
     end)
@@ -220,12 +221,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
 
   defp generate_parameter_variations(param) do
     param_name = param.name
-    
+
     # Generate test cases for different parameter values
     if Enum.any?(param.modifiers, fn mod -> String.contains?(mod, "enum:") end) do
       enum_modifier = Enum.find(param.modifiers, fn mod -> String.contains?(mod, "enum:") end)
       enum_values = parse_enum_values(enum_modifier)
-      
+
       Enum.map(enum_values, fn value ->
         %TestCase{
           name: "Parameter Test: #{param_name} = #{value}",
@@ -260,7 +261,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
     |> Enum.map(&String.trim/1)
   end
 
-  defp generate_basic_edge_cases(prompt) do
+  defp generate_basic_edge_cases(_prompt) do
     [
       %TestCase{
         name: "Empty Input Test",
@@ -287,7 +288,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
 
   defp extract_default_parameters(prompt) do
     parameters = extract_prompt_parameters(prompt)
-    
+
     Enum.reduce(parameters, %{}, fn param, acc ->
       default_value = extract_default_value(param)
       Map.put(acc, param.name, default_value)
@@ -295,9 +296,10 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
   end
 
   defp extract_default_value(param) do
-    default_modifier = Enum.find(param.modifiers, fn mod -> 
-      String.starts_with?(mod, "default:")
-    end)
+    default_modifier =
+      Enum.find(param.modifiers, fn mod ->
+        String.starts_with?(mod, "default:")
+      end)
 
     if default_modifier do
       String.trim_leading(default_modifier, "default:") |> String.trim()
@@ -309,17 +311,19 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
   defp build_validation_criteria(test_types) do
     base_criteria = %{}
 
-    criteria = if Enum.member?(test_types, :functional) do
-      Map.put(base_criteria, :functional, ValidationCriteria.functional_criteria())
-    else
-      base_criteria
-    end
+    criteria =
+      if Enum.member?(test_types, :functional) do
+        Map.put(base_criteria, :functional, ValidationCriteria.functional_criteria())
+      else
+        base_criteria
+      end
 
-    criteria = if Enum.member?(test_types, :performance) do
-      Map.put(criteria, :performance, ValidationCriteria.performance_criteria())
-    else
-      criteria
-    end
+    criteria =
+      if Enum.member?(test_types, :performance) do
+        Map.put(criteria, :performance, ValidationCriteria.performance_criteria())
+      else
+        criteria
+      end
 
     if Enum.member?(test_types, :quality) do
       Map.put(criteria, :quality, ValidationCriteria.quality_criteria())
@@ -338,9 +342,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
     Map.merge(defaults, benchmarks)
   end
 
-  defp create_regression_test_set(prompt, test_configuration) do
+  defp create_regression_test_set(_prompt, test_configuration) do
     historical_data = Map.get(test_configuration, :historical_data, [])
-    
+
     Enum.map(historical_data, fn data ->
       %TestCase{
         name: "Regression Test",
@@ -370,7 +374,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
   defp generate_edge_case_tests(_prompt, _test_configuration) do
     [
       %TestCase{
-        name: "Empty Input Test", 
+        name: "Empty Input Test",
         category: :edge_case,
         input_variations: ["", nil, "   "],
         expected_behavior: :graceful_handling,
@@ -379,7 +383,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
       },
       %TestCase{
         name: "Maximum Input Length Test",
-        category: :edge_case, 
+        category: :edge_case,
         input_variations: [String.duplicate("test ", 1000)],
         expected_behavior: :proper_truncation_or_handling,
         validation_criteria: [:response_quality_maintained, :no_timeout],
@@ -469,8 +473,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
 
   # Analysis and reporting functions
 
-  defp generate_execution_summary(test_results) do
-    total_tests = 50  # Mock calculation
+  defp generate_execution_summary(_test_results) do
+    # Mock calculation
+    total_tests = 50
     passed_tests = 47
     failed_tests = 3
 
@@ -555,18 +560,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
     ]
   end
 
-  defp generate_edge_case_tests(prompt, context) do
-    generate_edge_case_tests(prompt, context) ++ [
-      %TestCase{
-        name: "Unicode Input Test",
-        category: :edge_case,
-        input_variations: ["测试", "العربية", "русский"],
-        expected_behavior: :proper_unicode_handling,
-        validation_criteria: [:no_encoding_errors, :correct_processing],
-        priority: 0.6
-      }
-    ]
-  end
+  # Note: generate_edge_case_tests/2 is already defined above - removed duplicate
 
   defp generate_error_condition_tests(_prompt, _context) do
     [
@@ -606,11 +600,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
         validation_criteria: [:response_time, :resource_usage],
         priority: 0.8,
         performance_expectations: %{
-          max_response_time: case expected_complexity do
-            :low -> 1000
-            :medium -> 3000
-            :high -> 10000
-          end
+          max_response_time:
+            case expected_complexity do
+              :low -> 1000
+              :medium -> 3000
+              :high -> 10000
+            end
         }
       }
     ]
@@ -644,7 +639,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
 
   defp generate_parameter_combination_tests(prompt, _context) do
     parameters = extract_prompt_parameters(prompt)
-    
+
     if length(parameters) > 1 do
       [
         %TestCase{
@@ -669,7 +664,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
   end
 
   defp prioritize_test_cases(test_cases) do
-    Enum.sort(test_cases, fn a, b -> 
+    Enum.sort(test_cases, fn a, b ->
       Map.get(a, :priority, 0.5) >= Map.get(b, :priority, 0.5)
     end)
   end
@@ -678,6 +673,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFramework do
     # Remove duplicate test cases and optimize for coverage
     test_cases
     |> Enum.uniq_by(fn tc -> {tc.category, tc.parameters} end)
-    |> Enum.take(50)  # Limit to reasonable number
+    # Limit to reasonable number
+    |> Enum.take(50)
   end
 end

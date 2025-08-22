@@ -2,6 +2,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
   use ExUnit.Case, async: true
 
   alias TheMaestro.Prompts.EngineeringTools.TestingFramework
+
   alias TheMaestro.Prompts.EngineeringTools.TestingFramework.{
     PromptTestSuite,
     TestCase,
@@ -13,7 +14,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
   describe "create_prompt_test_suite/2" do
     test "creates comprehensive test suite for a prompt" do
       prompt = "You are a {{role}} assistant. Help the user with {{task}}."
-      
+
       test_configuration = %{
         test_types: [:functional, :performance, :quality, :regression],
         providers: [:openai, :anthropic, :google],
@@ -47,7 +48,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       Difficulty level: {{difficulty | enum: [beginner, intermediate, advanced] | default: beginner}}
       Provide a {{format | enum: [brief, detailed, comprehensive]}} explanation.
       """
-      
+
       test_configuration = %{
         test_types: [:functional, :edge_cases],
         parameter_testing: true,
@@ -57,22 +58,26 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       test_suite = TestingFramework.create_prompt_test_suite(prompt, test_configuration)
 
       # Should generate test cases for all parameter combinations
-      parameter_test_cases = Enum.filter(test_suite.test_cases, fn tc ->
-        tc.category == :parameter_variation
-      end)
-      
+      parameter_test_cases =
+        Enum.filter(test_suite.test_cases, fn tc ->
+          tc.category == :parameter_variation
+        end)
+
       assert length(parameter_test_cases) > 0
-      
+
       # Should test different role values
-      role_tests = Enum.filter(parameter_test_cases, fn tc ->
-        Map.has_key?(tc.parameters, "role")
-      end)
-      assert length(role_tests) >= 3  # teacher, mentor, expert
+      role_tests =
+        Enum.filter(parameter_test_cases, fn tc ->
+          Map.has_key?(tc.parameters, "role")
+        end)
+
+      # teacher, mentor, expert
+      assert length(role_tests) >= 3
     end
 
     test "establishes performance benchmarks" do
       prompt = "Analyze the provided code and suggest improvements."
-      
+
       test_configuration = %{
         test_types: [:performance],
         performance_benchmarks: %{
@@ -86,7 +91,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       test_suite = TestingFramework.create_prompt_test_suite(prompt, test_configuration)
 
       benchmarks = test_suite.performance_benchmarks
-      
+
       assert benchmarks.max_response_time == 3000
       assert benchmarks.min_quality_score == 0.85
       assert benchmarks.max_token_usage == 800
@@ -95,7 +100,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
 
     test "creates regression test set from historical data" do
       prompt = "Summarize the following text: {{text | required}}"
-      
+
       test_configuration = %{
         test_types: [:regression],
         historical_data: [
@@ -107,18 +112,19 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       test_suite = TestingFramework.create_prompt_test_suite(prompt, test_configuration)
 
       regression_tests = test_suite.regression_tests
-      
+
       assert length(regression_tests) == 2
+
       assert Enum.all?(regression_tests, fn test ->
-        Map.has_key?(test, :input) && Map.has_key?(test, :expected_quality)
-      end)
+               Map.has_key?(test, :input) && Map.has_key?(test, :expected_quality)
+             end)
     end
   end
 
   describe "execute_prompt_test_suite/2" do
     setup do
       prompt = "You are a helpful assistant. Answer: {{question | required}}"
-      
+
       test_configuration = %{
         test_types: [:functional, :performance],
         providers: [:test_provider],
@@ -156,7 +162,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       report = TestingFramework.execute_prompt_test_suite(test_suite, execution_options)
 
       functional_results = report.detailed_results.functional_tests
-      
+
       assert Map.has_key?(functional_results, :success_rate)
       assert Map.has_key?(functional_results, :failed_tests)
       assert Map.has_key?(functional_results, :execution_time)
@@ -170,11 +176,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       report = TestingFramework.execute_prompt_test_suite(test_suite, execution_options)
 
       performance_results = report.detailed_results.performance_tests
-      
+
       assert Map.has_key?(performance_results, :average_response_time)
       assert Map.has_key?(performance_results, :benchmark_compliance)
       assert Map.has_key?(performance_results, :performance_violations)
-      
+
       benchmark_compliance = performance_results.benchmark_compliance
       assert Map.has_key?(benchmark_compliance, :response_time_ok)
       assert Map.has_key?(benchmark_compliance, :token_usage_ok)
@@ -186,13 +192,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       report = TestingFramework.execute_prompt_test_suite(test_suite, execution_options)
 
       summary = report.execution_summary
-      
+
       assert Map.has_key?(summary, :total_tests)
       assert Map.has_key?(summary, :passed_tests)
       assert Map.has_key?(summary, :failed_tests)
       assert Map.has_key?(summary, :execution_time)
       assert Map.has_key?(summary, :overall_success_rate)
-      
+
       assert summary.total_tests == summary.passed_tests + summary.failed_tests
       assert is_number(summary.overall_success_rate)
     end
@@ -203,11 +209,13 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       report = TestingFramework.execute_prompt_test_suite(test_suite, execution_options)
 
       recommendations = report.recommendations
-      
+
       assert is_list(recommendations)
+
       assert Enum.all?(recommendations, fn rec ->
-        Map.has_key?(rec, :type) && Map.has_key?(rec, :description) && Map.has_key?(rec, :priority)
-      end)
+               Map.has_key?(rec, :type) && Map.has_key?(rec, :description) &&
+                 Map.has_key?(rec, :priority)
+             end)
     end
 
     test "performs regression analysis", %{test_suite: test_suite} do
@@ -216,7 +224,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       report = TestingFramework.execute_prompt_test_suite(test_suite, execution_options)
 
       regression_analysis = report.regression_analysis
-      
+
       assert Map.has_key?(regression_analysis, :performance_changes)
       assert Map.has_key?(regression_analysis, :quality_changes)
       assert Map.has_key?(regression_analysis, :regression_detected)
@@ -232,13 +240,14 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       test_cases = TestingFramework.generate_comprehensive_test_cases(prompt, domain_context)
 
       happy_path_tests = Enum.filter(test_cases, fn tc -> tc.category == :happy_path end)
-      
+
       assert length(happy_path_tests) > 0
+
       assert Enum.all?(happy_path_tests, fn test ->
-        Map.has_key?(test.parameters, "text") &&
-        Map.has_key?(test.parameters, "source_lang") &&
-        Map.has_key?(test.parameters, "target_lang")
-      end)
+               Map.has_key?(test.parameters, "text") &&
+                 Map.has_key?(test.parameters, "source_lang") &&
+                 Map.has_key?(test.parameters, "target_lang")
+             end)
     end
 
     test "generates edge case tests" do
@@ -248,20 +257,24 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       test_cases = TestingFramework.generate_comprehensive_test_cases(prompt, domain_context)
 
       edge_case_tests = Enum.filter(test_cases, fn tc -> tc.category == :edge_case end)
-      
+
       assert length(edge_case_tests) > 0
-      
+
       # Should include empty input test
-      empty_input_test = Enum.find(edge_case_tests, fn test ->
-        test.name == "Empty Input Test"
-      end)
+      empty_input_test =
+        Enum.find(edge_case_tests, fn test ->
+          test.name == "Empty Input Test"
+        end)
+
       assert empty_input_test != nil
       assert Enum.member?(empty_input_test.input_variations, "")
-      
+
       # Should include maximum length test
-      max_length_test = Enum.find(edge_case_tests, fn test ->
-        String.contains?(test.name, "Maximum")
-      end)
+      max_length_test =
+        Enum.find(edge_case_tests, fn test ->
+          String.contains?(test.name, "Maximum")
+        end)
+
       assert max_length_test != nil
     end
 
@@ -272,25 +285,29 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       test_cases = TestingFramework.generate_comprehensive_test_cases(prompt, domain_context)
 
       error_tests = Enum.filter(test_cases, fn tc -> tc.category == :error_condition end)
-      
+
       assert length(error_tests) > 0
+
       assert Enum.any?(error_tests, fn test ->
-        test.expected_behavior == :graceful_error_handling
-      end)
+               test.expected_behavior == :graceful_error_handling
+             end)
     end
 
     test "generates boundary tests" do
-      prompt = "Rate the quality from {{min_score | default: 1}} to {{max_score | default: 10}}: {{content}}"
+      prompt =
+        "Rate the quality from {{min_score | default: 1}} to {{max_score | default: 10}}: {{content}}"
+
       domain_context = %{type: :rating}
 
       test_cases = TestingFramework.generate_comprehensive_test_cases(prompt, domain_context)
 
       boundary_tests = Enum.filter(test_cases, fn tc -> tc.category == :boundary end)
-      
+
       assert length(boundary_tests) > 0
+
       assert Enum.any?(boundary_tests, fn test ->
-        String.contains?(test.name, "Boundary")
-      end)
+               String.contains?(test.name, "Boundary")
+             end)
     end
 
     test "generates performance tests" do
@@ -300,11 +317,12 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       test_cases = TestingFramework.generate_comprehensive_test_cases(prompt, domain_context)
 
       performance_tests = Enum.filter(test_cases, fn tc -> tc.category == :performance end)
-      
+
       assert length(performance_tests) > 0
+
       assert Enum.all?(performance_tests, fn test ->
-        Map.has_key?(test, :performance_expectations)
-      end)
+               Map.has_key?(test, :performance_expectations)
+             end)
     end
 
     test "prioritizes test cases by importance" do
@@ -330,19 +348,21 @@ defmodule TheMaestro.Prompts.EngineeringTools.TestingFrameworkTest do
       test_cases = TestingFramework.generate_comprehensive_test_cases(prompt, domain_context)
 
       # Should cover all parameter combinations efficiently
-      method_values = test_cases
+      method_values =
+        test_cases
         |> Enum.map(fn tc -> Map.get(tc.parameters, "method") end)
         |> Enum.uniq()
         |> Enum.reject(&is_nil/1)
-      
+
       assert Enum.member?(method_values, "fast")
       assert Enum.member?(method_values, "thorough")
-      
+
       # Should not have redundant test cases
-      unique_test_signatures = test_cases
+      unique_test_signatures =
+        test_cases
         |> Enum.map(fn tc -> {tc.category, tc.parameters} end)
         |> Enum.uniq()
-      
+
       assert length(unique_test_signatures) == length(test_cases)
     end
   end
