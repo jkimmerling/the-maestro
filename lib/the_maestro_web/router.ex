@@ -31,6 +31,7 @@ defmodule TheMaestroWeb.Router do
 
     live "/setup", ProviderSelectionLive, :index
     live "/agent", AgentLive, :index
+    live "/prompt-engineering", PromptEngineeringLive, :index
     get "/start_chat", SessionController, :start_chat
     post "/start_chat", SessionController, :start_chat
   end

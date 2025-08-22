@@ -128,9 +128,9 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControl do
       
       files when is_list(files) ->
         # Stage specific files
-        Enum.filter_map(files, 
-          fn file -> Map.has_key?(repo.working_directory, String.to_atom(file)) end,
-          fn file ->
+        files
+        |> Enum.filter(fn file -> Map.has_key?(repo.working_directory, String.to_atom(file)) end)
+        |> Enum.map(fn file ->
             %{
               file_path: file,
               change_type: :modification,
@@ -572,41 +572,11 @@ defmodule TheMaestro.Prompts.EngineeringTools.VersionControl do
     Enum.any?(repo.tags, &(&1.name == tag_name))
   end
 
-  defp resolve_reference(repo, ref) do
-    cond do
-      # Check if it's a commit ID
-      commit = find_commit(repo, ref) ->
-        commit
-      
-      # Check if it's a branch name
-      branch_exists?(repo, ref) ->
-        find_commit(repo, get_latest_commit(repo, ref))
-      
-      # Check if it's a tag name
-      tag = Enum.find(repo.tags, &(&1.name == ref)) ->
-        find_commit(repo, tag.commit_id)
-      
-      true ->
-        nil
-    end
-  end
 
   defp find_commit(repo, commit_id) do
     Enum.find(repo.commits, &(&1.commit_id == commit_id))
   end
 
-  defp calculate_diff(_from_commit, _to_commit) do
-    # Simplified diff calculation
-    []
-  end
-
-  defp calculate_diff_stats(_from_commit, _to_commit) do
-    %{
-      files_changed: 0,
-      insertions: 0,
-      deletions: 0
-    }
-  end
 
   defp invert_changes(changes) do
     # Create inverse of the changes to revert them

@@ -7,6 +7,7 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
 
   alias TheMaestro.MCP.{Config, ServerSupervisor}
   alias TheMaestro.MCP.CLI
+  alias TheMaestro.Prompts.EngineeringTools.CLI, as: PromptCLI
 
   @doc """
   Execute the interactive command.
@@ -254,6 +255,16 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
       "config" -> handle_config_command(args, state)
       "set" -> handle_set_command(args, state)
       "get" -> handle_get_command(args, state)
+      
+      # Prompt Engineering Commands
+      "prompt" -> handle_prompt_command(args, state)
+      "template" -> handle_template_command(args, state)
+      "experiment" -> handle_experiment_command(args, state)
+      "session" -> handle_session_command(args, state)
+      "workspace" -> handle_workspace_command(args, state)
+      "analyze" -> handle_analyze_command(args, state)
+      "docs" -> handle_docs_command(args, state)
+      
       "exit" -> {:exit, :user_exit}
       "quit" -> {:exit, :user_exit}
       "q" -> {:exit, :user_exit}
@@ -523,6 +534,68 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
     end
   end
 
+  # Prompt Engineering Command Handlers
+
+  defp handle_prompt_command(args, state) do
+    execute_prompt_engineering_command("prompt", args, state)
+  end
+
+  defp handle_template_command(args, state) do
+    execute_prompt_engineering_command("template", args, state)
+  end
+
+  defp handle_experiment_command(args, state) do
+    execute_prompt_engineering_command("experiment", args, state)
+  end
+
+  defp handle_session_command(args, state) do
+    execute_prompt_engineering_command("session", args, state)
+  end
+
+  defp handle_workspace_command(args, state) do
+    execute_prompt_engineering_command("workspace", args, state)
+  end
+
+  defp handle_analyze_command(args, state) do
+    execute_prompt_engineering_command("analyze", args, state)
+  end
+
+  defp handle_docs_command(args, state) do
+    execute_prompt_engineering_command("docs", args, state)
+  end
+
+  defp execute_prompt_engineering_command(command, args, state) do
+    # Build command string for PromptCLI
+    command_string = case args do
+      [] -> "#{command} help"
+      [subcommand | rest] -> 
+        case rest do
+          [] -> "#{command} #{subcommand}"
+          [name | _] -> "#{command} #{subcommand} #{name}"
+        end
+    end
+
+    # Create context with user info
+    context = %{
+      user: System.get_env("USER") || "maestro_user",
+      interactive_mode: true
+    }
+
+    case PromptCLI.handle_command(command_string, context) do
+      {:ok, result} ->
+        IO.puts(result)
+        {:ok, state}
+
+      {:error, reason} ->
+        CLI.print_error("Prompt engineering command failed: #{reason}")
+        {:ok, state}
+    end
+  rescue
+    error ->
+      CLI.print_error("Error executing prompt command: #{Exception.message(error)}")
+      {:ok, state}
+  end
+
   # State management
 
   defp add_to_history(state, command) do
@@ -575,14 +648,23 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
 
   defp show_welcome_message(state) do
     IO.puts("")
-    IO.puts("🎯 Welcome to MCP Interactive Mode!")
+    IO.puts("🎯 Welcome to MCP Interactive Mode with Prompt Engineering!")
     IO.puts("")
-    IO.puts("Available commands:")
+    IO.puts("MCP Commands:")
     IO.puts("  help          - Show available commands")
     IO.puts("  list          - List configured servers")
     IO.puts("  connect <srv> - Connect to a server")
     IO.puts("  tools         - List tools for current server")
     IO.puts("  call <tool>   - Call a tool")
+    IO.puts("")
+    IO.puts("Prompt Engineering Commands:")
+    IO.puts("  prompt        - Prompt management")
+    IO.puts("  template      - Template management")
+    IO.puts("  experiment    - Experiment management")
+    IO.puts("  workspace     - Workspace management")
+    IO.puts("  analyze       - Analysis tools")
+    IO.puts("  docs          - Documentation tools")
+    IO.puts("")
     IO.puts("  exit          - Exit interactive mode")
     IO.puts("")
 
@@ -625,13 +707,25 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
   defp show_interactive_help do
     IO.puts("")
     IO.puts("Interactive Commands:")
-    IO.puts("  help [topic]         - Show help (topics: servers, tools, config)")
+    IO.puts("")
+    IO.puts("MCP Commands:")
+    IO.puts("  help [topic]         - Show help (topics: servers, tools, config, prompts)")
     IO.puts("  list [servers|connected|<name>] - List servers or show details")
     IO.puts("  connect <server>     - Connect to MCP server")
     IO.puts("  disconnect [server]  - Disconnect from server")
     IO.puts("  status               - Show connection status")
     IO.puts("  tools [server]       - List available tools")
     IO.puts("  call <tool> [args]   - Call a tool on current server")
+    IO.puts("")
+    IO.puts("Prompt Engineering Commands:")
+    IO.puts("  prompt <action> [name] [options] - Manage prompts (create, list, show, edit, delete)")
+    IO.puts("  template <action> [name] [options] - Manage templates (create, list, show)")
+    IO.puts("  experiment <action> [name] [options] - Manage experiments (create, run, status)")
+    IO.puts("  workspace <action> [name] [options] - Manage workspaces (create, list, switch)")
+    IO.puts("  analyze <type> [target] [options] - Analysis tools (prompt, performance)")
+    IO.puts("  docs <action> [target] [options] - Documentation tools (generate, export)")
+    IO.puts("")
+    IO.puts("System Commands:")
     IO.puts("  history              - Show command history")
     IO.puts("  clear                - Clear screen")
     IO.puts("  config [reload]      - Show/reload configuration")
@@ -671,9 +765,22 @@ defmodule TheMaestro.MCP.CLI.Commands.Interactive do
         IO.puts("  get <key>       - Get session variable")
         IO.puts("")
 
+      "prompts" ->
+        IO.puts("")
+        IO.puts("Prompt Engineering:")
+        IO.puts("  prompt create <name>    - Create new prompt")
+        IO.puts("  prompt list             - List all prompts")
+        IO.puts("  prompt show <name>      - Show prompt details")
+        IO.puts("  template list           - List templates")
+        IO.puts("  experiment create <name> - Create experiment")
+        IO.puts("  workspace create <name> - Create workspace")
+        IO.puts("  analyze prompt <name>   - Analyze prompt")
+        IO.puts("  docs generate           - Generate documentation")
+        IO.puts("")
+
       _ ->
         CLI.print_error("Unknown help topic: #{topic}")
-        IO.puts("Available topics: servers, tools, config")
+        IO.puts("Available topics: servers, tools, config, prompts")
     end
   end
 

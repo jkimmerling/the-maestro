@@ -2135,7 +2135,7 @@ defmodule TheMaestro.Prompts.EngineeringTools.ExperimentationPlatform do
     performance_tracking = initialize_performance_tracking()
     
     # Session anonymization for privacy
-    session_id = user_context[:session_id] || "anonymous"
+    _session_id = user_context[:session_id] || "anonymous"
     
     # Construct prompt used (baseline + variant changes)
     prompt_used = construct_prompt_from_variant(experiment.baseline_prompt, selected_variant)

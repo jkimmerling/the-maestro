@@ -522,11 +522,11 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
     test "supports command-line prompt management" do
       # This would test the CLI interface functionality
       # For now, we verify that the CLI module structure exists
-      assert function_exported?(EngineeringTools.CLI, :handle_command, 2)
+      assert function_exported?(TheMaestro.Prompts.EngineeringTools.CLI, :handle_command, 2)
 
       # Test basic command parsing
       {:ok, parsed} =
-        EngineeringTools.CLI.parse_command("prompt create test_prompt --template basic")
+        TheMaestro.Prompts.EngineeringTools.CLI.parse_command("prompt create test_prompt --template basic")
 
       assert parsed.action == :create
       assert parsed.resource == :prompt
@@ -536,7 +536,7 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
 
     test "supports template management via CLI" do
       {:ok, parsed} =
-        EngineeringTools.CLI.parse_command("template list --category software_engineering")
+        TheMaestro.Prompts.EngineeringTools.CLI.parse_command("template list --category software_engineering")
 
       assert parsed.action == :list
       assert parsed.resource == :template
@@ -545,7 +545,7 @@ defmodule TheMaestro.Prompts.EngineeringToolsTest do
 
     test "supports experiment management via CLI" do
       {:ok, parsed} =
-        EngineeringTools.CLI.parse_command("experiment create ab_test --variants 2 --duration 7d")
+        TheMaestro.Prompts.EngineeringTools.CLI.parse_command("experiment create ab_test --variants 2 --duration 7d")
 
       assert parsed.action == :create
       assert parsed.resource == :experiment

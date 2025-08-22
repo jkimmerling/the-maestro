@@ -65,6 +65,7 @@ defmodule TheMaestro.MCP.CLI do
     Interactive
   }
 
+  alias TheMaestro.Prompts.EngineeringTools.CLI, as: PromptCLI
   alias TheMaestro.MCP.CLI.Formatters.{TableFormatter, JsonFormatter, YamlFormatter}
 
   @doc """
@@ -94,6 +95,36 @@ defmodule TheMaestro.MCP.CLI do
   end
 
   @doc """
+  Handle a command string for interactive CLI/TUI mode.
+  
+  This function allows commands to be executed interactively within
+  the TUI or when called programmatically with a command string.
+  """
+  def handle_command(command_string, _context \\ %{}) do
+    args = String.split(command_string, ~r/\s+/, trim: true)
+    
+    case parse_args(args) do
+      {command, subcommand, options} ->
+        execute_command(command, subcommand, options)
+        
+      {:ok, :help} ->
+        :ok
+        
+      {:ok, :version} ->
+        :ok
+        
+      {:error, reason} ->
+        print_error(reason)
+        {:error, reason}
+    end
+  rescue
+    error ->
+      error_message = "Command execution failed: #{Exception.message(error)}"
+      print_error(error_message)
+      {:error, error_message}
+  end
+
+  @doc """
   Parse command line arguments.
 
   Returns {command, subcommand, options} tuple or {:error, reason}.
@@ -102,6 +133,27 @@ defmodule TheMaestro.MCP.CLI do
     case args do
       ["mcp" | mcp_args] ->
         parse_mcp_command(mcp_args)
+
+      ["prompt" | prompt_args] ->
+        parse_prompt_command(prompt_args)
+
+      ["template" | template_args] ->
+        parse_template_command(template_args)
+
+      ["experiment" | experiment_args] ->
+        parse_experiment_command(experiment_args)
+
+      ["session" | session_args] ->
+        parse_session_command(session_args)
+
+      ["workspace" | workspace_args] ->
+        parse_workspace_command(workspace_args)
+
+      ["analyze" | analyze_args] ->
+        parse_analyze_command(analyze_args)
+
+      ["docs" | docs_args] ->
+        parse_docs_command(docs_args)
 
       ["--help"] ->
         show_help()
@@ -133,6 +185,118 @@ defmodule TheMaestro.MCP.CLI do
       [subcommand | rest] ->
         {options, remaining_args} = parse_options(rest)
         {:mcp, subcommand, %{options: options, args: remaining_args}}
+    end
+  end
+
+  defp parse_prompt_command(args) do
+    case args do
+      [] ->
+        show_prompt_help()
+        {:ok, :help}
+
+      ["--help"] ->
+        show_prompt_help()
+        {:ok, :help}
+
+      [subcommand | rest] ->
+        {options, remaining_args} = parse_options(rest)
+        {:prompt, subcommand, %{options: options, args: remaining_args}}
+    end
+  end
+
+  defp parse_template_command(args) do
+    case args do
+      [] ->
+        show_template_help()
+        {:ok, :help}
+
+      ["--help"] ->
+        show_template_help()
+        {:ok, :help}
+
+      [subcommand | rest] ->
+        {options, remaining_args} = parse_options(rest)
+        {:template, subcommand, %{options: options, args: remaining_args}}
+    end
+  end
+
+  defp parse_experiment_command(args) do
+    case args do
+      [] ->
+        show_experiment_help()
+        {:ok, :help}
+
+      ["--help"] ->
+        show_experiment_help()
+        {:ok, :help}
+
+      [subcommand | rest] ->
+        {options, remaining_args} = parse_options(rest)
+        {:experiment, subcommand, %{options: options, args: remaining_args}}
+    end
+  end
+
+  defp parse_session_command(args) do
+    case args do
+      [] ->
+        show_session_help()
+        {:ok, :help}
+
+      ["--help"] ->
+        show_session_help()
+        {:ok, :help}
+
+      [subcommand | rest] ->
+        {options, remaining_args} = parse_options(rest)
+        {:session, subcommand, %{options: options, args: remaining_args}}
+    end
+  end
+
+  defp parse_workspace_command(args) do
+    case args do
+      [] ->
+        show_workspace_help()
+        {:ok, :help}
+
+      ["--help"] ->
+        show_workspace_help()
+        {:ok, :help}
+
+      [subcommand | rest] ->
+        {options, remaining_args} = parse_options(rest)
+        {:workspace, subcommand, %{options: options, args: remaining_args}}
+    end
+  end
+
+  defp parse_analyze_command(args) do
+    case args do
+      [] ->
+        show_analyze_help()
+        {:ok, :help}
+
+      ["--help"] ->
+        show_analyze_help()
+        {:ok, :help}
+
+      [subcommand | rest] ->
+        {options, remaining_args} = parse_options(rest)
+        {:analyze, subcommand, %{options: options, args: remaining_args}}
+    end
+  end
+
+  defp parse_docs_command(args) do
+    case args do
+      [] ->
+        show_docs_help()
+        {:ok, :help}
+
+      ["--help"] ->
+        show_docs_help()
+        {:ok, :help}
+
+      [subcommand | rest] ->
+        {options, remaining_args} = parse_options(rest)
+        {:docs, subcommand, %{options: options, args: remaining_args}}
     end
   end
 
@@ -336,6 +500,44 @@ defmodule TheMaestro.MCP.CLI do
     end
   end
 
+  defp execute_command(command, subcommand, options) when command in [:prompt, :template, :experiment, :session, :workspace, :analyze, :docs] do
+    try do
+      # Convert args format for the PromptCLI
+      args_list = case options[:args] do
+        nil -> []
+        list when is_list(list) -> list
+        _ -> []
+      end
+
+      # Build command string for PromptCLI
+      command_string = case args_list do
+        [] -> "#{command} #{subcommand}"
+        [name | _] -> "#{command} #{subcommand} #{name}"
+      end
+
+      # Create context with options
+      context = %{
+        user: System.get_env("USER") || "maestro_user",
+        options: options[:options] || %{}
+      }
+
+      case PromptCLI.handle_command(command_string, context) do
+        {:ok, result} ->
+          unless quiet?(options[:options] || %{}) do
+            IO.puts(result)
+          end
+          :ok
+
+        {:error, reason} ->
+          print_error(reason)
+          unless test_mode?(), do: System.halt(1)
+      end
+    rescue
+      error ->
+        handle_command_error("#{command} #{subcommand}", error)
+    end
+  end
+
   defp execute_command(command, _subcommand, _options) do
     case command do
       :help ->
@@ -375,6 +577,7 @@ defmodule TheMaestro.MCP.CLI do
     Usage:
       maestro [COMMAND] [OPTIONS]
       maestro mcp [SUBCOMMAND] [OPTIONS]
+      maestro prompt [SUBCOMMAND] [OPTIONS]
 
     Global Commands:
       --help, -h        Show this help message
@@ -383,14 +586,21 @@ defmodule TheMaestro.MCP.CLI do
     MCP Commands:
       maestro mcp       MCP server management (see 'maestro mcp --help')
 
-    For detailed help on MCP commands:
-      maestro mcp --help
+    Prompt Engineering Commands:
+      maestro prompt    Prompt management (see 'maestro prompt --help')
+      maestro template  Template management (see 'maestro template --help')  
+      maestro experiment Experiment management (see 'maestro experiment --help')
+      maestro session   Session management (see 'maestro session --help')
+      maestro workspace Workspace management (see 'maestro workspace --help')
+      maestro analyze   Analysis tools (see 'maestro analyze --help')
+      maestro docs      Documentation tools (see 'maestro docs --help')
 
     Examples:
       maestro mcp list                    # List all configured MCP servers
-      maestro mcp add myServer --command python -m server
-      maestro mcp status myServer         # Check server status
-      maestro mcp tools --server myServer # List server's tools
+      maestro prompt create my_prompt     # Create a new prompt
+      maestro template list               # List available templates
+      maestro experiment run test_exp     # Run an experiment
+      maestro workspace create dev        # Create a development workspace
     """)
   end
 
@@ -578,5 +788,42 @@ defmodule TheMaestro.MCP.CLI do
 
   defp test_mode?() do
     Mix.env() == :test
+  end
+
+  # Help functions for prompt engineering commands
+
+  defp show_prompt_help do
+    {:ok, help_text} = PromptCLI.show_help(%{resource: :prompt}, %{})
+    IO.puts(help_text)
+  end
+
+  defp show_template_help do
+    {:ok, help_text} = PromptCLI.show_help(%{resource: :template}, %{})
+    IO.puts(help_text)
+  end
+
+  defp show_experiment_help do
+    {:ok, help_text} = PromptCLI.show_help(%{resource: :experiment}, %{})
+    IO.puts(help_text)
+  end
+
+  defp show_session_help do
+    {:ok, help_text} = PromptCLI.show_help(%{resource: :session}, %{})
+    IO.puts(help_text)
+  end
+
+  defp show_workspace_help do
+    {:ok, help_text} = PromptCLI.show_help(%{resource: :workspace}, %{})
+    IO.puts(help_text)
+  end
+
+  defp show_analyze_help do
+    {:ok, help_text} = PromptCLI.show_help(%{resource: :analyze}, %{})
+    IO.puts(help_text)
+  end
+
+  defp show_docs_help do
+    {:ok, help_text} = PromptCLI.show_help(%{resource: :docs}, %{})
+    IO.puts(help_text)
   end
 end
