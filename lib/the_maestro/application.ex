@@ -40,7 +40,7 @@ defmodule TheMaestro.Application do
 
   # Helper function to build Finch child specifications from configuration
   defp finch_child_spec(name, config) when is_list(config) do
-    pool_config = Keyword.get(config, :pool_config, [size: 10, count: 1])
+    pool_config = Keyword.get(config, :pool_config, size: 10, count: 1)
     base_url = Keyword.get(config, :base_url, "https://example.com")
 
     {Finch, name: name, pools: %{base_url => pool_config}}

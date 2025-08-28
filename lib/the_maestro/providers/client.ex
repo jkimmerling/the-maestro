@@ -10,8 +10,7 @@ defmodule TheMaestro.Providers.Client do
   @type pool_name :: atom()
   @type client_config :: %{
           base_url: String.t(),
-          pool: pool_name(),
-          middleware: [Tesla.Client.middleware()]
+          pool: pool_name()
         }
 
   @doc """
@@ -62,24 +61,21 @@ defmodule TheMaestro.Providers.Client do
   defp get_provider_config(:anthropic) do
     %{
       base_url: "https://api.anthropic.com",
-      pool: :anthropic_finch,
-      middleware: []
+      pool: :anthropic_finch
     }
   end
 
   defp get_provider_config(:openai) do
     %{
       base_url: "https://api.openai.com",
-      pool: :openai_finch,
-      middleware: []
+      pool: :openai_finch
     }
   end
 
   defp get_provider_config(:gemini) do
     %{
       base_url: "https://generativelanguage.googleapis.com",
-      pool: :gemini_finch,
-      middleware: []
+      pool: :gemini_finch
     }
   end
 end

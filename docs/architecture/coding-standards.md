@@ -84,12 +84,22 @@ As detailed in `CLAUDE.md`, ALL development must follow:
 - Elixir does NOT support `if/else if` - use `cond` or `case`
 - Use `{...}` for attribute interpolation, `<%= %>` for block constructs
 
-#### HTTP Client Standards (from CLAUDE.md)
+#### HTTP Client Standards 
 
-**Required Library:**
-- Use included `:req` (Req) library for HTTP requests
-- **AVOID** `:httpoison`, `:tesla`, `:httpc`
-- Req is included by default and preferred for Phoenix apps
+**Primary HTTP Client (ADR-002):**
+- Use `:tesla` with `:finch` adapter for multi-provider API communication
+- Tesla provides precise header control and middleware flexibility required for AI provider APIs
+- Finch provides efficient HTTP/2 connection pooling for performance
+
+**Secondary HTTP Client:**
+- Use included `:req` (Req) library for simple HTTP requests and internal services
+- Prefer existing dependencies over adding new ones (avoid `:httpoison` since `:req` already included)
+- **AVOID** `:httpc` (limited functionality)
+
+**Decision Context:**
+- Tesla + Finch: Multi-provider API communication requiring exact header fidelity (Anthropic, OpenAI, Google)
+- Req: General-purpose HTTP requests, file downloads, simple API calls
+- HTTPoison: Not needed since Req covers the same use cases with modern API
 
 #### Testing Standards (from CLAUDE.md)
 
@@ -132,7 +142,8 @@ As detailed in `CLAUDE.md`, ALL development must follow:
 **Dependencies:**
 - Use exact version numbers for production dependencies
 - Keep development/test dependencies up to date
-- Use `:req` for HTTP requests (avoid `:httpoison`, `:tesla`, `:httpc`)
+- Use `:tesla` + `:finch` for multi-provider API communication (per ADR-002)
+- Use `:req` for general-purpose HTTP requests (avoid `:httpoison`, `:httpc`)
 
 **Required Aliases:**
 - Use `mix precommit` alias to run all quality checks
@@ -163,6 +174,8 @@ For Elixir/Phoenix development:
 - `archon:search_code_examples(query="GenServer handle_call patterns", match_count=3)` 
 - `archon:search_code_examples(query="Phoenix LiveView form handling examples", match_count=3)`
 - `archon:search_code_examples(query="Ecto changeset validation examples", match_count=3)`
+- `archon:search_code_examples(query="Tesla HTTP client middleware examples", match_count=3)`
+- `archon:search_code_examples(query="Finch connection pooling configuration examples", match_count=3)`
 
 ### Quality Gates
 
