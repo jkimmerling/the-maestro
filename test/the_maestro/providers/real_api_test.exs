@@ -61,7 +61,7 @@ defmodule TheMaestro.Providers.RealAPITest do
                   "❌ AC3 FAILED: Got 403 Forbidden - API key invalid or insufficient permissions"
                 )
 
-              {:ok, %Tesla.Env{status: status, body: body}} ->
+              {:ok, %Tesla.Env{status: status, body: _body}} ->
                 IO.puts("ℹ️  AC3: Got status #{status}")
 
                 if status < 500 do

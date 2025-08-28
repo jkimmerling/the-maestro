@@ -231,7 +231,7 @@ SessionManager (DynamicSupervisor)
   system_prompt: "You are a helpful coding assistant...",
   working_directory: "/Users/alex/projects/app",
   enabled_tools: ["read_file", "write_file", "execute_code"],
-  enabled_mcps: ["context7", "playwright"],
+  enabled_mcps: ["context7", "browsermcp"],
   conversation_history: [...],  # Last 10 messages for context
   streaming_state: :idle | :streaming | :waiting_tool,
   current_request_id: "req_123"

@@ -1,5 +1,5 @@
 ---
-description: Review story implementation - be strict, verify visuals pass 100%, use playwright for visual testing
+description: Review story implementation - be strict, verify visuals pass 100%, use browsermcp for visual testing
 argument-hint: story-number (e.g. 1.4)
 ---
 
