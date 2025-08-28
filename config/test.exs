@@ -35,3 +35,18 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+# Configure Finch pools for HTTP clients - Test (minimal configuration)
+config :the_maestro, :finch_pools,
+  anthropic: [
+    pool_config: [size: 2, count: 1],
+    base_url: "https://api.anthropic.com"
+  ],
+  openai: [
+    pool_config: [size: 2, count: 1],
+    base_url: "https://api.openai.com"
+  ],
+  gemini: [
+    pool_config: [size: 2, count: 1],
+    base_url: "https://generativelanguage.googleapis.com"
+  ]

@@ -17,5 +17,20 @@ config :swoosh, local: false
 # Do not print debug messages in production
 config :logger, level: :info
 
+# Configure Finch pools for HTTP clients - Production (optimized for performance)
+config :the_maestro, :finch_pools,
+  anthropic: [
+    pool_config: [size: 15, count: 3],
+    base_url: "https://api.anthropic.com"
+  ],
+  openai: [
+    pool_config: [size: 15, count: 3],
+    base_url: "https://api.openai.com"
+  ],
+  gemini: [
+    pool_config: [size: 15, count: 3],
+    base_url: "https://generativelanguage.googleapis.com"
+  ]
+
 # Runtime production configuration, including reading
 # of environment variables, is done on config/runtime.exs.

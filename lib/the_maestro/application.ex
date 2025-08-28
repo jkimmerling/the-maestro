@@ -7,17 +7,16 @@ defmodule TheMaestro.Application do
 
   @impl true
   def start(_type, _args) do
+    finch_pools = Application.get_env(:the_maestro, :finch_pools, [])
+
     children = [
       TheMaestroWeb.Telemetry,
       TheMaestro.Repo,
       {DNSCluster, query: Application.get_env(:the_maestro, :dns_cluster_query) || :ignore},
       # Finch pools for HTTP client connection pooling
-      {Finch,
-       name: :anthropic_finch, pools: %{"https://api.anthropic.com" => [size: 10, count: 2]}},
-      {Finch, name: :openai_finch, pools: %{"https://api.openai.com" => [size: 10, count: 2]}},
-      {Finch,
-       name: :gemini_finch,
-       pools: %{"https://generativelanguage.googleapis.com" => [size: 10, count: 2]}},
+      finch_child_spec(:anthropic_finch, finch_pools[:anthropic]),
+      finch_child_spec(:openai_finch, finch_pools[:openai]),
+      finch_child_spec(:gemini_finch, finch_pools[:gemini]),
       {Phoenix.PubSub, name: TheMaestro.PubSub},
       # Start a worker by calling: TheMaestro.Worker.start_link(arg)
       # {TheMaestro.Worker, arg},
@@ -37,5 +36,18 @@ defmodule TheMaestro.Application do
   def config_change(changed, _new, removed) do
     TheMaestroWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  # Helper function to build Finch child specifications from configuration
+  defp finch_child_spec(name, config) when is_list(config) do
+    pool_config = Keyword.get(config, :pool_config, [size: 10, count: 1])
+    base_url = Keyword.get(config, :base_url, "https://example.com")
+
+    {Finch, name: name, pools: %{base_url => pool_config}}
+  end
+
+  defp finch_child_spec(name, _invalid_config) do
+    # Fallback configuration if config is missing or invalid
+    {Finch, name: name, pools: %{"https://api.anthropic.com" => [size: 10, count: 1]}}
   end
 end

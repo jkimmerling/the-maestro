@@ -86,3 +86,18 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Configure Finch pools for HTTP clients - Development
+config :the_maestro, :finch_pools,
+  anthropic: [
+    pool_config: [size: 5, count: 1],
+    base_url: "https://api.anthropic.com"
+  ],
+  openai: [
+    pool_config: [size: 5, count: 1],
+    base_url: "https://api.openai.com"
+  ],
+  gemini: [
+    pool_config: [size: 5, count: 1],
+    base_url: "https://generativelanguage.googleapis.com"
+  ]
