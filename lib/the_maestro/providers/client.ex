@@ -49,6 +49,8 @@ defmodule TheMaestro.Providers.Client do
     build_client(provider, :api_key)
   end
 
+  def build_client(_invalid_provider), do: {:error, :invalid_provider}
+
   def build_client(provider, auth_type) when provider in [:anthropic, :openai, :gemini] do
     case build_middleware(provider, auth_type) do
       {:ok, middleware} ->
@@ -61,7 +63,6 @@ defmodule TheMaestro.Providers.Client do
     end
   end
 
-  def build_client(_invalid_provider), do: {:error, :invalid_provider}
   def build_client(_invalid_provider, _auth_type), do: {:error, :invalid_provider}
 
   # Private function to build middleware stack based on provider and auth type
