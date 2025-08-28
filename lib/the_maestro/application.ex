@@ -13,11 +13,8 @@ defmodule TheMaestro.Application do
       {DNSCluster, query: Application.get_env(:the_maestro, :dns_cluster_query) || :ignore},
       # Finch pools for HTTP client connection pooling
       {Finch,
-       name: :anthropic_finch,
-       pools: %{"https://api.anthropic.com" => [size: 10, count: 2]}},
-      {Finch,
-       name: :openai_finch,
-       pools: %{"https://api.openai.com" => [size: 10, count: 2]}},
+       name: :anthropic_finch, pools: %{"https://api.anthropic.com" => [size: 10, count: 2]}},
+      {Finch, name: :openai_finch, pools: %{"https://api.openai.com" => [size: 10, count: 2]}},
       {Finch,
        name: :gemini_finch,
        pools: %{"https://generativelanguage.googleapis.com" => [size: 10, count: 2]}},
