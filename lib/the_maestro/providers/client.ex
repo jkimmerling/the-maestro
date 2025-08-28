@@ -3,7 +3,46 @@ defmodule TheMaestro.Providers.Client do
   Tesla-based HTTP client with Finch adapter for multi-provider API communication.
 
   Provides configured Tesla clients for different AI providers with connection pooling,
-  middleware for JSON handling, logging, and retry capabilities.
+  middleware for JSON handling, logging, and retry capabilities. Supports multiple
+  authentication modes including API key authentication for Anthropic API.
+
+  ## Authentication Support
+
+  ### API Key Authentication
+
+  Anthropic provider supports API key authentication with exact header requirements:
+
+  - `x-api-key`: API key from configuration
+  - `anthropic-version`: "2023-06-01" 
+  - `anthropic-beta`: "messages-2023-12-15"
+  - `user-agent`: "llxprt/1.0"
+  - `accept`: "application/json"
+  - `x-client-version`: "1.0.0"
+
+  Headers are injected in exact order for compatibility with llxprt reference.
+
+  ## Configuration
+
+  Configure Anthropic API key in runtime configuration:
+
+      config :the_maestro, :anthropic,
+        api_key: System.get_env("ANTHROPIC_API_KEY")
+
+  ## Examples
+
+      # Default API key authentication
+      client = TheMaestro.Providers.Client.build_client(:anthropic)
+      
+      # Explicit API key authentication  
+      client = TheMaestro.Providers.Client.build_client(:anthropic, :api_key)
+      
+      # Make authenticated API calls
+      {:ok, response} = Tesla.post(client, "/v1/messages", request_body)
+
+  ## Error Handling
+
+  Returns `{:error, :missing_api_key}` when Anthropic API key is not configured.
+  Returns `{:error, :invalid_provider}` for unsupported provider atoms.
   """
 
   alias TheMaestro.Providers.AnthropicConfig
