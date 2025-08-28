@@ -11,6 +11,16 @@ defmodule TheMaestro.Application do
       TheMaestroWeb.Telemetry,
       TheMaestro.Repo,
       {DNSCluster, query: Application.get_env(:the_maestro, :dns_cluster_query) || :ignore},
+      # Finch pools for HTTP client connection pooling
+      {Finch,
+       name: :anthropic_finch,
+       pools: %{"https://api.anthropic.com" => [size: 10, count: 2]}},
+      {Finch,
+       name: :openai_finch,
+       pools: %{"https://api.openai.com" => [size: 10, count: 2]}},
+      {Finch,
+       name: :gemini_finch,
+       pools: %{"https://generativelanguage.googleapis.com" => [size: 10, count: 2]}},
       {Phoenix.PubSub, name: TheMaestro.PubSub},
       # Start a worker by calling: TheMaestro.Worker.start_link(arg)
       # {TheMaestro.Worker, arg},
