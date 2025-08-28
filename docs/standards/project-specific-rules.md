@@ -64,7 +64,7 @@ git push
 
 #### QA Quality Gate  
 - [ ] UI Quality Checklist 100% complete
-- [ ] Playwright visual regression tests all pass
+- [ ] browsermcp visual regression tests all pass
 - [ ] Cross-browser consistency verified
 - [ ] All responsive breakpoints tested and approved
 - [ ] Performance and accessibility requirements met
@@ -91,7 +91,7 @@ git push
 □ Responsive behavior meets modern standards
 □ Interactive states properly implemented
 □ Cross-browser visual consistency confirmed
-□ Playwright visual regression tests pass
+□ browsermcp visual regression tests pass
 □ No visual regressions introduced
 □ Accessibility requirements met
 ```
@@ -107,7 +107,7 @@ git push
 - Responsive behavior doesn't meet modern standards
 - Cross-browser inconsistencies exist
 - Accessibility standards not met
-- Playwright visual tests fail
+- browsermcp visual tests fail
 
 ---
 
@@ -347,7 +347,7 @@ end
 
 ### For QA Engineers
 - **MUST complete comprehensive UI quality validation for every UI story**
-- **MUST use Playwright MCP for visual regression testing**
+- **MUST use browsermcp for visual regression testing**
 - **MUST validate Archon research was conducted and applied**
 - **MUST test all responsive breakpoints across browsers**
 - **MUST reject stories that don't meet business value testing criteria**

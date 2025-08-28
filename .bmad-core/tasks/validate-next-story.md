@@ -59,7 +59,7 @@ included in the story's Dev Notes or referenced appropriately for implementation
 - **Test scenarios**: Are key test cases identified?
 - **Validation steps**: Are acceptance criteria validation steps clear?
 - **Testing tools/frameworks**: Are required testing tools specified?
-- **Design system visual testing requirement**: If design system references are present, verify that the story includes Playwright visual regression tests to validate design consistency and professional quality standards
+- **Design system visual testing requirement**: If design system references are present, verify that the story includes browsermcp visual regression tests to validate design consistency and professional quality standards
 - **Test data requirements**: Are test data needs identified?
 
 ### 6. Security Considerations Assessment (if applicable)

@@ -5,10 +5,18 @@ defmodule TheMaestro.Providers.ClientTest do
 
   describe "build_client/1" do
     test "returns valid Tesla client for anthropic provider" do
+      # Setup test API key
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-key")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
       client = Client.build_client(:anthropic)
 
       assert %Tesla.Client{} = client
       assert client.adapter == {Tesla.Adapter.Finch, :call, [[name: :anthropic_finch]]}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
     end
 
     test "returns valid Tesla client for openai provider" do
@@ -31,10 +39,78 @@ defmodule TheMaestro.Providers.ClientTest do
       assert Client.build_client(nil) == {:error, :invalid_provider}
       assert Client.build_client("anthropic") == {:error, :invalid_provider}
     end
+
+    test "returns error when anthropic API key is missing" do
+      # Remove API key from config
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, nil)
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
+      result = Client.build_client(:anthropic)
+
+      assert result == {:error, :missing_api_key}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
+    end
+  end
+
+  describe "build_client/2" do
+    test "returns valid Tesla client for anthropic with api_key auth type" do
+      # Setup test API key
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-key-auth")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
+      client = Client.build_client(:anthropic, :api_key)
+
+      assert %Tesla.Client{} = client
+      assert client.adapter == {Tesla.Adapter.Finch, :call, [[name: :anthropic_finch]]}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
+    end
+
+    test "returns valid Tesla client for other providers with api_key auth type" do
+      for provider <- [:openai, :gemini] do
+        client = Client.build_client(provider, :api_key)
+        assert %Tesla.Client{} = client
+      end
+    end
+
+    test "returns error for invalid provider with any auth type" do
+      assert Client.build_client(:invalid, :api_key) == {:error, :invalid_provider}
+      assert Client.build_client(:invalid, :oauth) == {:error, :invalid_provider}
+    end
+
+    test "returns error for oauth auth type (not yet implemented)" do
+      assert Client.build_client(:anthropic, :oauth) == {:error, :oauth_not_implemented}
+      assert Client.build_client(:openai, :oauth) == {:error, :oauth_not_implemented}
+      assert Client.build_client(:gemini, :oauth) == {:error, :oauth_not_implemented}
+    end
+
+    test "returns error when anthropic API key is missing with explicit api_key auth" do
+      # Remove API key from config
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
+      result = Client.build_client(:anthropic, :api_key)
+
+      assert result == {:error, :missing_api_key}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
+    end
   end
 
   describe "Tesla client configuration" do
     test "anthropic client has correct base URL" do
+      # Setup test API key
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-key")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
       client = Client.build_client(:anthropic)
 
       # Extract BaseUrl middleware configuration
@@ -42,6 +118,9 @@ defmodule TheMaestro.Providers.ClientTest do
 
       assert base_url_middleware ==
                {Tesla.Middleware.BaseUrl, :call, ["https://api.anthropic.com"]}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
     end
 
     test "openai client has correct base URL" do
@@ -60,7 +139,63 @@ defmodule TheMaestro.Providers.ClientTest do
                {Tesla.Middleware.BaseUrl, :call, ["https://generativelanguage.googleapis.com"]}
     end
 
+    test "anthropic client has exact header order as specified in requirements" do
+      # Setup test API key
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-key-123")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
+      client = Client.build_client(:anthropic)
+
+      # Extract Headers middleware configuration
+      headers_middleware = find_middleware(client, Tesla.Middleware.Headers)
+
+      # Verify exact header order and values
+      expected_headers = [
+        {"x-api-key", "sk-test-key-123"},
+        {"anthropic-version", "2023-06-01"},
+        {"anthropic-beta", "messages-2023-12-15"},
+        {"user-agent", "llxprt/1.0"},
+        {"accept", "application/json"},
+        {"x-client-version", "1.0.0"}
+      ]
+
+      assert {Tesla.Middleware.Headers, :call, [^expected_headers]} = headers_middleware
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
+    end
+
+    test "anthropic client includes Headers middleware for authentication" do
+      # Setup test API key
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-headers")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
+      client = Client.build_client(:anthropic)
+
+      # Verify Headers middleware is present
+      assert has_middleware?(client, Tesla.Middleware.Headers)
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
+    end
+
+    test "non-anthropic clients do not have Headers middleware for authentication" do
+      # OpenAI and Gemini should not have Headers middleware (yet - future Epic 2)
+      openai_client = Client.build_client(:openai)
+      gemini_client = Client.build_client(:gemini)
+
+      refute has_middleware?(openai_client, Tesla.Middleware.Headers)
+      refute has_middleware?(gemini_client, Tesla.Middleware.Headers)
+    end
+
     test "all clients include expected middleware stack" do
+      # Setup test API key for Anthropic
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-middleware")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
       for provider <- [:anthropic, :openai, :gemini] do
         client = Client.build_client(provider)
 
@@ -76,9 +211,17 @@ defmodule TheMaestro.Providers.ClientTest do
         assert {Tesla.Middleware.Retry, :call, [[delay: 500, max_retries: 3, max_delay: 4_000]]} ==
                  retry_middleware
       end
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
     end
 
     test "all clients use Finch adapter with correct pool" do
+      # Setup test API key for Anthropic
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-finch")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
       anthropic_client = Client.build_client(:anthropic)
       openai_client = Client.build_client(:openai)
       gemini_client = Client.build_client(:gemini)
@@ -86,6 +229,9 @@ defmodule TheMaestro.Providers.ClientTest do
       assert anthropic_client.adapter == {Tesla.Adapter.Finch, :call, [[name: :anthropic_finch]]}
       assert openai_client.adapter == {Tesla.Adapter.Finch, :call, [[name: :openai_finch]]}
       assert gemini_client.adapter == {Tesla.Adapter.Finch, :call, [[name: :gemini_finch]]}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
     end
   end
 
@@ -119,14 +265,19 @@ defmodule TheMaestro.Providers.ClientTest do
 
   describe "integration tests" do
     @tag :integration
-    test "anthropic client can make HTTP requests" do
+    test "anthropic client can make HTTP requests with API key headers" do
+      # Setup test API key
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-integration-123")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
       client = Client.build_client(:anthropic)
 
       # Make a simple GET request that should fail with 401/403/405 (expected for auth/method)
-      # This proves the client can make HTTP requests and reach the server
+      # This proves the client can make HTTP requests and reach the server with headers
       case Tesla.get(client, "/v1/messages") do
-        {:ok, %Tesla.Env{status: status}} when status in [401, 403, 404, 405] ->
-          # Expected - we don't have auth or wrong method but we reached the server
+        {:ok, %Tesla.Env{status: status}} when status in [400, 401, 403, 404, 405] ->
+          # Expected - we don't have valid auth but we reached the server with headers
           :ok
 
         {:error, %Tesla.Error{reason: reason}} when reason in [:timeout, :econnrefused] ->
@@ -136,6 +287,9 @@ defmodule TheMaestro.Providers.ClientTest do
         result ->
           flunk("Unexpected result: #{inspect(result)}")
       end
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
     end
 
     @tag :integration
@@ -173,6 +327,11 @@ defmodule TheMaestro.Providers.ClientTest do
 
   describe "error scenarios" do
     test "handles network timeouts gracefully" do
+      # Setup test API key for Anthropic
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-timeout")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+
       client = Client.build_client(:anthropic)
 
       # Test with a non-routable IP that will timeout quickly
@@ -191,6 +350,9 @@ defmodule TheMaestro.Providers.ClientTest do
           # If somehow it succeeds, that's fine too
           :ok
       end
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
     end
 
     test "handles invalid URLs gracefully" do
@@ -205,8 +367,15 @@ defmodule TheMaestro.Providers.ClientTest do
     end
 
     test "client creation with nil config handled properly" do
-      # This tests the fallback behavior in finch_child_spec
-      assert %Tesla.Client{} = Client.build_client(:anthropic)
+      # This tests the fallback behavior - should return error for missing API key
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      Application.delete_env(:the_maestro, :anthropic)
+
+      result = Client.build_client(:anthropic)
+      assert result == {:error, :missing_api_key}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
     end
   end
 

@@ -10,7 +10,7 @@ Please create a comprehensive handover document that includes:
 6. **What NOT to Do**: Critical warnings about what should not be reverted or re-edited
 7. **Remaining Work**: What still needs to be done (if any)
 8. **Validation Results**: Test results, quality gate status, CI/CD readiness
-9. **UI Quality Standards**: Follow professional design system standards and ensure UI components meet accessibility and responsive design requirements. Use Playwright MCP for visual regression testing to maintain consistent UI quality.
+9. **UI Quality Standards**: Follow professional design system standards and ensure UI components meet accessibility and responsive design requirements. Use browsermcp for visual regression testing to maintain consistent UI quality.
 
 ## Format Requirements:
 

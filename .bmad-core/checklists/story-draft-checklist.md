@@ -74,7 +74,7 @@ REQUIRED WORKFLOW: Agent must understand ALL design system requirements BEFORE w
 - [ ] **COMPLETE DESIGN SPECIFICATIONS**: Includes color palette, typography, spacing, component specifications from design system
 - [ ] **RESPONSIVE DESIGN COVERAGE**: Design system responsive breakpoints and standards are included
 - [ ] **PROFESSIONAL QUALITY REQUIREMENT**: Story explicitly requires professional-grade design system compliance
-- [ ] **VISUAL TESTING MANDATE**: Story specifically requires Playwright visual regression tests to validate design consistency
+- [ ] **VISUAL TESTING MANDATE**: Story specifically requires browsermcp visual regression tests to validate design consistency
 
 ## 3. TECHNICAL IMPLEMENTATION GUIDANCE
 

@@ -117,3 +117,12 @@ if config_env() == :prod do
   #
   # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
 end
+
+# Anthropic API configuration for all environments
+config :the_maestro, :anthropic,
+  api_key: System.get_env("ANTHROPIC_API_KEY"),
+  base_url: "https://api.anthropic.com",
+  version: "2023-06-01",
+  beta: "messages-2023-12-15",
+  user_agent: "llxprt/1.0",
+  client_version: "1.0.0"
