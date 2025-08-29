@@ -149,10 +149,12 @@ defmodule TheMaestro.Providers.Client do
   """
   @spec build_client(provider()) ::
           Tesla.Client.t()
-          | {:error, :invalid_provider | :missing_api_key | :missing_org_id | :not_found | :expired}
+          | {:error,
+             :invalid_provider | :missing_api_key | :missing_org_id | :not_found | :expired}
   @spec build_client(provider(), auth_type()) ::
           Tesla.Client.t()
-          | {:error, :invalid_provider | :missing_api_key | :missing_org_id | :not_found | :expired}
+          | {:error,
+             :invalid_provider | :missing_api_key | :missing_org_id | :not_found | :expired}
   def build_client(provider) when provider in [:anthropic, :openai, :gemini] do
     build_client(provider, :api_key)
   end
