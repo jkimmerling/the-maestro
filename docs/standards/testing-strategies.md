@@ -138,6 +138,40 @@ test/
 - Implement data cleanup strategies
 - Provide realistic but minimal test datasets
 
+## OAuth Flow Testing Protocol
+
+### Manual OAuth Testing Requirements
+
+For any stories implementing OAuth authentication flows, **MANDATORY manual testing** must be included following this protocol:
+
+#### Required Manual Testing Process
+
+1. **Dev/QA Setup**: Development or QA team generates OAuth authorization URL using the implemented system
+2. **Manual Navigation**: Product Owner or designated tester manually navigates to the provided OAuth URL in a browser
+3. **Authorization Completion**: Tester completes the OAuth authorization flow through the provider's interface
+4. **Code Extraction**: Tester extracts the authorization code from the callback URL or response
+5. **Code Provision**: Tester provides the authorization code back to Dev/QA team
+6. **Token Exchange Testing**: Dev/QA uses the provided code to test the complete token exchange and API authentication flow
+7. **End-to-End Verification**: Verify that OAuth tokens can successfully authenticate API requests
+
+#### Integration with Automated Testing
+
+- Automated tests should mock the OAuth provider responses for consistent testing
+- Manual testing validates the real OAuth provider integration
+- Both manual and automated testing must be completed before story approval
+- Document any OAuth provider-specific behaviors discovered during manual testing
+
+#### Documentation Requirements
+
+- Include manual testing steps in the story's Testing section
+- Specify which team member will perform manual OAuth testing
+- Document the expected OAuth flow behavior and validation criteria
+- Record any OAuth provider-specific requirements or limitations
+
+**Note**: This manual testing protocol is required for all OAuth-related stories to ensure real-world OAuth provider compatibility and user experience validation.
+
+---
+
 ## Summary
 
 Effective testing strategies focus on:
@@ -147,6 +181,7 @@ Effective testing strategies focus on:
 - **Proper Isolation**: Independent tests without side effects
 - **Performance Awareness**: Fast, reliable test execution
 - **Clear Failure Messages**: Easy problem diagnosis
+- **OAuth Flow Validation**: Manual testing for real provider integration
 
 Following these practices results in:
 - Confidence in code correctness
@@ -154,3 +189,4 @@ Following these practices results in:
 - Safe refactoring capabilities
 - Quick and reliable feedback loops
 - Maintainable and scalable test suites
+- Validated OAuth provider integration
