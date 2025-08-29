@@ -141,3 +141,12 @@ config :the_maestro, :anthropic_oauth,
 config :the_maestro,
        :anthropic_oauth_client_id,
        System.get_env("ANTHROPIC_CLIENT_ID") || "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+
+# OpenAI API configuration for all environments
+config :the_maestro, :openai,
+  api_key: System.get_env("OPENAI_API_KEY"),
+  organization_id: System.get_env("OPENAI_ORG_ID"),
+  base_url: "https://api.openai.com",
+  beta_version: "assistants v2",
+  user_agent: "llxprt/1.0",
+  client_version: "1.0.0"

@@ -242,7 +242,10 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   end
 
   # Process token refresh for a saved authentication record
-  defp process_token_refresh(provider, %SavedAuthentication{credentials: credentials} = saved_auth) do
+  defp process_token_refresh(
+         provider,
+         %SavedAuthentication{credentials: credentials} = saved_auth
+       ) do
     refresh_token = Map.get(credentials, "refresh_token")
 
     if is_nil(refresh_token) or String.length(refresh_token) == 0 do
