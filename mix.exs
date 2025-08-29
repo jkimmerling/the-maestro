@@ -69,6 +69,8 @@ defmodule TheMaestro.MixProject do
       {:httpoison, "~> 2.0"},
       {:tesla, "~> 1.11"},
       {:finch, "~> 0.19"},
+      {:oban, "~> 2.17"},
+      {:cloak_ecto, "~> 1.3"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:gettext, "~> 0.26"},
@@ -78,7 +80,9 @@ defmodule TheMaestro.MixProject do
 
       # Development and testing tools
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:mox, "~> 1.0", only: :test},
+      {:igniter, "~> 0.5", only: [:dev], runtime: false}
     ]
   end
 

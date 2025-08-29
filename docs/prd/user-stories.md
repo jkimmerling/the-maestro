@@ -70,7 +70,9 @@
     
     - **As the system,** I need to make a request to the OpenAI API using a Bearer token, ensuring the headers exactly match the `llxprt` reference.
         
-    - **Reference:** `llxprt` source code for OpenAI header construction.
+    - **Reference:** 
+        `llxprt` source code for OpenAI header construction.
+        The OPENAI_API_KEY is stored as an ENV variable, it is also in ~/.zshrc
         
     - **Acceptance Criteria:**
         
@@ -96,7 +98,9 @@
     
     - **As the system,** I need to generate an OpenAI OAuth 2.0 URL and handle the token exchange.
         
-    - **Reference:** OpenAI's official OAuth documentation.
+    - **Reference:** 
+    OpenAI's official OAuth documentation.
+    The OPENAI_API_KEY is stored as an ENV variable, it is also in ~/.zshrc
         
     - **Acceptance Criteria:**
         

@@ -2,7 +2,6 @@ defmodule TheMaestro.RealOAuthBrowserTest do
   use ExUnit.Case, async: false
 
   alias TheMaestro.Auth
-  alias TheMaestro.Auth.OAuthToken
 
   @moduletag :real_oauth_browser
   @moduletag :capture_log
@@ -69,14 +68,6 @@ defmodule TheMaestro.RealOAuthBrowserTest do
         IO.puts("\n🔄 Step 3: Looking for authorization callback...")
 
         case capture_authorization_code() do
-          {:ok, auth_code} ->
-            IO.puts("✅ Got authorization code: #{String.slice(auth_code, 0, 20)}...")
-
-            # Step 5: Exchange code for tokens
-            IO.puts("\n🎯 Step 4: Exchanging authorization code for tokens...")
-
-            exchange_and_validate_tokens(auth_code, pkce_params)
-
           {:error, reason} ->
             IO.puts("⚠️  Could not capture authorization code: #{inspect(reason)}")
             IO.puts("   Manual verification required")
@@ -94,7 +85,7 @@ defmodule TheMaestro.RealOAuthBrowserTest do
     IO.puts("   🌐 Opening browser to: #{String.slice(auth_url, 0, 80)}...")
 
     # Navigate using the MCP browser tool
-    result =
+    _result =
       ExUnit.CaptureIO.capture_io(fn ->
         # This will be captured by the browser-mcp extension
         IO.puts("Navigating to OAuth URL: #{auth_url}")
@@ -121,44 +112,7 @@ defmodule TheMaestro.RealOAuthBrowserTest do
     {:error, :manual_verification_required}
   end
 
-  defp validate_oauth_token(%OAuthToken{} = token) do
-    IO.puts("\n🔍 Validating OAuth token structure:")
-
-    # Validate access token
-    assert is_binary(token.access_token)
-    assert String.length(token.access_token) > 20
-
-    IO.puts(
-      "   ✅ Access token: #{String.slice(token.access_token, 0, 15)}... (#{String.length(token.access_token)} chars)"
-    )
-
-    # Validate token type
-    assert token.token_type == "Bearer"
-    IO.puts("   ✅ Token type: #{token.token_type}")
-
-    # Validate expiry
-    if token.expiry do
-      assert is_integer(token.expiry)
-      expiry_time = DateTime.from_unix!(token.expiry)
-      IO.puts("   ✅ Expires: #{expiry_time}")
-    end
-
-    # Validate scope
-    if token.scope do
-      assert String.contains?(token.scope, "org:create_api_key")
-      IO.puts("   ✅ Scope: #{token.scope}")
-    end
-
-    # Validate refresh token if present
-    if token.refresh_token do
-      assert is_binary(token.refresh_token)
-      IO.puts("   ✅ Refresh token: #{String.slice(token.refresh_token, 0, 15)}...")
-    end
-
-    IO.puts("🎯 OAuth token validation complete!")
-  end
-
-  defp show_manual_instructions(auth_url, pkce_params) do
+  defp show_manual_instructions(_auth_url, pkce_params) do
     IO.puts("\n" <> String.duplicate("=", 80))
     IO.puts("📝 MANUAL OAUTH VERIFICATION REQUIRED")
     IO.puts(String.duplicate("=", 80))
@@ -175,18 +129,5 @@ defmodule TheMaestro.RealOAuthBrowserTest do
     IO.puts("   ...> }")
     IO.puts("   iex> Auth.exchange_code_for_tokens(\"YOUR_AUTH_CODE\", pkce)")
     IO.puts("\n" <> String.duplicate("=", 80))
-  end
-
-  defp exchange_and_validate_tokens(auth_code, pkce_params) do
-    case Auth.exchange_code_for_tokens(auth_code, pkce_params) do
-      {:ok, %OAuthToken{} = token} ->
-        IO.puts("🎉 SUCCESS: Complete OAuth flow validated!")
-        validate_oauth_token(token)
-
-      {:error, reason} ->
-        IO.puts("⚠️  Token exchange failed: #{inspect(reason)}")
-        IO.puts("   OAuth flow mechanics are validated, but token exchange failed")
-        IO.puts("   This could be due to expired codes or configuration issues")
-    end
   end
 end

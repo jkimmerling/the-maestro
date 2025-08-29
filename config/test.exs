@@ -1,4 +1,5 @@
 import Config
+config :the_maestro, Oban, testing: :manual
 
 # Configure your database
 #

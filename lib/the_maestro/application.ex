@@ -11,8 +11,10 @@ defmodule TheMaestro.Application do
 
     children = [
       TheMaestroWeb.Telemetry,
+      TheMaestro.Vault,
       TheMaestro.Repo,
       {DNSCluster, query: Application.get_env(:the_maestro, :dns_cluster_query) || :ignore},
+      {Oban, Application.fetch_env!(:the_maestro, Oban)},
       # Finch pools for HTTP client connection pooling
       finch_child_spec(:anthropic_finch, finch_pools[:anthropic]),
       finch_child_spec(:openai_finch, finch_pools[:openai]),

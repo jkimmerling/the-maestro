@@ -135,3 +135,9 @@ config :the_maestro, :anthropic_oauth,
   token_endpoint: "https://console.anthropic.com/v1/oauth/token",
   redirect_uri: "https://console.anthropic.com/oauth/code/callback",
   scopes: ["org:create_api_key", "user:profile", "user:inference"]
+
+# OAuth client_id for token refresh worker
+# Extracted from main OAuth config for easy access by TokenRefreshWorker
+config :the_maestro,
+       :anthropic_oauth_client_id,
+       System.get_env("ANTHROPIC_CLIENT_ID") || "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
