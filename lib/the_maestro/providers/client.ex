@@ -98,9 +98,11 @@ defmodule TheMaestro.Providers.Client do
       {:error, :invalid_provider}
   """
   @spec build_client(provider()) ::
-          Tesla.Client.t() | {:error, :invalid_provider | :missing_api_key | :not_found | :expired}
+          Tesla.Client.t()
+          | {:error, :invalid_provider | :missing_api_key | :not_found | :expired}
   @spec build_client(provider(), auth_type()) ::
-          Tesla.Client.t() | {:error, :invalid_provider | :missing_api_key | :not_found | :expired}
+          Tesla.Client.t()
+          | {:error, :invalid_provider | :missing_api_key | :not_found | :expired}
   def build_client(provider) when provider in [:anthropic, :openai, :gemini] do
     build_client(provider, :api_key)
   end
@@ -124,7 +126,7 @@ defmodule TheMaestro.Providers.Client do
   # OAuth token retrieval function
   @spec get_oauth_token(provider()) :: {:ok, OAuthToken.t()} | {:error, :not_found | :expired}
   defp get_oauth_token(_provider) do
-    # FIXME: Implement database lookup for OAuth tokens from saved_authentications table
+    # TODO: Task 4 - Implement database lookup for OAuth tokens from saved_authentications table
     # For now, return error until database integration is complete
     # This will be implemented in Task 4
     #
@@ -136,7 +138,8 @@ defmodule TheMaestro.Providers.Client do
   end
 
   # Private function to build middleware stack based on provider and auth type
-  @spec build_middleware(provider(), auth_type()) :: {:ok, list()} | {:error, :missing_api_key | :not_found | :expired}
+  @spec build_middleware(provider(), auth_type()) ::
+          {:ok, list()} | {:error, :missing_api_key | :not_found | :expired}
   defp build_middleware(:anthropic, :api_key) do
     case AnthropicConfig.load() do
       {:ok, config} ->
@@ -187,33 +190,9 @@ defmodule TheMaestro.Providers.Client do
   end
 
   defp build_middleware(:anthropic, :oauth) do
+    # TODO: Task 4 - OAuth authentication will be enabled when database integration is complete
+    # For now, return error until get_oauth_token/1 is implemented
     case get_oauth_token(:anthropic) do
-      {:ok, oauth_token} ->
-        config = get_provider_config(:anthropic)
-
-        middleware = [
-          # Base URL middleware
-          {Tesla.Middleware.BaseUrl, config.base_url},
-          # OAuth Bearer token headers (replaces x-api-key)
-          {Tesla.Middleware.Headers,
-           [
-             {"authorization", "Bearer #{oauth_token.access_token}"},
-             {"anthropic-version", "2023-06-01"},
-             {"anthropic-beta", "oauth-2025-04-20"},
-             {"user-agent", "llxprt/1.0"},
-             {"accept", "application/json"},
-             {"x-client-version", "1.0.0"}
-           ]},
-          # JSON middleware for request/response serialization
-          Tesla.Middleware.JSON,
-          # Logger middleware for request/response logging
-          Tesla.Middleware.Logger,
-          # Retry middleware for handling transient failures
-          {Tesla.Middleware.Retry, delay: 500, max_retries: 3, max_delay: 4_000}
-        ]
-
-        {:ok, middleware}
-
       {:error, reason} ->
         {:error, reason}
     end

@@ -7,6 +7,12 @@
 # General application configuration
 import Config
 
+config :the_maestro, Oban,
+  engine: Oban.Engines.Basic,
+  notifier: Oban.Notifiers.Postgres,
+  queues: [default: 10],
+  repo: TheMaestro.Repo
+
 config :the_maestro,
   ecto_repos: [TheMaestro.Repo],
   generators: [timestamp_type: :utc_datetime]
