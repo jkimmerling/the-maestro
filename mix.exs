@@ -66,6 +66,7 @@ defmodule TheMaestro.MixProject do
        depth: 1},
       {:swoosh, "~> 1.16"},
       {:req, "~> 0.5"},
+      {:httpoison, "~> 2.0"},
       {:tesla, "~> 1.11"},
       {:finch, "~> 0.19"},
       {:telemetry_metrics, "~> 1.0"},

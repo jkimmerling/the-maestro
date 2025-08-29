@@ -126,3 +126,12 @@ config :the_maestro, :anthropic,
   beta: "messages-2023-12-15",
   user_agent: "llxprt/1.0",
   client_version: "1.0.0"
+
+# Anthropic OAuth 2.0 configuration for all environments
+# Uses exact llxprt-code values for compatibility
+config :the_maestro, :anthropic_oauth,
+  client_id: System.get_env("ANTHROPIC_CLIENT_ID") || "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+  authorization_endpoint: "https://claude.ai/oauth/authorize",
+  token_endpoint: "https://console.anthropic.com/v1/oauth/token",
+  redirect_uri: "https://console.anthropic.com/oauth/code/callback",
+  scopes: ["org:create_api_key", "user:profile", "user:inference"]

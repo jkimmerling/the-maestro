@@ -14,19 +14,91 @@ defmodule TheMaestro.Auth do
   - redirect_uri: "https://console.anthropic.com/oauth/code/callback"
   - scopes: ["org:create_api_key", "user:profile", "user:inference"]
 
-  ## Example Usage
+  Configuration can be customized via environment variables in `config/runtime.exs`:
+  - ANTHROPIC_CLIENT_ID (defaults to hardcoded public client ID)
 
-      # Generate OAuth URL
+  ## OAuth Setup Process
+
+  ### Step 1: Generate OAuth URL
+  Generate a secure OAuth authorization URL with PKCE parameters:
+
       {:ok, {auth_url, pkce_params}} = TheMaestro.Auth.generate_oauth_url()
 
-      # Exchange authorization code for tokens
+  The `auth_url` will contain all necessary parameters and should be presented to the user
+  for authorization. The `pkce_params` must be retained for the token exchange step.
+
+  ### Step 2: User Authorization
+  Direct the user to visit the `auth_url` in their browser. They will:
+  1. See Anthropic's authorization page
+  2. Review the requested permissions (create API keys, profile access, inference)
+  3. Click "Authorize" to grant access
+  4. Be redirected with an authorization code in the URL fragment
+
+  ### Step 3: Extract Authorization Code
+  The user should copy the authorization code from the redirect URL. The code appears
+  after the callback URL in format: `code#state` or just `code`.
+
+  ### Step 4: Exchange Code for Tokens
+  Exchange the authorization code for access and refresh tokens:
+
       {:ok, oauth_token} = TheMaestro.Auth.exchange_code_for_tokens(
-        "auth_code_from_user",
+        "authorization_code_from_user",
         pkce_params
       )
+
+  The resulting `oauth_token` contains:
+  - `access_token`: For API authentication
+  - `refresh_token`: For token renewal (may be nil)
+  - `expiry`: Unix timestamp when token expires
+  - `scope`: Granted permissions
+  - `token_type`: Always "Bearer"
+
+  ## Complete Workflow Example
+
+      # Step 1: Generate OAuth URL
+      {:ok, {auth_url, pkce_params}} = TheMaestro.Auth.generate_oauth_url()
+      
+      # Present auth_url to user for authorization
+      IO.puts("Visit: " <> auth_url)
+      IO.puts("After authorization, copy the code from the redirect URL")
+      
+      # Step 2: Get code from user input
+      auth_code = IO.gets("Enter authorization code: ") |> String.trim()
+      
+      # Step 3: Exchange for tokens
+      case TheMaestro.Auth.exchange_code_for_tokens(auth_code, pkce_params) do
+        {:ok, oauth_token} ->
+          IO.puts("Success! Access token: " <> String.slice(oauth_token.access_token, 0, 20) <> "...")
+          # Store oauth_token.access_token for API calls
+          
+        {:error, reason} ->
+          IO.puts("OAuth failed: " <> inspect(reason))
+      end
+
+  ## Security Features
+
+  - **PKCE (Proof Key for Code Exchange)**: Uses S256 method for enhanced security
+  - **State Parameter**: Prevents CSRF attacks using code verifier as state
+  - **Secure Random Generation**: Cryptographically secure random values
+  - **JSON Request Format**: Follows llxprt standard (not form-encoded)
+
+  ## Error Handling
+
+  Functions return `{:ok, result}` or `{:error, reason}` tuples:
+  - `:url_generation_failed` - PKCE or URL construction error
+  - `:token_exchange_failed` - HTTP error with status and body
+  - `:token_request_failed` - Network or connection error  
+  - `:invalid_token_response` - Malformed response from Anthropic
+  - `:token_exchange_error` - Unexpected error during processing
+
+  ## Integration Notes
+
+  This module uses HTTPoison for OAuth token requests (separate from Tesla API client)
+  because OAuth and API endpoints have different authentication requirements.
+  OAuth endpoints require unauthenticated JSON requests, while API endpoints
+  require authenticated requests with different client configurations.
   """
 
-  alias TheMaestro.Providers.Client
   require Logger
 
   # Embedded struct definitions per Phoenix conventions for simple structs
@@ -44,13 +116,11 @@ defmodule TheMaestro.Auth do
             scopes: [String.t()]
           }
 
-    defstruct [
-      client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
-      authorization_endpoint: "https://claude.ai/oauth/authorize",
-      token_endpoint: "https://console.anthropic.com/v1/oauth/token",
-      redirect_uri: "https://console.anthropic.com/oauth/code/callback",
-      scopes: ["org:create_api_key", "user:profile", "user:inference"]
-    ]
+    defstruct client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+              authorization_endpoint: "https://claude.ai/oauth/authorize",
+              token_endpoint: "https://console.anthropic.com/v1/oauth/token",
+              redirect_uri: "https://console.anthropic.com/oauth/code/callback",
+              scopes: ["org:create_api_key", "user:profile", "user:inference"]
   end
 
   defmodule OAuthToken do
@@ -184,13 +254,30 @@ defmodule TheMaestro.Auth do
 
   ## Examples
 
-      iex> pkce_params = %TheMaestro.Auth.PKCEParams{
-      ...>   code_verifier: "test_verifier",
-      ...>   code_challenge: "test_challenge",
-      ...>   code_challenge_method: "S256"
-      ...> }
-      iex> TheMaestro.Auth.exchange_code_for_tokens("auth_code", pkce_params)
-      # Returns {:ok, %OAuthToken{}} or {:error, reason}
+      # After user authorization, exchange code for tokens
+      {:ok, {auth_url, pkce_params}} = generate_oauth_url()
+      # ... user visits auth_url and gets authorization code ...
+      
+      # Exchange code for tokens (handles both formats)
+      {:ok, oauth_token} = exchange_code_for_tokens("auth_code_123", pkce_params)
+      {:ok, oauth_token} = exchange_code_for_tokens("auth_code_123#state_456", pkce_params)
+      
+      # Access token details
+      oauth_token.access_token  # "sk-ant-oat01-..."
+      oauth_token.expiry        # Unix timestamp
+      oauth_token.token_type    # "Bearer"
+
+  ## Error Cases
+
+    * `{:error, :token_exchange_error}` - Unexpected error during processing
+    * `{:error, {:token_exchange_failed, status, body}}` - HTTP error from Anthropic
+    * `{:error, {:token_request_failed, reason}}` - Network or connection error
+    * `{:error, :invalid_token_response}` - Malformed response format
+
+  ## Note
+  This function makes real HTTP requests to Anthropic's OAuth endpoints.
+  The request is sent as JSON (not form-encoded) following llxprt specifications.
+  Uses HTTPoison client separate from Tesla API client for endpoint compatibility.
   """
   @spec exchange_code_for_tokens(String.t(), PKCEParams.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
@@ -210,15 +297,16 @@ defmodule TheMaestro.Auth do
       "code_verifier" => pkce_params.code_verifier
     }
 
-    # Send JSON request using existing Tesla + Finch infrastructure
-    client = Client.build_client(:anthropic)
+    # Send JSON request to OAuth token endpoint (like llxprt fetch)
+    # Use direct HTTP request since OAuth endpoint is different from API endpoint
     headers = [{"content-type", "application/json"}]
+    json_body = Jason.encode!(request_body)
 
-    case Tesla.post(client, config.token_endpoint, request_body, headers: headers) do
-      {:ok, %Tesla.Env{status: 200, body: response_body}} ->
-        map_token_response(response_body)
+    case HTTPoison.post(config.token_endpoint, json_body, headers) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
+        map_token_response(Jason.decode!(response_body))
 
-      {:ok, %Tesla.Env{status: status, body: response_body}} ->
+      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
         Logger.error("Token exchange failed with status #{status}: #{response_body}")
         {:error, {:token_exchange_failed, status, response_body}}
 
@@ -235,15 +323,30 @@ defmodule TheMaestro.Auth do
   @doc """
   Generate PKCE code verifier and challenge using S256 method.
 
+  Creates cryptographically secure PKCE (Proof Key for Code Exchange) parameters
+  for OAuth 2.0 authorization. Uses 32-byte random code verifier and SHA256
+  hash for code challenge following RFC 7636 specification.
+
   ## Returns
 
-    * `PKCEParams.t()` - Generated PKCE parameters
+    * `PKCEParams.t()` - Generated PKCE parameters with verifier, challenge, and method
 
   ## Examples
 
       iex> pkce = TheMaestro.Auth.generate_pkce_params()
       iex> pkce.code_challenge_method
       "S256"
+      iex> String.length(pkce.code_verifier) >= 43
+      true
+      iex> String.length(pkce.code_challenge) >= 43
+      true
+
+  ## Security Features
+
+  - Uses `:crypto.strong_rand_bytes/1` for cryptographically secure randomness
+  - 32-byte verifier provides sufficient entropy for security
+  - Base64URL encoding without padding follows RFC 7636
+  - SHA256 hash provides strong one-way function for challenge
   """
   @spec generate_pkce_params() :: PKCEParams.t()
   def generate_pkce_params do
