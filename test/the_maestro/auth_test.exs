@@ -562,13 +562,34 @@ defmodule TheMaestro.AuthTest do
 
       params = Auth.build_openai_oauth_params(config, pkce_params)
 
-      assert params["response_type"] == "code"
-      assert params["client_id"] == "app_EMoamEEZ73f0CkXaXp7hrann"
-      assert params["redirect_uri"] == "http://localhost:8080/auth/callback"
-      assert params["scope"] == "openid profile email offline_access"
-      assert params["code_challenge"] == pkce_params.code_challenge
-      assert params["code_challenge_method"] == "S256"
-      assert is_binary(params["state"])
+      # Convert list of tuples to map for easier testing
+      params_map = Map.new(params)
+
+      assert params_map["response_type"] == "code"
+      assert params_map["client_id"] == "app_EMoamEEZ73f0CkXaXp7hrann"
+      assert params_map["redirect_uri"] == "http://localhost:8080/auth/callback"
+      assert params_map["scope"] == "openid profile email offline_access"
+      assert params_map["code_challenge"] == pkce_params.code_challenge
+      assert params_map["code_challenge_method"] == "S256"
+      assert params_map["id_token_add_organizations"] == "true"
+      assert params_map["codex_cli_simplified_flow"] == "true"
+      assert is_binary(params_map["state"])
+
+      # Also test that the parameters are in the exact order as codex
+      expected_order = [
+        "response_type",
+        "client_id",
+        "redirect_uri",
+        "scope",
+        "code_challenge",
+        "code_challenge_method",
+        "id_token_add_organizations",
+        "codex_cli_simplified_flow",
+        "state"
+      ]
+
+      actual_order = Enum.map(params, fn {k, _v} -> k end)
+      assert actual_order == expected_order
     end
 
     test "build_openai_token_request/3 constructs proper token request" do

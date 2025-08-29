@@ -450,10 +450,16 @@ defmodule TheMaestro.Auth do
 
     case get_openai_oauth_config() do
       {:ok, config} ->
-        # Build OAuth parameters following OpenAI specification
+        # Build OAuth parameters following OpenAI specification with exact order
         oauth_params = build_openai_oauth_params(config, pkce_params)
 
-        auth_url = "#{config.authorization_endpoint}?#{URI.encode_query(oauth_params)}"
+        # Manually encode parameters to maintain exact codex order
+        query_string =
+          oauth_params
+          |> Enum.map(fn {k, v} -> "#{k}=#{URI.encode_www_form(v)}" end)
+          |> Enum.join("&")
+
+        auth_url = "#{config.authorization_endpoint}?#{query_string}"
         Logger.info("Generated OpenAI OAuth URL with PKCE parameters")
 
         {:ok, {auth_url, pkce_params}}
@@ -575,22 +581,25 @@ defmodule TheMaestro.Auth do
     * `codex_cli_simplified_flow` - Required by OpenAI OAuth for CLI integration
 
   """
-  @spec build_openai_oauth_params(OpenAIOAuthConfig.t(), PKCEParams.t()) :: map()
+  @spec build_openai_oauth_params(OpenAIOAuthConfig.t(), PKCEParams.t()) :: [
+          {String.t(), String.t()}
+        ]
   def build_openai_oauth_params(config, pkce_params) do
-    # Generate secure state parameter
-    state = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+    # Generate secure state parameter using same method as codex
+    state = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
 
-    %{
-      "response_type" => "code",
-      "client_id" => config.client_id,
-      "redirect_uri" => config.redirect_uri,
-      "scope" => Enum.join(config.scopes, " "),
-      "code_challenge" => pkce_params.code_challenge,
-      "code_challenge_method" => pkce_params.code_challenge_method,
-      "id_token_add_organizations" => "true",
-      "codex_cli_simplified_flow" => "true",
-      "state" => state
-    }
+    # Use ordered list matching exact codex-rs parameter order
+    [
+      {"response_type", "code"},
+      {"client_id", config.client_id},
+      {"redirect_uri", config.redirect_uri},
+      {"scope", Enum.join(config.scopes, " ")},
+      {"code_challenge", pkce_params.code_challenge},
+      {"code_challenge_method", pkce_params.code_challenge_method},
+      {"id_token_add_organizations", "true"},
+      {"codex_cli_simplified_flow", "true"},
+      {"state", state}
+    ]
   end
 
   @doc """
