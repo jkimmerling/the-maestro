@@ -1,0 +1,8 @@
+{
+  "scope": "user:inference user:profile",
+  "access_token": "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",
+  "token_type": "Bearer",
+  "expiry": 1756492014,
+  "refresh_token": "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",
+  "generated_at": "2025-08-29 10:26:54.763475Z"
+}

@@ -40,7 +40,6 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
 
   require Logger
 
-  alias TheMaestro.Auth
   alias TheMaestro.Auth.OAuthToken
 
   # Job data struct for validation and type checking
@@ -97,17 +96,25 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   def perform(%Oban.Job{args: args} = _job) do
     Logger.info("Starting token refresh job for provider: #{args["provider"]}")
 
-    # TODO: Task 4 - This is a placeholder implementation until database integration is complete
-    # For now, we'll just log that the worker is ready and return success
-    Logger.info("Token refresh worker called for provider: #{args["provider"]} (Task 4 pending)")
+    Logger.info("Token refresh worker starting for provider: #{args["provider"]}")
 
     case validate_job_args(args) do
-      {:ok, _job_data} ->
-        Logger.info(
-          "Token refresh job validation successful - awaiting Task 4 database integration"
-        )
-
-        :ok
+      {:ok, job_data} ->
+        Logger.info("Token refresh job validation successful, attempting token refresh")
+        
+        case refresh_token_for_provider(job_data.provider, job_data.auth_id) do
+          {:ok, _new_token} ->
+            Logger.info("Token refresh successful for provider: #{job_data.provider}")
+            :ok
+            
+          {:error, :not_found} ->
+            Logger.warning("No OAuth token found for provider: #{job_data.provider}")
+            {:error, :not_found}
+            
+          {:error, reason} ->
+            Logger.error("Token refresh failed for provider #{job_data.provider}: #{inspect(reason)}")
+            {:error, reason}
+        end
 
       {:error, reason} ->
         Logger.error("Token refresh job validation failed: #{inspect(reason)}")
@@ -169,13 +176,13 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
       end
 
     job_args = %{
-      provider: provider,
+      "provider" => provider,
       # Will be populated from database in Task 4
-      auth_id: "temp_auth_id",
-      retry_count: 0
+      "auth_id" => "temp_auth_id",
+      "retry_count" => 0
     }
 
-    %{args: job_args}
+    job_args
     |> new(scheduled_at: final_refresh_at)
     |> Oban.insert()
   end
@@ -206,14 +213,41 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   """
   @spec refresh_token_for_provider(String.t(), String.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
-  def refresh_token_for_provider(provider, refresh_token) do
-    case provider do
-      "anthropic" ->
-        refresh_anthropic_token(refresh_token)
-
-      _ ->
-        {:error, {:unsupported_provider, provider}}
+  def refresh_token_for_provider(provider, _auth_id) do
+    import Ecto.Query, warn: false
+    alias TheMaestro.{Repo, SavedAuthentication}
+    
+    # First, get the current stored token
+    provider_atom = String.to_existing_atom(provider)
+    
+    query = 
+      from sa in SavedAuthentication,
+      where: sa.provider == ^provider_atom and sa.auth_type == :oauth,
+      select: sa
+    
+    case Repo.one(query) do
+      nil ->
+        {:error, :not_found}
+        
+      %SavedAuthentication{credentials: credentials} = saved_auth ->
+        refresh_token = Map.get(credentials, "refresh_token")
+        
+        if refresh_token && String.length(refresh_token) > 0 do
+          case perform_token_refresh(provider, refresh_token) do
+            {:ok, new_oauth_token} ->
+              # Update the stored credentials with new token
+              update_stored_token(saved_auth, new_oauth_token)
+              
+            {:error, reason} ->
+              {:error, reason}
+          end
+        else
+          {:error, :no_refresh_token}
+        end
     end
+  rescue
+    ArgumentError ->
+      {:error, {:unsupported_provider, provider}}
   end
 
   # Private helper functions
@@ -237,42 +271,91 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
     end
   end
 
-  # TODO: Task 4 - Database integration functions will be implemented here
-  # The following functions will be added in Task 4:
-  # - get_refresh_token/2: Query saved_authentications table for refresh tokens
-  # - update_stored_token/3: Update saved_authentications with new OAuth tokens
-  # - schedule_next_refresh/2: Schedule follow-up refresh jobs based on token expiry
+  # Perform token refresh for specific provider using refresh token
+  defp perform_token_refresh(provider, refresh_token) do
+    case provider do
+      "anthropic" -> refresh_anthropic_token(refresh_token)
+      _ -> {:error, {:unsupported_provider, provider}}
+    end
+  end
 
-  # Refresh Anthropic OAuth token using existing Auth module
-  defp refresh_anthropic_token(refresh_token) do
-    # Use existing Tesla + Finch infrastructure from Auth module
-    # This follows the same patterns as the initial token exchange
-    config = %Auth.AnthropicOAuthConfig{}
-
-    request_body = %{
-      "grant_type" => "refresh_token",
-      "refresh_token" => refresh_token,
-      "client_id" => config.client_id
+  # Update stored OAuth token in database with new credentials
+  defp update_stored_token(saved_auth, new_oauth_token) do
+    import Ecto.Query, warn: false
+    alias TheMaestro.Repo
+    
+    # Calculate new expiry DateTime from unix timestamp
+    new_expires_at = 
+      if new_oauth_token.expiry do
+        DateTime.from_unix!(new_oauth_token.expiry)
+      else
+        nil
+      end
+    
+    # Update credentials and expiry
+    new_credentials = %{
+      "access_token" => new_oauth_token.access_token,
+      "refresh_token" => new_oauth_token.refresh_token || Map.get(saved_auth.credentials, "refresh_token"),
+      "token_type" => new_oauth_token.token_type || "Bearer",
+      "scope" => new_oauth_token.scope
     }
+    
+    changeset = TheMaestro.SavedAuthentication.changeset(saved_auth, %{
+      credentials: new_credentials,
+      expires_at: new_expires_at
+    })
+    
+    case Repo.update(changeset) do
+      {:ok, _updated_auth} ->
+        Logger.info("Successfully updated OAuth token for provider: #{saved_auth.provider}")
+        {:ok, new_oauth_token}
+        
+      {:error, changeset} ->
+        Logger.error("Failed to update OAuth token: #{inspect(changeset.errors)}")
+        {:error, :database_update_failed}
+    end
+  end
 
-    headers = [{"content-type", "application/json"}]
-    json_body = Jason.encode!(request_body)
+  # Refresh Anthropic OAuth token using HTTPoison
+  defp refresh_anthropic_token(refresh_token) do
+    # OAuth token refresh endpoint for Anthropic
+    token_endpoint = "https://auth.anthropic.com/oauth/token"
+    
+    # Get client_id from configuration - this would typically be stored in config
+    # For now, we'll need to handle this properly in the configuration
+    client_id = Application.get_env(:the_maestro, :anthropic_oauth_client_id)
+    
+    unless client_id do
+      Logger.error("Missing Anthropic OAuth client_id configuration")
+      {:error, :missing_client_id}
+    else
+      request_body = %{
+        "grant_type" => "refresh_token",
+        "refresh_token" => refresh_token,
+        "client_id" => client_id
+      }
 
-    case HTTPoison.post(config.token_endpoint, json_body, headers) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-        response_data = Jason.decode!(response_body)
-        map_refresh_response(response_data)
+      headers = [{"content-type", "application/json"}]
+      json_body = Jason.encode!(request_body)
 
-      {:ok, %HTTPoison.Response{status_code: 401, body: _}} ->
-        {:error, :invalid_refresh_token}
+      http_client = Application.get_env(:the_maestro, :http_client, HTTPoison)
+    
+      case http_client.post(token_endpoint, json_body, headers) do
+        {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
+          response_data = Jason.decode!(response_body)
+          map_refresh_response(response_data)
 
-      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
-        Logger.error("Token refresh failed with status #{status}: #{response_body}")
-        {:error, :token_refresh_failed}
+        {:ok, %HTTPoison.Response{status_code: 401, body: _}} ->
+          {:error, :invalid_refresh_token}
 
-      {:error, reason} ->
-        Logger.error("Network error during token refresh: #{inspect(reason)}")
-        {:error, :network_error}
+        {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
+          Logger.error("Token refresh failed with status #{status}: #{response_body}")
+          {:error, :token_refresh_failed}
+
+        {:error, reason} ->
+          Logger.error("Network error during token refresh: #{inspect(reason)}")
+          {:error, :network_error}
+      end
     end
   rescue
     error ->

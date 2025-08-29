@@ -1,0 +1,8 @@
+# PKCE Parameters for OAuth Token Exchange
+# Generated on 2025-08-29 11:01:58.377877Z
+# DO NOT SHARE - These parameters are required for token exchange
+
+PKCE_CODE_VERIFIER = "kMaeR9-Tk2JGfpsfDXu-gBvYwYcdNI5i_x78SujizYg"
+PKCE_CODE_CHALLENGE = "-xMY2ojhYO70gbgya8f0EVreXKraiNpCaiy2pofUUI4"
+PKCE_CODE_CHALLENGE_METHOD = "S256"
+# Note: state parameter in OAuth URL is set to the code_verifier value

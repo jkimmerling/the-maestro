@@ -1,7 +1,9 @@
 defmodule TheMaestro.Providers.ClientTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
+  use TheMaestro.DataCase
 
   alias TheMaestro.Providers.Client
+  alias TheMaestro.SavedAuthentication
 
   describe "build_client/1" do
     test "returns valid Tesla client for anthropic provider" do
@@ -83,8 +85,9 @@ defmodule TheMaestro.Providers.ClientTest do
       assert Client.build_client(:invalid, :oauth) == {:error, :invalid_provider}
     end
 
-    test "returns error for oauth auth type (not yet implemented)" do
-      assert Client.build_client(:anthropic, :oauth) == {:error, :oauth_not_implemented}
+    test "returns error for oauth auth type when no token is stored" do
+      # OAuth should return not_found when no token exists in database
+      assert Client.build_client(:anthropic, :oauth) == {:error, :not_found}
       assert Client.build_client(:openai, :oauth) == {:error, :oauth_not_implemented}
       assert Client.build_client(:gemini, :oauth) == {:error, :oauth_not_implemented}
     end
@@ -322,6 +325,157 @@ defmodule TheMaestro.Providers.ClientTest do
         result ->
           flunk("Unexpected result: #{inspect(result)}")
       end
+    end
+  end
+
+  describe "OAuth authentication" do
+    setup do
+      # Clean up any existing saved authentications
+      Repo.delete_all(SavedAuthentication)
+      :ok
+    end
+
+    test "successfully builds client with valid OAuth token" do
+      # Create a valid OAuth token in database
+      expires_at = DateTime.add(DateTime.utc_now(), 3600, :second)
+      
+      {:ok, _saved_auth} = %SavedAuthentication{}
+      |> SavedAuthentication.changeset(%{
+        provider: :anthropic,
+        auth_type: :oauth,
+        credentials: %{
+          "access_token" => "sk-ant-oat01-test-token-123",
+          "refresh_token" => "sk-ant-oar01-test-refresh-123", 
+          "token_type" => "Bearer",
+          "scope" => "user:profile user:inference"
+        },
+        expires_at: expires_at
+      })
+      |> Repo.insert()
+
+      # Build client with OAuth
+      client = Client.build_client(:anthropic, :oauth)
+
+      assert %Tesla.Client{} = client
+      assert client.adapter == {Tesla.Adapter.Finch, :call, [[name: :anthropic_finch]]}
+
+      # Verify OAuth headers are correct
+      headers_middleware = find_middleware(client, Tesla.Middleware.Headers)
+      {Tesla.Middleware.Headers, :call, [header_list]} = headers_middleware
+      
+      # Check for key OAuth headers (full Claude Code headers)
+      assert {"authorization", "Bearer sk-ant-oat01-test-token-123"} in header_list
+      assert {"anthropic-version", "2023-06-01"} in header_list
+      assert {"anthropic-beta", "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"} in header_list
+      assert {"user-agent", "claude-cli/1.0.81 (external, cli)"} in header_list
+      assert {"accept", "application/json"} in header_list
+      assert {"content-type", "application/json"} in header_list
+    end
+
+    test "returns error when OAuth token not found in database" do
+      # No token stored - should return not_found error
+      result = Client.build_client(:anthropic, :oauth)
+      assert result == {:error, :not_found}
+    end
+
+    test "returns error when OAuth token has expired" do
+      # Create an expired OAuth token
+      expired_at = DateTime.add(DateTime.utc_now(), -3600, :second)  # 1 hour ago
+      
+      {:ok, _saved_auth} = %SavedAuthentication{}
+      |> SavedAuthentication.changeset(%{
+        provider: :anthropic,
+        auth_type: :oauth,
+        credentials: %{
+          "access_token" => "sk-ant-oat01-expired-token",
+          "refresh_token" => "sk-ant-oar01-expired-refresh",
+          "token_type" => "Bearer"
+        },
+        expires_at: expired_at
+      })
+      |> Repo.insert()
+
+      # Build client should return expired error
+      result = Client.build_client(:anthropic, :oauth)
+      assert result == {:error, :expired}
+    end
+
+    test "OAuth headers differ from API key headers" do
+      # Setup API key client for comparison
+      original_config = Application.get_env(:the_maestro, :anthropic, [])
+      test_config = Keyword.put(original_config, :api_key, "sk-test-api-key")
+      Application.put_env(:the_maestro, :anthropic, test_config)
+      
+      # Setup OAuth token
+      expires_at = DateTime.add(DateTime.utc_now(), 3600, :second)
+      
+      {:ok, _saved_auth} = %SavedAuthentication{}
+      |> SavedAuthentication.changeset(%{
+        provider: :anthropic,
+        auth_type: :oauth,
+        credentials: %{
+          "access_token" => "sk-ant-oat01-oauth-token",
+          "refresh_token" => "sk-ant-oar01-oauth-refresh",
+          "token_type" => "Bearer"
+        },
+        expires_at: expires_at
+      })
+      |> Repo.insert()
+
+      # Get both clients
+      api_client = Client.build_client(:anthropic, :api_key)
+      oauth_client = Client.build_client(:anthropic, :oauth)
+
+      # Compare headers
+      api_headers = find_middleware(api_client, Tesla.Middleware.Headers)
+      oauth_headers = find_middleware(oauth_client, Tesla.Middleware.Headers)
+
+      # Extract header lists
+      {Tesla.Middleware.Headers, :call, [api_header_list]} = api_headers
+      {Tesla.Middleware.Headers, :call, [oauth_header_list]} = oauth_headers
+
+      # API key uses x-api-key header
+      assert {"x-api-key", "sk-test-api-key"} in api_header_list
+      refute Enum.any?(api_header_list, fn {key, _} -> key == "authorization" end)
+      
+      # OAuth uses authorization header
+      assert {"authorization", "Bearer sk-ant-oat01-oauth-token"} in oauth_header_list
+      refute Enum.any?(oauth_header_list, fn {key, _} -> key == "x-api-key" end)
+      
+      # Different beta headers
+      assert {"anthropic-beta", "messages-2023-12-15"} in api_header_list
+      assert {"anthropic-beta", "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"} in oauth_header_list
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_config)
+    end
+
+    test "OAuth token with far future expiry is handled" do
+      # Create OAuth token with far future expiry (valid for a long time)
+      far_future = DateTime.add(DateTime.utc_now(), 365 * 24 * 3600, :second)  # 1 year
+      
+      {:ok, _saved_auth} = %SavedAuthentication{}
+      |> SavedAuthentication.changeset(%{
+        provider: :anthropic,
+        auth_type: :oauth,
+        credentials: %{
+          "access_token" => "sk-ant-oat01-long-expiry",
+          "refresh_token" => "sk-ant-oar01-long-expiry",
+          "token_type" => "Bearer"
+        },
+        expires_at: far_future
+      })
+      |> Repo.insert()
+
+      # Should successfully build client
+      client = Client.build_client(:anthropic, :oauth)
+      assert %Tesla.Client{} = client
+
+      # Verify authorization header is present
+      headers_middleware = find_middleware(client, Tesla.Middleware.Headers)
+      {Tesla.Middleware.Headers, :call, [header_list]} = headers_middleware
+      
+      assert {"authorization", "Bearer sk-ant-oat01-long-expiry"} in header_list
     end
   end
 

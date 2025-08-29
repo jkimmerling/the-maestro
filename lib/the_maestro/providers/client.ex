@@ -21,23 +21,50 @@ defmodule TheMaestro.Providers.Client do
 
   ### OAuth Bearer Authentication
 
-  Anthropic provider supports OAuth 2.0 Bearer authentication with exact header requirements:
+  Anthropic provider supports OAuth 2.0 Bearer authentication with database-backed token storage:
 
-  - `authorization`: "Bearer [ACCESS_TOKEN]" (replaces x-api-key)
+  - `authorization`: "Bearer [ACCESS_TOKEN]" (replaces `x-api-key` header)
   - `anthropic-version`: "2023-06-01"
-  - `anthropic-beta`: "oauth-2025-04-20" 
+  - `anthropic-beta`: "oauth-2025-04-20" (OAuth-specific beta version)
   - `user-agent`: "llxprt/1.0"
   - `accept`: "application/json"
   - `x-client-version`: "1.0.0"
 
-  Headers are injected in exact order for compatibility with llxprt reference.
+  OAuth tokens are retrieved from the `saved_authentications` database table with automatic
+  expiry validation. If a token is expired or missing, the client returns an error for
+  handling by the calling code or automatic refresh by the TokenRefreshWorker.
+
+  ## OAuth Token Refresh Workflow
+
+  The system includes automated token refresh using Oban background jobs:
+
+  1. **Token Storage**: OAuth tokens stored in `saved_authentications` table with encryption
+  2. **Expiry Monitoring**: Client checks token expiry on each use
+  3. **Automatic Refresh**: TokenRefreshWorker refreshes tokens at 80% of their lifetime
+  4. **Database Updates**: New tokens atomically replace expired tokens
+  5. **Error Recovery**: Network failures retry with exponential backoff
+
+  See `TheMaestro.Workers.TokenRefreshWorker` for refresh implementation details.
 
   ## Configuration
+
+  ### API Key Authentication
 
   Configure Anthropic API key in runtime configuration:
 
       config :the_maestro, :anthropic,
         api_key: System.get_env("ANTHROPIC_API_KEY")
+
+  ### OAuth Authentication
+
+  OAuth tokens are stored in the database and retrieved automatically.
+  Configure OAuth client credentials for token refresh:
+
+      config :the_maestro, :anthropic_oauth_client_id,
+        System.get_env("ANTHROPIC_CLIENT_ID")
+
+  Environment variables:
+  - `ANTHROPIC_CLIENT_ID`: OAuth client ID for token refresh
 
   ## Examples
 
@@ -63,6 +90,7 @@ defmodule TheMaestro.Providers.Client do
 
   alias TheMaestro.Auth.OAuthToken
   alias TheMaestro.Providers.AnthropicConfig
+  alias TheMaestro.SavedAuthentication
 
   @type provider :: :anthropic | :openai | :gemini
   @type pool_name :: atom()
@@ -125,16 +153,37 @@ defmodule TheMaestro.Providers.Client do
 
   # OAuth token retrieval function
   @spec get_oauth_token(provider()) :: {:ok, OAuthToken.t()} | {:error, :not_found | :expired}
-  defp get_oauth_token(_provider) do
-    # TODO: Task 4 - Implement database lookup for OAuth tokens from saved_authentications table
-    # For now, return error until database integration is complete
-    # This will be implemented in Task 4
-    #
-    # Future implementation will:
-    # 1. Query saved_authentications table for provider OAuth tokens
-    # 2. Check token expiry and return :expired if needed
-    # 3. Return {:ok, oauth_token} for valid tokens
-    {:error, :not_found}
+  defp get_oauth_token(provider) do
+    import Ecto.Query, warn: false
+    alias TheMaestro.{Repo, SavedAuthentication}
+    
+    # Query for OAuth token for the specified provider
+    query = 
+      from sa in SavedAuthentication,
+      where: sa.provider == ^provider and sa.auth_type == :oauth,
+      select: sa
+    
+    case Repo.one(query) do
+      nil ->
+        {:error, :not_found}
+        
+      %SavedAuthentication{credentials: credentials, expires_at: expires_at} ->
+        # Check if token has expired
+        if expires_at && DateTime.compare(DateTime.utc_now(), expires_at) != :lt do
+          {:error, :expired}
+        else
+          # Convert stored credentials to OAuthToken struct
+          oauth_token = %OAuthToken{
+            access_token: Map.get(credentials, "access_token"),
+            refresh_token: Map.get(credentials, "refresh_token"),
+            expiry: if(expires_at, do: DateTime.to_unix(expires_at), else: nil),
+            scope: Map.get(credentials, "scope"),
+            token_type: Map.get(credentials, "token_type", "Bearer")
+          }
+          
+          {:ok, oauth_token}
+        end
+    end
   end
 
   # Private function to build middleware stack based on provider and auth type
@@ -190,9 +239,50 @@ defmodule TheMaestro.Providers.Client do
   end
 
   defp build_middleware(:anthropic, :oauth) do
-    # TODO: Task 4 - OAuth authentication will be enabled when database integration is complete
-    # For now, return error until get_oauth_token/1 is implemented
     case get_oauth_token(:anthropic) do
+      {:ok, oauth_token} ->
+        config = get_provider_config(:anthropic)
+
+        middleware = [
+          # Base URL middleware
+          {Tesla.Middleware.BaseUrl, config.base_url},
+          # OAuth Bearer token headers (must match Claude Code exactly)
+          {Tesla.Middleware.Headers,
+           [
+             {"connection", "keep-alive"},
+             {"accept", "application/json"},
+             {"x-stainless-retry-count", "0"},
+             {"x-stainless-timeout", "60"},
+             {"x-stainless-lang", "js"},
+             {"x-stainless-package-version", "0.55.1"},
+             {"x-stainless-os", "MacOS"},
+             {"x-stainless-arch", "arm64"},
+             {"x-stainless-runtime", "node"},
+             {"x-stainless-runtime-version", "v23.11.0"},
+             {"anthropic-dangerous-direct-browser-access", "true"},
+             {"anthropic-version", "2023-06-01"},
+             {"authorization", "Bearer #{oauth_token.access_token}"},
+             {"x-app", "cli"},
+             {"user-agent", "claude-cli/1.0.81 (external, cli)"},
+             {"content-type", "application/json"},
+             {"anthropic-beta", "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"},
+             {"x-stainless-helper-method", "stream"},
+             {"accept-language", "*"},
+             {"sec-fetch-mode", "cors"},
+             {"accept-encoding", "gzip, deflate, br"}
+           ]},
+          # JSON middleware for request encoding
+          Tesla.Middleware.JSON,
+          # Custom OAuth response middleware for decompression + JSON parsing
+          {__MODULE__.OAuthResponseMiddleware, []},
+          # Logger middleware for request/response logging
+          Tesla.Middleware.Logger,
+          # Retry middleware for handling transient failures
+          {Tesla.Middleware.Retry, delay: 500, max_retries: 3, max_delay: 4_000}
+        ]
+
+        {:ok, middleware}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -224,5 +314,55 @@ defmodule TheMaestro.Providers.Client do
       base_url: "https://generativelanguage.googleapis.com",
       pool: :gemini_finch
     }
+  end
+
+  # Custom middleware for handling OAuth responses with compression
+  defmodule OAuthResponseMiddleware do
+    @moduledoc """
+    Custom Tesla middleware for handling compressed OAuth responses from Anthropic API.
+    Decompresses gzipped responses and parses JSON, similar to llxprt-code implementation.
+    """
+    
+    @behaviour Tesla.Middleware
+    
+    def call(env, next, _options) do
+      with {:ok, env} <- Tesla.run(env, next) do
+        {:ok, decompress_and_decode_response(env)}
+      end
+    end
+    
+    defp decompress_and_decode_response(%Tesla.Env{body: body, headers: headers} = env) when is_binary(body) do
+      # Decompress response if needed
+      decompressed_body = decompress_response_if_needed(body, headers)
+      
+      # Parse JSON
+      case Jason.decode(decompressed_body) do
+        {:ok, decoded} -> %{env | body: decoded}
+        {:error, _} -> env  # Return original if JSON parsing fails
+      end
+    end
+    
+    defp decompress_and_decode_response(env), do: env
+    
+    defp decompress_response_if_needed(body, headers) do
+      content_encoding =
+        headers
+        |> Enum.find(fn {key, _} -> String.downcase(key) == "content-encoding" end)
+        |> case do
+          {_, encoding} -> String.downcase(encoding)
+          nil -> nil
+        end
+
+      case content_encoding do
+        "gzip" ->
+          :zlib.gunzip(body)
+
+        "deflate" ->
+          :zlib.uncompress(body)
+
+        _ ->
+          body
+      end
+    end
   end
 end
