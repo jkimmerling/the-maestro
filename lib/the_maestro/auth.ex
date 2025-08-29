@@ -140,7 +140,7 @@ defmodule TheMaestro.Auth do
     defstruct client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
               authorization_endpoint: "https://auth.openai.com/oauth/authorize",
               token_endpoint: "https://auth.openai.com/oauth/token",
-              redirect_uri: "http://localhost:3000/auth/callback",
+              redirect_uri: "http://localhost:8080/auth/callback",
               scopes: ["openid", "profile", "email", "offline_access"]
   end
 
