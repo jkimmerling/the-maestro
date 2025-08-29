@@ -4,17 +4,26 @@ defmodule TheMaestro.Providers.Client do
 
   Provides configured Tesla clients for different AI providers with connection pooling,
   middleware for JSON handling, logging, and retry capabilities. Supports multiple
-  authentication modes including API key and OAuth Bearer authentication for Anthropic API.
+  authentication modes including API key and OAuth Bearer authentication.
 
   ## Authentication Support
 
   ### API Key Authentication
 
-  Anthropic provider supports API key authentication with exact header requirements:
+  **Anthropic provider** supports API key authentication with exact header requirements:
 
   - `x-api-key`: API key from configuration
   - `anthropic-version`: "2023-06-01" 
   - `anthropic-beta`: "messages-2023-12-15"
+  - `user-agent`: "llxprt/1.0"
+  - `accept`: "application/json"
+  - `x-client-version`: "1.0.0"
+
+  **OpenAI provider** supports Bearer token authentication with exact header requirements:
+
+  - `authorization`: "Bearer [API_KEY]"
+  - `openai-organization`: Organization ID from configuration
+  - `openai-beta`: "assistants v2"
   - `user-agent`: "llxprt/1.0"
   - `accept`: "application/json"
   - `x-client-version`: "1.0.0"
@@ -55,6 +64,12 @@ defmodule TheMaestro.Providers.Client do
       config :the_maestro, :anthropic,
         api_key: System.get_env("ANTHROPIC_API_KEY")
 
+  Configure OpenAI API key and organization ID in runtime configuration:
+
+      config :the_maestro, :openai,
+        api_key: System.get_env("OPENAI_API_KEY"),
+        organization_id: System.get_env("OPENAI_ORG_ID")
+
   ### OAuth Authentication
 
   OAuth tokens are stored in the database and retrieved automatically.
@@ -65,24 +80,30 @@ defmodule TheMaestro.Providers.Client do
 
   Environment variables:
   - `ANTHROPIC_CLIENT_ID`: OAuth client ID for token refresh
+  - `OPENAI_API_KEY`: OpenAI API key for authentication
+  - `OPENAI_ORG_ID`: OpenAI organization ID for API access
 
   ## Examples
 
       # Default API key authentication
       client = TheMaestro.Providers.Client.build_client(:anthropic)
+      client = TheMaestro.Providers.Client.build_client(:openai)
       
       # Explicit API key authentication  
       client = TheMaestro.Providers.Client.build_client(:anthropic, :api_key)
+      client = TheMaestro.Providers.Client.build_client(:openai, :api_key)
       
-      # OAuth Bearer authentication
+      # OAuth Bearer authentication (Anthropic only)
       client = TheMaestro.Providers.Client.build_client(:anthropic, :oauth)
       
       # Make authenticated API calls
       {:ok, response} = Tesla.post(client, "/v1/messages", request_body)
+      {:ok, response} = Tesla.post(client, "/v1/chat/completions", request_body)
 
   ## Error Handling
 
-  Returns `{:error, :missing_api_key}` when Anthropic API key is not configured.
+  Returns `{:error, :missing_api_key}` when API key is not configured.
+  Returns `{:error, :missing_org_id}` when OpenAI organization ID is not configured.
   Returns `{:error, :not_found}` when OAuth token is not found in database.
   Returns `{:error, :expired}` when OAuth token has expired.
   Returns `{:error, :invalid_provider}` for unsupported provider atoms.
@@ -90,6 +111,7 @@ defmodule TheMaestro.Providers.Client do
 
   alias TheMaestro.Auth.OAuthToken
   alias TheMaestro.Providers.AnthropicConfig
+  alias TheMaestro.Providers.OpenAIConfig
   alias TheMaestro.SavedAuthentication
 
   @type provider :: :anthropic | :openai | :gemini
@@ -127,10 +149,10 @@ defmodule TheMaestro.Providers.Client do
   """
   @spec build_client(provider()) ::
           Tesla.Client.t()
-          | {:error, :invalid_provider | :missing_api_key | :not_found | :expired}
+          | {:error, :invalid_provider | :missing_api_key | :missing_org_id | :not_found | :expired}
   @spec build_client(provider(), auth_type()) ::
           Tesla.Client.t()
-          | {:error, :invalid_provider | :missing_api_key | :not_found | :expired}
+          | {:error, :invalid_provider | :missing_api_key | :missing_org_id | :not_found | :expired}
   def build_client(provider) when provider in [:anthropic, :openai, :gemini] do
     build_client(provider, :api_key)
   end
@@ -188,7 +210,7 @@ defmodule TheMaestro.Providers.Client do
 
   # Private function to build middleware stack based on provider and auth type
   @spec build_middleware(provider(), auth_type()) ::
-          {:ok, list()} | {:error, :missing_api_key | :not_found | :expired}
+          {:ok, list()} | {:error, :missing_api_key | :missing_org_id | :not_found | :expired}
   defp build_middleware(:anthropic, :api_key) do
     case AnthropicConfig.load() do
       {:ok, config} ->
@@ -220,7 +242,38 @@ defmodule TheMaestro.Providers.Client do
     end
   end
 
-  defp build_middleware(provider, :api_key) when provider in [:openai, :gemini] do
+  defp build_middleware(:openai, :api_key) do
+    case OpenAIConfig.load() do
+      {:ok, config} ->
+        middleware = [
+          # Base URL middleware
+          {Tesla.Middleware.BaseUrl, config.base_url},
+          # OpenAI API headers in exact order as specified
+          {Tesla.Middleware.Headers,
+           [
+             {"authorization", "Bearer #{config.api_key}"},
+             {"openai-organization", config.organization_id},
+             {"openai-beta", config.beta_version},
+             {"user-agent", config.user_agent},
+             {"accept", config.accept},
+             {"x-client-version", config.client_version}
+           ]},
+          # JSON middleware for request/response serialization
+          Tesla.Middleware.JSON,
+          # Logger middleware for request/response logging
+          Tesla.Middleware.Logger,
+          # Retry middleware for handling transient failures
+          {Tesla.Middleware.Retry, delay: 500, max_retries: 3, max_delay: 4_000}
+        ]
+
+        {:ok, middleware}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp build_middleware(provider, :api_key) when provider in [:gemini] do
     # For other providers, use basic middleware without authentication headers
     config = get_provider_config(provider)
 
