@@ -557,7 +557,8 @@ defmodule TheMaestro.Auth do
   @doc """
   Build OpenAI OAuth authorization parameters.
 
-  Constructs the OAuth parameters for OpenAI authorization URL.
+  Constructs the OAuth parameters for OpenAI authorization URL following the exact
+  codex-rs implementation. Includes required OpenAI-specific parameters.
 
   ## Parameters
 
@@ -567,6 +568,11 @@ defmodule TheMaestro.Auth do
   ## Returns
 
     * `map()` - OAuth parameters for URL encoding
+
+  ## OpenAI-Specific Parameters
+
+    * `id_token_add_organizations` - Required by OpenAI OAuth
+    * `codex_cli_simplified_flow` - Required by OpenAI OAuth for CLI integration
 
   """
   @spec build_openai_oauth_params(OpenAIOAuthConfig.t(), PKCEParams.t()) :: map()
@@ -581,6 +587,8 @@ defmodule TheMaestro.Auth do
       "scope" => Enum.join(config.scopes, " "),
       "code_challenge" => pkce_params.code_challenge,
       "code_challenge_method" => pkce_params.code_challenge_method,
+      "id_token_add_organizations" => "true",
+      "codex_cli_simplified_flow" => "true",
       "state" => state
     }
   end
