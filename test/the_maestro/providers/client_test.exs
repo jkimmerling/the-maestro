@@ -21,11 +21,24 @@ defmodule TheMaestro.Providers.ClientTest do
       Application.put_env(:the_maestro, :anthropic, original_config)
     end
 
-    test "returns valid Tesla client for openai provider" do
+    test "returns valid Tesla client for openai provider with real API key" do
+      # Setup real OpenAI configuration from environment
+      original_config = Application.get_env(:the_maestro, :openai, [])
+
+      test_config =
+        original_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID"))
+
+      Application.put_env(:the_maestro, :openai, test_config)
+
       client = Client.build_client(:openai)
 
       assert %Tesla.Client{} = client
       assert client.adapter == {Tesla.Adapter.Finch, :call, [[name: :openai_finch]]}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_config)
     end
 
     test "returns valid Tesla client for gemini provider" do
@@ -74,10 +87,23 @@ defmodule TheMaestro.Providers.ClientTest do
     end
 
     test "returns valid Tesla client for other providers with api_key auth type" do
+      # Setup OpenAI configuration for this test
+      original_openai_config = Application.get_env(:the_maestro, :openai, [])
+
+      openai_config =
+        original_openai_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID") || "default-org")
+
+      Application.put_env(:the_maestro, :openai, openai_config)
+
       for provider <- [:openai, :gemini] do
         client = Client.build_client(provider, :api_key)
         assert %Tesla.Client{} = client
       end
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_openai_config)
     end
 
     test "returns error for invalid provider with any auth type" do
@@ -184,20 +210,50 @@ defmodule TheMaestro.Providers.ClientTest do
       Application.put_env(:the_maestro, :anthropic, original_config)
     end
 
-    test "non-anthropic clients do not have Headers middleware for authentication" do
-      # OpenAI and Gemini should not have Headers middleware (yet - future Epic 2)
-      openai_client = Client.build_client(:openai)
-      gemini_client = Client.build_client(:gemini)
+    test "openai client has Headers middleware for Bearer authentication" do
+      # Setup real OpenAI configuration
+      original_config = Application.get_env(:the_maestro, :openai, [])
 
-      refute has_middleware?(openai_client, Tesla.Middleware.Headers)
+      test_config =
+        original_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID"))
+
+      Application.put_env(:the_maestro, :openai, test_config)
+
+      openai_client = Client.build_client(:openai)
+
+      # OpenAI should have Headers middleware for Bearer token authentication
+      assert has_middleware?(openai_client, Tesla.Middleware.Headers)
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_config)
+    end
+
+    test "gemini client does not have Headers middleware" do
+      # Gemini should not have Headers middleware yet
+      gemini_client = Client.build_client(:gemini)
       refute has_middleware?(gemini_client, Tesla.Middleware.Headers)
     end
 
     test "all clients include expected middleware stack" do
       # Setup test API key for Anthropic
-      original_config = Application.get_env(:the_maestro, :anthropic, [])
-      test_config = Keyword.put(original_config, :api_key, "sk-test-middleware")
-      Application.put_env(:the_maestro, :anthropic, test_config)
+      original_anthropic_config = Application.get_env(:the_maestro, :anthropic, [])
+
+      anthropic_test_config =
+        Keyword.put(original_anthropic_config, :api_key, "sk-test-middleware")
+
+      Application.put_env(:the_maestro, :anthropic, anthropic_test_config)
+
+      # Setup OpenAI configuration
+      original_openai_config = Application.get_env(:the_maestro, :openai, [])
+
+      openai_test_config =
+        original_openai_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID"))
+
+      Application.put_env(:the_maestro, :openai, openai_test_config)
 
       for provider <- [:anthropic, :openai, :gemini] do
         client = Client.build_client(provider)
@@ -216,14 +272,25 @@ defmodule TheMaestro.Providers.ClientTest do
       end
 
       # Cleanup
-      Application.put_env(:the_maestro, :anthropic, original_config)
+      Application.put_env(:the_maestro, :anthropic, original_anthropic_config)
+      Application.put_env(:the_maestro, :openai, original_openai_config)
     end
 
     test "all clients use Finch adapter with correct pool" do
       # Setup test API key for Anthropic
-      original_config = Application.get_env(:the_maestro, :anthropic, [])
-      test_config = Keyword.put(original_config, :api_key, "sk-test-finch")
-      Application.put_env(:the_maestro, :anthropic, test_config)
+      original_anthropic_config = Application.get_env(:the_maestro, :anthropic, [])
+      anthropic_test_config = Keyword.put(original_anthropic_config, :api_key, "sk-test-finch")
+      Application.put_env(:the_maestro, :anthropic, anthropic_test_config)
+
+      # Setup OpenAI configuration
+      original_openai_config = Application.get_env(:the_maestro, :openai, [])
+
+      openai_test_config =
+        original_openai_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID"))
+
+      Application.put_env(:the_maestro, :openai, openai_test_config)
 
       anthropic_client = Client.build_client(:anthropic)
       openai_client = Client.build_client(:openai)
@@ -234,7 +301,8 @@ defmodule TheMaestro.Providers.ClientTest do
       assert gemini_client.adapter == {Tesla.Adapter.Finch, :call, [[name: :gemini_finch]]}
 
       # Cleanup
-      Application.put_env(:the_maestro, :anthropic, original_config)
+      Application.put_env(:the_maestro, :anthropic, original_anthropic_config)
+      Application.put_env(:the_maestro, :openai, original_openai_config)
     end
   end
 
@@ -296,19 +364,95 @@ defmodule TheMaestro.Providers.ClientTest do
     end
 
     @tag :integration
-    test "openai client can make HTTP requests" do
+    test "openai client with valid credentials returns 200 OK" do
+      # Setup OpenAI configuration with real credentials
+      original_openai_config = Application.get_env(:the_maestro, :openai, [])
+
+      openai_test_config =
+        original_openai_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID"))
+
+      Application.put_env(:the_maestro, :openai, openai_test_config)
+
       client = Client.build_client(:openai)
 
       case Tesla.get(client, "/v1/models") do
-        {:ok, %Tesla.Env{status: status}} when status in [401, 403, 404] ->
+        {:ok, %Tesla.Env{status: 200, body: body}} ->
+          # Success! Verify we got a proper models response
+          assert is_map(body)
+          assert body["object"] == "list"
+          assert is_list(body["data"])
+
+        {:error, %Tesla.Error{reason: reason}} when reason in [:timeout, :econnrefused] ->
+          :skip
+
+        result ->
+          flunk("Expected 200 OK with valid credentials, got: #{inspect(result)}")
+      end
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_openai_config)
+    end
+
+    @tag :integration
+    test "openai client with invalid API key returns 401 Unauthorized" do
+      # Setup OpenAI configuration with fake API key
+      original_openai_config = Application.get_env(:the_maestro, :openai, [])
+
+      openai_test_config =
+        original_openai_config
+        |> Keyword.put(:api_key, "sk-fake-invalid-key-for-testing-123456789")
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID"))
+
+      Application.put_env(:the_maestro, :openai, openai_test_config)
+
+      client = Client.build_client(:openai)
+
+      case Tesla.get(client, "/v1/models") do
+        {:ok, %Tesla.Env{status: status}} when status in [401, 403] ->
+          # Expected - invalid API key should return 401/403
           :ok
 
         {:error, %Tesla.Error{reason: reason}} when reason in [:timeout, :econnrefused] ->
           :skip
 
         result ->
-          flunk("Unexpected result: #{inspect(result)}")
+          flunk("Expected 401/403 with invalid API key, got: #{inspect(result)}")
       end
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_openai_config)
+    end
+
+    @tag :integration
+    test "openai client with invalid organization ID returns 403 Forbidden" do
+      # Setup OpenAI configuration with fake organization ID
+      original_openai_config = Application.get_env(:the_maestro, :openai, [])
+
+      openai_test_config =
+        original_openai_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, "org-fake-invalid-org-id-123456789")
+
+      Application.put_env(:the_maestro, :openai, openai_test_config)
+
+      client = Client.build_client(:openai)
+
+      case Tesla.get(client, "/v1/models") do
+        {:ok, %Tesla.Env{status: status}} when status in [401, 403, 404] ->
+          # Expected - invalid org ID should return 401/403/404
+          :ok
+
+        {:error, %Tesla.Error{reason: reason}} when reason in [:timeout, :econnrefused] ->
+          :skip
+
+        result ->
+          flunk("Expected 401/403/404 with invalid org ID, got: #{inspect(result)}")
+      end
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_openai_config)
     end
 
     @tag :integration
@@ -541,6 +685,224 @@ defmodule TheMaestro.Providers.ClientTest do
 
       # Cleanup
       Application.put_env(:the_maestro, :anthropic, original_config)
+    end
+  end
+
+  describe "OpenAI Bearer token authentication" do
+    test "builds client with real API key and organization ID" do
+      # Setup real OpenAI configuration
+      original_config = Application.get_env(:the_maestro, :openai, [])
+
+      test_config =
+        original_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID"))
+
+      Application.put_env(:the_maestro, :openai, test_config)
+
+      client = Client.build_client(:openai)
+
+      assert %Tesla.Client{} = client
+      assert client.adapter == {Tesla.Adapter.Finch, :call, [[name: :openai_finch]]}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_config)
+    end
+
+    test "openai client has exact header order as specified in Story 1.5" do
+      # Setup real OpenAI configuration
+      original_config = Application.get_env(:the_maestro, :openai, [])
+
+      test_config =
+        original_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID"))
+
+      Application.put_env(:the_maestro, :openai, test_config)
+
+      client = Client.build_client(:openai)
+
+      # Extract Headers middleware configuration
+      headers_middleware = find_middleware(client, Tesla.Middleware.Headers)
+
+      # Verify exact header order and values as specified in Story 1.5 acceptance criteria
+      expected_headers = [
+        {"authorization", "Bearer #{System.get_env("OPENAI_API_KEY")}"},
+        {"openai-organization", System.get_env("OPENAI_ORG_ID")},
+        {"openai-beta", "assistants v2"},
+        {"user-agent", "llxprt/1.0"},
+        {"accept", "application/json"},
+        {"x-client-version", "1.0.0"}
+      ]
+
+      assert {Tesla.Middleware.Headers, :call, [^expected_headers]} = headers_middleware
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_config)
+    end
+
+    test "returns error when OpenAI API key is missing" do
+      # Setup config with missing API key
+      original_config = Application.get_env(:the_maestro, :openai, [])
+
+      test_config =
+        original_config
+        |> Keyword.put(:api_key, nil)
+        |> Keyword.put(:organization_id, "test-org")
+
+      Application.put_env(:the_maestro, :openai, test_config)
+
+      result = Client.build_client(:openai)
+      assert result == {:error, :missing_api_key}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_config)
+    end
+
+    test "returns error when OpenAI API key is empty string" do
+      # Setup config with empty API key
+      original_config = Application.get_env(:the_maestro, :openai, [])
+
+      test_config =
+        original_config
+        |> Keyword.put(:api_key, "")
+        |> Keyword.put(:organization_id, "test-org")
+
+      Application.put_env(:the_maestro, :openai, test_config)
+
+      result = Client.build_client(:openai)
+      assert result == {:error, :missing_api_key}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_config)
+    end
+
+    test "returns error when OpenAI organization ID is missing" do
+      # Setup config with missing organization ID
+      original_config = Application.get_env(:the_maestro, :openai, [])
+
+      test_config =
+        original_config
+        |> Keyword.put(:api_key, "sk-fake-key-for-org-test")
+        |> Keyword.put(:organization_id, nil)
+
+      Application.put_env(:the_maestro, :openai, test_config)
+
+      result = Client.build_client(:openai)
+      assert result == {:error, :missing_org_id}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_config)
+    end
+
+    test "returns error when OpenAI organization ID is empty string" do
+      # Setup config with empty organization ID
+      original_config = Application.get_env(:the_maestro, :openai, [])
+
+      test_config =
+        original_config
+        |> Keyword.put(:api_key, "sk-fake-key-for-org-test")
+        |> Keyword.put(:organization_id, "")
+
+      Application.put_env(:the_maestro, :openai, test_config)
+
+      result = Client.build_client(:openai)
+      assert result == {:error, :missing_org_id}
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_config)
+    end
+
+    test "openai headers differ from anthropic headers" do
+      # Setup both providers
+      original_anthropic_config = Application.get_env(:the_maestro, :anthropic, [])
+      original_openai_config = Application.get_env(:the_maestro, :openai, [])
+
+      anthropic_config = Keyword.put(original_anthropic_config, :api_key, "sk-ant-test-key")
+
+      openai_config =
+        original_openai_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID") || "default-org")
+
+      Application.put_env(:the_maestro, :anthropic, anthropic_config)
+      Application.put_env(:the_maestro, :openai, openai_config)
+
+      # Get both clients
+      anthropic_client = Client.build_client(:anthropic, :api_key)
+      openai_client = Client.build_client(:openai, :api_key)
+
+      # Compare headers
+      anthropic_headers = find_middleware(anthropic_client, Tesla.Middleware.Headers)
+      openai_headers = find_middleware(openai_client, Tesla.Middleware.Headers)
+
+      # Extract header lists
+      {Tesla.Middleware.Headers, :call, [anthropic_header_list]} = anthropic_headers
+      {Tesla.Middleware.Headers, :call, [openai_header_list]} = openai_headers
+
+      # Anthropic uses x-api-key header
+      assert {"x-api-key", "sk-ant-test-key"} in anthropic_header_list
+      refute Enum.any?(anthropic_header_list, fn {key, _} -> key == "authorization" end)
+
+      # OpenAI uses authorization Bearer header
+      assert {"authorization", "Bearer #{System.get_env("OPENAI_API_KEY")}"} in openai_header_list
+      refute Enum.any?(openai_header_list, fn {key, _} -> key == "x-api-key" end)
+
+      # Different organization headers
+      assert {"openai-organization", System.get_env("OPENAI_ORG_ID")} in openai_header_list
+      refute Enum.any?(anthropic_header_list, fn {key, _} -> key == "openai-organization" end)
+
+      # Different beta headers
+      assert {"anthropic-beta", "messages-2023-12-15"} in anthropic_header_list
+      assert {"openai-beta", "assistants v2"} in openai_header_list
+
+      # Same user-agent, accept, client-version
+      assert {"user-agent", "llxprt/1.0"} in anthropic_header_list
+      assert {"user-agent", "llxprt/1.0"} in openai_header_list
+      assert {"accept", "application/json"} in anthropic_header_list
+      assert {"accept", "application/json"} in openai_header_list
+      assert {"x-client-version", "1.0.0"} in anthropic_header_list
+      assert {"x-client-version", "1.0.0"} in openai_header_list
+
+      # Cleanup
+      Application.put_env(:the_maestro, :anthropic, original_anthropic_config)
+      Application.put_env(:the_maestro, :openai, original_openai_config)
+    end
+
+    @tag :integration
+    test "openai client can make HTTP requests with Bearer token headers - AC #3" do
+      # Setup real OpenAI configuration
+      original_config = Application.get_env(:the_maestro, :openai, [])
+
+      test_config =
+        original_config
+        |> Keyword.put(:api_key, System.get_env("OPENAI_API_KEY"))
+        |> Keyword.put(:organization_id, System.get_env("OPENAI_ORG_ID"))
+
+      Application.put_env(:the_maestro, :openai, test_config)
+
+      client = Client.build_client(:openai)
+
+      # Make a simple API call that should succeed with 200 OK (models endpoint is lightweight)
+      case Tesla.get(client, "/v1/models") do
+        {:ok, %Tesla.Env{status: 200, body: body}} ->
+          # Success! This validates Bearer authentication works perfectly
+          assert is_map(body)
+          assert Map.has_key?(body, "data")
+          assert body["object"] == "list"
+          assert is_list(body["data"])
+          :ok
+
+        {:error, %Tesla.Error{reason: reason}} when reason in [:timeout, :econnrefused] ->
+          # Skip this test if we can't reach the internet
+          :skip
+
+        result ->
+          flunk("Unexpected result: #{inspect(result)}")
+      end
+
+      # Cleanup
+      Application.put_env(:the_maestro, :openai, original_config)
     end
   end
 
