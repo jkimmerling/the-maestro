@@ -1,9 +1,9 @@
 defmodule TheMaestro.Auth do
   @moduledoc """
-  OAuth 2.0 authentication module for Anthropic API integration.
+  OAuth 2.0 authentication module for Anthropic and OpenAI API integrations.
 
   Provides OAuth URL generation and authorization code exchange functionality
-  with exact llxprt configuration compliance for Anthropic API authentication.
+  for both Anthropic and OpenAI OAuth 2.0 authentication flows.
 
   ## Configuration Values
 
@@ -121,6 +121,27 @@ defmodule TheMaestro.Auth do
               token_endpoint: "https://console.anthropic.com/v1/oauth/token",
               redirect_uri: "https://console.anthropic.com/oauth/code/callback",
               scopes: ["org:create_api_key", "user:profile", "user:inference"]
+  end
+
+  defmodule OpenAIOAuthConfig do
+    @moduledoc """
+    Configuration structure for OpenAI OAuth 2.0 authentication.
+    Based on OpenAI OAuth 2.0 specification and Codex CLI implementation.
+    """
+
+    @type t :: %__MODULE__{
+            client_id: String.t(),
+            authorization_endpoint: String.t(),
+            token_endpoint: String.t(),
+            redirect_uri: String.t(),
+            scopes: [String.t()]
+          }
+
+    defstruct client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+              authorization_endpoint: "https://auth.openai.com/oauth/authorize",
+              token_endpoint: "https://auth.openai.com/oauth/token",
+              redirect_uri: "http://localhost:3000/auth/callback",
+              scopes: ["openid", "profile", "email", "offline_access"]
   end
 
   defmodule OAuthToken do
@@ -362,6 +383,238 @@ defmodule TheMaestro.Auth do
       code_challenge: code_challenge,
       code_challenge_method: "S256"
     }
+  end
+
+  @doc """
+  Generate OpenAI OAuth authorization URL with PKCE parameters.
+
+  Creates an OpenAI OAuth 2.0 authorization URL with PKCE (Proof Key for Code Exchange)
+  security parameters following OpenAI OAuth specification.
+
+  ## Returns
+
+    * `{:ok, {String.t(), PKCEParams.t()}}` - Success with URL and PKCE params
+    * `{:error, term()}` - Error during URL generation
+
+  ## Examples
+
+      iex> {:ok, {auth_url, pkce_params}} = TheMaestro.Auth.generate_openai_oauth_url()
+      iex> is_binary(auth_url)
+      true
+      iex> String.starts_with?(auth_url, "https://auth.openai.com/oauth/authorize?")
+      true
+      iex> is_struct(pkce_params, TheMaestro.Auth.PKCEParams)
+      true
+
+  """
+  @spec generate_openai_oauth_url() :: {:ok, {String.t(), PKCEParams.t()}} | {:error, term()}
+  def generate_openai_oauth_url do
+    # Generate PKCE parameters for security
+    pkce_params = generate_pkce_params()
+
+    case get_openai_oauth_config() do
+      {:ok, config} ->
+        # Build OAuth parameters following OpenAI specification
+        oauth_params = build_openai_oauth_params(config, pkce_params)
+
+        auth_url = "#{config.authorization_endpoint}?#{URI.encode_query(oauth_params)}"
+        Logger.info("Generated OpenAI OAuth URL with PKCE parameters")
+
+        {:ok, {auth_url, pkce_params}}
+
+      {:error, reason} ->
+        Logger.error("Failed to get OpenAI OAuth configuration: #{inspect(reason)}")
+        {:error, :url_generation_failed}
+    end
+  rescue
+    error ->
+      Logger.error("Failed to generate OpenAI OAuth URL: #{inspect(error)}")
+      {:error, :url_generation_failed}
+  end
+
+  @doc """
+  Exchange OpenAI authorization code for OAuth tokens.
+
+  Exchanges the authorization code received from user for access and refresh tokens
+  using form-encoded request format as required by OpenAI OAuth specification.
+
+  ## Parameters
+
+    * `auth_code` - Authorization code from OpenAI callback
+    * `pkce_params` - PKCE parameters from URL generation
+
+  ## Returns
+
+    * `{:ok, OAuthToken.t()}` - Success with OAuth tokens
+    * `{:error, term()}` - Error during token exchange
+
+  ## Examples
+
+      # After user authorization, exchange code for tokens
+      {:ok, {auth_url, pkce_params}} = generate_openai_oauth_url()
+      # ... user visits auth_url and gets authorization code ...
+      
+      {:ok, oauth_token} = exchange_openai_code_for_tokens("auth_code_123", pkce_params)
+      
+      # Access token details
+      oauth_token.access_token  # Bearer token for OpenAI API
+      oauth_token.expiry        # Unix timestamp
+      oauth_token.token_type    # "Bearer"
+
+  """
+  @spec exchange_openai_code_for_tokens(String.t(), PKCEParams.t()) ::
+          {:ok, OAuthToken.t()} | {:error, term()}
+  def exchange_openai_code_for_tokens(auth_code, pkce_params) do
+    case get_openai_oauth_config() do
+      {:ok, config} ->
+        # Build token exchange request
+        request_body = build_openai_token_request(auth_code, pkce_params, config)
+
+        # Send form-encoded request to OpenAI token endpoint
+        headers = [{"content-type", "application/x-www-form-urlencoded"}]
+        form_body = URI.encode_query(request_body)
+
+        case HTTPoison.post(config.token_endpoint, form_body, headers) do
+          {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
+            validate_openai_token_response(Jason.decode!(response_body))
+
+          {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
+            Logger.error("OpenAI token exchange failed with status #{status}: #{response_body}")
+            {:error, {:token_exchange_failed, status, response_body}}
+
+          {:error, reason} ->
+            Logger.error("OpenAI token request failed: #{inspect(reason)}")
+            {:error, {:token_request_failed, reason}}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to get OpenAI OAuth configuration: #{inspect(reason)}")
+        {:error, :token_exchange_failed}
+    end
+  rescue
+    error ->
+      Logger.error("OpenAI token exchange error: #{inspect(error)}")
+      {:error, :token_exchange_error}
+  end
+
+  @doc """
+  Get OpenAI OAuth configuration.
+
+  Returns the OpenAI OAuth configuration with environment variable overrides.
+
+  ## Returns
+
+    * `{:ok, OpenAIOAuthConfig.t()}` - Success with configuration
+    * `{:error, term()}` - Error loading configuration
+
+  """
+  @spec get_openai_oauth_config() :: {:ok, OpenAIOAuthConfig.t()} | {:error, term()}
+  def get_openai_oauth_config do
+    config = %OpenAIOAuthConfig{}
+    {:ok, config}
+  rescue
+    error ->
+      Logger.error("Failed to load OpenAI OAuth configuration: #{inspect(error)}")
+      {:error, :config_load_failed}
+  end
+
+  @doc """
+  Build OpenAI OAuth authorization parameters.
+
+  Constructs the OAuth parameters for OpenAI authorization URL.
+
+  ## Parameters
+
+    * `config` - OpenAI OAuth configuration
+    * `pkce_params` - PKCE parameters for security
+
+  ## Returns
+
+    * `map()` - OAuth parameters for URL encoding
+
+  """
+  @spec build_openai_oauth_params(OpenAIOAuthConfig.t(), PKCEParams.t()) :: map()
+  def build_openai_oauth_params(config, pkce_params) do
+    # Generate secure state parameter
+    state = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+
+    %{
+      "response_type" => "code",
+      "client_id" => config.client_id,
+      "redirect_uri" => config.redirect_uri,
+      "scope" => Enum.join(config.scopes, " "),
+      "code_challenge" => pkce_params.code_challenge,
+      "code_challenge_method" => pkce_params.code_challenge_method,
+      "state" => state
+    }
+  end
+
+  @doc """
+  Build OpenAI token exchange request.
+
+  Constructs the token exchange request parameters for OpenAI.
+
+  ## Parameters
+
+    * `auth_code` - Authorization code from callback
+    * `pkce_params` - PKCE parameters for verification
+    * `config` - OpenAI OAuth configuration
+
+  ## Returns
+
+    * `map()` - Token request parameters for form encoding
+
+  """
+  @spec build_openai_token_request(String.t(), PKCEParams.t(), OpenAIOAuthConfig.t()) :: map()
+  def build_openai_token_request(auth_code, pkce_params, config) do
+    %{
+      "grant_type" => "authorization_code",
+      "code" => auth_code,
+      "redirect_uri" => config.redirect_uri,
+      "client_id" => config.client_id,
+      "code_verifier" => pkce_params.code_verifier
+    }
+  end
+
+  @doc """
+  Validate OpenAI token response and map to OAuthToken.
+
+  Validates the token response from OpenAI and maps it to the standard OAuthToken format.
+
+  ## Parameters
+
+    * `response_body` - Decoded JSON response from OpenAI
+
+  ## Returns
+
+    * `{:ok, OAuthToken.t()}` - Success with mapped token
+    * `{:error, term()}` - Error during validation/mapping
+
+  """
+  @spec validate_openai_token_response(map()) :: {:ok, OAuthToken.t()} | {:error, term()}
+  def validate_openai_token_response(response_body) do
+    case response_body do
+      %{
+        "access_token" => access_token,
+        "expires_in" => expires_in
+      } = data ->
+        expiry = System.system_time(:second) + expires_in
+
+        oauth_token = %OAuthToken{
+          access_token: access_token,
+          refresh_token: Map.get(data, "refresh_token"),
+          expiry: expiry,
+          scope: Map.get(data, "scope"),
+          token_type: Map.get(data, "token_type", "Bearer")
+        }
+
+        Logger.info("Successfully mapped OpenAI token response")
+        {:ok, oauth_token}
+
+      _ ->
+        Logger.error("Invalid OpenAI token response format: #{inspect(response_body)}")
+        {:error, :invalid_token_response}
+    end
   end
 
   # Private helper functions
