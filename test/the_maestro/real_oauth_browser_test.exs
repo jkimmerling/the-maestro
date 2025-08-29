@@ -112,7 +112,6 @@ defmodule TheMaestro.RealOAuthBrowserTest do
     {:error, :manual_verification_required}
   end
 
-
   defp show_manual_instructions(_auth_url, pkce_params) do
     IO.puts("\n" <> String.duplicate("=", 80))
     IO.puts("📝 MANUAL OAUTH VERIFICATION REQUIRED")
@@ -131,5 +130,4 @@ defmodule TheMaestro.RealOAuthBrowserTest do
     IO.puts("   iex> Auth.exchange_code_for_tokens(\"YOUR_AUTH_CODE\", pkce)")
     IO.puts("\n" <> String.duplicate("=", 80))
   end
-
 end

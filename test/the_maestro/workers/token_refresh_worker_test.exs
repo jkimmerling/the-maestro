@@ -5,10 +5,10 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
 
   import Mox
 
-  alias TheMaestro.Workers.TokenRefreshWorker
-  alias TheMaestro.SavedAuthentication
-  alias TheMaestro.Auth.OAuthToken
   alias Oban.Job
+  alias TheMaestro.Auth.OAuthToken
+  alias TheMaestro.SavedAuthentication
+  alias TheMaestro.Workers.TokenRefreshWorker
 
   setup :verify_on_exit!
 
@@ -22,42 +22,42 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
     test "successfully performs token refresh for valid OAuth token" do
       # Create valid OAuth token in database
       expires_at = DateTime.add(DateTime.utc_now(), 3600, :second)
-      
-      {:ok, saved_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(%{
-        provider: :anthropic,
-        auth_type: :oauth,
-        credentials: %{
-          "access_token" => "sk-ant-oat01-old-token",
-          "refresh_token" => "sk-ant-oar01-refresh-token",
-          "token_type" => "Bearer"
-        },
-        expires_at: expires_at
-      })
-      |> Repo.insert()
+
+      {:ok, saved_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(%{
+          provider: :anthropic,
+          auth_type: :oauth,
+          credentials: %{
+            "access_token" => "sk-ant-oat01-old-token",
+            "refresh_token" => "sk-ant-oar01-refresh-token",
+            "token_type" => "Bearer"
+          },
+          expires_at: expires_at
+        })
+        |> Repo.insert()
 
       # Mock HTTPoison response for successful token refresh
       expect(HTTPoisonMock, :post, fn
-        "https://auth.anthropic.com/oauth/token", 
-        body,
-        [{"content-type", "application/json"}] ->
-          
+        "https://auth.anthropic.com/oauth/token", body, [{"content-type", "application/json"}] ->
           # Verify request body contains correct refresh token
           decoded_body = Jason.decode!(body)
           assert decoded_body["grant_type"] == "refresh_token"
           assert decoded_body["refresh_token"] == "sk-ant-oar01-refresh-token"
-          
+
           # Return successful response
-          {:ok, %HTTPoison.Response{
-            status_code: 200,
-            body: Jason.encode!(%{
-              "access_token" => "sk-ant-oat01-new-token",
-              "refresh_token" => "sk-ant-oar01-new-refresh",
-              "expires_in" => 3600,
-              "token_type" => "Bearer",
-              "scope" => "user:profile user:inference"
-            })
-          }}
+          {:ok,
+           %HTTPoison.Response{
+             status_code: 200,
+             body:
+               Jason.encode!(%{
+                 "access_token" => "sk-ant-oat01-new-token",
+                 "refresh_token" => "sk-ant-oar01-new-refresh",
+                 "expires_in" => 3600,
+                 "token_type" => "Bearer",
+                 "scope" => "user:profile user:inference"
+               })
+           }}
       end)
 
       # Create and execute Oban job
@@ -92,19 +92,20 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
     test "handles network errors gracefully" do
       # Create valid OAuth token in database
       expires_at = DateTime.add(DateTime.utc_now(), 3600, :second)
-      
-      {:ok, saved_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(%{
-        provider: :anthropic,
-        auth_type: :oauth,
-        credentials: %{
-          "access_token" => "sk-ant-oat01-test",
-          "refresh_token" => "sk-ant-oar01-test",
-          "token_type" => "Bearer"
-        },
-        expires_at: expires_at
-      })
-      |> Repo.insert()
+
+      {:ok, saved_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(%{
+          provider: :anthropic,
+          auth_type: :oauth,
+          credentials: %{
+            "access_token" => "sk-ant-oat01-test",
+            "refresh_token" => "sk-ant-oar01-test",
+            "token_type" => "Bearer"
+          },
+          expires_at: expires_at
+        })
+        |> Repo.insert()
 
       # Mock HTTPoison to return network error
       expect(HTTPoisonMock, :post, fn _, _, _ ->
@@ -113,7 +114,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
 
       job = %Job{
         args: %{
-          "provider" => "anthropic", 
+          "provider" => "anthropic",
           "auth_id" => to_string(saved_auth.id),
           "retry_count" => 0
         }
@@ -125,32 +126,34 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
     test "handles invalid refresh token response" do
       # Create OAuth token with invalid refresh token
       expires_at = DateTime.add(DateTime.utc_now(), 3600, :second)
-      
-      {:ok, saved_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(%{
-        provider: :anthropic,
-        auth_type: :oauth,
-        credentials: %{
-          "access_token" => "sk-ant-oat01-test",
-          "refresh_token" => "sk-ant-oar01-invalid",
-          "token_type" => "Bearer"
-        },
-        expires_at: expires_at
-      })
-      |> Repo.insert()
+
+      {:ok, saved_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(%{
+          provider: :anthropic,
+          auth_type: :oauth,
+          credentials: %{
+            "access_token" => "sk-ant-oat01-test",
+            "refresh_token" => "sk-ant-oar01-invalid",
+            "token_type" => "Bearer"
+          },
+          expires_at: expires_at
+        })
+        |> Repo.insert()
 
       # Mock HTTPoison to return 401 (invalid refresh token)
       expect(HTTPoisonMock, :post, fn _, _, _ ->
-        {:ok, %HTTPoison.Response{
-          status_code: 401,
-          body: Jason.encode!(%{"error" => "invalid_grant"})
-        }}
+        {:ok,
+         %HTTPoison.Response{
+           status_code: 401,
+           body: Jason.encode!(%{"error" => "invalid_grant"})
+         }}
       end)
 
       job = %Job{
         args: %{
           "provider" => "anthropic",
-          "auth_id" => to_string(saved_auth.id), 
+          "auth_id" => to_string(saved_auth.id),
           "retry_count" => 0
         }
       }
@@ -165,19 +168,20 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
 
       # Create valid OAuth token in database
       expires_at = DateTime.add(DateTime.utc_now(), 3600, :second)
-      
-      {:ok, saved_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(%{
-        provider: :anthropic,
-        auth_type: :oauth,
-        credentials: %{
-          "access_token" => "sk-ant-oat01-test",
-          "refresh_token" => "sk-ant-oar01-test",
-          "token_type" => "Bearer"
-        },
-        expires_at: expires_at
-      })
-      |> Repo.insert()
+
+      {:ok, saved_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(%{
+          provider: :anthropic,
+          auth_type: :oauth,
+          credentials: %{
+            "access_token" => "sk-ant-oat01-test",
+            "refresh_token" => "sk-ant-oar01-test",
+            "token_type" => "Bearer"
+          },
+          expires_at: expires_at
+        })
+        |> Repo.insert()
 
       job = %Job{
         args: %{
@@ -200,7 +204,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
       job = %Job{args: %{"auth_id" => "test", "retry_count" => 0}}
       assert {:error, :missing_required_field} = TokenRefreshWorker.perform(job)
 
-      # Test missing auth_id  
+      # Test missing auth_id
       job = %Job{args: %{"provider" => "anthropic", "retry_count" => 0}}
       assert {:error, :missing_required_field} = TokenRefreshWorker.perform(job)
 
@@ -213,22 +217,22 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
   describe "schedule_refresh_job/2" do
     test "schedules refresh job with correct timing" do
       provider = "anthropic"
-      expires_at = DateTime.add(DateTime.utc_now(), 3600, :second)  # 1 hour from now
+      # 1 hour from now
+      expires_at = DateTime.add(DateTime.utc_now(), 3600, :second)
 
       result = TokenRefreshWorker.schedule_refresh_job(provider, expires_at)
-      IO.inspect(result, label: "Schedule result")
-      
       {:ok, job} = result
 
       assert %Oban.Job{} = job
-      IO.inspect(job.args, label: "Job args")
       assert job.args["provider"] == provider
-      assert job.args["auth_id"] == "temp_auth_id"  # Placeholder from current implementation
+      # Placeholder from current implementation
+      assert job.args["auth_id"] == "temp_auth_id"
       assert job.args["retry_count"] == 0
 
       # Should be scheduled at 80% of token lifetime (48 minutes from now)
-      expected_schedule_time = DateTime.add(expires_at, -720, :second)  # 20% of 3600 = 720 seconds
-      
+      # 20% of 3600 = 720 seconds
+      expected_schedule_time = DateTime.add(expires_at, -720, :second)
+
       # Allow 5 second tolerance for test timing
       time_diff = DateTime.diff(job.scheduled_at, expected_schedule_time, :second)
       assert abs(time_diff) <= 5
@@ -242,8 +246,9 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
       {:ok, job} = TokenRefreshWorker.schedule_refresh_job(provider, expires_at)
 
       # Should be scheduled 5 minutes before expiry (minimum), not 80% (2 minutes)
-      expected_schedule_time = DateTime.add(expires_at, -300, :second)  # 5 minutes before
-      
+      # 5 minutes before
+      expected_schedule_time = DateTime.add(expires_at, -300, :second)
+
       time_diff = DateTime.diff(job.scheduled_at, expected_schedule_time, :second)
       assert abs(time_diff) <= 5
     end
@@ -257,7 +262,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
 
       # Should be scheduled maximum 24 hours from now, not 38.4 hours (80% of 48)
       max_schedule_time = DateTime.add(DateTime.utc_now(), 24 * 3600, :second)
-      
+
       # Job should be scheduled at or before the 24-hour limit
       assert DateTime.compare(job.scheduled_at, max_schedule_time) in [:lt, :eq]
     end
@@ -274,39 +279,45 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
     test "successfully refreshes token and updates database" do
       # Create OAuth token in database
       expires_at = DateTime.add(DateTime.utc_now(), 1800, :second)
-      
-      {:ok, saved_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(%{
-        provider: :anthropic,
-        auth_type: :oauth,
-        credentials: %{
-          "access_token" => "sk-ant-oat01-current",
-          "refresh_token" => "sk-ant-oar01-current",
-          "token_type" => "Bearer"
-        },
-        expires_at: expires_at
-      })
-      |> Repo.insert()
+
+      {:ok, saved_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(%{
+          provider: :anthropic,
+          auth_type: :oauth,
+          credentials: %{
+            "access_token" => "sk-ant-oat01-current",
+            "refresh_token" => "sk-ant-oar01-current",
+            "token_type" => "Bearer"
+          },
+          expires_at: expires_at
+        })
+        |> Repo.insert()
 
       # Mock successful HTTPoison response
       expect(HTTPoisonMock, :post, fn
         "https://auth.anthropic.com/oauth/token", body, _ ->
           decoded = Jason.decode!(body)
           assert decoded["refresh_token"] == "sk-ant-oar01-current"
-          
-          {:ok, %HTTPoison.Response{
-            status_code: 200,
-            body: Jason.encode!(%{
-              "access_token" => "sk-ant-oat01-refreshed",
-              "refresh_token" => "sk-ant-oar01-refreshed", 
-              "expires_in" => 7200,
-              "token_type" => "Bearer"
-            })
-          }}
+
+          {:ok,
+           %HTTPoison.Response{
+             status_code: 200,
+             body:
+               Jason.encode!(%{
+                 "access_token" => "sk-ant-oat01-refreshed",
+                 "refresh_token" => "sk-ant-oar01-refreshed",
+                 "expires_in" => 7200,
+                 "token_type" => "Bearer"
+               })
+           }}
       end)
 
-      assert {:ok, %OAuthToken{} = oauth_token} = 
-        TokenRefreshWorker.refresh_token_for_provider("anthropic", to_string(saved_auth.id))
+      assert {:ok, %OAuthToken{} = oauth_token} =
+               TokenRefreshWorker.refresh_token_for_provider(
+                 "anthropic",
+                 to_string(saved_auth.id)
+               )
 
       assert oauth_token.access_token == "sk-ant-oat01-refreshed"
       assert oauth_token.refresh_token == "sk-ant-oar01-refreshed"
@@ -318,34 +329,38 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
     end
 
     test "returns error when no OAuth token exists" do
-      assert {:error, :not_found} = 
-        TokenRefreshWorker.refresh_token_for_provider("anthropic", "nonexistent")
+      assert {:error, :not_found} =
+               TokenRefreshWorker.refresh_token_for_provider("anthropic", "nonexistent")
     end
 
     test "returns error when refresh token is missing" do
       # Create OAuth token without refresh token
       expires_at = DateTime.add(DateTime.utc_now(), 3600, :second)
-      
-      {:ok, saved_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(%{
-        provider: :anthropic,
-        auth_type: :oauth,
-        credentials: %{
-          "access_token" => "sk-ant-oat01-no-refresh",
-          "token_type" => "Bearer"
-          # No refresh_token field
-        },
-        expires_at: expires_at
-      })
-      |> Repo.insert()
 
-      assert {:error, :no_refresh_token} = 
-        TokenRefreshWorker.refresh_token_for_provider("anthropic", to_string(saved_auth.id))
+      {:ok, saved_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(%{
+          provider: :anthropic,
+          auth_type: :oauth,
+          credentials: %{
+            "access_token" => "sk-ant-oat01-no-refresh",
+            "token_type" => "Bearer"
+            # No refresh_token field
+          },
+          expires_at: expires_at
+        })
+        |> Repo.insert()
+
+      assert {:error, :no_refresh_token} =
+               TokenRefreshWorker.refresh_token_for_provider(
+                 "anthropic",
+                 to_string(saved_auth.id)
+               )
     end
 
     test "handles unsupported provider" do
-      assert {:error, {:unsupported_provider, "unsupported"}} = 
-        TokenRefreshWorker.refresh_token_for_provider("unsupported", "test-id")
+      assert {:error, {:unsupported_provider, "unsupported"}} =
+               TokenRefreshWorker.refresh_token_for_provider("unsupported", "test-id")
     end
   end
 end

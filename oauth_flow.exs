@@ -21,24 +21,27 @@ case TheMaestro.Auth.generate_oauth_url() do
     IO.puts("4. Copy the authorization code from the redirect URL")
     IO.puts("5. Return here with the code")
     IO.puts("")
-    
+
     # Save PKCE parameters for later use
     pkce_file_content = """
-# PKCE Parameters for OAuth Token Exchange
-# Generated on #{DateTime.utc_now() |> DateTime.to_string()}
-# DO NOT SHARE - These parameters are required for token exchange
+    # PKCE Parameters for OAuth Token Exchange
+    # Generated on #{DateTime.utc_now() |> DateTime.to_string()}
+    # DO NOT SHARE - These parameters are required for token exchange
 
-PKCE_CODE_VERIFIER = "#{pkce_params.code_verifier}"
-PKCE_CODE_CHALLENGE = "#{pkce_params.code_challenge}"
-PKCE_CODE_CHALLENGE_METHOD = "#{pkce_params.code_challenge_method}"
-PKCE_STATE = "#{pkce_params.state}"
+    PKCE_CODE_VERIFIER = "#{pkce_params.code_verifier}"
+    PKCE_CODE_CHALLENGE = "#{pkce_params.code_challenge}"
+    PKCE_CODE_CHALLENGE_METHOD = "#{pkce_params.code_challenge_method}"
+    PKCE_STATE = "#{pkce_params.state}"
     """
-    
+
     File.write!("/Users/jasonk/Development/the_maestro/pkce_params.txt", pkce_file_content)
     IO.puts("💾 PKCE parameters saved to: pkce_params.txt")
     IO.puts("")
-    IO.puts("⚠️  IMPORTANT: Keep the pkce_params.txt file secure - it's needed for token exchange!")
-    
+
+    IO.puts(
+      "⚠️  IMPORTANT: Keep the pkce_params.txt file secure - it's needed for token exchange!"
+    )
+
   {:error, reason} ->
     IO.puts("❌ Failed to generate OAuth URL: #{inspect(reason)}")
 end

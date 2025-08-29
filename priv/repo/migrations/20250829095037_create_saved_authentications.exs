@@ -12,9 +12,10 @@ defmodule TheMaestro.Repo.Migrations.CreateSavedAuthentications do
     end
 
     # Unique constraint to ensure one credential per provider per auth type
-    create unique_index(:saved_authentications, [:provider, :auth_type], 
-           name: :saved_authentications_provider_auth_type_index)
-    
+    create unique_index(:saved_authentications, [:provider, :auth_type],
+             name: :saved_authentications_provider_auth_type_index
+           )
+
     # Index for finding expiring tokens
     create index(:saved_authentications, [:expires_at])
   end

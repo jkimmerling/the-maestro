@@ -156,17 +156,17 @@ defmodule TheMaestro.Providers.Client do
   defp get_oauth_token(provider) do
     import Ecto.Query, warn: false
     alias TheMaestro.{Repo, SavedAuthentication}
-    
+
     # Query for OAuth token for the specified provider
-    query = 
+    query =
       from sa in SavedAuthentication,
-      where: sa.provider == ^provider and sa.auth_type == :oauth,
-      select: sa
-    
+        where: sa.provider == ^provider and sa.auth_type == :oauth,
+        select: sa
+
     case Repo.one(query) do
       nil ->
         {:error, :not_found}
-        
+
       %SavedAuthentication{credentials: credentials, expires_at: expires_at} ->
         # Check if token has expired
         if expires_at && DateTime.compare(DateTime.utc_now(), expires_at) != :lt do
@@ -180,7 +180,7 @@ defmodule TheMaestro.Providers.Client do
             scope: Map.get(credentials, "scope"),
             token_type: Map.get(credentials, "token_type", "Bearer")
           }
-          
+
           {:ok, oauth_token}
         end
     end
@@ -265,7 +265,8 @@ defmodule TheMaestro.Providers.Client do
              {"x-app", "cli"},
              {"user-agent", "claude-cli/1.0.81 (external, cli)"},
              {"content-type", "application/json"},
-             {"anthropic-beta", "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"},
+             {"anthropic-beta",
+              "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"},
              {"x-stainless-helper-method", "stream"},
              {"accept-language", "*"},
              {"sec-fetch-mode", "cors"},
@@ -322,28 +323,30 @@ defmodule TheMaestro.Providers.Client do
     Custom Tesla middleware for handling compressed OAuth responses from Anthropic API.
     Decompresses gzipped responses and parses JSON, similar to llxprt-code implementation.
     """
-    
+
     @behaviour Tesla.Middleware
-    
+
     def call(env, next, _options) do
       with {:ok, env} <- Tesla.run(env, next) do
         {:ok, decompress_and_decode_response(env)}
       end
     end
-    
-    defp decompress_and_decode_response(%Tesla.Env{body: body, headers: headers} = env) when is_binary(body) do
+
+    defp decompress_and_decode_response(%Tesla.Env{body: body, headers: headers} = env)
+         when is_binary(body) do
       # Decompress response if needed
       decompressed_body = decompress_response_if_needed(body, headers)
-      
+
       # Parse JSON
       case Jason.decode(decompressed_body) do
         {:ok, decoded} -> %{env | body: decoded}
-        {:error, _} -> env  # Return original if JSON parsing fails
+        # Return original if JSON parsing fails
+        {:error, _} -> env
       end
     end
-    
+
     defp decompress_and_decode_response(env), do: env
-    
+
     defp decompress_response_if_needed(body, headers) do
       content_encoding =
         headers

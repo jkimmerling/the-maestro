@@ -6,7 +6,8 @@ IO.puts("🎯 Function: TheMaestro.Auth.exchange_code_for_tokens/2")
 IO.puts("")
 
 # Authorization code from user
-auth_code = "4odRX46ADwzIUTPcFfik3AeINQJ76C95sAZeIz465ONuefOW#fi6lA63xfvyZKwW0SAgf5KmnDYLoAf-92SDZAbODRLU"
+auth_code =
+  "4odRX46ADwzIUTPcFfik3AeINQJ76C95sAZeIz465ONuefOW#fi6lA63xfvyZKwW0SAgf5KmnDYLoAf-92SDZAbODRLU"
 
 # Generate PKCE params to match the URL generation (we need the same code_verifier)
 # Note: In real flow, we'd store these from the URL generation step
@@ -35,7 +36,11 @@ case TheMaestro.Auth.exchange_code_for_tokens(auth_code, pkce_params) do
     IO.puts("✅ TOKEN EXCHANGE SUCCESS!")
     IO.puts("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     IO.puts("🎯 Access Token: #{String.slice(oauth_token.access_token, 0, 30)}...")
-    IO.puts("🔄 Refresh Token: #{if oauth_token.refresh_token, do: String.slice(oauth_token.refresh_token, 0, 30) <> "...", else: "nil"}")
+
+    IO.puts(
+      "🔄 Refresh Token: #{if oauth_token.refresh_token, do: String.slice(oauth_token.refresh_token, 0, 30) <> "...", else: "nil"}"
+    )
+
     IO.puts("⏰ Expires: #{DateTime.from_unix!(oauth_token.expiry)}")
     IO.puts("🔒 Token Type: #{oauth_token.token_type}")
     IO.puts("📋 Scope: #{oauth_token.scope}")

@@ -160,10 +160,11 @@ defmodule TheMaestro.SavedAuthenticationTest do
       assert changeset.valid?
 
       # Test OAuth auth type (with expires_at)
-      oauth_attrs = base_attrs
-      |> Map.put(:auth_type, :oauth)
-      |> Map.put(:expires_at, DateTime.utc_now())
-      
+      oauth_attrs =
+        base_attrs
+        |> Map.put(:auth_type, :oauth)
+        |> Map.put(:expires_at, DateTime.utc_now())
+
       changeset = SavedAuthentication.changeset(%SavedAuthentication{}, oauth_attrs)
       assert changeset.valid?
     end
@@ -182,9 +183,10 @@ defmodule TheMaestro.SavedAuthenticationTest do
         expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
       }
 
-      {:ok, saved_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(valid_attrs)
-      |> Repo.insert()
+      {:ok, saved_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(valid_attrs)
+        |> Repo.insert()
 
       assert saved_auth.id
       assert saved_auth.provider == :anthropic
@@ -203,9 +205,10 @@ defmodule TheMaestro.SavedAuthenticationTest do
         }
       }
 
-      {:ok, saved_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(valid_attrs)
-      |> Repo.insert()
+      {:ok, saved_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(valid_attrs)
+        |> Repo.insert()
 
       assert saved_auth.id
       assert saved_auth.provider == :openai
@@ -223,20 +226,24 @@ defmodule TheMaestro.SavedAuthenticationTest do
       }
 
       # Insert first record
-      {:ok, _} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(attrs)
-      |> Repo.insert()
+      {:ok, _} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(attrs)
+        |> Repo.insert()
 
       # Try to insert duplicate
       duplicate_attrs = %{attrs | credentials: %{"access_token" => "token2"}}
-      
-      {:error, changeset} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(duplicate_attrs)
-      |> Repo.insert()
+
+      {:error, changeset} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(duplicate_attrs)
+        |> Repo.insert()
 
       refute changeset.valid?
-      assert "Authentication already exists for this provider and auth type" in 
-             errors_on(changeset)[:provider]
+
+      assert "Authentication already exists for this provider and auth type" in errors_on(
+               changeset
+             )[:provider]
     end
 
     test "allows same provider with different auth types" do
@@ -248,9 +255,10 @@ defmodule TheMaestro.SavedAuthenticationTest do
         expires_at: DateTime.utc_now()
       }
 
-      {:ok, _oauth_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(oauth_attrs)
-      |> Repo.insert()
+      {:ok, _oauth_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(oauth_attrs)
+        |> Repo.insert()
 
       # Insert API key for same provider - should succeed
       api_key_attrs = %{
@@ -259,9 +267,10 @@ defmodule TheMaestro.SavedAuthenticationTest do
         credentials: %{"api_key" => "api-key-token"}
       }
 
-      {:ok, api_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(api_key_attrs)
-      |> Repo.insert()
+      {:ok, api_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(api_key_attrs)
+        |> Repo.insert()
 
       assert api_auth.provider == :anthropic
       assert api_auth.auth_type == :api_key
@@ -279,18 +288,19 @@ defmodule TheMaestro.SavedAuthenticationTest do
         }
       }
 
-      {:ok, saved_auth} = %SavedAuthentication{}
-      |> SavedAuthentication.changeset(%{
-        provider: :anthropic,
-        auth_type: :oauth,
-        credentials: complex_credentials,
-        expires_at: DateTime.utc_now()
-      })
-      |> Repo.insert()
+      {:ok, saved_auth} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(%{
+          provider: :anthropic,
+          auth_type: :oauth,
+          credentials: complex_credentials,
+          expires_at: DateTime.utc_now()
+        })
+        |> Repo.insert()
 
       # Reload from database
       reloaded = Repo.get!(SavedAuthentication, saved_auth.id)
-      
+
       assert reloaded.credentials["access_token"] == "sk-ant-oat01-complex"
       assert reloaded.credentials["metadata"]["client_id"] == "test-client"
       assert is_map(reloaded.credentials["metadata"])
@@ -311,33 +321,37 @@ defmodule TheMaestro.SavedAuthenticationTest do
           auth_type: auth_type,
           credentials: %{"token" => "#{provider}-#{auth_type}"}
         }
-        
-        attrs = if auth_type == :oauth do
-          Map.put(attrs, :expires_at, DateTime.utc_now())
-        else
-          attrs
-        end
 
-        {:ok, _} = %SavedAuthentication{}
-        |> SavedAuthentication.changeset(attrs)
-        |> Repo.insert()
+        attrs =
+          if auth_type == :oauth do
+            Map.put(attrs, :expires_at, DateTime.utc_now())
+          else
+            attrs
+          end
+
+        {:ok, _} =
+          %SavedAuthentication{}
+          |> SavedAuthentication.changeset(attrs)
+          |> Repo.insert()
       end
 
       # Query for specific provider and auth type
-      anthropic_oauth = Repo.get_by(SavedAuthentication, 
-        provider: :anthropic, 
-        auth_type: :oauth
-      )
-      
+      anthropic_oauth =
+        Repo.get_by(SavedAuthentication,
+          provider: :anthropic,
+          auth_type: :oauth
+        )
+
       assert anthropic_oauth
       assert anthropic_oauth.credentials["token"] == "anthropic-oauth"
 
       # Query for all authentications for a provider
-      anthropic_auths = Repo.all(
-        from sa in SavedAuthentication, 
-        where: sa.provider == :anthropic
-      )
-      
+      anthropic_auths =
+        Repo.all(
+          from sa in SavedAuthentication,
+            where: sa.provider == :anthropic
+        )
+
       assert length(anthropic_auths) == 2
       auth_types = Enum.map(anthropic_auths, & &1.auth_type)
       assert :oauth in auth_types
