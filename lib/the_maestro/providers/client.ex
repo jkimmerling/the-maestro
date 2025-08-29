@@ -4,7 +4,7 @@ defmodule TheMaestro.Providers.Client do
 
   Provides configured Tesla clients for different AI providers with connection pooling,
   middleware for JSON handling, logging, and retry capabilities. Supports multiple
-  authentication modes including API key authentication for Anthropic API.
+  authentication modes including API key and OAuth Bearer authentication for Anthropic API.
 
   ## Authentication Support
 
@@ -15,6 +15,17 @@ defmodule TheMaestro.Providers.Client do
   - `x-api-key`: API key from configuration
   - `anthropic-version`: "2023-06-01" 
   - `anthropic-beta`: "messages-2023-12-15"
+  - `user-agent`: "llxprt/1.0"
+  - `accept`: "application/json"
+  - `x-client-version`: "1.0.0"
+
+  ### OAuth Bearer Authentication
+
+  Anthropic provider supports OAuth 2.0 Bearer authentication with exact header requirements:
+
+  - `authorization`: "Bearer [ACCESS_TOKEN]" (replaces x-api-key)
+  - `anthropic-version`: "2023-06-01"
+  - `anthropic-beta`: "oauth-2025-04-20" 
   - `user-agent`: "llxprt/1.0"
   - `accept`: "application/json"
   - `x-client-version`: "1.0.0"
@@ -36,15 +47,21 @@ defmodule TheMaestro.Providers.Client do
       # Explicit API key authentication  
       client = TheMaestro.Providers.Client.build_client(:anthropic, :api_key)
       
+      # OAuth Bearer authentication
+      client = TheMaestro.Providers.Client.build_client(:anthropic, :oauth)
+      
       # Make authenticated API calls
       {:ok, response} = Tesla.post(client, "/v1/messages", request_body)
 
   ## Error Handling
 
   Returns `{:error, :missing_api_key}` when Anthropic API key is not configured.
+  Returns `{:error, :not_found}` when OAuth token is not found in database.
+  Returns `{:error, :expired}` when OAuth token has expired.
   Returns `{:error, :invalid_provider}` for unsupported provider atoms.
   """
 
+  alias TheMaestro.Auth.OAuthToken
   alias TheMaestro.Providers.AnthropicConfig
 
   @type provider :: :anthropic | :openai | :gemini
@@ -81,9 +98,9 @@ defmodule TheMaestro.Providers.Client do
       {:error, :invalid_provider}
   """
   @spec build_client(provider()) ::
-          Tesla.Client.t() | {:error, :invalid_provider | :missing_api_key}
+          Tesla.Client.t() | {:error, :invalid_provider | :missing_api_key | :not_found | :expired}
   @spec build_client(provider(), auth_type()) ::
-          Tesla.Client.t() | {:error, :invalid_provider | :missing_api_key}
+          Tesla.Client.t() | {:error, :invalid_provider | :missing_api_key | :not_found | :expired}
   def build_client(provider) when provider in [:anthropic, :openai, :gemini] do
     build_client(provider, :api_key)
   end
@@ -104,8 +121,22 @@ defmodule TheMaestro.Providers.Client do
 
   def build_client(_invalid_provider, _auth_type), do: {:error, :invalid_provider}
 
+  # OAuth token retrieval function
+  @spec get_oauth_token(provider()) :: {:ok, OAuthToken.t()} | {:error, :not_found | :expired}
+  defp get_oauth_token(_provider) do
+    # FIXME: Implement database lookup for OAuth tokens from saved_authentications table
+    # For now, return error until database integration is complete
+    # This will be implemented in Task 4
+    #
+    # Future implementation will:
+    # 1. Query saved_authentications table for provider OAuth tokens
+    # 2. Check token expiry and return :expired if needed
+    # 3. Return {:ok, oauth_token} for valid tokens
+    {:error, :not_found}
+  end
+
   # Private function to build middleware stack based on provider and auth type
-  @spec build_middleware(provider(), auth_type()) :: {:ok, list()} | {:error, :missing_api_key}
+  @spec build_middleware(provider(), auth_type()) :: {:ok, list()} | {:error, :missing_api_key | :not_found | :expired}
   defp build_middleware(:anthropic, :api_key) do
     case AnthropicConfig.load() do
       {:ok, config} ->
@@ -155,8 +186,41 @@ defmodule TheMaestro.Providers.Client do
     {:ok, middleware}
   end
 
+  defp build_middleware(:anthropic, :oauth) do
+    case get_oauth_token(:anthropic) do
+      {:ok, oauth_token} ->
+        config = get_provider_config(:anthropic)
+
+        middleware = [
+          # Base URL middleware
+          {Tesla.Middleware.BaseUrl, config.base_url},
+          # OAuth Bearer token headers (replaces x-api-key)
+          {Tesla.Middleware.Headers,
+           [
+             {"authorization", "Bearer #{oauth_token.access_token}"},
+             {"anthropic-version", "2023-06-01"},
+             {"anthropic-beta", "oauth-2025-04-20"},
+             {"user-agent", "llxprt/1.0"},
+             {"accept", "application/json"},
+             {"x-client-version", "1.0.0"}
+           ]},
+          # JSON middleware for request/response serialization
+          Tesla.Middleware.JSON,
+          # Logger middleware for request/response logging
+          Tesla.Middleware.Logger,
+          # Retry middleware for handling transient failures
+          {Tesla.Middleware.Retry, delay: 500, max_retries: 3, max_delay: 4_000}
+        ]
+
+        {:ok, middleware}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp build_middleware(_provider, :oauth) do
-    # OAuth not implemented yet - placeholder for future Epic 2 work
+    # OAuth not implemented for other providers yet
     {:error, :oauth_not_implemented}
   end
 
