@@ -567,7 +567,7 @@ defmodule TheMaestro.AuthTest do
 
       assert params_map["response_type"] == "code"
       assert params_map["client_id"] == "app_EMoamEEZ73f0CkXaXp7hrann"
-      assert params_map["redirect_uri"] == "http://localhost:8080/auth/callback"
+      assert params_map["redirect_uri"] == "http://localhost:1455/auth/callback"
       assert params_map["scope"] == "openid profile email offline_access"
       assert params_map["code_challenge"] == pkce_params.code_challenge
       assert params_map["code_challenge_method"] == "S256"

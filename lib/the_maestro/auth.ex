@@ -176,7 +176,7 @@ defmodule TheMaestro.Auth do
     defstruct client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
               authorization_endpoint: "https://auth.openai.com/oauth/authorize",
               token_endpoint: "https://auth.openai.com/oauth/token",
-              redirect_uri: "http://localhost:8080/auth/callback",
+              redirect_uri: "http://localhost:1455/auth/callback",
               scopes: ["openid", "profile", "email", "offline_access"]
   end
 
@@ -454,9 +454,10 @@ defmodule TheMaestro.Auth do
         oauth_params = build_openai_oauth_params(config, pkce_params)
 
         # Manually encode parameters to maintain exact codex order
+        # Use URI.encode/2 with :rfc3986 to match codex urlencoding::encode behavior
         query_string =
           oauth_params
-          |> Enum.map(fn {k, v} -> "#{k}=#{URI.encode_www_form(v)}" end)
+          |> Enum.map(fn {k, v} -> "#{k}=#{URI.encode(v, &URI.char_unreserved?/1)}" end)
           |> Enum.join("&")
 
         auth_url = "#{config.authorization_endpoint}?#{query_string}"

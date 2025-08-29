@@ -7,14 +7,14 @@ defmodule OAuthCallbackServer do
   require Logger
 
   def start_server do
-    {:ok, listen_socket} = :gen_tcp.listen(8080, [
+    {:ok, listen_socket} = :gen_tcp.listen(1455, [
       :binary,
       {:packet, 0},
       {:active, false},
       {:reuseaddr, true}
     ])
 
-    IO.puts("🚀 OAuth callback server started on http://localhost:8080")
+    IO.puts("🚀 OAuth callback server started on http://localhost:1455")
     IO.puts("📋 Waiting for OAuth callback from OpenAI...")
     IO.puts("🌐 Visit the OAuth URL in your browser to complete authorization")
     IO.puts("")
@@ -23,14 +23,12 @@ defmodule OAuthCallbackServer do
   end
 
   defp accept_connections(listen_socket) do
-    case :gen_tcp.accept(listen_socket, 30_000) do  # 30 second timeout
+    case :gen_tcp.accept(listen_socket, :infinity) do  # No timeout - wait forever
       {:ok, client_socket} ->
         spawn(fn -> handle_connection(client_socket) end)
         accept_connections(listen_socket)
 
-      {:error, :timeout} ->
-        IO.puts("⏰ Server timeout - no OAuth callback received within 30 seconds")
-        :gen_tcp.close(listen_socket)
+      # Removed timeout case since we're using :infinity
 
       {:error, reason} ->
         IO.puts("❌ Server error: #{inspect(reason)}")
