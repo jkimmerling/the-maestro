@@ -6,6 +6,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   Anthropic, OpenAI, and Gemini with ordered headers and connection pooling.
   """
 
+  alias TheMaestro.Providers.Http.ReqConfig
   alias TheMaestro.Types
 
   @typedoc "A configured Req request"
@@ -15,15 +16,17 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
           {:ok, request()} | {:error, term()}
   def create_client(provider, auth_type \\ :api_key, opts \\ []) do
     with {:ok, base_url, pool} <- provider_base_and_pool(provider),
-         {:ok, headers} <- build_headers(provider, auth_type, opts),
-         retry_opts <- Keyword.get(opts, :retry, max_retries: 2, backoff_factor: 2.0) do
-      req =
-        Req.new(
+         {:ok, headers} <- build_headers(provider, auth_type, opts) do
+      # Merge base options with provider-specific options; caller opts (like :retry)
+      # should take precedence when provided.
+      merged_opts =
+        ReqConfig.merge_with_base(
           base_url: base_url,
           finch: pool,
-          headers: headers,
-          retry: retry_opts
+          headers: headers
         )
+
+      req = Req.new(merged_opts)
 
       {:ok, req}
     end
