@@ -23,18 +23,35 @@ defmodule TheMaestro.Provider do
   @spec create_session(Types.provider(), Types.auth_type(), keyword()) ::
           {:ok, session_id()} | {:error, term()}
   def create_session(provider, auth_type, opts \\ []) do
-    with {:ok, mod} <- resolve_module(provider, auth_type_to_operation(auth_type)),
-         true <- function_exported?(mod, :create_session, 1) || {:error, :not_implemented} do
-      mod.create_session(opts)
+    if is_list(opts) do
+      with :ok <- validate_provider(provider),
+           :ok <- validate_auth_type(auth_type),
+           :ok <- validate_create_session_opts(opts),
+           {:ok, mod} <- resolve_module(provider, auth_type_to_operation(auth_type)) do
+        if function_exported?(mod, :create_session, 1) do
+          mod.create_session(opts)
+        else
+          {:error, :not_implemented}
+        end
+      else
+        {:error, _} = err -> err
+      end
+    else
+      {:error, :invalid_options}
     end
   end
 
   @spec delete_session(Types.provider(), Types.auth_type(), session_id()) ::
           :ok | {:error, term()}
-  def delete_session(provider, auth_type, session_id) do
-    with {:ok, mod} <- resolve_module(provider, auth_type_to_operation(auth_type)),
-         true <- function_exported?(mod, :delete_session, 1) || {:error, :not_implemented} do
-      mod.delete_session(session_id)
+  def delete_session(provider, auth_type, session_name) when is_binary(session_name) do
+    with :ok <- validate_provider(provider),
+         :ok <- validate_auth_type(auth_type) do
+      # Delete named session from our storage for idempotency
+      case TheMaestro.SavedAuthentication.delete_named_session(provider, auth_type, session_name) do
+        :ok -> :ok
+        {:error, :not_found} -> :ok
+        {:error, _} = err -> err
+      end
     end
   end
 
@@ -48,19 +65,31 @@ defmodule TheMaestro.Provider do
 
   @spec list_models(Types.provider(), Types.auth_type(), session_id()) ::
           {:ok, [Types.model_id()]} | {:error, term()}
-  def list_models(provider, _auth_type, session_id) do
-    with {:ok, mod} <- resolve_module(provider, :models),
-         true <- function_exported?(mod, :list_models, 1) || {:error, :not_implemented} do
-      mod.list_models(session_id)
+  def list_models(provider, auth_type, session_name) when is_binary(session_name) do
+    with :ok <- validate_provider(provider),
+         :ok <- validate_auth_type(auth_type),
+         :ok <- ensure_session_exists(provider, auth_type, session_name),
+         {:ok, mod} <- resolve_module(provider, :models) do
+      if function_exported?(mod, :list_models, 1),
+        do: mod.list_models(session_name),
+        else: {:error, :not_implemented}
+    else
+      {:error, _} = err -> err
     end
   end
 
   @spec stream_chat(Types.provider(), session_id(), messages(), keyword()) ::
           {:ok, Enumerable.t()} | {:error, term()}
-  def stream_chat(provider, session_id, messages, opts \\ []) do
-    with {:ok, mod} <- resolve_module(provider, :streaming),
-         true <- function_exported?(mod, :stream_chat, 3) || {:error, :not_implemented} do
-      mod.stream_chat(session_id, messages, opts)
+  def stream_chat(provider, session_name, messages, opts \\ []) when is_list(messages) do
+    with :ok <- validate_provider(provider),
+         :ok <- ensure_session_exists_for_any_auth(provider, session_name),
+         :ok <- validate_messages(messages),
+         {:ok, mod} <- resolve_module(provider, :streaming) do
+      if function_exported?(mod, :stream_chat, 3),
+        do: mod.stream_chat(session_name, messages, opts),
+        else: {:error, :not_implemented}
+    else
+      {:error, _} = err -> err
     end
   end
 
@@ -75,27 +104,29 @@ defmodule TheMaestro.Provider do
 
   @spec provider_capabilities(Types.provider()) :: {:ok, Capabilities.t()} | {:error, term()}
   def provider_capabilities(provider) do
-    # Basic introspection-based fallback. Provider modules may expose a
-    # `capabilities/0` function for richer metadata; otherwise we return a
-    # reasonable default based on known providers.
-    default = %Capabilities{
-      provider: provider,
-      auth_types: [:oauth, :api_key],
-      features: [:streaming, :models],
-      limits: %{}
-    }
+    with :ok <- validate_provider(provider) do
+      # Basic introspection-based fallback. Provider modules may expose a
+      # `capabilities/0` function for richer metadata; otherwise we return a
+      # reasonable default based on known providers.
+      default = %Capabilities{
+        provider: provider,
+        auth_types: [:oauth, :api_key],
+        features: [:streaming, :models],
+        limits: %{}
+      }
 
-    modules = [:oauth, :api_key, :streaming, :models]
+      modules = [:oauth, :api_key, :streaming, :models]
 
-    implemented =
-      modules
-      |> Enum.filter(fn op -> match?({:ok, _}, resolve_module(provider, op)) end)
+      implemented =
+        modules
+        |> Enum.filter(fn op -> match?({:ok, _}, resolve_module(provider, op)) end)
 
-    {:ok,
-     %Capabilities{
-       default
-       | features: Enum.uniq(default.features ++ feature_from_ops(implemented))
-     }}
+      {:ok,
+       %Capabilities{
+         default
+         | features: Enum.uniq(default.features ++ feature_from_ops(implemented))
+       }}
+    end
   end
 
   # Resolution helpers
@@ -218,6 +249,7 @@ defmodule TheMaestro.Provider do
 
   defp auth_type_to_operation(:oauth), do: :oauth
   defp auth_type_to_operation(:api_key), do: :api_key
+  defp auth_type_to_operation(_), do: :invalid
 
   defp provider_to_module(:openai), do: OpenAI
   defp provider_to_module(:anthropic), do: Anthropic
@@ -234,6 +266,7 @@ defmodule TheMaestro.Provider do
   defp operation_to_module(:api_key), do: APIKey
   defp operation_to_module(:streaming), do: Streaming
   defp operation_to_module(:models), do: Models
+  defp operation_to_module(_), do: :invalid
 
   defp provider_has_modules?(provider) do
     [:oauth, :api_key, :streaming, :models]
@@ -247,12 +280,79 @@ defmodule TheMaestro.Provider do
 
   defp feature_from_ops(ops) do
     ops
-    |> Enum.map(fn
-      :streaming -> :streaming
-      :models -> :models
-      :oauth -> :auth
-      :api_key -> :auth
-      _ -> :unknown
+    |> Enum.flat_map(fn
+      :streaming -> [:streaming]
+      :models -> [:models]
+      _ -> []
     end)
   end
+
+  # ===== Validation helpers =====
+
+  @spec validate_provider(term()) :: :ok | {:error, :invalid_provider}
+  defp validate_provider(provider) when provider in [:openai, :anthropic, :gemini], do: :ok
+  defp validate_provider(_), do: {:error, :invalid_provider}
+
+  @spec validate_auth_type(term()) :: :ok | {:error, :invalid_auth_type}
+  defp validate_auth_type(auth_type) when auth_type in [:oauth, :api_key], do: :ok
+  defp validate_auth_type(_), do: {:error, :invalid_auth_type}
+
+  @spec validate_create_session_opts(keyword()) :: :ok | {:error, term()}
+  defp validate_create_session_opts(opts) do
+    name = Keyword.get(opts, :name)
+    credentials = Keyword.get(opts, :credentials)
+
+    with :ok <- validate_session_name_presence_and_format(name),
+         :ok <- validate_credentials_presence_and_shape(credentials) do
+      :ok
+    else
+      {:error, _} = err -> err
+    end
+  end
+
+  defp validate_session_name_presence_and_format(nil), do: {:error, :missing_session_name}
+
+  defp validate_session_name_presence_and_format(name) do
+    case validate_session_name(name) do
+      :ok -> :ok
+      {:error, _} -> {:error, :invalid_session_name}
+    end
+  end
+
+  defp validate_credentials_presence_and_shape(nil), do: {:error, :missing_credentials}
+
+  defp validate_credentials_presence_and_shape(%{} = cred) when map_size(cred) == 0,
+    do: {:error, :invalid_credentials}
+
+  defp validate_credentials_presence_and_shape(%{}), do: :ok
+  defp validate_credentials_presence_and_shape(_), do: {:error, :invalid_credentials}
+
+  @spec ensure_session_exists(Types.provider(), Types.auth_type(), String.t()) ::
+          :ok | {:error, :session_not_found}
+  defp ensure_session_exists(provider, auth_type, name) do
+    case TheMaestro.SavedAuthentication.get_by_provider_and_name(provider, auth_type, name) do
+      nil -> {:error, :session_not_found}
+      _ -> :ok
+    end
+  end
+
+  @spec ensure_session_exists_for_any_auth(Types.provider(), String.t()) ::
+          :ok | {:error, :session_not_found}
+  defp ensure_session_exists_for_any_auth(provider, name) do
+    case Enum.any?([:oauth, :api_key], fn auth ->
+           TheMaestro.SavedAuthentication.get_by_provider_and_name(provider, auth, name) != nil
+         end) do
+      true -> :ok
+      false -> {:error, :session_not_found}
+    end
+  end
+
+  @spec validate_messages(term()) :: :ok | {:error, term()}
+  defp validate_messages([]), do: {:error, :empty_messages}
+
+  defp validate_messages(list) when is_list(list) do
+    if Enum.all?(list, &is_map/1), do: :ok, else: {:error, :invalid_messages}
+  end
+
+  defp validate_messages(_), do: {:error, :invalid_messages}
 end

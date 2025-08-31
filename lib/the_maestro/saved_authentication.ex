@@ -205,9 +205,11 @@ defmodule TheMaestro.SavedAuthentication do
   def create_named_session(provider, auth_type, name, attrs) do
     alias TheMaestro.Repo
 
+    atomized = atomize_keys(attrs)
+    normalized = normalize_credentials_for_auth(auth_type, atomized)
+
     full_attrs =
-      attrs
-      |> atomize_keys()
+      normalized
       |> Map.put(:provider, provider)
       |> Map.put(:auth_type, auth_type)
       |> Map.put(:name, name)
@@ -237,9 +239,11 @@ defmodule TheMaestro.SavedAuthentication do
   def upsert_named_session(provider, auth_type, name, attrs) do
     alias TheMaestro.Repo
 
+    atomized = atomize_keys(attrs)
+    normalized = normalize_credentials_for_auth(auth_type, atomized)
+
     full_attrs =
-      attrs
-      |> atomize_keys()
+      normalized
       |> Map.put(:provider, provider)
       |> Map.put(:auth_type, auth_type)
       |> Map.put(:name, name)
@@ -299,4 +303,52 @@ defmodule TheMaestro.SavedAuthentication do
     name = "default_#{provider}_#{auth_type}"
     get_by_provider_and_name(provider, auth_type, name)
   end
+
+  @doc """
+  Gets a named session (alias of get_by_provider_and_name/3).
+  """
+  @spec get_named_session(atom(), atom(), String.t()) :: t() | nil
+  def get_named_session(provider, auth_type, name) do
+    get_by_provider_and_name(provider, auth_type, name)
+  end
+
+  # ===== Internal helpers =====
+
+  @doc false
+  @spec normalize_credentials_for_auth(atom(), map()) :: map()
+  defp normalize_credentials_for_auth(:api_key, attrs) when is_map(attrs) do
+    cond do
+      credentials_present?(attrs) -> attrs
+      api_key = extract_api_key(attrs) -> Map.put(attrs, :credentials, %{"api_key" => api_key})
+      true -> attrs
+    end
+  end
+
+  defp normalize_credentials_for_auth(:oauth, attrs) when is_map(attrs) do
+    cond do
+      credentials_present?(attrs) -> attrs
+      (cred = oauth_tokens_from(attrs)) != %{} -> Map.put(attrs, :credentials, cred)
+      true -> attrs
+    end
+  end
+
+  defp normalize_credentials_for_auth(_other, attrs), do: attrs
+
+  defp credentials_present?(attrs) do
+    (Map.has_key?(attrs, :credentials) and is_map(attrs[:credentials])) or
+      (Map.has_key?(attrs, "credentials") and is_map(attrs["credentials"]))
+  end
+
+  defp extract_api_key(attrs), do: attrs[:api_key] || attrs["api_key"]
+
+  defp oauth_tokens_from(attrs) do
+    %{}
+    |> put_if_present("access_token", attrs[:access_token] || attrs["access_token"])
+    |> put_if_present("refresh_token", attrs[:refresh_token] || attrs["refresh_token"])
+    |> put_if_present("token_type", attrs[:token_type] || attrs["token_type"])
+    |> put_if_present("scope", attrs[:scope] || attrs["scope"])
+  end
+
+  defp put_if_present(map, _k, nil), do: map
+  defp put_if_present(map, k, v), do: Map.put(map, k, v)
 end

@@ -28,6 +28,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         |> SavedAuthentication.changeset(%{
           provider: :anthropic,
           auth_type: :oauth,
+          name: "test_session",
           credentials: %{
             "access_token" => "sk-ant-oat01-old-token",
             "refresh_token" => "sk-ant-oar01-refresh-token",
@@ -98,6 +99,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         |> SavedAuthentication.changeset(%{
           provider: :anthropic,
           auth_type: :oauth,
+          name: "test_session",
           credentials: %{
             "access_token" => "sk-ant-oat01-test",
             "refresh_token" => "sk-ant-oar01-test",
@@ -132,6 +134,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         |> SavedAuthentication.changeset(%{
           provider: :anthropic,
           auth_type: :oauth,
+          name: "test_session",
           credentials: %{
             "access_token" => "sk-ant-oat01-test",
             "refresh_token" => "sk-ant-oar01-invalid",
@@ -174,6 +177,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         |> SavedAuthentication.changeset(%{
           provider: :anthropic,
           auth_type: :oauth,
+          name: "test_session",
           credentials: %{
             "access_token" => "sk-ant-oat01-test",
             "refresh_token" => "sk-ant-oar01-test",
@@ -285,6 +289,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         |> SavedAuthentication.changeset(%{
           provider: :anthropic,
           auth_type: :oauth,
+          name: "test_session",
           credentials: %{
             "access_token" => "sk-ant-oat01-current",
             "refresh_token" => "sk-ant-oar01-current",
@@ -342,6 +347,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         |> SavedAuthentication.changeset(%{
           provider: :anthropic,
           auth_type: :oauth,
+          name: "test_session",
           credentials: %{
             "access_token" => "sk-ant-oat01-no-refresh",
             "token_type" => "Bearer"
