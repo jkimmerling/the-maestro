@@ -19,8 +19,9 @@ defmodule TheMaestro.Providers.Http.ReqConfig do
   @spec base_options() :: base_options()
   def base_options do
     [
-      # Conservative, explicit retry defaults; providers may override
-      retry: [max_retries: 2, backoff_factor: 2.0],
+      # Conservative retry defaults using Req built-in transient retry step
+      retry: :transient,
+      max_retries: 2,
       # Reasonable default timeouts; can be overridden per request
       receive_timeout: 60_000
     ]
