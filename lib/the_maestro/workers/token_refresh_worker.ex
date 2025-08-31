@@ -356,22 +356,19 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   end
 
   defp do_token_refresh_request(url, request_body) do
-    case Application.get_env(:the_maestro, :req_request_fun) do
-      fun when is_function(fun, 2) ->
-        req = Req.new(headers: [{"content-type", "application/json"}], finch: :anthropic_finch)
-        case fun.(req, [method: :post, url: url, json: request_body]) do
-          {:ok, %Req.Response{} = resp} -> handle_refresh_response(resp)
-          {:error, reason} -> {:error, reason}
-          other -> {:error, {:unexpected_result, other}}
-        end
+    case {Application.get_env(:the_maestro, :req_request_fun),
+          Req.new(headers: [{"content-type", "application/json"}], finch: :anthropic_finch)} do
+      {fun, req} when is_function(fun, 2) -> do_req(fun, req, url, request_body)
+      {_, req} -> do_req(&Req.request/2, req, url, request_body)
+    end
+  end
 
-      _ ->
-        req = Req.new(headers: [{"content-type", "application/json"}], finch: :anthropic_finch)
-
-        case Req.request(req, method: :post, url: url, json: request_body) do
-          {:ok, %Req.Response{} = resp} -> handle_refresh_response(resp)
-          {:error, reason} -> {:error, reason}
-        end
+  defp do_req(fun, req, url, request_body) do
+    case fun.(req, [method: :post, url: url, json: request_body]) do
+      {:ok, %Req.Response{} = resp} -> handle_refresh_response(resp)
+      {:error, %Req.TransportError{}} -> {:error, :network_error}
+      {:error, reason} -> {:error, reason}
+      other -> {:error, {:unexpected_result, other}}
     end
   end
 
