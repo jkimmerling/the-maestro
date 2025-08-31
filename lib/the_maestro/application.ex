@@ -20,8 +20,8 @@ defmodule TheMaestro.Application do
       finch_child_spec(:openai_finch, finch_pools[:openai]),
       finch_child_spec(:gemini_finch, finch_pools[:gemini]),
       {Phoenix.PubSub, name: TheMaestro.PubSub},
-      # Start a worker by calling: TheMaestro.Worker.start_link(arg)
-      # {TheMaestro.Worker, arg},
+      # Provider registry for automatic discovery and validation
+      TheMaestro.ProviderRegistry,
       # Start to serve requests, typically the last entry
       TheMaestroWeb.Endpoint
     ]

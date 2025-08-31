@@ -65,7 +65,13 @@ defmodule TheMaestro.Provider do
   end
 
   @spec list_providers() :: [Types.provider()]
-  def list_providers, do: [:openai, :anthropic, :gemini]
+  def list_providers do
+    # For now, return static list. In future, could scan filesystem for provider modules
+    available_providers = [:openai, :anthropic, :gemini]
+
+    # Filter to only return providers that have at least one working module
+    Enum.filter(available_providers, &provider_has_modules?/1)
+  end
 
   @spec provider_capabilities(Types.provider()) :: {:ok, Capabilities.t()} | {:error, term()}
   def provider_capabilities(provider) do
@@ -228,6 +234,16 @@ defmodule TheMaestro.Provider do
   defp operation_to_module(:api_key), do: APIKey
   defp operation_to_module(:streaming), do: Streaming
   defp operation_to_module(:models), do: Models
+
+  defp provider_has_modules?(provider) do
+    [:oauth, :api_key, :streaming, :models]
+    |> Enum.any?(fn operation ->
+      case resolve_module(provider, operation) do
+        {:ok, _mod} -> true
+        {:error, :module_not_found} -> false
+      end
+    end)
+  end
 
   defp feature_from_ops(ops) do
     ops
