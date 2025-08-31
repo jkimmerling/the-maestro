@@ -383,10 +383,10 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
             Logger.error("Token refresh failed with status #{status}: #{response_body}")
             {:error, :token_refresh_failed}
 
-          {:error, %HTTPoison.Error{reason: reason}} ->
-            {:error, reason}
-        end
+          {:error, %HTTPoison.Error{reason: _reason}} ->
+            {:error, :network_error}
     end
+  end
   end
 
   defp fetch_anthropic_client_id do

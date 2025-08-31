@@ -48,8 +48,16 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
 
   @spec build_headers(Types.provider(), Types.auth_type(), keyword()) ::
           {:ok, [{String.t(), String.t()}]} | {:error, term()}
-  def build_headers(:anthropic, :api_key, _opts) do
-    api_key = Application.get_env(:the_maestro, :anthropic, []) |> Keyword.get(:api_key)
+  def build_headers(:anthropic, :api_key, opts) do
+    session_name = Keyword.get(opts, :session)
+    saved = if session_name, do: get_saved_auth(:anthropic, :api_key, session_name), else: nil
+
+    api_key =
+      if is_map(saved) do
+        saved.credentials["api_key"]
+      else
+        Application.get_env(:the_maestro, :anthropic, []) |> Keyword.get(:api_key)
+      end
 
     case is_binary(api_key) and api_key != "" do
       true ->
@@ -87,29 +95,35 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     end
   end
 
-  def build_headers(:openai, :api_key, _opts) do
+  def build_headers(:openai, :api_key, opts) do
+    session_name = Keyword.get(opts, :session)
+    saved = if session_name, do: get_saved_auth(:openai, :api_key, session_name), else: nil
+
     cfg = Application.get_env(:the_maestro, :openai, [])
-    api_key = Keyword.get(cfg, :api_key)
+    api_key = if is_map(saved), do: saved.credentials["api_key"], else: Keyword.get(cfg, :api_key)
+
     org_id = Keyword.get(cfg, :organization_id)
 
-    cond do
-      !is_binary(api_key) or api_key == "" ->
-        {:error, :missing_api_key}
+    if !is_binary(api_key) or api_key == "" do
+      {:error, :missing_api_key}
+    else
+      base_headers = [
+        {"authorization", "Bearer #{api_key}"},
+        {"user-agent", "llxprt/1.0"},
+        {"accept", "application/json"},
+        {"x-client-version", "1.0.0"}
+      ]
 
-      !is_binary(org_id) or org_id == "" ->
-        {:error, :missing_org_id}
+      headers =
+        case org_id do
+          id when is_binary(id) and id != "" ->
+            [{"openai-organization", id}, {"openai-beta", "assistants v2"} | base_headers]
 
-      true ->
-        headers = [
-          {"authorization", "Bearer #{api_key}"},
-          {"openai-organization", org_id},
-          {"openai-beta", "assistants v2"},
-          {"user-agent", "llxprt/1.0"},
-          {"accept", "application/json"},
-          {"x-client-version", "1.0.0"}
-        ]
+          _ ->
+            base_headers
+        end
 
-        {:ok, headers}
+      {:ok, headers}
     end
   end
 
