@@ -364,7 +364,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   end
 
   defp do_req(fun, req, url, request_body) do
-    case fun.(req, [method: :post, url: url, json: request_body]) do
+    case fun.(req, method: :post, url: url, json: request_body) do
       {:ok, %Req.Response{} = resp} -> handle_refresh_response(resp)
       {:error, %Req.TransportError{}} -> {:error, :network_error}
       {:error, reason} -> {:error, reason}

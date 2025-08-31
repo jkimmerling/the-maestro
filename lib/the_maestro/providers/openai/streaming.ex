@@ -12,7 +12,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
   def stream_chat(session_id, messages, opts \\ []) do
     Logger.debug("OpenAI.Streaming.stream_chat/3 called")
 
-    with true <- is_list(messages) and messages != [] or {:error, :empty_messages},
+    with true <- (is_list(messages) and messages != []) or {:error, :empty_messages},
          auth_type <- Keyword.get(opts, :auth_type, :api_key),
          {:ok, req} <- ReqClientFactory.create_client(:openai, auth_type, session: session_id) do
       model = Keyword.get(opts, :model)
@@ -26,7 +26,11 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
           "stream" => true
         }
 
-        StreamingAdapter.stream_request(req, method: :post, url: "/v1/chat/completions", json: body)
+        StreamingAdapter.stream_request(req,
+          method: :post,
+          url: "/v1/chat/completions",
+          json: body
+        )
       end
     end
   end

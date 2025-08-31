@@ -24,16 +24,22 @@ defmodule TheMaestro.Providers.Gemini.Models do
         {:ok, models}
       else
         {:ok, %Req.Response{status: status, body: body}} ->
-          {:error, {:http_error, status, if(is_binary(body), do: body, else: Jason.encode!(body))}}
-        {:error, :not_found} -> {:error, :session_not_found}
-        {:error, reason} -> {:error, reason}
+          {:error,
+           {:http_error, status, if(is_binary(body), do: body, else: Jason.encode!(body))}}
+
+        {:error, :not_found} ->
+          {:error, :session_not_found}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
   end
 
   @impl true
   @spec get_model_info(Types.session_id(), String.t()) :: {:ok, Types.model()} | {:error, term()}
-  def get_model_info(session_name, model_id) when is_binary(session_name) and is_binary(model_id) do
+  def get_model_info(session_name, model_id)
+      when is_binary(session_name) and is_binary(model_id) do
     if Mix.env() == :test and System.get_env("RUN_REAL_API_TEST") != "1" do
       {:error, :not_implemented}
     else
@@ -46,18 +52,28 @@ defmodule TheMaestro.Providers.Gemini.Models do
         {:ok, %{id: id, name: id, capabilities: []}}
       else
         {:ok, %Req.Response{status: status, body: body}} ->
-          {:error, {:http_error, status, if(is_binary(body), do: body, else: Jason.encode!(body))}}
-        {:error, :not_found} -> {:error, :session_not_found}
-        {:error, reason} -> {:error, reason}
+          {:error,
+           {:http_error, status, if(is_binary(body), do: body, else: Jason.encode!(body))}}
+
+        {:error, :not_found} ->
+          {:error, :session_not_found}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
   end
 
   defp detect_auth(session_name) do
     cond do
-      is_map(SavedAuthentication.get_by_provider_and_name(:gemini, :oauth, session_name)) -> {:ok, :oauth}
-      is_map(SavedAuthentication.get_by_provider_and_name(:gemini, :api_key, session_name)) -> {:ok, :api_key}
-      true -> {:error, :not_found}
+      is_map(SavedAuthentication.get_by_provider_and_name(:gemini, :oauth, session_name)) ->
+        {:ok, :oauth}
+
+      is_map(SavedAuthentication.get_by_provider_and_name(:gemini, :api_key, session_name)) ->
+        {:ok, :api_key}
+
+      true ->
+        {:error, :not_found}
     end
   end
 end

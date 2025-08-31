@@ -23,6 +23,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
           :openai -> choose_openai_base_url(auth_type, opts, base_url0)
           _ -> base_url0
         end
+
       # Merge base options with provider-specific options; caller opts (like :retry)
       # should take precedence when provided.
       merged_opts =
@@ -169,7 +170,8 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
 
   defp build_openai_api_key_headers_session(session_name) do
     case get_saved_auth(:openai, :api_key, session_name) do
-      %SavedAuthentication{credentials: %{"api_key" => api_key}} when is_binary(api_key) and
+      %SavedAuthentication{credentials: %{"api_key" => api_key}}
+      when is_binary(api_key) and
              api_key != "" ->
         {:ok, openai_base_headers(api_key)}
 
@@ -184,11 +186,18 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     org_id = Keyword.get(cfg, :organization_id)
 
     cond do
-      !is_binary(api_key) or api_key == "" -> {:error, :missing_api_key}
-      !is_binary(org_id) or org_id == "" -> {:error, :missing_org_id}
+      !is_binary(api_key) or api_key == "" ->
+        {:error, :missing_api_key}
+
+      !is_binary(org_id) or org_id == "" ->
+        {:error, :missing_org_id}
+
       true ->
         {:ok,
-         [{"openai-organization", org_id}, {"openai-beta", "assistants v2"} | openai_base_headers(api_key)]}
+         [
+           {"openai-organization", org_id},
+           {"openai-beta", "assistants v2"} | openai_base_headers(api_key)
+         ]}
     end
   end
 
@@ -205,7 +214,8 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     SavedAuthentication.get_by_provider_and_name(provider, auth_type, session_name)
   end
 
-  @spec fetch_saved(atom(), atom(), String.t() | nil) :: {:ok, SavedAuthentication.t()} | {:error, :not_found}
+  @spec fetch_saved(atom(), atom(), String.t() | nil) ::
+          {:ok, SavedAuthentication.t()} | {:error, :not_found}
   defp fetch_saved(provider, auth_type, session_name) do
     case get_saved_auth(provider, auth_type, session_name) do
       %SavedAuthentication{} = saved -> {:ok, saved}
@@ -215,6 +225,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
 
   @spec ensure_not_expired(DateTime.t() | nil) :: :ok | {:error, :expired}
   defp ensure_not_expired(nil), do: :ok
+
   defp ensure_not_expired(%DateTime{} = expires_at) do
     if DateTime.compare(DateTime.utc_now(), expires_at) == :lt, do: :ok, else: {:error, :expired}
   end
@@ -222,8 +233,11 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   @spec fetch_token(map()) :: {:ok, String.t(), String.t()} | {:error, :missing_token}
   defp fetch_token(%{} = creds) do
     case Map.get(creds, "access_token") do
-      token when is_binary(token) and token != "" -> {:ok, token, Map.get(creds, "token_type", "Bearer")}
-      _ -> {:error, :missing_token}
+      token when is_binary(token) and token != "" ->
+        {:ok, token, Map.get(creds, "token_type", "Bearer")}
+
+      _ ->
+        {:error, :missing_token}
     end
   end
 end

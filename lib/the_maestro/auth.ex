@@ -512,6 +512,7 @@ defmodule TheMaestro.Auth do
       case Req.request(req, method: :post, url: token_endpoint, body: request_body) do
         {:ok, %Req.Response{status: 200, body: body}} ->
           decoded = if is_binary(body), do: Jason.decode!(body), else: body
+
           case decoded do
             %{"access_token" => api_key} ->
               Logger.info("Successfully obtained OpenAI API key")
@@ -1002,7 +1003,8 @@ defmodule TheMaestro.Auth do
   """
   @spec finish_anthropic_oauth(String.t(), PKCEParams.t(), String.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
-  def finish_anthropic_oauth(auth_code_input, pkce_params, session_name) when is_binary(session_name) do
+  def finish_anthropic_oauth(auth_code_input, pkce_params, session_name)
+      when is_binary(session_name) do
     with {:ok, %OAuthToken{} = token} <- exchange_code_for_tokens(auth_code_input, pkce_params),
          :ok <- persist_oauth_token(:anthropic, session_name, token) do
       {:ok, token}
@@ -1025,13 +1027,16 @@ defmodule TheMaestro.Auth do
   end
 
   @doc false
-  @spec persist_oauth_token(:anthropic | :openai, String.t(), OAuthToken.t()) :: :ok | {:error, term()}
+  @spec persist_oauth_token(:anthropic | :openai, String.t(), OAuthToken.t()) ::
+          :ok | {:error, term()}
   def persist_oauth_token(provider, session_name, %OAuthToken{} = token) do
     alias TheMaestro.SavedAuthentication
 
     expires_at =
       case token.expiry do
-        nil -> nil
+        nil ->
+          nil
+
         int when is_integer(int) ->
           case DateTime.from_unix(int) do
             {:ok, dt} -> dt
@@ -1056,6 +1061,7 @@ defmodule TheMaestro.Auth do
       _ -> {:error, :unexpected_result}
     end
   end
+
   defp parse_auth_code_input(auth_code_input, default_state) do
     case String.split(auth_code_input, "#", parts: 2) do
       [auth_code, state] -> {auth_code, state}

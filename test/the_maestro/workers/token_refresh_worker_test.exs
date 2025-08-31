@@ -51,14 +51,13 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         {:ok,
          %Req.Response{
            status: 200,
-           body:
-             %{
-               "access_token" => "sk-ant-oat01-new-token",
-               "refresh_token" => "sk-ant-oar01-new-refresh",
-               "expires_in" => 3600,
-               "token_type" => "Bearer",
-               "scope" => "user:profile user:inference"
-             }
+           body: %{
+             "access_token" => "sk-ant-oat01-new-token",
+             "refresh_token" => "sk-ant-oar01-new-refresh",
+             "expires_in" => 3600,
+             "token_type" => "Bearer",
+             "scope" => "user:profile user:inference"
+           }
          }}
       end)
 
@@ -306,13 +305,12 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         {:ok,
          %Req.Response{
            status: 200,
-           body:
-             %{
-               "access_token" => "sk-ant-oat01-refreshed",
-               "refresh_token" => "sk-ant-oar01-refreshed",
-               "expires_in" => 7200,
-               "token_type" => "Bearer"
-             }
+           body: %{
+             "access_token" => "sk-ant-oat01-refreshed",
+             "refresh_token" => "sk-ant-oar01-refreshed",
+             "expires_in" => 7200,
+             "token_type" => "Bearer"
+           }
          }}
       end)
 

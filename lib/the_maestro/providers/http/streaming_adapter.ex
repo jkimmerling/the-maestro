@@ -118,7 +118,9 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
       ])
 
     case payload do
-      nil -> base
+      nil ->
+        base
+
       _ ->
         base
         |> List.keydelete("content-type", 0)
@@ -128,11 +130,17 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
   defp take_complete_events(buffer) do
     parts = String.split(buffer, "\n\n")
+
     case parts do
-      [] -> {[], ""}
-      [_single] -> {[], buffer}
+      [] ->
+        {[], ""}
+
+      [_single] ->
+        {[], buffer}
+
       _ ->
         {complete, [remaining]} = Enum.split(parts, length(parts) - 1)
+
         events =
           complete
           |> Enum.map(&parse_event/1)
@@ -144,6 +152,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
   defp start_streaming(finch, request, timeout) do
     parent = self()
+
     {:ok, task} =
       Task.start_link(fn ->
         Finch.stream(request, finch, parent, &dispatch_stream_msg/2)
@@ -179,8 +188,12 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
         {events, remaining} = take_complete_events(buffer)
         {events, %{state | buffer: remaining}}
 
-      {:status, _} -> {[], state}
-      {:headers, _} -> {[], state}
+      {:status, _} ->
+        {[], state}
+
+      {:headers, _} ->
+        {[], state}
+
       :done ->
         {final_events, _} = take_complete_events(state.buffer)
         {final_events, %{state | done: true}}
