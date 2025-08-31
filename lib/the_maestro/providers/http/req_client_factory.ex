@@ -7,6 +7,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   """
 
   alias TheMaestro.Providers.Http.ReqConfig
+  alias TheMaestro.SavedAuthentication
   alias TheMaestro.Types
 
   @typedoc "A configured Req request"
@@ -68,10 +69,22 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     end
   end
 
-  def build_headers(:anthropic, :oauth, _opts) do
-    # OAuth header composition would include Bearer token pulled from DB/session
-    # For Story 0.2, leave unimplemented.
-    {:error, :not_implemented}
+  def build_headers(:anthropic, :oauth, opts) do
+    session_name = Keyword.get(opts, :session)
+
+    with {:ok, saved} <- fetch_saved(:anthropic, :oauth, session_name),
+         :ok <- ensure_not_expired(saved.expires_at),
+         {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
+      {:ok,
+       [
+         {"authorization", token_type <> " " <> access_token},
+         {"anthropic-version", "2023-06-01"},
+         {"anthropic-beta", "oauth-2025-04-20"},
+         {"user-agent", "llxprt/1.0"},
+         {"accept", "application/json"},
+         {"x-client-version", "1.0.0"}
+       ]}
+    end
   end
 
   def build_headers(:openai, :api_key, _opts) do
@@ -100,7 +113,33 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     end
   end
 
-  def build_headers(:openai, :oauth, _opts), do: {:error, :not_implemented}
+  def build_headers(:openai, :oauth, opts) do
+    session_name = Keyword.get(opts, :session)
+
+    with {:ok, saved} <- fetch_saved(:openai, :oauth, session_name),
+         :ok <- ensure_not_expired(saved.expires_at),
+         {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
+      org_id = Application.get_env(:the_maestro, :openai, []) |> Keyword.get(:organization_id)
+
+      base_headers = [
+        {"authorization", token_type <> " " <> access_token},
+        {"user-agent", "llxprt/1.0"},
+        {"accept", "application/json"},
+        {"x-client-version", "1.0.0"}
+      ]
+
+      headers =
+        case org_id do
+          id when is_binary(id) and id != "" ->
+            [{"openai-organization", id} | base_headers]
+
+          _ ->
+            base_headers
+        end
+
+      {:ok, headers}
+    end
+  end
 
   def build_headers(:gemini, _auth_type, _opts) do
     # No default headers for Gemini at this time
@@ -109,4 +148,39 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   end
 
   def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
+
+  # ===== Internal helpers =====
+
+  @spec get_saved_auth(atom(), atom(), String.t() | nil) :: SavedAuthentication.t() | nil
+  defp get_saved_auth(provider, auth_type, nil) do
+    provider
+    |> SavedAuthentication.list_by_provider()
+    |> Enum.find(&(&1.auth_type == auth_type))
+  end
+
+  defp get_saved_auth(provider, auth_type, session_name) when is_binary(session_name) do
+    SavedAuthentication.get_by_provider_and_name(provider, auth_type, session_name)
+  end
+
+  @spec fetch_saved(atom(), atom(), String.t() | nil) :: {:ok, SavedAuthentication.t()} | {:error, :not_found}
+  defp fetch_saved(provider, auth_type, session_name) do
+    case get_saved_auth(provider, auth_type, session_name) do
+      %SavedAuthentication{} = saved -> {:ok, saved}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @spec ensure_not_expired(DateTime.t() | nil) :: :ok | {:error, :expired}
+  defp ensure_not_expired(nil), do: :ok
+  defp ensure_not_expired(%DateTime{} = expires_at) do
+    if DateTime.compare(DateTime.utc_now(), expires_at) == :lt, do: :ok, else: {:error, :expired}
+  end
+
+  @spec fetch_token(map()) :: {:ok, String.t(), String.t()} | {:error, :missing_token}
+  defp fetch_token(%{} = creds) do
+    case Map.get(creds, "access_token") do
+      token when is_binary(token) and token != "" -> {:ok, token, Map.get(creds, "token_type", "Bearer")}
+      _ -> {:error, :missing_token}
+    end
+  end
 end
