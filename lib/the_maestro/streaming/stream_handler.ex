@@ -39,14 +39,8 @@ defmodule TheMaestro.Streaming.StreamHandler do
     data: String.t()
   }
 
-  @type stream_message :: %{
-    type: :content | :function_call | :usage | :error | :done,
-    content: String.t() | nil,
-    function_call: map() | nil,
-    usage: map() | nil,
-    error: String.t() | nil,
-    metadata: map()
-  }
+  alias TheMaestro.Streaming.Message
+  @type stream_message :: Message.t()
 
   @type handler_state :: term()
   @type handler_options :: keyword()
@@ -138,7 +132,7 @@ defmodule TheMaestro.Streaming.StreamHandler do
 
       # Helper function to create error messages
       def error_message(error, metadata \\ %{}) do
-        %{
+        %TheMaestro.Streaming.Message{
           type: :error,
           error: error,
           content: nil,
@@ -150,7 +144,7 @@ defmodule TheMaestro.Streaming.StreamHandler do
 
       # Helper function to create content messages
       def content_message(content, metadata \\ %{}) do
-        %{
+        %TheMaestro.Streaming.Message{
           type: :content,
           content: content,
           function_call: nil,
@@ -162,7 +156,7 @@ defmodule TheMaestro.Streaming.StreamHandler do
 
       # Helper function to create function call messages
       def function_call_message(function_call, metadata \\ %{}) do
-        %{
+        %TheMaestro.Streaming.Message{
           type: :function_call,
           content: nil,
           function_call: function_call,
@@ -174,7 +168,7 @@ defmodule TheMaestro.Streaming.StreamHandler do
 
       # Helper function to create usage messages
       def usage_message(usage, metadata \\ %{}) do
-        %{
+        %TheMaestro.Streaming.Message{
           type: :usage,
           content: nil,
           function_call: nil,
@@ -186,7 +180,7 @@ defmodule TheMaestro.Streaming.StreamHandler do
 
       # Helper function to create done messages
       def done_message(metadata \\ %{}) do
-        %{
+        %TheMaestro.Streaming.Message{
           type: :done,
           content: nil,
           function_call: nil,

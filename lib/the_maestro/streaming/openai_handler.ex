@@ -208,6 +208,8 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     end
   end
 
+  alias TheMaestro.Streaming.{Function, FunctionCall}
+
   # Handle completed function call
   defp handle_function_call_done(event) do
     item = Map.get(event, "item", %{})
@@ -220,13 +222,9 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
         final_arguments = Map.get(item, "arguments", call_data.arguments)
 
         # Create function call message
-        function_call = %{
+        function_call = %FunctionCall{
           id: call_data.id,
-          type: "function",
-          function: %{
-            name: call_data.name,
-            arguments: final_arguments
-          }
+          function: %Function{name: call_data.name, arguments: final_arguments}
         }
 
         # Remove from tracking

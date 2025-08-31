@@ -172,6 +172,8 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
     [] # Don't emit until complete
   end
 
+  alias TheMaestro.Streaming.{Function, FunctionCall}
+
   # Complete tool use
   defp handle_tool_use_complete do
     if current_tool_call = get_current_tool_call() do
@@ -182,13 +184,9 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
       end
 
       # Create function call message in OpenAI format for consistency
-      function_call = %{
+      function_call = %FunctionCall{
         id: current_tool_call.id,
-        type: "function",
-        function: %{
-          name: current_tool_call.name,
-          arguments: Jason.encode!(input)
-        }
+        function: %Function{name: current_tool_call.name, arguments: Jason.encode!(input)}
       }
 
       # Clear current tool call

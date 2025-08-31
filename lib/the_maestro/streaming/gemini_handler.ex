@@ -99,11 +99,11 @@ defmodule TheMaestro.Streaming.GeminiHandler do
   end
 
   defp handle_content_part(%{"functionCall" => function_call}, messages) do
+    alias TheMaestro.Streaming.{Function, FunctionCall}
     # Convert Gemini function call to standard format
-    function_call_data = %{
+    function_call_data = %FunctionCall{
       id: Map.get(function_call, "id", generate_call_id()),
-      type: "function",
-      function: %{
+      function: %Function{
         name: Map.get(function_call, "name"),
         arguments: Jason.encode!(Map.get(function_call, "args", %{}))
       }
