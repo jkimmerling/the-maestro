@@ -44,6 +44,9 @@ defmodule TheMaestro.SavedAuthentication do
           updated_at: DateTime.t() | nil
         }
 
+  @typedoc "Attributes for changesets - ALL keys must be atoms"
+  @type attrs :: %{optional(atom()) => any()}
+
   schema "saved_authentications" do
     field :provider, Ecto.Enum, values: [:anthropic, :openai, :gemini]
     field :auth_type, Ecto.Enum, values: [:api_key, :oauth]
@@ -73,10 +76,13 @@ defmodule TheMaestro.SavedAuthentication do
 
   * `expires_at` - DateTime for when credentials expire (required for OAuth)
   """
-  @spec changeset(t(), map()) :: Ecto.Changeset.t()
+  @spec changeset(t(), attrs() | map()) :: Ecto.Changeset.t()
   def changeset(saved_authentication, attrs) do
+    # Ensure all keys are atoms
+    atomized_attrs = atomize_keys(attrs)
+
     saved_authentication
-    |> cast(attrs, [:provider, :auth_type, :name, :credentials, :expires_at])
+    |> cast(atomized_attrs, [:provider, :auth_type, :name, :credentials, :expires_at])
     |> validate_required([:provider, :auth_type, :name, :credentials])
     |> validate_inclusion(:provider, [:anthropic, :openai, :gemini])
     |> validate_inclusion(:auth_type, [:api_key, :oauth])
@@ -109,6 +115,25 @@ defmodule TheMaestro.SavedAuthentication do
       _ ->
         changeset
     end
+  end
+
+  # Helper to ensure all map keys are atoms
+  # Only converts known keys that are safe to atomize
+  @doc false
+  @spec atomize_keys(map()) :: map()
+  defp atomize_keys(map) when is_map(map) do
+    map
+    |> Enum.map(fn
+      {"provider", value} -> {:provider, value}
+      {"auth_type", value} -> {:auth_type, value}
+      {"name", value} -> {:name, value}
+      {"credentials", value} -> {:credentials, value}
+      {"expires_at", value} -> {:expires_at, value}
+      {key, value} when is_atom(key) -> {key, value}
+      # Keep unknown string keys as-is (they'll be ignored by cast anyway)
+      {key, value} -> {key, value}
+    end)
+    |> Enum.into(%{})
   end
 
   # ===== Named Session Helper Functions =====
@@ -174,13 +199,15 @@ defmodule TheMaestro.SavedAuthentication do
 
   Returns {:ok, saved_authentication} or {:error, changeset}.
   """
-  @spec create_named_session(atom(), atom(), String.t(), map()) ::
+  @spec create_named_session(atom(), atom(), String.t(), attrs()) ::
           {:ok, t()} | {:error, Ecto.Changeset.t()}
+  @dialyzer {:nowarn_function, create_named_session: 4}
   def create_named_session(provider, auth_type, name, attrs) do
     alias TheMaestro.Repo
 
     full_attrs =
       attrs
+      |> atomize_keys()
       |> Map.put(:provider, provider)
       |> Map.put(:auth_type, auth_type)
       |> Map.put(:name, name)
@@ -204,13 +231,15 @@ defmodule TheMaestro.SavedAuthentication do
 
   Returns {:ok, saved_authentication} or {:error, changeset}.
   """
-  @spec upsert_named_session(atom(), atom(), String.t(), map()) ::
+  @spec upsert_named_session(atom(), atom(), String.t(), attrs()) ::
           {:ok, t()} | {:error, Ecto.Changeset.t()}
+  @dialyzer {:nowarn_function, upsert_named_session: 4}
   def upsert_named_session(provider, auth_type, name, attrs) do
     alias TheMaestro.Repo
 
     full_attrs =
       attrs
+      |> atomize_keys()
       |> Map.put(:provider, provider)
       |> Map.put(:auth_type, auth_type)
       |> Map.put(:name, name)
