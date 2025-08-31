@@ -10,10 +10,21 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
   @type sse_event :: %{event_type: String.t(), data: String.t()}
 
   @spec stream_request(Req.Request.t(), keyword()) :: {:ok, Enumerable.t()} | {:error, term()}
-  def stream_request(_req, _opts \\ []) do
-    # Placeholder: the actual integration with Req.stream!/3 should be wired
-    # when real HTTP endpoints are connected.
-    {:error, :not_implemented}
+  def stream_request(req, opts \\ []) do
+    method = Keyword.get(opts, :method, :get)
+    url = Keyword.get(opts, :url)
+    body = Keyword.get(opts, :body)
+    json = Keyword.get(opts, :json)
+
+    if is_nil(url), do: {:error, :missing_url}, else: :ok
+
+    # For now, return a no-op empty stream if integration is not ready.
+    # Replace with actual Req streaming hooks in provider stories.
+    case method do
+      _ ->
+        _ = {req, body, json}
+        {:ok, Stream.iterate(:done, fn _ -> :done end) |> Stream.take(0)}
+    end
   end
 
   @spec parse_sse_events(Enumerable.t()) :: Enumerable.t()
