@@ -329,51 +329,58 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
     end
   end
 
-  # Refresh Anthropic OAuth token using HTTPoison
+  # Refresh Anthropic OAuth token using Req
   defp refresh_anthropic_token(refresh_token) do
     # OAuth token refresh endpoint for Anthropic
     token_endpoint = "https://auth.anthropic.com/oauth/token"
 
     # Get client_id from configuration - this would typically be stored in config
     # For now, we'll need to handle this properly in the configuration
-    client_id = Application.get_env(:the_maestro, :anthropic_oauth_client_id)
-
-    if client_id do
-      request_body = %{
-        "grant_type" => "refresh_token",
-        "refresh_token" => refresh_token,
-        "client_id" => client_id
-      }
-
-      headers = [{"content-type", "application/json"}]
-      json_body = Jason.encode!(request_body)
-
-      http_client = Application.get_env(:the_maestro, :http_client, HTTPoison)
-
-      case http_client.post(token_endpoint, json_body, headers) do
-        {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-          response_data = Jason.decode!(response_body)
-          map_refresh_response(response_data)
-
-        {:ok, %HTTPoison.Response{status_code: 401, body: _}} ->
-          {:error, :invalid_refresh_token}
-
-        {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
-          Logger.error("Token refresh failed with status #{status}: #{response_body}")
-          {:error, :token_refresh_failed}
-
-        {:error, reason} ->
-          Logger.error("Network error during token refresh: #{inspect(reason)}")
-          {:error, :network_error}
-      end
+    with {:ok, client_id} <- fetch_anthropic_client_id(),
+         request_body <- %{
+           "grant_type" => "refresh_token",
+           "refresh_token" => refresh_token,
+           "client_id" => client_id
+         },
+         req <- Req.new(headers: [{"content-type", "application/json"}], finch: :anthropic_finch),
+         {:ok, %Req.Response{} = resp} <-
+           Req.request(req, method: :post, url: token_endpoint, json: request_body) do
+      handle_refresh_response(resp)
     else
-      Logger.error("Missing Anthropic OAuth client_id configuration")
-      {:error, :missing_client_id}
+      {:error, :missing_client_id} ->
+        Logger.error("Missing Anthropic OAuth client_id configuration")
+        {:error, :missing_client_id}
+
+      {:error, reason} ->
+        Logger.error("Network error during token refresh: #{inspect(reason)}")
+        {:error, :network_error}
     end
   rescue
     error ->
       Logger.error("Unexpected error during token refresh: #{inspect(error)}")
       {:error, :refresh_error}
+  end
+
+  defp fetch_anthropic_client_id do
+    case Application.get_env(:the_maestro, :anthropic_oauth_client_id) do
+      nil -> {:error, :missing_client_id}
+      id -> {:ok, id}
+    end
+  end
+
+  defp handle_refresh_response(%Req.Response{status: 200, body: body}) do
+    response_data = if is_binary(body), do: Jason.decode!(body), else: body
+    map_refresh_response(response_data)
+  end
+
+  defp handle_refresh_response(%Req.Response{status: 401}) do
+    {:error, :invalid_refresh_token}
+  end
+
+  defp handle_refresh_response(%Req.Response{status: status, body: body}) do
+    response_body = if is_binary(body), do: body, else: Jason.encode!(body)
+    Logger.error("Token refresh failed with status #{status}: #{response_body}")
+    {:error, :token_refresh_failed}
   end
 
   # Map refresh token response to OAuthToken struct

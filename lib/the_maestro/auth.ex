@@ -361,11 +361,19 @@ defmodule TheMaestro.Auth do
     headers = [{"content-type", "application/json"}]
     json_body = Jason.encode!(request_body)
 
-    case HTTPoison.post(config.token_endpoint, json_body, headers) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-        map_token_response(Jason.decode!(response_body))
+    req = Req.new(headers: headers, finch: :anthropic_finch)
 
-      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
+    case Req.request(req,
+           method: :post,
+           url: config.token_endpoint,
+           json: request_body
+         ) do
+      {:ok, %Req.Response{status: 200, body: body}} ->
+        decoded = if is_binary(body), do: Jason.decode!(body), else: body
+        map_token_response(decoded)
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        response_body = if is_binary(body), do: body, else: Jason.encode!(body)
         Logger.error("Token exchange failed with status #{status}: #{response_body}")
         {:error, {:token_exchange_failed, status, response_body}}
 
@@ -672,26 +680,27 @@ defmodule TheMaestro.Auth do
   @spec exchange_openai_code_for_tokens(String.t(), PKCEParams.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
   def exchange_openai_code_for_tokens(auth_code, pkce_params) do
-    with {:ok, config} <- get_openai_oauth_config(),
-         request_body <- build_openai_token_request(auth_code, pkce_params, config),
-         headers <- [{"content-type", "application/x-www-form-urlencoded"}],
-         form_body <- URI.encode_query(request_body),
-         {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} <-
-           HTTPoison.post(config.token_endpoint, form_body, headers),
-         {:ok, decoded} <- Jason.decode(response_body) do
-      validate_openai_token_response(decoded)
-    else
-      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
-        Logger.error("OpenAI token exchange failed with status #{status}: #{response_body}")
-        {:error, {:token_exchange_failed, status, response_body}}
+    with {:ok, config} <- get_openai_oauth_config() do
+      request_body = build_openai_token_request(auth_code, pkce_params, config)
+      headers = [{"content-type", "application/x-www-form-urlencoded"}]
+      form_body = URI.encode_query(request_body)
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        Logger.error("OpenAI token request failed: #{inspect(reason)}")
-        {:error, {:token_request_failed, reason}}
+      req = Req.new(headers: headers, finch: :openai_finch)
 
-      {:error, reason} ->
-        Logger.error("Failed to decode token response: #{inspect(reason)}")
-        {:error, :token_decode_failed}
+      case Req.request(req, method: :post, url: config.token_endpoint, body: form_body) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          decoded = if is_binary(body), do: Jason.decode!(body), else: body
+          validate_openai_token_response(decoded)
+
+        {:ok, %Req.Response{status: status, body: body}} ->
+          response_body = if is_binary(body), do: body, else: Jason.encode!(body)
+          Logger.error("OpenAI token exchange failed with status #{status}: #{response_body}")
+          {:error, {:token_exchange_failed, status, response_body}}
+
+        {:error, reason} ->
+          Logger.error("OpenAI token request failed: #{inspect(reason)}")
+          {:error, {:token_request_failed, reason}}
+      end
     end
   end
 
