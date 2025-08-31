@@ -9,8 +9,14 @@ defmodule TheMaestro.StreamingTest do
   describe "OpenAI streaming" do
     test "handles text content deltas" do
       events = [
-        %{event_type: "message", data: ~s/{"type": "response.output_text.delta", "delta": "Hello"}/},
-        %{event_type: "message", data: ~s/{"type": "response.output_text.delta", "delta": " world"}/},
+        %{
+          event_type: "message",
+          data: ~s/{"type": "response.output_text.delta", "delta": "Hello"}/
+        },
+        %{
+          event_type: "message",
+          data: ~s/{"type": "response.output_text.delta", "delta": " world"}/
+        },
         %{event_type: "done", data: "[DONE]"}
       ]
 
@@ -28,9 +34,14 @@ defmodule TheMaestro.StreamingTest do
     end
 
     test "handles reasoning JSON" do
-      reasoning_json = "{\\\"reasoning\\\": \\\"I need to calculate 2+2\\\", \\\"answer\\\": \\\"4\\\"}"
+      reasoning_json =
+        "{\\\"reasoning\\\": \\\"I need to calculate 2+2\\\", \\\"answer\\\": \\\"4\\\"}"
+
       events = [
-        %{event_type: "message", data: ~s/{"type": "response.output_text.delta", "delta": "#{reasoning_json}"}/},
+        %{
+          event_type: "message",
+          data: ~s/{"type": "response.output_text.delta", "delta": "#{reasoning_json}"}/
+        },
         %{event_type: "done", data: "[DONE]"}
       ]
 
@@ -39,12 +50,15 @@ defmodule TheMaestro.StreamingTest do
       content_messages = Enum.filter(messages, &(&1.type == :content))
       assert length(content_messages) == 2
 
-      thinking_msg = Enum.find(content_messages, fn msg ->
-        msg.content && String.starts_with?(msg.content, "Thinking:")
-      end)
-      answer_msg = Enum.find(content_messages, fn msg ->
-        msg.content == "4"
-      end)
+      thinking_msg =
+        Enum.find(content_messages, fn msg ->
+          msg.content && String.starts_with?(msg.content, "Thinking:")
+        end)
+
+      answer_msg =
+        Enum.find(content_messages, fn msg ->
+          msg.content == "4"
+        end)
 
       assert thinking_msg
       assert answer_msg
@@ -52,10 +66,26 @@ defmodule TheMaestro.StreamingTest do
 
     test "handles function calls" do
       events = [
-        %{event_type: "message", data: ~s/{"type": "response.output_item.added", "item": {"type": "function_call", "id": "call_1", "name": "get_weather", "call_id": "call_1"}}/},
-        %{event_type: "message", data: ~s/{"type": "response.function_call_arguments.delta", "item_id": "call_1", "delta": "{\\"city\\": \\"San"}/},
-        %{event_type: "message", data: ~s/{"type": "response.function_call_arguments.delta", "item_id": "call_1", "delta": " Francisco\\"}"}/},
-        %{event_type: "message", data: ~s/{"type": "response.output_item.done", "item": {"type": "function_call", "id": "call_1", "arguments": "{\\"city\\": \\"San Francisco\\"}"}}/},
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "response.output_item.added", "item": {"type": "function_call", "id": "call_1", "name": "get_weather", "call_id": "call_1"}}/
+        },
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "response.function_call_arguments.delta", "item_id": "call_1", "delta": "{\\"city\\": \\"San"}/
+        },
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "response.function_call_arguments.delta", "item_id": "call_1", "delta": " Francisco\\"}"}/
+        },
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "response.output_item.done", "item": {"type": "function_call", "id": "call_1", "arguments": "{\\"city\\": \\"San Francisco\\"}"}}/
+        },
         %{event_type: "done", data: "[DONE]"}
       ]
 
@@ -74,7 +104,11 @@ defmodule TheMaestro.StreamingTest do
 
     test "handles usage data" do
       events = [
-        %{event_type: "message", data: ~s/{"type": "response.completed", "response": {"usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}}}/},
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "response.completed", "response": {"usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}}}/
+        },
         %{event_type: "done", data: "[DONE]"}
       ]
 
@@ -89,8 +123,16 @@ defmodule TheMaestro.StreamingTest do
   describe "Anthropic streaming" do
     test "handles text deltas" do
       events = [
-        %{event_type: "message", data: ~s/{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hello"}}/},
-        %{event_type: "message", data: ~s/{"type": "content_block_delta", "delta": {"type": "text_delta", "text": " world"}}/},
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hello"}}/
+        },
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "content_block_delta", "delta": {"type": "text_delta", "text": " world"}}/
+        },
         %{event_type: "message", data: ~s/{"type": "message_stop"}/},
         %{event_type: "done", data: "[DONE]"}
       ]
@@ -109,9 +151,21 @@ defmodule TheMaestro.StreamingTest do
 
     test "handles tool use" do
       events = [
-        %{event_type: "message", data: ~s/{"type": "content_block_start", "content_block": {"type": "tool_use", "id": "tool_1", "name": "search"}}/},
-        %{event_type: "message", data: ~s/{"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": "{\\"query\\": \\"test"}}/},
-        %{event_type: "message", data: ~s/{"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": "\\"}"}}/},
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "content_block_start", "content_block": {"type": "tool_use", "id": "tool_1", "name": "search"}}/
+        },
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": "{\\"query\\": \\"test"}}/
+        },
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": "\\"}"}}/
+        },
         %{event_type: "message", data: ~s/{"type": "content_block_stop"}/},
         %{event_type: "message", data: ~s/{"type": "message_stop"}/},
         %{event_type: "done", data: "[DONE]"}
@@ -132,8 +186,15 @@ defmodule TheMaestro.StreamingTest do
 
     test "handles usage updates" do
       events = [
-        %{event_type: "message", data: ~s/{"type": "message_start", "message": {"usage": {"input_tokens": 10, "output_tokens": 0}}}/},
-        %{event_type: "message", data: ~s/{"type": "message_delta", "usage": {"output_tokens": 5}}/},
+        %{
+          event_type: "message",
+          data:
+            ~s/{"type": "message_start", "message": {"usage": {"input_tokens": 10, "output_tokens": 0}}}/
+        },
+        %{
+          event_type: "message",
+          data: ~s/{"type": "message_delta", "usage": {"output_tokens": 5}}/
+        },
         %{event_type: "message", data: ~s/{"type": "message_stop"}/},
         %{event_type: "done", data: "[DONE]"}
       ]
@@ -152,21 +213,30 @@ defmodule TheMaestro.StreamingTest do
   describe "Gemini streaming" do
     test "handles text content" do
       events = [
-        %{event_type: "message", data: ~s/{"candidates": [{"content": {"parts": [{"text": "Hello world"}]}}]}/},
+        %{
+          event_type: "message",
+          data: ~s/{"candidates": [{"content": {"parts": [{"text": "Hello world"}]}}]}/
+        },
         %{event_type: "done", data: "[DONE]"}
       ]
 
       messages = process_events(events, GeminiHandler)
 
-      content_msg = Enum.find(messages, fn msg ->
-        msg.type == :content && msg.content == "Hello world"
-      end)
+      content_msg =
+        Enum.find(messages, fn msg ->
+          msg.type == :content && msg.content == "Hello world"
+        end)
+
       assert content_msg
     end
 
     test "handles function calls" do
       events = [
-        %{event_type: "message", data: ~s/{"candidates": [{"content": {"parts": [{"functionCall": {"name": "search", "args": {"query": "test"}}}]}}]}/},
+        %{
+          event_type: "message",
+          data:
+            ~s/{"candidates": [{"content": {"parts": [{"functionCall": {"name": "search", "args": {"query": "test"}}}]}}]}/
+        },
         %{event_type: "done", data: "[DONE]"}
       ]
 
@@ -179,7 +249,11 @@ defmodule TheMaestro.StreamingTest do
 
     test "handles usage metadata" do
       events = [
-        %{event_type: "message", data: ~s/{"candidates": [{"content": {"parts": [{"text": "Hello"}]}}], "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 1, "totalTokenCount": 6}}/},
+        %{
+          event_type: "message",
+          data:
+            ~s/{"candidates": [{"content": {"parts": [{"text": "Hello"}]}}], "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 1, "totalTokenCount": 6}}/
+        },
         %{event_type: "done", data: "[DONE]"}
       ]
 

@@ -11,4 +11,10 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
     Logger.debug("OpenAI.Streaming.stream_chat/3 stub called")
     {:error, :not_implemented}
   end
+
+  @impl true
+  def parse_stream_event(_event, state) do
+    Logger.debug("OpenAI.Streaming.parse_stream_event/2 stub called")
+    {[], state}
+  end
 end

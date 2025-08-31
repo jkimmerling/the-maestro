@@ -9,4 +9,10 @@ defmodule TheMaestro.Providers.Anthropic.Models do
     Logger.debug("Anthropic.Models.list_models/1 stub called")
     {:error, :not_implemented}
   end
+
+  @impl true
+  def get_model_info(_session_id, _model_id) do
+    Logger.debug("Anthropic.Models.get_model_info/2 stub called")
+    {:error, :not_implemented}
+  end
 end

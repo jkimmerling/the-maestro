@@ -9,4 +9,10 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     Logger.debug("Gemini.Streaming.stream_chat/3 stub called")
     {:error, :not_implemented}
   end
+
+  @impl true
+  def parse_stream_event(_event, state) do
+    Logger.debug("Gemini.Streaming.parse_stream_event/2 stub called")
+    {[], state}
+  end
 end

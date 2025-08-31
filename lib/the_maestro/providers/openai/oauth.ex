@@ -12,11 +12,13 @@ defmodule TheMaestro.Providers.OpenAI.OAuth do
     Logger.debug("OpenAI.OAuth.create_session/1 stub called")
     {:error, :not_implemented}
   end
+
   @impl true
   def delete_session(_session_id) do
     Logger.debug("OpenAI.OAuth.delete_session/1 stub called")
     :ok
   end
+
   @impl true
   def refresh_tokens(_session_id) do
     Logger.debug("OpenAI.OAuth.refresh_tokens/1 stub called")

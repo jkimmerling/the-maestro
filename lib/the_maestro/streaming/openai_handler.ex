@@ -58,7 +58,8 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     [done_message()]
   end
 
-  def handle_event(%{event_type: event_type, data: data}, opts) when event_type in ["message", "delta"] do
+  def handle_event(%{event_type: event_type, data: data}, opts)
+      when event_type in ["message", "delta"] do
     case safe_json_decode(data) do
       {:ok, event} -> handle_openai_event(event, opts)
       {:error, reason} -> [error_message(reason)]
@@ -95,7 +96,8 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
 
   defp handle_openai_event(%{"type" => "response.function_call_arguments.delta"} = event, _opts) do
     handle_function_arguments_delta(event)
-    [] # Don't emit messages until function call is complete
+    # Don't emit messages until function call is complete
+    []
   end
 
   defp handle_openai_event(%{"type" => "response.output_item.done"} = event, _opts) do
@@ -110,16 +112,19 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     messages = []
 
     # Extract usage data if present
-    messages = if usage = get_in(event, ["response", "usage"]) do
-      usage_msg = usage_message(%{
-        prompt_tokens: Map.get(usage, "input_tokens", 0),
-        completion_tokens: Map.get(usage, "output_tokens", 0),
-        total_tokens: Map.get(usage, "total_tokens", 0)
-      })
-      [usage_msg | messages]
-    else
-      messages
-    end
+    messages =
+      if usage = get_in(event, ["response", "usage"]) do
+        usage_msg =
+          usage_message(%{
+            prompt_tokens: Map.get(usage, "input_tokens", 0),
+            completion_tokens: Map.get(usage, "output_tokens", 0),
+            total_tokens: Map.get(usage, "total_tokens", 0)
+          })
+
+        [usage_msg | messages]
+      else
+        messages
+      end
 
     # Clean up state
     cleanup_state()
@@ -189,7 +194,8 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     new_calls = Map.put(function_calls, call_data.id, call_data)
     put_function_calls(new_calls)
 
-    [] # Don't emit until complete
+    # Don't emit until complete
+    []
   end
 
   # Handle function call arguments delta
@@ -199,6 +205,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
 
     if item_id do
       function_calls = get_function_calls()
+
       if Map.has_key?(function_calls, item_id) do
         call_data = Map.get(function_calls, item_id)
         updated_call = %{call_data | arguments: call_data.arguments <> delta}
@@ -217,6 +224,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
 
     if item_id do
       function_calls = get_function_calls()
+
       if call_data = Map.get(function_calls, item_id) do
         # Update with final arguments if provided
         final_arguments = Map.get(item, "arguments", call_data.arguments)
@@ -260,7 +268,8 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
 
   # Handle completed message items
   defp handle_message_done(event) do
-    put_text_accumulator("") # Reset accumulator at message boundaries
+    # Reset accumulator at message boundaries
+    put_text_accumulator("")
     handle_message_item(event)
   end
 
@@ -290,14 +299,21 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     case Jason.decode(text) do
       {:ok, %{"reasoning" => reasoning} = parsed} ->
         answer = Map.get(parsed, "answer") || Map.get(parsed, "response")
-        answer_text = if is_list(answer) do
-          Enum.join(answer, " ")
-        else
-          to_string(answer || "")
-        end
+
+        answer_text =
+          if is_list(answer) do
+            Enum.join(answer, " ")
+          else
+            to_string(answer || "")
+          end
+
         {:ok, reasoning, answer_text}
-      {:ok, _} -> {:error, :not_reasoning}
-      {:error, reason} -> {:error, reason}
+
+      {:ok, _} ->
+        {:error, :not_reasoning}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

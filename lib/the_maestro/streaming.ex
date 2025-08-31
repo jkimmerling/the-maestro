@@ -59,13 +59,13 @@ defmodule TheMaestro.Streaming do
   @type message_type :: :content | :function_call | :usage | :error | :done
 
   @type stream_message :: %{
-    type: message_type(),
-    content: String.t() | nil,
-    function_call: map() | nil,
-    usage: map() | nil,
-    error: String.t() | nil,
-    metadata: map()
-  }
+          type: message_type(),
+          content: String.t() | nil,
+          function_call: map() | nil,
+          usage: map() | nil,
+          error: String.t() | nil,
+          metadata: map()
+        }
 
   @doc """
   Parse a streaming response from the specified provider.
@@ -105,7 +105,17 @@ defmodule TheMaestro.Streaming do
   rescue
     error ->
       Logger.error("Stream parsing failed for #{provider}: #{inspect(error)}")
-      [%{type: :error, error: "Stream parsing failed: #{inspect(error)}", content: nil, function_call: nil, usage: nil, metadata: %{}}]
+
+      [
+        %{
+          type: :error,
+          error: "Stream parsing failed: #{inspect(error)}",
+          content: nil,
+          function_call: nil,
+          usage: nil,
+          metadata: %{}
+        }
+      ]
   end
 
   @doc """
@@ -161,6 +171,7 @@ defmodule TheMaestro.Streaming do
   defp get_handler(:openai), do: TheMaestro.Streaming.OpenAIHandler
   defp get_handler(:anthropic), do: TheMaestro.Streaming.AnthropicHandler
   defp get_handler(:gemini), do: TheMaestro.Streaming.GeminiHandler
+
   defp get_handler(provider) do
     raise ArgumentError, "Unsupported provider: #{inspect(provider)}"
   end
@@ -174,7 +185,7 @@ defmodule TheMaestro.Streaming do
     events =
       complete_events
       |> Enum.map(&parse_sse_event/1)
-      |> Enum.filter(& &1 != nil)
+      |> Enum.filter(&(&1 != nil))
 
     remaining_buffer = List.first(remaining) || ""
     {events, remaining_buffer}
@@ -194,7 +205,7 @@ defmodule TheMaestro.Streaming do
         String.starts_with?(line, "data: ") ->
           data = String.trim_leading(line, "data: ")
           existing_data = Map.get(acc, :data, "")
-          new_data = (existing_data == "" && data) || (existing_data <> "\n" <> data)
+          new_data = (existing_data == "" && data) || existing_data <> "\n" <> data
           %{acc | data: new_data}
 
         String.trim(line) == "" ->
@@ -208,7 +219,8 @@ defmodule TheMaestro.Streaming do
   end
 
   # Read a chunk from the stream (implementation depends on stream type)
-  @spec read_stream_chunk(term(), non_neg_integer()) :: {:ok, binary()} | {:done} | {:error, term()}
+  @spec read_stream_chunk(term(), non_neg_integer()) ::
+          {:ok, binary()} | {:done} | {:error, term()}
   defp read_stream_chunk(stream, _buffer_size) do
     cond do
       is_binary(stream) -> {:ok, stream}

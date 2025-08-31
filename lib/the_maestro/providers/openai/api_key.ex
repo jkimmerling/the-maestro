@@ -11,11 +11,13 @@ defmodule TheMaestro.Providers.OpenAI.APIKey do
     Logger.debug("OpenAI.APIKey.create_session/1 stub called")
     {:error, :not_implemented}
   end
+
   @impl true
   def delete_session(_session_id) do
     Logger.debug("OpenAI.APIKey.delete_session/1 stub called")
     :ok
   end
+
   @impl true
   def refresh_tokens(_session_id) do
     Logger.debug("OpenAI.APIKey.refresh_tokens/1 stub called")

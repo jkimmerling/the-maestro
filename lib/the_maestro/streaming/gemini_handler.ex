@@ -43,7 +43,8 @@ defmodule TheMaestro.Streaming.GeminiHandler do
     [done_message()]
   end
 
-  def handle_event(%{event_type: event_type, data: data}, opts) when event_type in ["message", "delta"] do
+  def handle_event(%{event_type: event_type, data: data}, opts)
+      when event_type in ["message", "delta"] do
     case safe_json_decode(data) do
       {:ok, event} -> handle_gemini_event(event, opts)
       {:error, reason} -> [error_message(reason)]
@@ -63,21 +64,25 @@ defmodule TheMaestro.Streaming.GeminiHandler do
     candidates = Map.get(event, "candidates", [])
 
     # Process each candidate
-    messages = Enum.reduce(candidates, messages, fn candidate, acc ->
-      handle_candidate(candidate, acc)
-    end)
+    messages =
+      Enum.reduce(candidates, messages, fn candidate, acc ->
+        handle_candidate(candidate, acc)
+      end)
 
     # Extract usage information if present
-    messages = if usage = Map.get(event, "usageMetadata") do
-      usage_msg = usage_message(%{
-        prompt_tokens: Map.get(usage, "promptTokenCount", 0),
-        completion_tokens: Map.get(usage, "candidatesTokenCount", 0),
-        total_tokens: Map.get(usage, "totalTokenCount", 0)
-      })
-      [usage_msg | messages]
-    else
-      messages
-    end
+    messages =
+      if usage = Map.get(event, "usageMetadata") do
+        usage_msg =
+          usage_message(%{
+            prompt_tokens: Map.get(usage, "promptTokenCount", 0),
+            completion_tokens: Map.get(usage, "candidatesTokenCount", 0),
+            total_tokens: Map.get(usage, "totalTokenCount", 0)
+          })
+
+        [usage_msg | messages]
+      else
+        messages
+      end
 
     Enum.reverse(messages)
   end
@@ -119,6 +124,6 @@ defmodule TheMaestro.Streaming.GeminiHandler do
 
   # Generate a unique call ID for function calls
   defp generate_call_id do
-    "call_" <> :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)
+    ("call_" <> :crypto.strong_rand_bytes(8)) |> Base.url_encode64(padding: false)
   end
 end

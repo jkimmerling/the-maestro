@@ -40,9 +40,14 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
     {event, data} =
       Enum.reduce(lines, {"message", ""}, fn line, {ev, acc} ->
         cond do
-          String.starts_with?(line, "event: ") -> {String.trim_leading(line, "event: "), acc}
-          String.starts_with?(line, "data: ") -> {ev, append_data(acc, String.trim_leading(line, "data: "))}
-          true -> {ev, acc}
+          String.starts_with?(line, "event: ") ->
+            {String.trim_leading(line, "event: "), acc}
+
+          String.starts_with?(line, "data: ") ->
+            {ev, append_data(acc, String.trim_leading(line, "data: "))}
+
+          true ->
+            {ev, acc}
         end
       end)
 

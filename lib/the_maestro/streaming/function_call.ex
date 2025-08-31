@@ -15,6 +15,7 @@ defmodule TheMaestro.Streaming.FunctionCall do
           function: TheMaestro.Streaming.Function.t()
         }
 end
+
 defmodule TheMaestro.Streaming.Function do
   @moduledoc """
   Typed struct for function details (name + JSON arguments).

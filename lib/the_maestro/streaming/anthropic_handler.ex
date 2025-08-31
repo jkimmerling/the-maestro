@@ -55,7 +55,8 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
     [done_message()]
   end
 
-  def handle_event(%{event_type: event_type, data: data}, opts) when event_type in ["message", "delta"] do
+  def handle_event(%{event_type: event_type, data: data}, opts)
+      when event_type in ["message", "delta"] do
     case safe_json_decode(data) do
       {:ok, event} -> handle_anthropic_event(event, opts)
       {:error, reason} -> [error_message(reason)]
@@ -77,14 +78,17 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
         input_tokens: Map.get(usage, "input_tokens", 0),
         output_tokens: Map.get(usage, "output_tokens", 0)
       }
+
       put_current_usage(current_usage)
 
       # Emit initial usage message
-      usage_msg = usage_message(%{
-        prompt_tokens: current_usage.input_tokens,
-        completion_tokens: current_usage.output_tokens,
-        total_tokens: current_usage.input_tokens + current_usage.output_tokens
-      })
+      usage_msg =
+        usage_message(%{
+          prompt_tokens: current_usage.input_tokens,
+          completion_tokens: current_usage.output_tokens,
+          total_tokens: current_usage.input_tokens + current_usage.output_tokens
+        })
+
       [usage_msg | messages]
     else
       messages
@@ -121,11 +125,13 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
     messages = []
 
     if current_usage = get_current_usage() do
-      usage_msg = usage_message(%{
-        prompt_tokens: current_usage.input_tokens,
-        completion_tokens: current_usage.output_tokens,
-        total_tokens: current_usage.input_tokens + current_usage.output_tokens
-      })
+      usage_msg =
+        usage_message(%{
+          prompt_tokens: current_usage.input_tokens,
+          completion_tokens: current_usage.output_tokens,
+          total_tokens: current_usage.input_tokens + current_usage.output_tokens
+        })
+
       _messages = [usage_msg | messages]
     end
 
@@ -158,7 +164,8 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
     }
 
     put_current_tool_call(tool_call)
-    [] # Don't emit until complete
+    # Don't emit until complete
+    []
   end
 
   # Handle tool input JSON deltas
@@ -169,7 +176,8 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
       put_current_tool_call(updated_call)
     end
 
-    [] # Don't emit until complete
+    # Don't emit until complete
+    []
   end
 
   alias TheMaestro.Streaming.{Function, FunctionCall}
@@ -178,10 +186,11 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
   defp handle_tool_use_complete do
     if current_tool_call = get_current_tool_call() do
       # Parse the completed input JSON
-      input = case Jason.decode(current_tool_call.input) do
-        {:ok, parsed} -> parsed
-        {:error, _} -> current_tool_call.input
-      end
+      input =
+        case Jason.decode(current_tool_call.input) do
+          {:ok, parsed} -> parsed
+          {:error, _} -> current_tool_call.input
+        end
 
       # Create function call message in OpenAI format for consistency
       function_call = %FunctionCall{
@@ -211,11 +220,12 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
       put_current_usage(updated_usage)
 
       # Emit updated usage
-      usage_msg = usage_message(%{
-        prompt_tokens: updated_usage.input_tokens,
-        completion_tokens: updated_usage.output_tokens,
-        total_tokens: updated_usage.input_tokens + updated_usage.output_tokens
-      })
+      usage_msg =
+        usage_message(%{
+          prompt_tokens: updated_usage.input_tokens,
+          completion_tokens: updated_usage.output_tokens,
+          total_tokens: updated_usage.input_tokens + updated_usage.output_tokens
+        })
 
       [usage_msg]
     else

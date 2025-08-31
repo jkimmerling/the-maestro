@@ -35,9 +35,9 @@ defmodule TheMaestro.Streaming.StreamHandler do
   """
 
   @type sse_event :: %{
-    event_type: String.t(),
-    data: String.t()
-  }
+          event_type: String.t(),
+          data: String.t()
+        }
 
   alias TheMaestro.Streaming.Message
   @type stream_message :: Message.t()

@@ -17,6 +17,13 @@ defmodule TheMaestro.Types do
   @typedoc "Model identifier"
   @type model_id :: String.t()
 
+  @typedoc "Model information structure"
+  @type model :: %{
+          id: String.t(),
+          name: String.t(),
+          capabilities: [String.t()]
+        }
+
   @typedoc "Provider capability descriptor"
   @type provider_capabilities :: %{
           auth_types: [auth_type()],

@@ -506,9 +506,7 @@ defmodule TheMaestro.Auth do
       {:ok, api_key}
     else
       {:ok, %HTTPoison.Response{status_code: status_code, body: error_body}} ->
-        Logger.error(
-          "OpenAI API key exchange failed with status #{status_code}: #{error_body}"
-        )
+        Logger.error("OpenAI API key exchange failed with status #{status_code}: #{error_body}")
 
         {:error, {:api_key_exchange_failed, status_code, error_body}}
 
@@ -604,34 +602,36 @@ defmodule TheMaestro.Auth do
   def complete_openai_oauth_flow(auth_code, pkce_params) do
     with {:ok, tokens} <- exchange_openai_code_for_tokens(auth_code, pkce_params),
          {:ok, auth_mode} <- determine_openai_auth_mode(tokens.id_token) do
-
       case auth_mode do
         :chatgpt ->
           Logger.info("Using ChatGPT mode - personal account detected")
-          {:ok, %{
-            auth_mode: :chatgpt,
-            access_token: tokens.access_token,
-            id_token: tokens.id_token,
-            refresh_token: tokens.refresh_token
-          }}
+
+          {:ok,
+           %{
+             auth_mode: :chatgpt,
+             access_token: tokens.access_token,
+             id_token: tokens.id_token,
+             refresh_token: tokens.refresh_token
+           }}
 
         :api_key ->
           Logger.info("Using API Key mode - enterprise account detected")
+
           case exchange_openai_id_token_for_api_key(tokens.id_token) do
             {:ok, api_key} ->
-              {:ok, %{
-                auth_mode: :api_key,
-                api_key: api_key,
-                id_token: tokens.id_token,
-                refresh_token: tokens.refresh_token
-              }}
+              {:ok,
+               %{
+                 auth_mode: :api_key,
+                 api_key: api_key,
+                 id_token: tokens.id_token,
+                 refresh_token: tokens.refresh_token
+               }}
 
             {:error, reason} ->
               Logger.error("API key exchange failed: #{inspect(reason)}")
               {:error, {:api_key_exchange_failed, reason}}
           end
       end
-
     else
       {:error, reason} ->
         Logger.error("OpenAI OAuth flow failed: #{inspect(reason)}")
@@ -721,10 +721,10 @@ defmodule TheMaestro.Auth do
       token_endpoint: token_env || OpenAIOAuthConfig.__struct__().token_endpoint,
       redirect_uri: redirect_env || OpenAIOAuthConfig.__struct__().redirect_uri,
       scopes:
-        (case scopes_env do
-           nil -> OpenAIOAuthConfig.__struct__().scopes
-           s when is_binary(s) -> String.split(s, ",", trim: true) |> Enum.map(&String.trim/1)
-         end)
+        case scopes_env do
+          nil -> OpenAIOAuthConfig.__struct__().scopes
+          s when is_binary(s) -> String.split(s, ",", trim: true) |> Enum.map(&String.trim/1)
+        end
     }
 
     strict? = System.get_env("OPENAI_OAUTH_STRICT") in ["1", "true", "TRUE"]
@@ -943,7 +943,8 @@ defmodule TheMaestro.Auth do
     * `{:error, term()}` - Error during validation
 
   """
-  @spec validate_openai_oauth_documentation() :: {:ok, map()} | {:error, {:validation_failed, map()}}
+  @spec validate_openai_oauth_documentation() ::
+          {:ok, map()} | {:error, {:validation_failed, map()}}
   def validate_openai_oauth_documentation do
     {:ok, config} = get_openai_oauth_config()
 

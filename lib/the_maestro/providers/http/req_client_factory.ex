@@ -16,7 +16,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   def create_client(provider, auth_type \\ :api_key, opts \\ []) do
     with {:ok, base_url, pool} <- provider_base_and_pool(provider),
          {:ok, headers} <- build_headers(provider, auth_type, opts),
-         retry_opts <- Keyword.get(opts, :retry, [max_retries: 2, backoff_factor: 2.0]) do
+         retry_opts <- Keyword.get(opts, :retry, max_retries: 2, backoff_factor: 2.0) do
       req =
         Req.new(
           base_url: base_url,
@@ -64,6 +64,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
         {:error, :missing_api_key}
     end
   end
+
   def build_headers(:anthropic, :oauth, _opts) do
     # OAuth header composition would include Bearer token pulled from DB/session
     # For Story 0.2, leave unimplemented.
@@ -76,8 +77,12 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     org_id = Keyword.get(cfg, :organization_id)
 
     cond do
-      !is_binary(api_key) or api_key == "" -> {:error, :missing_api_key}
-      !is_binary(org_id) or org_id == "" -> {:error, :missing_org_id}
+      !is_binary(api_key) or api_key == "" ->
+        {:error, :missing_api_key}
+
+      !is_binary(org_id) or org_id == "" ->
+        {:error, :missing_org_id}
+
       true ->
         headers = [
           {"authorization", "Bearer #{api_key}"},
