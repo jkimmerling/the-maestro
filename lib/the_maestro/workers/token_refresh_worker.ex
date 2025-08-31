@@ -342,23 +342,51 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
            "refresh_token" => refresh_token,
            "client_id" => client_id
          },
-         req <- Req.new(headers: [{"content-type", "application/json"}], finch: :anthropic_finch),
-         {:ok, %Req.Response{} = resp} <-
-           Req.request(req, method: :post, url: token_endpoint, json: request_body) do
-      handle_refresh_response(resp)
+         result <- do_token_refresh_request(token_endpoint, request_body) do
+      result
     else
       {:error, :missing_client_id} ->
         Logger.error("Missing Anthropic OAuth client_id configuration")
         {:error, :missing_client_id}
-
-      {:error, reason} ->
-        Logger.error("Network error during token refresh: #{inspect(reason)}")
-        {:error, :network_error}
     end
   rescue
     error ->
       Logger.error("Unexpected error during token refresh: #{inspect(error)}")
       {:error, :refresh_error}
+  end
+
+  defp do_token_refresh_request(url, request_body) do
+    case Application.get_env(:the_maestro, :http_client) do
+      nil ->
+        # Default to Req
+        req = Req.new(headers: [{"content-type", "application/json"}], finch: :anthropic_finch)
+
+        case Req.request(req, method: :post, url: url, json: request_body) do
+          {:ok, %Req.Response{} = resp} -> handle_refresh_response(resp)
+          {:error, reason} -> {:error, reason}
+        end
+
+      http_client ->
+        # Backwards-compatibility for existing tests using HTTPoisonMock
+        body = Jason.encode!(request_body)
+        headers = [{"content-type", "application/json"}]
+
+        case http_client.post(url, body, headers) do
+          {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
+            response_data = Jason.decode!(response_body)
+            map_refresh_response(response_data)
+
+          {:ok, %HTTPoison.Response{status_code: 401}} ->
+            {:error, :invalid_refresh_token}
+
+          {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
+            Logger.error("Token refresh failed with status #{status}: #{response_body}")
+            {:error, :token_refresh_failed}
+
+          {:error, %HTTPoison.Error{reason: reason}} ->
+            {:error, reason}
+        end
+    end
   end
 
   defp fetch_anthropic_client_id do

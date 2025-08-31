@@ -359,7 +359,6 @@ defmodule TheMaestro.Auth do
     # Send JSON request to OAuth token endpoint (like llxprt fetch)
     # Use direct HTTP request since OAuth endpoint is different from API endpoint
     headers = [{"content-type", "application/json"}]
-    json_body = Jason.encode!(request_body)
 
     req = Req.new(headers: headers, finch: :anthropic_finch)
 
