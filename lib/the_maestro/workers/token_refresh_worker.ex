@@ -356,37 +356,23 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   end
 
   defp do_token_refresh_request(url, request_body) do
-    case Application.get_env(:the_maestro, :http_client) do
-      nil ->
-        # Default to Req
+    case Application.get_env(:the_maestro, :req_request_fun) do
+      fun when is_function(fun, 2) ->
+        req = Req.new(headers: [{"content-type", "application/json"}], finch: :anthropic_finch)
+        case fun.(req, [method: :post, url: url, json: request_body]) do
+          {:ok, %Req.Response{} = resp} -> handle_refresh_response(resp)
+          {:error, reason} -> {:error, reason}
+          other -> {:error, {:unexpected_result, other}}
+        end
+
+      _ ->
         req = Req.new(headers: [{"content-type", "application/json"}], finch: :anthropic_finch)
 
         case Req.request(req, method: :post, url: url, json: request_body) do
           {:ok, %Req.Response{} = resp} -> handle_refresh_response(resp)
           {:error, reason} -> {:error, reason}
         end
-
-      http_client ->
-        # Backwards-compatibility for existing tests using HTTPoisonMock
-        body = Jason.encode!(request_body)
-        headers = [{"content-type", "application/json"}]
-
-        case http_client.post(url, body, headers) do
-          {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-            response_data = Jason.decode!(response_body)
-            map_refresh_response(response_data)
-
-          {:ok, %HTTPoison.Response{status_code: 401}} ->
-            {:error, :invalid_refresh_token}
-
-          {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
-            Logger.error("Token refresh failed with status #{status}: #{response_body}")
-            {:error, :token_refresh_failed}
-
-          {:error, %HTTPoison.Error{reason: _reason}} ->
-            {:error, :network_error}
     end
-  end
   end
 
   defp fetch_anthropic_client_id do

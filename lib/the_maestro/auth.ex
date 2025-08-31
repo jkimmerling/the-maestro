@@ -502,29 +502,36 @@ defmodule TheMaestro.Auth do
   """
   @spec exchange_openai_id_token_for_api_key(String.t()) :: {:ok, String.t()} | {:error, term()}
   def exchange_openai_id_token_for_api_key(id_token) do
-    with {:ok, config} <- get_openai_oauth_config(),
-         token_endpoint <- "https://auth.openai.com/oauth/token",
-         headers <- [{"Content-Type", "application/x-www-form-urlencoded"}],
-         request_body <- build_openai_api_key_request(id_token, config),
-         _ <- Logger.info("Exchanging OpenAI ID token for API key"),
-         {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} <-
-           HTTPoison.post(token_endpoint, request_body, headers),
-         {:ok, %{"access_token" => api_key}} <- Jason.decode(response_body) do
-      Logger.info("Successfully obtained OpenAI API key")
-      {:ok, api_key}
-    else
-      {:ok, %HTTPoison.Response{status_code: status_code, body: error_body}} ->
-        Logger.error("OpenAI API key exchange failed with status #{status_code}: #{error_body}")
+    with {:ok, config} <- get_openai_oauth_config() do
+      token_endpoint = "https://auth.openai.com/oauth/token"
+      headers = [{"content-type", "application/x-www-form-urlencoded"}]
+      request_body = build_openai_api_key_request(id_token, config)
+      _ = Logger.info("Exchanging OpenAI ID token for API key")
 
-        {:error, {:api_key_exchange_failed, status_code, error_body}}
+      req = Req.new(headers: headers, finch: :openai_finch)
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        Logger.error("API key exchange request failed: #{inspect(reason)}")
-        {:error, {:api_key_request_failed, reason}}
+      case Req.request(req, method: :post, url: token_endpoint, body: request_body) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          decoded = if is_binary(body), do: Jason.decode!(body), else: body
+          case decoded do
+            %{"access_token" => api_key} ->
+              Logger.info("Successfully obtained OpenAI API key")
+              {:ok, api_key}
 
-      {:error, decode_error} ->
-        Logger.error("Failed to decode API key response: #{inspect(decode_error)}")
-        {:error, :api_key_decode_error}
+            _ ->
+              Logger.error("Failed to decode API key response: #{inspect(decoded)}")
+              {:error, :api_key_decode_error}
+          end
+
+        {:ok, %Req.Response{status: status_code, body: body}} ->
+          error_body = if is_binary(body), do: body, else: Jason.encode!(body)
+          Logger.error("OpenAI API key exchange failed with status #{status_code}: #{error_body}")
+          {:error, {:api_key_exchange_failed, status_code, error_body}}
+
+        {:error, %Req.TransportError{reason: reason}} ->
+          Logger.error("API key exchange request failed: #{inspect(reason)}")
+          {:error, {:api_key_request_failed, reason}}
+      end
     end
   end
 
