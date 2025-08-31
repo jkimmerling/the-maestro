@@ -296,23 +296,24 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         })
         |> Repo.insert()
 
-      # Mock successful HTTPoison response
-      expect(HTTPoisonMock, :post, fn
-        "https://auth.anthropic.com/oauth/token", body, _ ->
-          decoded = Jason.decode!(body)
-          assert decoded["refresh_token"] == "sk-ant-oar01-current"
+      # Inject Req request function for successful refresh
+      Application.put_env(:the_maestro, :req_request_fun, fn _req, opts ->
+        assert Keyword.get(opts, :method) == :post
+        assert Keyword.get(opts, :url) == "https://auth.anthropic.com/oauth/token"
+        decoded = Keyword.get(opts, :json)
+        assert decoded["refresh_token"] == "sk-ant-oar01-current"
 
-          {:ok,
-           %HTTPoison.Response{
-             status_code: 200,
-             body:
-               Jason.encode!(%{
-                 "access_token" => "sk-ant-oat01-refreshed",
-                 "refresh_token" => "sk-ant-oar01-refreshed",
-                 "expires_in" => 7200,
-                 "token_type" => "Bearer"
-               })
-           }}
+        {:ok,
+         %Req.Response{
+           status: 200,
+           body:
+             %{
+               "access_token" => "sk-ant-oat01-refreshed",
+               "refresh_token" => "sk-ant-oar01-refreshed",
+               "expires_in" => 7200,
+               "token_type" => "Bearer"
+             }
+         }}
       end)
 
       assert {:ok, %OAuthToken{} = oauth_token} =
