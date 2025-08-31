@@ -96,34 +96,12 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   end
 
   def build_headers(:openai, :api_key, opts) do
-    session_name = Keyword.get(opts, :session)
-    saved = if session_name, do: get_saved_auth(:openai, :api_key, session_name), else: nil
+    case Keyword.get(opts, :session) do
+      session when is_binary(session) and session != "" ->
+        build_openai_api_key_headers_session(session)
 
-    cfg = Application.get_env(:the_maestro, :openai, [])
-    api_key = if is_map(saved), do: saved.credentials["api_key"], else: Keyword.get(cfg, :api_key)
-
-    org_id = Keyword.get(cfg, :organization_id)
-
-    if !is_binary(api_key) or api_key == "" do
-      {:error, :missing_api_key}
-    else
-      base_headers = [
-        {"authorization", "Bearer #{api_key}"},
-        {"user-agent", "llxprt/1.0"},
-        {"accept", "application/json"},
-        {"x-client-version", "1.0.0"}
-      ]
-
-      headers =
-        case org_id do
-          id when is_binary(id) and id != "" ->
-            [{"openai-organization", id}, {"openai-beta", "assistants v2"} | base_headers]
-
-          _ ->
-            base_headers
-        end
-
-      {:ok, headers}
+      _ ->
+        build_openai_api_key_headers_env()
     end
   end
 
@@ -162,6 +140,40 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   end
 
   def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
+
+  defp openai_base_headers(api_key) do
+    [
+      {"authorization", "Bearer #{api_key}"},
+      {"user-agent", "llxprt/1.0"},
+      {"accept", "application/json"},
+      {"x-client-version", "1.0.0"}
+    ]
+  end
+
+  defp build_openai_api_key_headers_session(session_name) do
+    case get_saved_auth(:openai, :api_key, session_name) do
+      %SavedAuthentication{credentials: %{"api_key" => api_key}} when is_binary(api_key) and
+             api_key != "" ->
+        {:ok, openai_base_headers(api_key)}
+
+      _ ->
+        {:error, :missing_api_key}
+    end
+  end
+
+  defp build_openai_api_key_headers_env do
+    cfg = Application.get_env(:the_maestro, :openai, [])
+    api_key = Keyword.get(cfg, :api_key)
+    org_id = Keyword.get(cfg, :organization_id)
+
+    cond do
+      !is_binary(api_key) or api_key == "" -> {:error, :missing_api_key}
+      !is_binary(org_id) or org_id == "" -> {:error, :missing_org_id}
+      true ->
+        {:ok,
+         [{"openai-organization", org_id}, {"openai-beta", "assistants v2"} | openai_base_headers(api_key)]}
+    end
+  end
 
   # ===== Internal helpers =====
 
