@@ -20,18 +20,18 @@ defmodule TheMaestro.Providers.Http.ReqClientFactoryTest do
       assert {:ok, %Req.Request{} = req} = ReqClientFactory.create_client(:anthropic)
 
       # Verify finch pool and base_url options exist
-      assert Keyword.get(req.options, :finch) == :anthropic_finch
-      assert Keyword.get(req.options, :base_url) == "https://api.anthropic.com"
+      assert Map.get(req.options, :finch) == :anthropic_finch
+      assert Map.get(req.options, :base_url) == "https://api.anthropic.com"
 
       # Verify exact header order and values
-      expected = [
-        {"x-api-key", "sk-test-key"},
-        {"anthropic-version", "2023-06-01"},
-        {"anthropic-beta", "messages-2023-12-15"},
-        {"user-agent", "llxprt/1.0"},
-        {"accept", "application/json"},
-        {"x-client-version", "1.0.0"}
-      ]
+      expected = %{
+        "x-api-key" => ["sk-test-key"],
+        "anthropic-version" => ["2023-06-01"],
+        "anthropic-beta" => ["messages-2023-12-15"],
+        "user-agent" => ["llxprt/1.0"],
+        "accept" => ["application/json"],
+        "x-client-version" => ["1.0.0"]
+      }
 
       assert req.headers == expected
     end
@@ -49,17 +49,17 @@ defmodule TheMaestro.Providers.Http.ReqClientFactoryTest do
       Application.put_env(:the_maestro, :openai, api_key: api_key, organization_id: org_id)
 
       assert {:ok, %Req.Request{} = req} = ReqClientFactory.create_client(:openai)
-      assert Keyword.get(req.options, :finch) == :openai_finch
-      assert Keyword.get(req.options, :base_url) == "https://api.openai.com"
+      assert Map.get(req.options, :finch) == :openai_finch
+      assert Map.get(req.options, :base_url) == "https://api.openai.com"
 
-      expected = [
-        {"authorization", "Bearer #{api_key}"},
-        {"openai-organization", org_id},
-        {"openai-beta", "assistants v2"},
-        {"user-agent", "llxprt/1.0"},
-        {"accept", "application/json"},
-        {"x-client-version", "1.0.0"}
-      ]
+      expected = %{
+        "authorization" => ["Bearer #{api_key}"],
+        "openai-organization" => [org_id],
+        "openai-beta" => ["assistants v2"],
+        "user-agent" => ["llxprt/1.0"],
+        "accept" => ["application/json"],
+        "x-client-version" => ["1.0.0"]
+      }
 
       assert req.headers == expected
     end
@@ -78,9 +78,9 @@ defmodule TheMaestro.Providers.Http.ReqClientFactoryTest do
   describe "Gemini client" do
     test "builds Req client with base URL and pool, no default headers" do
       assert {:ok, %Req.Request{} = req} = ReqClientFactory.create_client(:gemini)
-      assert Keyword.get(req.options, :finch) == :gemini_finch
-      assert Keyword.get(req.options, :base_url) == "https://generativelanguage.googleapis.com"
-      assert req.headers == []
+      assert Map.get(req.options, :finch) == :gemini_finch
+      assert Map.get(req.options, :base_url) == "https://generativelanguage.googleapis.com"
+      assert req.headers == %{}
     end
   end
 
