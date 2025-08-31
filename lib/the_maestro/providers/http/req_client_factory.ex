@@ -16,8 +16,13 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   @spec create_client(Types.provider(), Types.auth_type(), keyword()) ::
           {:ok, request()} | {:error, term()}
   def create_client(provider, auth_type \\ :api_key, opts \\ []) do
-    with {:ok, base_url, pool} <- provider_base_and_pool(provider),
+    with {:ok, base_url0, pool} <- provider_base_and_pool(provider),
          {:ok, headers} <- build_headers(provider, auth_type, opts) do
+      base_url =
+        case provider do
+          :openai -> choose_openai_base_url(auth_type, opts, base_url0)
+          _ -> base_url0
+        end
       # Merge base options with provider-specific options; caller opts (like :retry)
       # should take precedence when provided.
       merged_opts =
@@ -140,6 +145,18 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   end
 
   def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
+
+  # ===== OpenAI endpoint selection =====
+  defp choose_openai_base_url(_auth_type, opts, default) do
+    cfg = Application.get_env(:the_maestro, :openai, [])
+    mode = Keyword.get(opts, :mode, Keyword.get(cfg, :mode, :api))
+
+    case mode do
+      :chatgpt -> Keyword.get(cfg, :chatgpt_base_url, "https://chat.openai.com/backend-api")
+      :api -> Keyword.get(cfg, :api_base_url, default)
+      _ -> default
+    end
+  end
 
   defp openai_base_headers(api_key) do
     [

@@ -21,9 +21,12 @@ defmodule TheMaestroWeb.Router do
   end
 
   # Other scopes may use custom stacks.
-  # scope "/api", TheMaestroWeb do
-  #   pipe_through :api
-  # end
+  scope "/api", TheMaestroWeb do
+    pipe_through :api
+
+    post "/oauth/openai/callback", OAuthController, :openai_callback
+    post "/oauth/anthropic/callback", OAuthController, :anthropic_callback
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:the_maestro, :dev_routes) do

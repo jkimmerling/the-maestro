@@ -136,6 +136,7 @@ defmodule TheMaestro.Auth do
   """
 
   require Logger
+  @dialyzer {:nowarn_function, persist_oauth_token: 3}
 
   # Embedded struct definitions per Phoenix conventions for simple structs
   defmodule AnthropicOAuthConfig do
@@ -986,6 +987,69 @@ defmodule TheMaestro.Auth do
   # Private helper functions
 
   # Parse authorization code input handling both "code#state" and "code" formats
+
+  @doc """
+  Finish Anthropic OAuth flow and persist tokens to a named session.
+
+  Exchanges the authorization code for tokens using Req and saves them to
+  `saved_authentications` under the given `session_name`.
+  """
+  @spec finish_anthropic_oauth(String.t(), PKCEParams.t(), String.t()) ::
+          {:ok, OAuthToken.t()} | {:error, term()}
+  def finish_anthropic_oauth(auth_code_input, pkce_params, session_name) when is_binary(session_name) do
+    with {:ok, %OAuthToken{} = token} <- exchange_code_for_tokens(auth_code_input, pkce_params),
+         :ok <- persist_oauth_token(:anthropic, session_name, token) do
+      {:ok, token}
+    end
+  end
+
+  @doc """
+  Finish OpenAI OAuth flow and persist tokens to a named session.
+
+  Exchanges the authorization code for tokens using Req and saves them to
+  `saved_authentications` under the given `session_name`.
+  """
+  @spec finish_openai_oauth(String.t(), PKCEParams.t(), String.t()) ::
+          {:ok, OAuthToken.t()} | {:error, term()}
+  def finish_openai_oauth(auth_code, pkce_params, session_name) when is_binary(session_name) do
+    with {:ok, %OAuthToken{} = token} <- exchange_openai_code_for_tokens(auth_code, pkce_params),
+         :ok <- persist_oauth_token(:openai, session_name, token) do
+      {:ok, token}
+    end
+  end
+
+  @doc false
+  @spec persist_oauth_token(:anthropic | :openai, String.t(), OAuthToken.t()) :: :ok | {:error, term()}
+  def persist_oauth_token(provider, session_name, %OAuthToken{} = token) do
+    alias TheMaestro.SavedAuthentication
+
+    expires_at =
+      case token.expiry do
+        nil -> nil
+        int when is_integer(int) ->
+          case DateTime.from_unix(int) do
+            {:ok, dt} -> dt
+            _ -> nil
+          end
+      end
+
+    attrs = %{
+      credentials: %{
+        "access_token" => token.access_token,
+        "refresh_token" => token.refresh_token,
+        "id_token" => token.id_token,
+        "scope" => token.scope,
+        "token_type" => token.token_type || "Bearer"
+      },
+      expires_at: expires_at
+    }
+
+    case SavedAuthentication.upsert_named_session(provider, :oauth, session_name, attrs) do
+      {:ok, _sa} -> :ok
+      {:error, %Ecto.Changeset{} = cs} -> {:error, cs}
+      _ -> {:error, :unexpected_result}
+    end
+  end
   defp parse_auth_code_input(auth_code_input, default_state) do
     case String.split(auth_code_input, "#", parts: 2) do
       [auth_code, state] -> {auth_code, state}
