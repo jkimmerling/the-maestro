@@ -389,7 +389,7 @@ defmodule TheMaestro.AuthTest do
 
       assert params["response_type"] == "code"
       assert params["client_id"] == "app_EMoamEEZ73f0CkXaXp7hrann"
-      assert params["redirect_uri"] == "http://localhost:8080/auth/callback"
+      assert params["redirect_uri"] == "http://localhost:1455/auth/callback"
       assert params["scope"] == "openid profile email offline_access"
       assert params["code_challenge"] == pkce_params.code_challenge
       assert params["code_challenge_method"] == "S256"
@@ -552,7 +552,7 @@ defmodule TheMaestro.AuthTest do
       assert config.client_id == "app_EMoamEEZ73f0CkXaXp7hrann"
       assert config.authorization_endpoint == "https://auth.openai.com/oauth/authorize"
       assert config.token_endpoint == "https://auth.openai.com/oauth/token"
-      assert config.redirect_uri == "http://localhost:8080/auth/callback"
+      assert config.redirect_uri == "http://localhost:1455/auth/callback"
       assert config.scopes == ["openid", "profile", "email", "offline_access"]
     end
 
@@ -601,7 +601,7 @@ defmodule TheMaestro.AuthTest do
 
       assert request["grant_type"] == "authorization_code"
       assert request["code"] == "test_auth_code"
-      assert request["redirect_uri"] == "http://localhost:8080/auth/callback"
+      assert request["redirect_uri"] == "http://localhost:1455/auth/callback"
       assert request["client_id"] == "app_EMoamEEZ73f0CkXaXp7hrann"
       assert request["code_verifier"] == pkce_params.code_verifier
     end
@@ -669,7 +669,7 @@ defmodule TheMaestro.AuthTest do
       assert config.client_id == "app_EMoamEEZ73f0CkXaXp7hrann"
       assert config.authorization_endpoint == "https://auth.openai.com/oauth/authorize"
       assert config.token_endpoint == "https://auth.openai.com/oauth/token"
-      assert config.redirect_uri == "http://localhost:8080/auth/callback"
+      assert config.redirect_uri == "http://localhost:1455/auth/callback"
       assert config.scopes == ["openid", "profile", "email", "offline_access"]
     end
 

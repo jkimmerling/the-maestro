@@ -1,4 +1,199 @@
-This is a web application written using the Phoenix web framework.
+# Agents Index
+
+This file serves as an index for all available agents.  
+When an agent is invoked (e.g., `*agent dev`), the corresponding definition file is loaded.
+
+```yaml
+agents:
+  - id: analyst
+    path: .bmad-core/agents/analyst.md
+  - id: architect
+    path: .bmad-core/agents/architect.md
+  - id: bmad-master
+    path: .bmad-core/agents/bmad-master.md
+  - id: bmad-orchestrator
+    path: .bmad-core/agents/bmad-orchestrator.md
+  - id: dev
+    path: .bmad-core/agents/dev.md
+  - id: pm
+    path: .bmad-core/agents/pm.md
+  - id: po
+    path: .bmad-core/agents/po.md
+  - id: qa
+    path: .bmad-core/agents/qa.md
+  - id: sm
+    path: .bmad-core/agents/sm.md
+  - id: ux-expert
+    path: .bmad-core/agents/ux-expert.md
+```
+
+
+# 🚨 ZERO TOLERANCE: Git Hook Bypassing - IMMEDIATE PROJECT REMOVAL
+
+**ABSOLUTELY FORBIDDEN - IMMEDIATE CONSEQUENCES - NO EXCEPTIONS:**
+
+Any use of the following commands results in **IMMEDIATE PROJECT REMOVAL**:
+
+```bash
+# ❌ FORBIDDEN - IMMEDIATE PROJECT REMOVAL
+git commit --no-verify
+git commit -n
+git push --no-verify  
+git push --force
+git push --force-with-lease
+git push -f
+```
+
+**CONSEQUENCES - NO WARNINGS:**
+- **First and only response**: Immediate project removal
+- **Zero tolerance**: No exceptions, no warnings, no second chances
+- **Treated as sabotage** of code quality and team standards
+
+**IF HOOKS FAIL - FIX THE ISSUES, NEVER BYPASS:**
+```bash
+# ✅ CORRECT APPROACH - ALWAYS
+# 1. READ hook failure message carefully
+# 2. FIX the identified issues (format, test, lint, security)
+# 3. Run checks locally: mix format, mix test, mix credo
+# 4. Commit and push normally - let hooks run
+git commit -m "Your message"
+git push
+```
+
+**MANUAL TESTING**
+STOP FUCKING USING 10s WHEN RUNNING THE SERVER.  ----- RUN THE BACKGROUND PROCESS WITHOUT A TIMEOUT, AND KILL IT ONLY WHEN YOU ARE DONE TESTING WHAT YOU NEED!
+
+**Professional developers solve problems. They never bypass protections.**
+
+# Archon Research Integration
+
+**Use Archon MCP server for documentation research and knowledge retrieval.**
+
+## Documentation Research Requirements
+
+### Before Any Implementation
+
+**MANDATORY: Use Archon for research before coding:**
+
+```bash
+# Research best practices and patterns
+archon:perform_rag_query(
+  query="[technology/feature] best practices patterns",
+  match_count=3-5
+)
+
+# Get specific implementation examples
+archon:search_code_examples(
+  query="[specific feature] implementation examples",
+  match_count=2-3
+)
+```
+
+### Research Guidelines
+
+**Query Strategy:**
+- Start with broad architectural queries, narrow to specific implementation
+- Use RAG for both strategic decisions and tactical "how-to" questions
+- Cross-reference multiple sources for validation
+- Keep match_count low (2-5) for focused results
+
+**Research Scope Examples:**
+- **High-level**: "microservices architecture patterns", "database security practices", "API design patterns"
+- **Low-level**: "React hooks patterns", "Python async/await usage", "TypeScript generics implementation"
+- **Debugging**: "React state management issues", "Python exception handling", "Elixir GenServer debugging"
+- **Code Examples**: "React useEffect examples", "Python FastAPI routing", "TypeScript interface definitions"
+
+## Programming Language Code Examples
+
+### MANDATORY: Check Archon for Code Examples
+
+**BEFORE using ANY library, function, or module, MUST query Archon for examples:**
+
+```bash
+# Generic pattern for any language/framework
+archon:search_code_examples(
+  query="[language] [function/library] usage examples",
+  match_count=3
+)
+
+# For specific implementations
+archon:search_code_examples(
+  query="[framework] [feature] implementation examples",
+  match_count=3
+)
+```
+
+### Required Code Example Queries by Language
+
+**For React/TypeScript Frontend:**
+```bash
+# React hooks and patterns
+archon:search_code_examples(query="React useState hook examples", match_count=3)
+archon:search_code_examples(query="React useEffect cleanup examples", match_count=3)
+archon:search_code_examples(query="TypeScript React component props examples", match_count=3)
+archon:search_code_examples(query="React Context API usage examples", match_count=3)
+
+# Form handling and state management
+archon:search_code_examples(query="React Hook Form validation examples", match_count=3)
+archon:search_code_examples(query="React Zustand state management examples", match_count=3)
+```
+
+**For Python Backend:**
+```bash
+# Core Python patterns
+archon:search_code_examples(query="Python asyncio examples", match_count=3)
+archon:search_code_examples(query="Python FastAPI routing examples", match_count=3)
+archon:search_code_examples(query="Python Pydantic model validation examples", match_count=3)
+archon:search_code_examples(query="Python SQLAlchemy query examples", match_count=3)
+
+# Authentication and middleware
+archon:search_code_examples(query="Python JWT authentication examples", match_count=3)
+archon:search_code_examples(query="FastAPI middleware examples", match_count=3)
+```
+
+**For Elixir/Phoenix Backend:**
+```bash
+# Core Elixir patterns
+archon:search_code_examples(query="Elixir Enum.reduce examples", match_count=3)
+archon:search_code_examples(query="GenServer handle_call patterns", match_count=3)
+archon:search_code_examples(query="Phoenix LiveView form handling examples", match_count=3)
+archon:search_code_examples(query="Ecto changeset validation examples", match_count=3)
+
+# Phoenix-specific features
+archon:search_code_examples(query="Phoenix Context pattern examples", match_count=3)
+archon:search_code_examples(query="Phoenix Channel authentication examples", match_count=3)
+```
+
+**For TypeScript Utilities:**
+```bash
+# TypeScript-specific patterns
+archon:search_code_examples(query="TypeScript generic constraints examples", match_count=3)
+archon:search_code_examples(query="TypeScript utility types examples", match_count=3)
+archon:search_code_examples(query="TypeScript decorators examples", match_count=3)
+archon:search_code_examples(query="TypeScript async/await error handling examples", match_count=3)
+```
+
+**For External Libraries (Any Language):**
+```bash
+# Framework-agnostic library usage
+archon:search_code_examples(query="[library_name] [language] setup examples", match_count=3)
+archon:search_code_examples(query="[package_name] configuration examples", match_count=3)
+archon:search_code_examples(query="[tool_name] integration examples", match_count=3)
+```
+
+### Research Validation
+
+**Always validate research findings:**
+- Cross-reference multiple sources
+- Verify recency of information
+- Test applicability to current project context
+- Document assumptions and limitations
+- **Adapt examples to project-specific patterns and conventions**
+
+
+# Multi-Language Development Standards
+
+This configuration supports multiple programming languages and frameworks across different projects.
 
 ## Project guidelines
 

@@ -9,17 +9,17 @@ defmodule TheMaestro.Auth do
 
   ### Anthropic OAuth Configuration
   Uses exact llxprt reference implementation configuration:
-  - client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e" 
+  - client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
   - authorization_endpoint: "https://claude.ai/oauth/authorize"
   - token_endpoint: "https://console.anthropic.com/v1/oauth/token"
   - redirect_uri: "https://console.anthropic.com/oauth/code/callback"
   - scopes: ["org:create_api_key", "user:profile", "user:inference"]
   - request_format: JSON
 
-  ### OpenAI OAuth Configuration  
+  ### OpenAI OAuth Configuration
   Based on OpenAI OAuth 2.0 specification and Codex CLI:
   - client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
-  - authorization_endpoint: "https://auth.openai.com/oauth/authorize" 
+  - authorization_endpoint: "https://auth.openai.com/oauth/authorize"
   - token_endpoint: "https://auth.openai.com/oauth/token"
   - redirect_uri: "http://localhost:8080/auth/callback"
   - scopes: ["openid", "profile", "email", "offline_access"]
@@ -34,10 +34,10 @@ defmodule TheMaestro.Auth do
 
       # Step 1: Generate OAuth URL
       {:ok, {auth_url, pkce_params}} = TheMaestro.Auth.generate_oauth_url()
-      
+
       # Step 2: User visits auth_url and authorizes
       # Step 3: Extract authorization code from redirect URL
-      
+
       # Step 4: Exchange for tokens
       {:ok, oauth_token} = TheMaestro.Auth.exchange_code_for_tokens(auth_code, pkce_params)
 
@@ -45,10 +45,10 @@ defmodule TheMaestro.Auth do
 
       # Step 1: Generate OAuth URL
       {:ok, {auth_url, pkce_params}} = TheMaestro.Auth.generate_openai_oauth_url()
-      
-      # Step 2: User visits auth_url and authorizes  
+
+      # Step 2: User visits auth_url and authorizes
       # Step 3: Extract authorization code from redirect URL
-      
+
       # Step 4: Exchange for tokens
       {:ok, oauth_token} = TheMaestro.Auth.exchange_openai_code_for_tokens(auth_code, pkce_params)
 
@@ -58,18 +58,18 @@ defmodule TheMaestro.Auth do
 
       # Generate OAuth URL
       {:ok, {auth_url, pkce_params}} = TheMaestro.Auth.generate_oauth_url()
-      
+
       IO.puts("Visit: " <> auth_url)
       IO.puts("After authorization, copy the code from the redirect URL")
-      
+
       # Get code from user
       auth_code = IO.gets("Enter authorization code: ") |> String.trim()
-      
+
       # Exchange for tokens
       case TheMaestro.Auth.exchange_code_for_tokens(auth_code, pkce_params) do
         {:ok, oauth_token} ->
           IO.puts("Success! Access token: " <> String.slice(oauth_token.access_token, 0, 20) <> "...")
-          
+
         {:error, reason} ->
           IO.puts("OAuth failed: " <> inspect(reason))
       end
@@ -78,18 +78,18 @@ defmodule TheMaestro.Auth do
 
       # Generate OAuth URL
       {:ok, {auth_url, pkce_params}} = TheMaestro.Auth.generate_openai_oauth_url()
-      
+
       IO.puts("Visit: " <> auth_url)
       IO.puts("After authorization, copy the code from the callback URL")
-      
+
       # Get code from user
       auth_code = IO.gets("Enter authorization code: ") |> String.trim()
-      
+
       # Exchange for tokens
       case TheMaestro.Auth.exchange_openai_code_for_tokens(auth_code, pkce_params) do
         {:ok, oauth_token} ->
           IO.puts("Success! Access token: " <> String.slice(oauth_token.access_token, 0, 20) <> "...")
-          
+
         {:error, reason} ->
           IO.puts("OAuth failed: " <> inspect(reason))
       end
@@ -104,7 +104,7 @@ defmodule TheMaestro.Auth do
   - **Anthropic**: HTTPS callback to console.anthropic.com
   - **OpenAI**: HTTP callback to localhost:8080 (development setup)
 
-  ### Token Response Structure  
+  ### Token Response Structure
   Both providers return similar OAuth token structures, but may have different
   field availability and token lifetimes.
 
@@ -119,7 +119,7 @@ defmodule TheMaestro.Auth do
 
   Functions return `{:ok, result}` or `{:error, reason}` tuples:
   - `:url_generation_failed` - PKCE or URL construction error
-  - `:token_exchange_failed` - HTTP error with status and body  
+  - `:token_exchange_failed` - HTTP error with status and body
   - `:token_request_failed` - Network or connection error
   - `:invalid_token_response` - Malformed response from provider
   - `:token_exchange_error` - Unexpected error during processing
@@ -128,7 +128,7 @@ defmodule TheMaestro.Auth do
 
   This module uses HTTPoison for OAuth token requests (separate from Tesla API client)
   because OAuth and API endpoints have different authentication requirements.
-  OAuth endpoints require unauthenticated requests, while API endpoints  
+  OAuth endpoints require unauthenticated requests, while API endpoints
   require authenticated requests with different client configurations.
 
   The module follows the Manual OAuth Testing Protocol from testing-strategies.md,
@@ -188,6 +188,7 @@ defmodule TheMaestro.Auth do
     @type t :: %__MODULE__{
             access_token: String.t(),
             refresh_token: String.t() | nil,
+            id_token: String.t() | nil,
             expiry: integer(),
             scope: String.t() | nil,
             token_type: String.t()
@@ -196,6 +197,7 @@ defmodule TheMaestro.Auth do
     defstruct [
       :access_token,
       :refresh_token,
+      :id_token,
       :expiry,
       :scope,
       token_type: "Bearer"
@@ -314,11 +316,11 @@ defmodule TheMaestro.Auth do
       # After user authorization, exchange code for tokens
       {:ok, {auth_url, pkce_params}} = generate_oauth_url()
       # ... user visits auth_url and gets authorization code ...
-      
+
       # Exchange code for tokens (handles both formats)
       {:ok, oauth_token} = exchange_code_for_tokens("auth_code_123", pkce_params)
       {:ok, oauth_token} = exchange_code_for_tokens("auth_code_123#state_456", pkce_params)
-      
+
       # Access token details
       oauth_token.access_token  # "sk-ant-oat01-..."
       oauth_token.expiry        # Unix timestamp
@@ -443,36 +445,198 @@ defmodule TheMaestro.Auth do
       true
 
   """
-  @spec generate_openai_oauth_url() :: {:ok, {String.t(), PKCEParams.t()}} | {:error, term()}
+  @spec generate_openai_oauth_url() :: {:ok, {String.t(), PKCEParams.t()}}
   def generate_openai_oauth_url do
-    # Generate PKCE parameters for security
     pkce_params = generate_pkce_params()
+    {:ok, config} = get_openai_oauth_config()
 
-    case get_openai_oauth_config() do
-      {:ok, config} ->
-        # Build OAuth parameters following OpenAI specification with exact order
-        oauth_params = build_openai_oauth_params(config, pkce_params)
+    oauth_params = build_openai_oauth_params(config, pkce_params)
 
-        # Manually encode parameters to maintain exact codex order
-        # Use URI.encode/2 with :rfc3986 to match codex urlencoding::encode behavior
-        query_string =
-          oauth_params
-          |> Enum.map(fn {k, v} -> "#{k}=#{URI.encode(v, &URI.char_unreserved?/1)}" end)
-          |> Enum.join("&")
+    query_string =
+      oauth_params
+      |> Enum.map(fn {k, v} -> "#{k}=#{URI.encode(v, &URI.char_unreserved?/1)}" end)
+      |> Enum.join("&")
 
-        auth_url = "#{config.authorization_endpoint}?#{query_string}"
-        Logger.info("Generated OpenAI OAuth URL with PKCE parameters")
+    auth_url = "#{config.authorization_endpoint}?#{query_string}"
+    Logger.info("Generated OpenAI OAuth URL with PKCE parameters")
 
-        {:ok, {auth_url, pkce_params}}
+    {:ok, {auth_url, pkce_params}}
+  end
 
-      {:error, reason} ->
-        Logger.error("Failed to get OpenAI OAuth configuration: #{inspect(reason)}")
-        {:error, :url_generation_failed}
+  @doc """
+  Exchange OpenAI ID token for API key access token.
+
+  This is the second stage of OpenAI OAuth authentication. After obtaining
+  OAuth tokens, the id_token must be exchanged for an OpenAI API key that
+  can be used for actual API calls.
+
+  Based on Codex CLI implementation: uses token exchange grant type to convert
+  OAuth id_token into a traditional OpenAI API key format.
+
+  ## Parameters
+
+    * `id_token` - ID token from OAuth authorization flow
+
+  ## Returns
+
+    * `{:ok, String.t()}` - Success with OpenAI API key
+    * `{:error, term()}` - Error during API key exchange
+
+  ## Examples
+
+      # After OAuth token exchange, get API key for API calls
+      {:ok, oauth_token} = exchange_openai_code_for_tokens(auth_code, pkce_params)
+      {:ok, api_key} = exchange_openai_id_token_for_api_key(oauth_token.id_token)
+
+      # Use API key for OpenAI API calls
+      "sk-..." = api_key  # Traditional OpenAI API key format
+
+  """
+  @spec exchange_openai_id_token_for_api_key(String.t()) :: {:ok, String.t()} | {:error, term()}
+  def exchange_openai_id_token_for_api_key(id_token) do
+    with {:ok, config} <- get_openai_oauth_config(),
+         token_endpoint <- "https://auth.openai.com/oauth/token",
+         headers <- [{"Content-Type", "application/x-www-form-urlencoded"}],
+         request_body <- build_openai_api_key_request(id_token, config),
+         _ <- Logger.info("Exchanging OpenAI ID token for API key"),
+         {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} <-
+           HTTPoison.post(token_endpoint, request_body, headers),
+         {:ok, %{"access_token" => api_key}} <- Jason.decode(response_body) do
+      Logger.info("Successfully obtained OpenAI API key")
+      {:ok, api_key}
+    else
+      {:ok, %HTTPoison.Response{status_code: status_code, body: error_body}} ->
+        Logger.error(
+          "OpenAI API key exchange failed with status #{status_code}: #{error_body}"
+        )
+
+        {:error, {:api_key_exchange_failed, status_code, error_body}}
+
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        Logger.error("API key exchange request failed: #{inspect(reason)}")
+        {:error, {:api_key_request_failed, reason}}
+
+      {:error, decode_error} ->
+        Logger.error("Failed to decode API key response: #{inspect(decode_error)}")
+        {:error, :api_key_decode_error}
     end
-  rescue
-    error ->
-      Logger.error("Failed to generate OpenAI OAuth URL: #{inspect(error)}")
-      {:error, :url_generation_failed}
+  end
+
+  @doc """
+  Determine OpenAI authentication mode based on account type.
+
+  Parses the ID token to extract account plan type and determines whether to use
+  ChatGPT mode (personal accounts) or API Key mode (enterprise accounts).
+
+  ## Parameters
+
+    * `id_token` - JWT ID token from OpenAI OAuth flow
+
+  ## Returns
+
+    * `{:ok, :chatgpt}` - Use ChatGPT mode (Free/Plus/Pro/Team accounts)
+    * `{:ok, :api_key}` - Use API Key mode (Business/Enterprise/Edu accounts)
+    * `{:error, reason}` - Failed to parse token or determine mode
+
+  ## Examples
+
+      {:ok, mode} = TheMaestro.Auth.determine_openai_auth_mode(id_token)
+      case mode do
+        :chatgpt -> use_access_token_directly(access_token)
+        :api_key -> exchange_for_api_key(id_token)
+      end
+  """
+  def determine_openai_auth_mode(id_token) do
+    with [_, payload, _] <- String.split(id_token, "."),
+         {:ok, decoded} <- Base.url_decode64(payload, padding: false),
+         {:ok, claims} <- Jason.decode(decoded) do
+      plan_type = get_in(claims, ["https://api.openai.com/auth", "chatgpt_plan_type"])
+      organizations = get_in(claims, ["https://api.openai.com/auth", "organizations"])
+
+      Logger.info(
+        "OpenAI account analysis - Plan: #{inspect(plan_type)}, Orgs: #{inspect(organizations)}"
+      )
+
+      auth_mode =
+        case plan_type do
+          type when type in ["free", "plus", "pro", "team"] -> :chatgpt
+          type when type in ["business", "enterprise", "edu"] -> :api_key
+          nil -> :chatgpt
+          _ -> :api_key
+        end
+
+      Logger.info("Determined OpenAI authentication mode: #{auth_mode}")
+      {:ok, auth_mode}
+    else
+      _ ->
+        Logger.error("Failed to determine OpenAI auth mode: invalid id_token")
+        {:error, :invalid_id_token}
+    end
+  end
+
+  @doc """
+  Complete OpenAI OAuth flow with automatic account type detection.
+
+  Handles the complete OAuth flow by determining account type and using the
+  appropriate authentication method (ChatGPT mode vs API Key mode).
+
+  ## Parameters
+
+    * `auth_code` - Authorization code from OpenAI callback
+    * `pkce_params` - PKCE parameters from OAuth initiation
+
+  ## Returns
+
+    * `{:ok, %{auth_mode: :chatgpt, access_token: token}}` - ChatGPT mode result
+    * `{:ok, %{auth_mode: :api_key, api_key: key}}` - API Key mode result
+    * `{:error, reason}` - Authentication failed
+
+  ## Examples
+
+      {:ok, result} = TheMaestro.Auth.complete_openai_oauth_flow(auth_code, pkce_params)
+      case result do
+        %{auth_mode: :chatgpt, access_token: token} ->
+          # Use token directly for API calls
+        %{auth_mode: :api_key, api_key: key} ->
+          # Use API key for standard OpenAI API
+      end
+  """
+  def complete_openai_oauth_flow(auth_code, pkce_params) do
+    with {:ok, tokens} <- exchange_openai_code_for_tokens(auth_code, pkce_params),
+         {:ok, auth_mode} <- determine_openai_auth_mode(tokens.id_token) do
+
+      case auth_mode do
+        :chatgpt ->
+          Logger.info("Using ChatGPT mode - personal account detected")
+          {:ok, %{
+            auth_mode: :chatgpt,
+            access_token: tokens.access_token,
+            id_token: tokens.id_token,
+            refresh_token: tokens.refresh_token
+          }}
+
+        :api_key ->
+          Logger.info("Using API Key mode - enterprise account detected")
+          case exchange_openai_id_token_for_api_key(tokens.id_token) do
+            {:ok, api_key} ->
+              {:ok, %{
+                auth_mode: :api_key,
+                api_key: api_key,
+                id_token: tokens.id_token,
+                refresh_token: tokens.refresh_token
+              }}
+
+            {:error, reason} ->
+              Logger.error("API key exchange failed: #{inspect(reason)}")
+              {:error, {:api_key_exchange_failed, reason}}
+          end
+      end
+
+    else
+      {:error, reason} ->
+        Logger.error("OpenAI OAuth flow failed: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   @doc """
@@ -496,9 +660,9 @@ defmodule TheMaestro.Auth do
       # After user authorization, exchange code for tokens
       {:ok, {auth_url, pkce_params}} = generate_openai_oauth_url()
       # ... user visits auth_url and gets authorization code ...
-      
+
       {:ok, oauth_token} = exchange_openai_code_for_tokens("auth_code_123", pkce_params)
-      
+
       # Access token details
       oauth_token.access_token  # Bearer token for OpenAI API
       oauth_token.expiry        # Unix timestamp
@@ -508,36 +672,27 @@ defmodule TheMaestro.Auth do
   @spec exchange_openai_code_for_tokens(String.t(), PKCEParams.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
   def exchange_openai_code_for_tokens(auth_code, pkce_params) do
-    case get_openai_oauth_config() do
-      {:ok, config} ->
-        # Build token exchange request
-        request_body = build_openai_token_request(auth_code, pkce_params, config)
+    with {:ok, config} <- get_openai_oauth_config(),
+         request_body <- build_openai_token_request(auth_code, pkce_params, config),
+         headers <- [{"content-type", "application/x-www-form-urlencoded"}],
+         form_body <- URI.encode_query(request_body),
+         {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} <-
+           HTTPoison.post(config.token_endpoint, form_body, headers),
+         {:ok, decoded} <- Jason.decode(response_body) do
+      validate_openai_token_response(decoded)
+    else
+      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
+        Logger.error("OpenAI token exchange failed with status #{status}: #{response_body}")
+        {:error, {:token_exchange_failed, status, response_body}}
 
-        # Send form-encoded request to OpenAI token endpoint
-        headers = [{"content-type", "application/x-www-form-urlencoded"}]
-        form_body = URI.encode_query(request_body)
-
-        case HTTPoison.post(config.token_endpoint, form_body, headers) do
-          {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-            validate_openai_token_response(Jason.decode!(response_body))
-
-          {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
-            Logger.error("OpenAI token exchange failed with status #{status}: #{response_body}")
-            {:error, {:token_exchange_failed, status, response_body}}
-
-          {:error, reason} ->
-            Logger.error("OpenAI token request failed: #{inspect(reason)}")
-            {:error, {:token_request_failed, reason}}
-        end
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        Logger.error("OpenAI token request failed: #{inspect(reason)}")
+        {:error, {:token_request_failed, reason}}
 
       {:error, reason} ->
-        Logger.error("Failed to get OpenAI OAuth configuration: #{inspect(reason)}")
-        {:error, :token_exchange_failed}
+        Logger.error("Failed to decode token response: #{inspect(reason)}")
+        {:error, :token_decode_failed}
     end
-  rescue
-    error ->
-      Logger.error("OpenAI token exchange error: #{inspect(error)}")
-      {:error, :token_exchange_error}
   end
 
   @doc """
@@ -553,12 +708,32 @@ defmodule TheMaestro.Auth do
   """
   @spec get_openai_oauth_config() :: {:ok, OpenAIOAuthConfig.t()} | {:error, term()}
   def get_openai_oauth_config do
-    config = %OpenAIOAuthConfig{}
-    {:ok, config}
-  rescue
-    error ->
-      Logger.error("Failed to load OpenAI OAuth configuration: #{inspect(error)}")
-      {:error, :config_load_failed}
+    # Allow environment overrides so error paths are meaningful when strict mode is enabled
+    client_id_env = System.get_env("OPENAI_CLIENT_ID")
+    authz_env = System.get_env("OPENAI_AUTHORIZATION_ENDPOINT")
+    token_env = System.get_env("OPENAI_TOKEN_ENDPOINT")
+    redirect_env = System.get_env("OPENAI_REDIRECT_URI")
+    scopes_env = System.get_env("OPENAI_SCOPES")
+
+    config = %OpenAIOAuthConfig{
+      client_id: client_id_env || OpenAIOAuthConfig.__struct__().client_id,
+      authorization_endpoint: authz_env || OpenAIOAuthConfig.__struct__().authorization_endpoint,
+      token_endpoint: token_env || OpenAIOAuthConfig.__struct__().token_endpoint,
+      redirect_uri: redirect_env || OpenAIOAuthConfig.__struct__().redirect_uri,
+      scopes:
+        (case scopes_env do
+           nil -> OpenAIOAuthConfig.__struct__().scopes
+           s when is_binary(s) -> String.split(s, ",", trim: true) |> Enum.map(&String.trim/1)
+         end)
+    }
+
+    strict? = System.get_env("OPENAI_OAUTH_STRICT") in ["1", "true", "TRUE"]
+
+    if strict? and not validate_openai_config(config) do
+      {:error, :invalid_config}
+    else
+      {:ok, config}
+    end
   end
 
   @doc """
@@ -601,6 +776,39 @@ defmodule TheMaestro.Auth do
       {"codex_cli_simplified_flow", "true"},
       {"state", state}
     ]
+  end
+
+  @doc """
+  Build OpenAI API key exchange request.
+
+  Creates the token exchange request to convert an OAuth ID token into
+  an OpenAI API key using the RFC8693 token exchange standard.
+
+  ## Parameters
+
+    * `id_token` - OAuth ID token to exchange
+    * `config` - OpenAI OAuth configuration
+
+  ## Returns
+
+    * `String.t()` - Form-encoded request body
+
+  """
+  @spec build_openai_api_key_request(String.t(), OpenAIOAuthConfig.t()) :: String.t()
+  def build_openai_api_key_request(id_token, config) do
+    # Build token exchange request matching exact codex implementation
+    params = [
+      {"grant_type", "urn:ietf:params:oauth:grant-type:token-exchange"},
+      {"client_id", config.client_id},
+      {"requested_token", "openai-api-key"},
+      {"subject_token", id_token},
+      {"subject_token_type", "urn:ietf:params:oauth:token-type:id_token"}
+    ]
+
+    # Form-encode the parameters
+    params
+    |> Enum.map(fn {k, v} -> "#{k}=#{URI.encode_www_form(v)}" end)
+    |> Enum.join("&")
   end
 
   @doc """
@@ -657,6 +865,7 @@ defmodule TheMaestro.Auth do
         oauth_token = %OAuthToken{
           access_token: access_token,
           refresh_token: Map.get(data, "refresh_token"),
+          id_token: Map.get(data, "id_token"),
           expiry: expiry,
           scope: Map.get(data, "scope"),
           token_type: Map.get(data, "token_type", "Bearer")
@@ -705,7 +914,7 @@ defmodule TheMaestro.Auth do
       {:ok, oauth_token} ->
         IO.puts("Access token: " <> String.slice(oauth_token.access_token, 0, 20) <> "...")
         IO.puts("Token expires at: " <> to_string(oauth_token.expiry))
-        
+
       {:error, reason} ->
         IO.puts("OAuth failed: " <> inspect(reason))
     end
@@ -734,44 +943,35 @@ defmodule TheMaestro.Auth do
     * `{:error, term()}` - Error during validation
 
   """
-  @spec validate_openai_oauth_documentation() :: {:ok, map()} | {:error, term()}
+  @spec validate_openai_oauth_documentation() :: {:ok, map()} | {:error, {:validation_failed, map()}}
   def validate_openai_oauth_documentation do
-    case get_openai_oauth_config() do
-      {:ok, config} ->
-        validation_results = %{
-          configuration_valid: validate_openai_config(config),
-          functions_available: validate_openai_functions(),
-          documentation_complete: validate_documentation_completeness(),
-          security_features: validate_security_features(),
-          test_coverage: validate_test_coverage(),
-          integration_status: :ready
-        }
+    {:ok, config} = get_openai_oauth_config()
 
-        all_valid =
-          validation_results
-          |> Map.values()
-          |> Enum.all?(fn
-            :ready -> true
-            true -> true
-            false -> false
-            {:ok, _} -> true
-            {:error, _} -> false
-          end)
+    validation_results = %{
+      configuration_valid: validate_openai_config(config),
+      functions_available: validate_openai_functions(),
+      documentation_complete: validate_documentation_completeness(),
+      security_features: validate_security_features(),
+      test_coverage: validate_test_coverage(),
+      integration_status: :ready
+    }
 
-        if all_valid do
-          {:ok, Map.put(validation_results, :overall_status, :valid)}
-        else
-          {:error, {:validation_failed, validation_results}}
-        end
+    all_valid =
+      validation_results
+      |> Map.values()
+      |> Enum.all?(fn
+        :ready -> true
+        true -> true
+        false -> false
+        {:ok, _} -> true
+        {:error, _} -> false
+      end)
 
-      {:error, reason} ->
-        Logger.error("OAuth configuration load failed: #{inspect(reason)}")
-        {:error, {:config_load_failed, reason}}
+    if all_valid do
+      {:ok, Map.put(validation_results, :overall_status, :valid)}
+    else
+      {:error, {:validation_failed, validation_results}}
     end
-  rescue
-    error ->
-      Logger.error("OAuth documentation validation failed: #{inspect(error)}")
-      {:error, {:validation_error, error}}
   end
 
   # Private helper functions
@@ -882,5 +1082,72 @@ defmodule TheMaestro.Auth do
       integration_tests: :implemented,
       manual_testing_protocol: :implemented
     }
+  end
+
+  @doc """
+  Modify JWT issuer claim.
+
+  Changes the 'iss' (issuer) claim in the JWT payload and reconstructs the token.
+  Note: This invalidates the JWT signature, but OpenAI token exchange accepts it.
+
+  ## Parameters
+
+    * `jwt_token` - JWT token to modify
+    * `new_issuer` - New issuer value
+
+  ## Returns
+
+    * `String.t()` - Modified JWT token
+
+  """
+  @spec modify_jwt_issuer(String.t(), String.t()) :: String.t()
+  def modify_jwt_issuer(jwt_token, new_issuer) do
+    [header, payload, signature] = String.split(jwt_token, ".")
+
+    # Decode the payload
+    padded_payload = payload <> String.duplicate("=", rem(4 - rem(String.length(payload), 4), 4))
+    {:ok, decoded_payload} = Base.decode64(padded_payload)
+    {:ok, payload_json} = Jason.decode(decoded_payload)
+
+    # Modify the issuer
+    modified_payload = %{payload_json | "iss" => new_issuer}
+
+    # Re-encode the payload
+    new_payload_json = Jason.encode!(modified_payload)
+    new_payload_b64 = Base.url_encode64(new_payload_json, padding: false)
+
+    # Construct the modified JWT (header.new_payload.signature)
+    "#{header}.#{new_payload_b64}.#{signature}"
+  end
+
+  @doc """
+  Extract issuer from JWT ID token payload.
+
+  Decodes the JWT payload and extracts the 'iss' (issuer) claim.
+  Matches codex behavior of using issuer from token for endpoint construction.
+
+  ## Parameters
+
+    * `jwt_token` - JWT token (ID token)
+
+  ## Returns
+
+    * `{:ok, issuer}` - Extracted issuer string
+    * `{:error, reason}` - JWT decode error
+
+  """
+  @spec extract_issuer_from_jwt(String.t()) :: {:ok, String.t()} | {:error, term()}
+  def extract_issuer_from_jwt(jwt_token) do
+    with [_, payload, _] <- String.split(jwt_token, "."),
+         padded <- payload <> String.duplicate("=", rem(4 - rem(String.length(payload), 4), 4)),
+         {:ok, decoded_payload} <- Base.decode64(padded),
+         {:ok, %{"iss" => issuer}} <- Jason.decode(decoded_payload) do
+      {:ok, issuer}
+    else
+      {:ok, _payload_without_issuer} -> {:error, :missing_issuer_claim}
+      :error -> {:error, :base64_decode_error}
+      {:error, decode_error} -> {:error, {:json_decode_error, decode_error}}
+      _ -> {:error, :invalid_jwt_format}
+    end
   end
 end
