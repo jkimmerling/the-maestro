@@ -9,6 +9,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       valid_attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
+        name: "test_session",
         credentials: %{
           "access_token" => "sk-ant-oat01-test-token",
           "refresh_token" => "sk-ant-oar01-test-refresh",
@@ -28,6 +29,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       valid_attrs = %{
         provider: :anthropic,
         auth_type: :api_key,
+        name: "test_api_session",
         credentials: %{
           "api_key" => "sk-ant-api03-test-key"
         }
@@ -56,6 +58,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
     test "requires auth_type field" do
       invalid_attrs = %{
         provider: :anthropic,
+        name: "test_session",
         credentials: %{"access_token" => "token"}
       }
 
@@ -69,6 +72,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       invalid_attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
+        name: "test_session",
         expires_at: DateTime.utc_now()
       }
 
@@ -82,6 +86,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       invalid_attrs = %{
         provider: :invalid_provider,
         auth_type: :oauth,
+        name: "test_session",
         credentials: %{"access_token" => "token"},
         expires_at: DateTime.utc_now()
       }
@@ -96,6 +101,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       invalid_attrs = %{
         provider: :anthropic,
         auth_type: :invalid_auth,
+        name: "test_session",
         credentials: %{"access_token" => "token"}
       }
 
@@ -109,6 +115,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       invalid_attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
+        name: "test_session",
         credentials: %{
           "access_token" => "sk-ant-oat01-token",
           "refresh_token" => "sk-ant-oar01-refresh"
@@ -126,6 +133,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       valid_attrs = %{
         provider: :anthropic,
         auth_type: :api_key,
+        name: "test_session",
         credentials: %{"api_key" => "sk-ant-api03-key"},
         expires_at: nil
       }
@@ -140,6 +148,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
         attrs = %{
           provider: provider,
           auth_type: :api_key,
+          name: "test_session_#{provider}",
           credentials: %{"api_key" => "test-key-#{provider}"}
         }
 
@@ -151,6 +160,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
     test "accepts both auth types" do
       base_attrs = %{
         provider: :anthropic,
+        name: "test_session",
         credentials: %{"access_token" => "token"}
       }
 
@@ -175,6 +185,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       valid_attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
+        name: "test_session",
         credentials: %{
           "access_token" => "sk-ant-oat01-db-test",
           "refresh_token" => "sk-ant-oar01-db-test",
@@ -200,6 +211,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       valid_attrs = %{
         provider: :openai,
         auth_type: :api_key,
+        name: "test_session",
         credentials: %{
           "api_key" => "sk-openai-test-key"
         }
@@ -217,10 +229,11 @@ defmodule TheMaestro.SavedAuthenticationTest do
       assert is_nil(saved_auth.expires_at)
     end
 
-    test "enforces unique constraint on provider and auth_type" do
+    test "enforces unique constraint on provider, auth_type, and name" do
       attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
+        name: "test_session",
         credentials: %{"access_token" => "token1"},
         expires_at: DateTime.utc_now()
       }
@@ -231,7 +244,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
         |> SavedAuthentication.changeset(attrs)
         |> Repo.insert()
 
-      # Try to insert duplicate
+      # Try to insert duplicate with same name
       duplicate_attrs = %{attrs | credentials: %{"access_token" => "token2"}}
 
       {:error, changeset} =
@@ -241,9 +254,17 @@ defmodule TheMaestro.SavedAuthenticationTest do
 
       refute changeset.valid?
 
-      assert "Authentication already exists for this provider and auth type" in errors_on(
-               changeset
-             )[:provider]
+      # Should allow same provider/auth_type with different name
+      different_name_attrs = %{
+        attrs
+        | name: "different_session",
+          credentials: %{"access_token" => "token3"}
+      }
+
+      {:ok, _} =
+        %SavedAuthentication{}
+        |> SavedAuthentication.changeset(different_name_attrs)
+        |> Repo.insert()
     end
 
     test "allows same provider with different auth types" do
@@ -251,6 +272,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       oauth_attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
+        name: "oauth_session",
         credentials: %{"access_token" => "oauth-token"},
         expires_at: DateTime.utc_now()
       }
@@ -264,6 +286,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       api_key_attrs = %{
         provider: :anthropic,
         auth_type: :api_key,
+        name: "api_key_session",
         credentials: %{"api_key" => "api-key-token"}
       }
 
@@ -293,6 +316,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
         |> SavedAuthentication.changeset(%{
           provider: :anthropic,
           auth_type: :oauth,
+          name: "complex_session",
           credentials: complex_credentials,
           expires_at: DateTime.utc_now()
         })
@@ -319,6 +343,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
         attrs = %{
           provider: provider,
           auth_type: auth_type,
+          name: "session_#{provider}_#{auth_type}",
           credentials: %{"token" => "#{provider}-#{auth_type}"}
         }
 
@@ -335,11 +360,12 @@ defmodule TheMaestro.SavedAuthenticationTest do
           |> Repo.insert()
       end
 
-      # Query for specific provider and auth type
+      # Query for specific provider, auth type, and name
       anthropic_oauth =
         Repo.get_by(SavedAuthentication,
           provider: :anthropic,
-          auth_type: :oauth
+          auth_type: :oauth,
+          name: "session_anthropic_oauth"
         )
 
       assert anthropic_oauth

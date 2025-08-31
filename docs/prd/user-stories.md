@@ -108,40 +108,57 @@
             
         - The module can accept an authorization code and exchange it for an `access_token` and `refresh_token` from OpenAI's token endpoint.
             
-- **1.7: OpenAI OAuth - Authenticated Call & Refresh**
+- **1.7: OpenAI OAuth — Modular Auth, Streaming, and Refresh (Dual‑Mode)**
     
-    - **As the system,** I need to use an OpenAI OAuth access token for API calls and refresh it.
+    - **As the system,** I need OpenAI OAuth to work transparently through the generic provider interface with full streaming and token refresh, supporting both ChatGPT (personal) and Enterprise (API key exchange) modes.
         
     - **Acceptance Criteria:**
         
-        - The `Client.build_client/1` function, when configured for OpenAI OAuth, injects the `Authorization: Bearer [ACCESS_TOKEN]` header.
+        - All interactions go through `TheMaestro.Provider` (no direct provider calls). Examples:
+          - `TheMaestro.Provider.create_session(:openai, :oauth, name: "work_openai")`
+          - `TheMaestro.Provider.list_models(:openai, :oauth, "work_openai")`
+          - `TheMaestro.Provider.stream_chat(:openai, "work_openai", messages, opts)`
+        - Dual‑mode detection implemented in provider:
+          - Personal ChatGPT accounts use `access_token` directly with ChatGPT backend endpoint
+          - Enterprise accounts perform Stage‑2 token exchange (RFC 8693) to obtain API key for `/v1/responses`
+        - All HTTP uses `Req`; provider internals and OAuth flows are implemented with `Req`
+        - Live streaming flows through `Req` streaming + shared SSE adapter into `TheMaestro.Streaming.parse_stream/3`
+        - Named sessions supported; multiple OpenAI OAuth sessions can co‑exist
+        - Background refresh worker supports OpenAI OAuth tokens
+        - HTTP for OAuth flows and E2E uses `Req` (align with Phoenix guidelines)
+        - E2E validates full prompt flow, usage stats, and interruption handling
             
-        - An Oban worker can use a stored refresh token to get a new access token from OpenAI.
-            
-- **1.8: Gemini OAuth - URL Generation & Token Exchange**
+- **1.8: Gemini OAuth — URL Generation, Token Exchange, and Model Listing (Modular)**
     
-    - **As the system,** I need to generate a Google OAuth 2.0 URL and handle the token exchange, mimicking the `gemini-cli` flow.
+    - **As the system,** I need a modular Gemini OAuth implementation (and API key alternative) behind the generic provider interface, including model listing and standardized streaming support.
         
-    - **Reference:** `gemini-cli` OAuth implementation and Google Identity docs: [https://developers.google.com/identity/protocols/oauth2/native-app](https://developers.google.com/identity/protocols/oauth2/native-app "null")
+    - **Reference:** `gemini-cli` OAuth implementation and Google Identity docs: [https://developers.google.com/identity/protocols/oauth2/native-app](https://developers.google.com/identity/protocols/oauth2/native-app)
         
     - **Acceptance Criteria:**
         
-        - The `LLMOrchestrator.Auth` module generates a valid Google OAuth 2.0 URL with PKCE.
+        - All interactions go through `TheMaestro.Provider`:
+          - `TheMaestro.Provider.create_session(:gemini, :oauth, name: "personal_gemini")`
+          - `TheMaestro.Provider.create_session(:gemini, :api_key, name: "svc_gemini", api_key: "..." )`
+          - `TheMaestro.Provider.list_models(:gemini, auth_type, session)` returns models for both OAuth and API key
+        - OAuth URL generated with PKCE; token exchange performed against Google token endpoint; implemented with `Req`
+        - All HTTP uses `Req` for both OAuth and provider calls
+        - Streaming responses processed via `Req` streaming + shared SSE adapter into `TheMaestro.Streaming.parse_stream/3`
+        - Named sessions supported for both OAuth and API key
+        - Background refresh worker supports Gemini OAuth refresh tokens
+        - E2E coverage planned: OAuth + streaming; API key + streaming
             
-        - The module can exchange an authorization code and `code_verifier` for an `access_token` and `refresh_token` from Google's token endpoint (`https://oauth2.googleapis.com/token`).
-            
-- **1.9: Gemini OAuth - Authenticated Call & Refresh**
+- **1.9: Gemini OAuth — Authenticated Call, Streaming, and Refresh (Modular)**
     
-    - **As the system,** I need to use a Gemini OAuth access token to make an API call and implement a background job to refresh it.
-        
-    - **Reference:** `gemini-cli` authenticated requests.
+    - **As the system,** I need to use a Gemini OAuth (or API key) session to make authenticated streaming calls through the generic interface and refresh tokens automatically.
         
     - **Acceptance Criteria:**
         
-        - The `Client.build_client/1` function, when configured for Gemini OAuth, injects the `Authorization: Bearer [ACCESS_TOKEN]` header.
-            
-        - An Oban worker can use a stored refresh token to request a new access token from Google.
-            
+        - Streaming chat via `TheMaestro.Provider.stream_chat(:gemini, session, messages, opts)` with generic parsing
+        - Token refresh supported by background worker for OAuth sessions
+        - Named sessions enabled; multiple sessions can co‑exist
+        - Model listing validated for the same session via the generic interface
+        - All HTTP uses `Req` (OAuth, provider calls, E2E); provider internals hidden from callers
+        - E2E validates complete prompt, full response assembly, usage stats (if available), and error recovery
 - **1.10: Response Streaming Foundation**
     
     - **As the system,** I need the HTTP client to process a chunked HTTP response and send each chunk to a calling process.
@@ -594,4 +611,3 @@
         - A `mix release` command is defined that builds the TUI into a single, executable file for at least one target platform (e.g., macOS, Linux, or Windows).
             
         - The resulting executable can be run from any directory and successfully connects to the main application.
-

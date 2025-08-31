@@ -150,3 +150,18 @@ config :the_maestro, :openai,
   beta_version: "assistants v2",
   user_agent: "llxprt/1.0",
   client_version: "1.0.0"
+
+# OpenAI OAuth 2.0 configuration for all environments
+# Based on OpenAI OAuth 2.0 specification and Codex CLI implementation
+config :the_maestro, :openai_oauth,
+  client_id: System.get_env("OPENAI_OAUTH_CLIENT_ID") || "app_EMoamEEZ73f0CkXaXp7hrann",
+  authorization_endpoint: "https://auth.openai.com/oauth/authorize",
+  token_endpoint: "https://auth.openai.com/oauth/token",
+  redirect_uri: "http://localhost:8080/auth/callback",
+  scopes: ["openid", "profile", "email", "offline_access"]
+
+# OpenAI OAuth client_id for potential future token refresh worker
+# Extracted from main OAuth config for easy access by workers
+config :the_maestro,
+       :openai_oauth_client_id,
+       System.get_env("OPENAI_OAUTH_CLIENT_ID") || "app_EMoamEEZ73f0CkXaXp7hrann"
