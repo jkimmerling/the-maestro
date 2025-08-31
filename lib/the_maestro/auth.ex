@@ -126,10 +126,9 @@ defmodule TheMaestro.Auth do
 
   ## Integration Notes
 
-  This module uses HTTPoison for OAuth token requests (separate from Tesla API client)
-  because OAuth and API endpoints have different authentication requirements.
-  OAuth endpoints require unauthenticated requests, while API endpoints
-  require authenticated requests with different client configurations.
+  This module uses Req for OAuth token requests with provider-specific Finch pools.
+  OAuth endpoints are unauthenticated (aside from PKCE), while API endpoints
+  require authenticated requests with different headers; both use Req consistently.
 
   The module follows the Manual OAuth Testing Protocol from testing-strategies.md,
   requiring human interaction for real OAuth provider validation during testing.
@@ -337,7 +336,7 @@ defmodule TheMaestro.Auth do
   ## Note
   This function makes real HTTP requests to Anthropic's OAuth endpoints.
   The request is sent as JSON (not form-encoded) following llxprt specifications.
-  Uses HTTPoison client separate from Tesla API client for endpoint compatibility.
+  Uses Req client for endpoint compatibility and correct form-encoding.
   """
   @spec exchange_code_for_tokens(String.t(), PKCEParams.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
