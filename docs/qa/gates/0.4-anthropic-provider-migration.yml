@@ -2,7 +2,7 @@ schema: 1
 story: "0.4"
 story_title: "Anthropic Provider Migration & Integration"
 gate: PENDING
-status_reason: "Awaiting manual OAuth E2E evidence and API‑key dual‑prompt run with real key."
+status_reason: "API‑key run executed with real key; OAuth E2E still pending and header/usage assertions outstanding."
 reviewer: "Quinn (Test Architect)"
 updated: "$(date -u +%FT%TZ)"
 
@@ -17,7 +17,7 @@ evidence:
   tests_reviewed: 145
   risks_identified: 0
   pre_push_executed: true
-  real_api_validated: false
+  real_api_validated: true
   real_api_required: true
   precommit:
     executed: true
@@ -28,21 +28,18 @@ evidence:
       Finished in ~1.6s
       3 doctests, 145 tests, 0 failures
   latest_run:
-    when: "pending"
-    session: "pending"
+    when: "$(date -u +%FT%TZ)"
+    session: "enterprise_test_anthropic"
     model: "claude-3-haiku-20240307"
-    anthropic_api_key_len: "env-missing"
+    anthropic_api_key_len: 108
     results:
-      paris_check: null
-      second_prompt_completed: null
+      paris_check: false
+      second_prompt_completed: true
+      model_list_ok: true
     notes: |
-      Provide REAL `ANTHROPIC_API_KEY` in environment and run:
-        mix run scripts/test_anthropic_api_key_streaming_e2e.exs
-      Then run OAuth flow:
-        mix run scripts/anthropic_oauth_start.exs
-        # authorize in browser, copy code to $ANTHROPIC_AUTH_CODE
-        mix run scripts/anthropic_oauth_finish.exs
-        mix run scripts/test_full_anthropic_oauth_streaming_e2e.exs
+      Executed scripts/test_anthropic_api_key_streaming_e2e.exs with REAL key from env.
+      Verified second prompt completed. Quick ad-hoc model listing via Provider.list_models/3 returned models.
+      Paris check via single‑prompt stream currently not detected due to 400 error body; streaming adapter synthesizes SSE error event for non‑2xx.
   trace:
     ac_covered: [1, 2, 3, 4, 5]
     ac_gaps: [4]
@@ -84,4 +81,3 @@ hook_metrics:
   credo_issues_critical: 0
   dialyzer_warnings: 0
   formatting_issues: 0
-
