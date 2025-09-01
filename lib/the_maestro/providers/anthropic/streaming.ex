@@ -23,12 +23,26 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
       if is_nil(model) do
         {:error, :missing_model}
       else
-        body = %{
+        base_body = %{
           "model" => model,
           "messages" => messages,
           "max_tokens" => Keyword.get(opts, :max_tokens, 512),
           "stream" => true
         }
+
+        # Claude Code parity: add system prompt for OAuth tokens
+        body =
+          case auth_type do
+            :oauth ->
+              Map.put(
+                base_body,
+                "system",
+                "You are Claude Code, Anthropic's official CLI for Claude."
+              )
+
+            _ ->
+              base_body
+          end
 
         StreamingAdapter.stream_request(req, method: :post, url: "/v1/messages", json: body)
       end
