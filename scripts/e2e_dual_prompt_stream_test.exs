@@ -5,6 +5,7 @@ Application.ensure_all_started(:logger)
 Application.ensure_all_started(:finch)
 
 alias TheMaestro.Provider
+alias TheMaestro.SavedAuthentication
 
 [provider_s, session | _rest] =
   case System.argv() do
@@ -16,21 +17,33 @@ alias TheMaestro.Provider
   end
 
 provider = String.to_atom(provider_s)
-model = System.get_env("MODEL") || Enum.at(System.argv(), 2) || default_model(provider)
 
-defp default_model(:openai), do: System.get_env("OPENAI_MODEL") || "gpt-4o"
-defp default_model(:anthropic), do: System.get_env("ANTHROPIC_MODEL") || "claude-3-haiku-20240307"
-defp default_model(:gemini), do: System.get_env("GEMINI_MODEL") || "gemini-1.5-flash"
-defp default_model(_), do: "gpt-4o"
+# Choose default model with ChatGPT personal => gpt-5, enterprise/API => gpt-4o
+model =
+  System.get_env("MODEL") ||
+    Enum.at(System.argv(), 2) ||
+    case provider do
+      :openai ->
+        case SavedAuthentication.get_by_provider_and_name(:openai, :oauth, session) do
+          %SavedAuthentication{} -> "gpt-5"
+          _ -> System.get_env("OPENAI_MODEL") || "gpt-4o"
+        end
+
+      :anthropic -> System.get_env("ANTHROPIC_MODEL") || "claude-3-haiku-20240307"
+      :gemini -> System.get_env("GEMINI_MODEL") || "gemini-1.5-flash"
+      _ -> "gpt-4o"
+    end
 
 defmodule E2E do
   def stream_and_collect(provider, session, messages, opts \\ []) do
+    debug = System.get_env("DEBUG") in ["1", "true", "TRUE"]
     case Provider.stream_chat(provider, session, messages, opts) do
       {:ok, stream} ->
         acc =
           stream
           |> TheMaestro.Streaming.parse_stream(provider)
           |> Enum.reduce(%{content: "", done: false}, fn msg, a ->
+            if debug, do: IO.inspect(msg, label: "stream msg")
             case msg.type do
               :content -> IO.write(msg.content); %{a | content: a.content <> (msg.content || "")}
               :done -> IO.puts("\n✅ Done"); %{a | done: true}
@@ -70,4 +83,3 @@ case Task.yield(task, 300_000) || Task.shutdown(task, :brutal_kill) do
   {:ok, {:error, reason}} -> IO.puts("\n❌ Streaming error: #{inspect(reason)}")
   nil -> IO.puts("\n⏱️  Timed out after 5 minutes; ending test run")
 end
-

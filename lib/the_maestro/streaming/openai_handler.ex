@@ -150,10 +150,19 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     [done_message(%{response_id: get_in(event, ["response", "id"])}) | messages]
   end
 
-  defp handle_openai_event(event, _opts) do
-    # Log unknown events for debugging
-    Logger.debug("Unknown OpenAI event type: #{inspect(event)}")
+  defp handle_openai_event(event, opts) do
+    # Optionally log unknown events for debugging
+    if log_unknown_events?(opts) do
+      Logger.debug("Unknown OpenAI event type: #{inspect(event)}")
+    end
+
     []
+  end
+
+  defp log_unknown_events?(opts) do
+    Keyword.get(opts, :log_unknown_events, false) ||
+      System.get_env("STREAM_LOG_UNKNOWN_EVENTS") in ["1", "true", "TRUE"] ||
+      Application.get_env(:the_maestro, :log_unknown_stream_events, false)
   end
 
   # Handle text deltas with reasoning detection

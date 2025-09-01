@@ -7,7 +7,10 @@ defmodule TheMaestro.Providers.ProviderComprehensiveTest do
 
   describe "Task 5.1: Universal Interface Testing - create_session/3" do
     test "creates session with valid parameters" do
-      session_params = [name: "test_session", credentials: %{"api_key" => "test-key"}]
+      session_params = [
+        name: "test_session",
+        credentials: %{"api_key" => "sk-test-key-1234567890123456"}
+      ]
 
       result = Provider.create_session(:openai, :api_key, session_params)
 

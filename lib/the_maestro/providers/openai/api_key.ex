@@ -77,10 +77,14 @@ defmodule TheMaestro.Providers.OpenAI.APIKey do
   @spec test_connection(Req.Request.t()) :: :ok | {:error, term()}
   def test_connection(%Req.Request{} = req) do
     case Req.request(req, method: :get, url: "/v1/models") do
-      {:ok, %Req.Response{status: 200}} -> :ok
+      {:ok, %Req.Response{status: 200}} ->
+        :ok
+
       {:ok, %Req.Response{status: status, body: body}} ->
         {:error, {:http_error, status, (is_binary(body) && body) || Jason.encode!(body)}}
-      {:error, reason} -> {:error, reason}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
