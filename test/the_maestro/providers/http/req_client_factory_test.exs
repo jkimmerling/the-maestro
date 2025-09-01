@@ -27,6 +27,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactoryTest do
       expected = %{
         "x-api-key" => ["sk-test-key"],
         "anthropic-version" => ["2023-06-01"],
+        "anthropic-beta" => ["messages-2023-12-15"],
         "user-agent" => ["llxprt/1.0"],
         "accept" => ["application/json"],
         "x-client-version" => ["1.0.0"]
