@@ -13,7 +13,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   @typedoc "A configured Req request"
   @type request :: Req.Request.t()
 
-  @spec create_client(Types.provider(), Types.auth_type(), keyword()) ::
+  @spec create_client(Types.provider(), Types.auth_type(), Types.request_opts()) ::
           {:ok, request()} | {:error, term()}
   def create_client(provider, auth_type \\ :api_key, opts \\ []) do
     with {:ok, base_url0, pool} <- provider_base_and_pool(provider),
@@ -52,7 +52,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
 
   def provider_base_and_pool(_), do: {:error, :invalid_provider}
 
-  @spec build_headers(Types.provider(), Types.auth_type(), keyword()) ::
+  @spec build_headers(Types.provider(), Types.auth_type(), Types.request_opts()) ::
           {:ok, [{String.t(), String.t()}]} | {:error, term()}
   def build_headers(:anthropic, :api_key, opts) do
     session_name = Keyword.get(opts, :session)

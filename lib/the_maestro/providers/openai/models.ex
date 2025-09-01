@@ -6,12 +6,13 @@ defmodule TheMaestro.Providers.OpenAI.Models do
   """
   @behaviour TheMaestro.Providers.Behaviours.Models
   require Logger
+  alias TheMaestro.Models.Model
   alias TheMaestro.Providers.Http.ReqClientFactory
   alias TheMaestro.SavedAuthentication
   alias TheMaestro.Types
 
   @impl true
-  @spec list_models(Types.session_id()) :: {:ok, [Types.model()]} | {:error, term()}
+  @spec list_models(Types.session_id()) :: {:ok, [Model.t()]} | {:error, term()}
   def list_models(session_name) when is_binary(session_name) do
     if Mix.env() == :test and System.get_env("RUN_REAL_API_TEST") != "1" do
       {:error, :not_implemented}
@@ -25,7 +26,7 @@ defmodule TheMaestro.Providers.OpenAI.Models do
         models =
           decoded
           |> Map.get("data", [])
-          |> Enum.map(fn %{"id" => id} -> %{id: id, name: id, capabilities: []} end)
+          |> Enum.map(fn %{"id" => id} -> %Model{id: id, name: id, capabilities: []} end)
 
         {:ok, models}
       else
@@ -43,7 +44,7 @@ defmodule TheMaestro.Providers.OpenAI.Models do
   end
 
   @impl true
-  @spec get_model_info(Types.session_id(), String.t()) :: {:ok, Types.model()} | {:error, term()}
+  @spec get_model_info(Types.session_id(), String.t()) :: {:ok, Model.t()} | {:error, term()}
   def get_model_info(session_name, model_id)
       when is_binary(session_name) and is_binary(model_id) do
     if Mix.env() == :test and System.get_env("RUN_REAL_API_TEST") != "1" do
@@ -55,7 +56,7 @@ defmodule TheMaestro.Providers.OpenAI.Models do
              Req.request(req, method: :get, url: "/v1/models/" <> model_id) do
         decoded = if is_binary(body), do: Jason.decode!(body), else: body
 
-        model = %{
+        model = %Model{
           id: Map.get(decoded, "id", model_id),
           name: Map.get(decoded, "id", model_id),
           capabilities: []

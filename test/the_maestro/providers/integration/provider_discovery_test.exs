@@ -11,6 +11,7 @@ defmodule TheMaestro.Providers.Integration.ProviderDiscoveryTest do
     assert :openai in providers
     assert :anthropic in providers
     assert :gemini in providers
+    refute :behaviours in providers
 
     # Since stubs are incomplete, available operations should be empty
     for entry <- registry do

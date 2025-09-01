@@ -2,14 +2,18 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
   @moduledoc """
   Req streaming adapter helpers.
 
-  Converts Req streaming responses to SSE-like event maps for consumption by
-  `TheMaestro.Streaming` and provider handlers.
+  Uses Req's `into: :self` asynchronous streaming to consume response body
+  chunks and converts them into SSE-like event maps. SSE parsing logic is
+  centralized in `TheMaestro.Streaming` to avoid duplication.
   """
+
+  alias TheMaestro.Types
 
   @typedoc "Parsed SSE-like event"
   @type sse_event :: %{event_type: String.t(), data: String.t()}
 
-  @spec stream_request(Req.Request.t(), keyword()) :: {:ok, Enumerable.t()} | {:error, term()}
+  @spec stream_request(Req.Request.t(), Types.request_opts()) ::
+          {:ok, Enumerable.t()} | {:error, term()}
   def stream_request(req, opts \\ []) do
     method = Keyword.get(opts, :method, :get)
     path_or_url = Keyword.get(opts, :url)
@@ -26,181 +30,88 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
   @spec parse_sse_events(Enumerable.t()) :: Enumerable.t()
   def parse_sse_events(enum) do
-    enum
-    |> Stream.map(&to_string/1)
-    |> Stream.flat_map(&chunk_to_events/1)
+    # Delegate to centralized SSE parser
+    TheMaestro.Streaming.parse_sse_stream(enum)
   end
 
   @spec handle_streaming_interruption(term()) :: :retry | :abort | {:error, term()}
   def handle_streaming_interruption(_reason), do: :retry
 
-  defp chunk_to_events(chunk) when is_binary(chunk) do
-    # Split on double newlines for individual events
-    chunk
-    |> String.split("\n\n", trim: true)
-    |> Enum.map(&parse_event/1)
-    |> Enum.filter(& &1)
-  end
-
-  defp parse_event(text) do
-    lines = String.split(text, "\n", trim: true)
-
-    {event, data} =
-      Enum.reduce(lines, {"message", ""}, fn line, {ev, acc} ->
-        cond do
-          String.starts_with?(line, "event: ") ->
-            {String.trim_leading(line, "event: "), acc}
-
-          String.starts_with?(line, "data: ") ->
-            {ev, append_data(acc, String.trim_leading(line, "data: "))}
-
-          true ->
-            {ev, acc}
-        end
-      end)
-
-    %{event_type: event, data: data}
-  end
-
-  defp append_data("", d), do: d
-  defp append_data(acc, d), do: acc <> "\n" <> d
-
-  # ===== Internal Finch streaming integration =====
+  # ===== Internal Req streaming integration =====
   defp do_stream_request(req, method, path_or_url, body, json, timeout) do
-    finch = Map.get(req.options, :finch)
-    base_url = Map.get(req.options, :base_url, "")
-    headers = req.headers |> headers_to_list()
-    headers = put_sse_headers(headers, json || body)
+    # Ensure SSE-friendly headers are present
+    req =
+      req
+      |> Req.Request.put_header("accept", "text/event-stream")
+      |> Req.Request.put_header("cache-control", "no-cache")
 
-    if is_atom(finch) do
-      full_url =
-        cond do
-          is_binary(path_or_url) and String.starts_with?(path_or_url, "http") -> path_or_url
-          is_binary(base_url) -> base_url <> path_or_url
-        end
+    req =
+      if json || body do
+        Req.Request.put_header(req, "content-type", "application/json")
+      else
+        req
+      end
 
-      payload =
-        cond do
-          json != nil -> Jason.encode!(json)
-          is_binary(body) -> body
-          true -> body
-        end
+    stream =
+      Stream.resource(
+        fn -> start_req_streaming(req, method, path_or_url, body, json, timeout) end,
+        fn state -> next_events(state) end,
+        fn _state -> :ok end
+      )
 
-      req_method = method |> to_string() |> String.upcase()
-      request = Finch.build(req_method, full_url, headers, payload)
-
-      stream =
-        Stream.resource(
-          fn -> start_streaming(finch, request, timeout) end,
-          fn state -> next_events(state) end,
-          fn _state -> :ok end
-        )
-
-      {:ok, stream}
-    else
-      {:error, :missing_finch_pool}
-    end
+    {:ok, stream}
   end
 
-  defp headers_to_list(headers_map) when is_map(headers_map) do
-    headers_map
-    |> Enum.flat_map(fn {k, vals} -> Enum.map(List.wrap(vals), fn v -> {k, v} end) end)
-  end
-
-  defp put_sse_headers(headers, payload) do
-    base =
-      headers
-      |> List.keydelete("accept", 0)
-      |> List.keydelete("cache-control", 0)
-      |> Kernel.++([
-        {"accept", "text/event-stream"},
-        {"cache-control", "no-cache"}
-      ])
-
-    case payload do
-      nil ->
-        base
-
-      _ ->
-        base
-        |> List.keydelete("content-type", 0)
-        |> Kernel.++([{"content-type", "application/json"}])
-    end
-  end
-
-  defp take_complete_events(buffer) do
-    parts = String.split(buffer, "\n\n")
-
-    case parts do
-      [] ->
-        {[], ""}
-
-      [_single] ->
-        {[], buffer}
-
-      _ ->
-        {complete, [remaining]} = Enum.split(parts, length(parts) - 1)
-
-        events =
-          complete
-          |> Enum.map(&parse_event/1)
-          |> Enum.filter(& &1)
-
-        {events, remaining}
-    end
-  end
-
-  defp start_streaming(finch, request, timeout) do
+  defp start_req_streaming(req, method, url, body, json, timeout) do
     parent = self()
 
     {:ok, task} =
       Task.start_link(fn ->
-        Finch.stream(request, finch, parent, &dispatch_stream_msg/2)
+        # Use Req's async streaming into this Task process, then forward chunks to parent
+        req_opts =
+          [
+            method: method,
+            url: url,
+            into: :self,
+            receive_timeout: timeout
+          ] ++
+            if(json != nil, do: [json: json], else: []) ++
+            if json == nil and body != nil, do: [body: body], else: []
+
+        resp = Req.request!(req, req_opts)
+
+        # Enumerate async body in the same Task (required by Req) and forward to parent
+        Enum.each(resp.body, fn chunk ->
+          send(parent, {:data, chunk})
+        end)
+
+        send(parent, :done)
       end)
 
     %{task: task, buffer: "", done: false, timeout: timeout}
   end
 
-  defp dispatch_stream_msg({:status, status}, dest) do
-    send(dest, {:status, status})
-    dest
-  end
-
-  defp dispatch_stream_msg({:headers, headers}, dest) do
-    send(dest, {:headers, headers})
-    dest
-  end
-
-  defp dispatch_stream_msg({:data, data}, dest) do
-    send(dest, {:data, data})
-    dest
-  end
-
-  defp dispatch_stream_msg(:done, dest) do
-    send(dest, :done)
-    dest
-  end
-
   defp next_events(state) do
-    receive do
-      {:data, data} when is_binary(data) ->
-        buffer = state.buffer <> data
-        {events, remaining} = take_complete_events(buffer)
-        {events, %{state | buffer: remaining}}
+    # If marked done, halt the stream to avoid emitting duplicate events/timeouts
+    if state.done do
+      {:halt, state}
+    else
+      receive do
+        {:data, data} when is_binary(data) ->
+          buffer = state.buffer <> data
+          {events, remaining} = TheMaestro.Streaming.parse_sse_buffer(buffer)
+          {events, %{state | buffer: remaining}}
 
-      {:status, _} ->
-        {[], state}
-
-      {:headers, _} ->
-        {[], state}
-
-      :done ->
-        {final_events, _} = take_complete_events(state.buffer)
-        {final_events, %{state | done: true}}
-    after
-      state.timeout ->
-        error = [%{event_type: "error", data: "stream_timeout"}]
-        {error, %{state | done: true}}
+        :done ->
+          {final_events, _} = TheMaestro.Streaming.parse_sse_buffer(state.buffer)
+          # Emit any remaining events, then halt on next invocation
+          {final_events, %{state | done: true}}
+      after
+        state.timeout ->
+          # Emit a single timeout error and mark done so we terminate
+          error = [%{event_type: "error", data: "stream_timeout"}]
+          {error, %{state | done: true}}
+      end
     end
   end
 end

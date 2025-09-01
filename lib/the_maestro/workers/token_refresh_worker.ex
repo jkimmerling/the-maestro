@@ -3,7 +3,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   Oban worker for periodic OAuth token refresh operations.
 
   Handles automatic refresh of OAuth access tokens before they expire to ensure
-  continuous API availability. Integrates with existing Tesla + Finch HTTP client
+  continuous API availability. Integrates with Req + Finch HTTP client
   infrastructure and updates the saved_authentications table with new tokens.
 
   ## Job Scheduling
@@ -210,7 +210,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
 
   ## Implementation Notes
 
-  - Uses Tesla + Finch HTTP client for refresh requests
+  - Uses Req + Finch HTTP client for refresh requests
   - Follows exact token exchange format from Story 1.3
   - Maintains same error handling patterns as initial OAuth flow
   - Logs refresh attempts without exposing sensitive token data

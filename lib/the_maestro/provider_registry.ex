@@ -93,7 +93,7 @@ defmodule TheMaestro.ProviderRegistry do
 
   @spec discover_and_validate_providers() :: [registry_entry()]
   defp discover_and_validate_providers do
-    potential_providers = [:openai, :anthropic, :gemini]
+    potential_providers = TheMaestro.Provider.list_providers()
     operations = [:oauth, :api_key, :streaming, :models]
 
     Enum.map(potential_providers, fn provider ->

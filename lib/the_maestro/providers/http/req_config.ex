@@ -31,7 +31,7 @@ defmodule TheMaestro.Providers.Http.ReqConfig do
   Merges the provided options on top of the base options.
   Later values win on key conflicts.
   """
-  @spec merge_with_base(keyword()) :: keyword()
+  @spec merge_with_base(TheMaestro.Types.request_opts()) :: TheMaestro.Types.request_opts()
   def merge_with_base(opts) when is_list(opts) do
     Keyword.merge(base_options(), opts, fn _k, _v1, v2 -> v2 end)
   end

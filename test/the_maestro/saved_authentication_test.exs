@@ -82,19 +82,18 @@ defmodule TheMaestro.SavedAuthenticationTest do
       assert "can't be blank" in errors_on(changeset)[:credentials]
     end
 
-    test "validates provider inclusion" do
-      invalid_attrs = %{
-        provider: :invalid_provider,
+    test "accepts dynamic provider values (no inclusion list)" do
+      attrs = %{
+        provider: :new_provider,
         auth_type: :oauth,
         name: "test_session",
         credentials: %{"access_token" => "token"},
         expires_at: DateTime.utc_now()
       }
 
-      changeset = SavedAuthentication.changeset(%SavedAuthentication{}, invalid_attrs)
-
-      refute changeset.valid?
-      assert "is invalid" in errors_on(changeset)[:provider]
+      changeset = SavedAuthentication.changeset(%SavedAuthentication{}, attrs)
+      assert changeset.valid?
+      refute changeset.errors != []
     end
 
     test "validates auth_type inclusion" do

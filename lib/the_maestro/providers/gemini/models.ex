@@ -4,12 +4,13 @@ defmodule TheMaestro.Providers.Gemini.Models do
   """
   @behaviour TheMaestro.Providers.Behaviours.Models
   require Logger
+  alias TheMaestro.Models.Model
   alias TheMaestro.Providers.Http.ReqClientFactory
   alias TheMaestro.SavedAuthentication
   alias TheMaestro.Types
 
   @impl true
-  @spec list_models(Types.session_id()) :: {:ok, [Types.model()]} | {:error, term()}
+  @spec list_models(Types.session_id()) :: {:ok, [Model.t()]} | {:error, term()}
   def list_models(session_name) when is_binary(session_name) do
     if Mix.env() == :test and System.get_env("RUN_REAL_API_TEST") != "1" do
       {:error, :not_implemented}
@@ -20,7 +21,10 @@ defmodule TheMaestro.Providers.Gemini.Models do
              Req.request(req, method: :get, url: "/v1beta/models") do
         decoded = if is_binary(body), do: Jason.decode!(body), else: body
         items = Map.get(decoded, "models", [])
-        models = Enum.map(items, fn %{"name" => id} -> %{id: id, name: id, capabilities: []} end)
+
+        models =
+          Enum.map(items, fn %{"name" => id} -> %Model{id: id, name: id, capabilities: []} end)
+
         {:ok, models}
       else
         {:ok, %Req.Response{status: status, body: body}} ->
@@ -37,7 +41,7 @@ defmodule TheMaestro.Providers.Gemini.Models do
   end
 
   @impl true
-  @spec get_model_info(Types.session_id(), String.t()) :: {:ok, Types.model()} | {:error, term()}
+  @spec get_model_info(Types.session_id(), String.t()) :: {:ok, Model.t()} | {:error, term()}
   def get_model_info(session_name, model_id)
       when is_binary(session_name) and is_binary(model_id) do
     if Mix.env() == :test and System.get_env("RUN_REAL_API_TEST") != "1" do
@@ -49,7 +53,7 @@ defmodule TheMaestro.Providers.Gemini.Models do
              Req.request(req, method: :get, url: "/v1beta/" <> model_id) do
         decoded = if is_binary(body), do: Jason.decode!(body), else: body
         id = Map.get(decoded, "name", model_id)
-        {:ok, %{id: id, name: id, capabilities: []}}
+        {:ok, %Model{id: id, name: id, capabilities: []}}
       else
         {:ok, %Req.Response{status: status, body: body}} ->
           {:error,

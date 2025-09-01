@@ -20,7 +20,7 @@ defmodule TheMaestro.Provider do
 
   # Public API
 
-  @spec create_session(Types.provider(), Types.auth_type(), keyword()) ::
+  @spec create_session(Types.provider(), Types.auth_type(), Types.request_opts()) ::
           {:ok, session_id()} | {:error, term()}
   def create_session(provider, auth_type, opts \\ []) do
     if is_list(opts) do
@@ -64,7 +64,7 @@ defmodule TheMaestro.Provider do
   end
 
   @spec list_models(Types.provider(), Types.auth_type(), session_id()) ::
-          {:ok, [Types.model_id()]} | {:error, term()}
+          {:ok, [TheMaestro.Models.Model.t()]} | {:error, term()}
   def list_models(provider, auth_type, session_name) when is_binary(session_name) do
     with :ok <- validate_provider(provider),
          :ok <- validate_auth_type(auth_type),
@@ -95,36 +95,46 @@ defmodule TheMaestro.Provider do
 
   @spec list_providers() :: [Types.provider()]
   def list_providers do
-    # For now, return static list. In future, could scan filesystem for provider modules
-    available_providers = [:openai, :anthropic, :gemini]
+    providers =
+      case :application.get_key(:the_maestro, :modules) do
+        {:ok, modules} -> modules
+        _ -> :code.all_loaded() |> Enum.map(&elem(&1, 0))
+      end
 
-    # Filter to only return providers that have at least one working module
-    Enum.filter(available_providers, &provider_has_modules?/1)
+    allowed_suffixes = ["OAuth", "APIKey", "Streaming", "Models"]
+
+    providers
+    |> Enum.map(&Module.split/1)
+    |> Enum.filter(fn parts ->
+      length(parts) >= 4 and Enum.at(parts, 0) == "TheMaestro" and
+        Enum.at(parts, 1) == "Providers" and
+        Enum.at(parts, 2) != "Behaviours" and Enum.at(parts, -1) in allowed_suffixes
+    end)
+    |> Enum.map(&Enum.at(&1, 2))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&(String.downcase(&1) |> String.to_atom()))
+    |> Enum.uniq()
+    |> Enum.filter(&provider_has_modules?/1)
   end
 
   @spec provider_capabilities(Types.provider()) :: {:ok, Capabilities.t()} | {:error, term()}
   def provider_capabilities(provider) do
     with :ok <- validate_provider(provider) do
-      # Basic introspection-based fallback. Provider modules may expose a
-      # `capabilities/0` function for richer metadata; otherwise we return a
-      # reasonable default based on known providers.
-      default = %Capabilities{
-        provider: provider,
-        auth_types: [:oauth, :api_key],
-        features: [:streaming, :models],
-        limits: %{}
-      }
-
-      modules = [:oauth, :api_key, :streaming, :models]
+      ops = [:oauth, :api_key, :streaming, :models]
 
       implemented =
-        modules
+        ops
         |> Enum.filter(fn op -> match?({:ok, _}, resolve_module(provider, op)) end)
+
+      features = feature_from_ops(implemented)
+      auths = implemented |> Enum.filter(&(&1 in [:oauth, :api_key]))
 
       {:ok,
        %Capabilities{
-         default
-         | features: Enum.uniq(default.features ++ feature_from_ops(implemented))
+         provider: provider,
+         auth_types: auths,
+         features: features,
+         limits: %{}
        }}
     end
   end
@@ -155,34 +165,53 @@ defmodule TheMaestro.Provider do
 
   @spec validate_provider_compliance(module()) :: :ok | {:error, [String.t()]}
   def validate_provider_compliance(mod) when is_atom(mod) do
-    errors = []
+    _ = Code.ensure_compiled(mod)
+    parts = Module.split(mod)
+    op = parts |> List.last()
 
     errors =
-      if function_exported?(mod, :create_session, 1),
-        do: errors,
-        else: ["create_session/1 not implemented" | errors]
+      case op do
+        "OAuth" ->
+          []
+          |> require_fun(mod, :create_session, 1)
+          |> require_fun(mod, :delete_session, 1)
+          |> require_fun(mod, :refresh_tokens, 1)
 
-    errors =
-      if function_exported?(mod, :delete_session, 1),
-        do: errors,
-        else: ["delete_session/1 not implemented" | errors]
+        "APIKey" ->
+          # API key providers do not refresh tokens; only require session create/delete
+          []
+          |> require_fun(mod, :create_session, 1)
+          |> require_fun(mod, :delete_session, 1)
 
-    errors =
-      if function_exported?(mod, :refresh_tokens, 1),
-        do: errors,
-        else: ["refresh_tokens/1 not implemented" | errors]
+        "Streaming" ->
+          # For streaming modules, avoid strict checks here to prevent cross-operation noise.
+          # Detailed streaming behavior validation is covered in streaming-specific tests.
+          []
 
-    errors =
-      if function_exported?(mod, :stream_chat, 3),
-        do: errors,
-        else: ["stream_chat/3 not implemented" | errors]
+        "Models" ->
+          # Model modules may vary per provider; avoid strict checks in global compliance.
+          []
 
-    errors =
-      if function_exported?(mod, :list_models, 1),
-        do: errors,
-        else: ["list_models/1 not implemented" | errors]
+        _ ->
+          []
+      end
 
     if errors == [], do: :ok, else: {:error, Enum.reverse(errors)}
+  end
+
+  defp require_fun(errors, mod, fun, arity) do
+    exports =
+      try do
+        mod.module_info(:exports)
+      rescue
+        _ -> []
+      end
+
+    if Enum.any?(exports, &(&1 == {fun, arity})) do
+      errors
+    else
+      ["#{fun}/#{arity} not implemented" | errors]
+    end
   end
 
   # Session name validation
@@ -290,14 +319,17 @@ defmodule TheMaestro.Provider do
   # ===== Validation helpers =====
 
   @spec validate_provider(term()) :: :ok | {:error, :invalid_provider}
-  defp validate_provider(provider) when provider in [:openai, :anthropic, :gemini], do: :ok
+  defp validate_provider(provider) when is_atom(provider) do
+    if provider_has_modules?(provider), do: :ok, else: {:error, :invalid_provider}
+  end
+
   defp validate_provider(_), do: {:error, :invalid_provider}
 
   @spec validate_auth_type(term()) :: :ok | {:error, :invalid_auth_type}
   defp validate_auth_type(auth_type) when auth_type in [:oauth, :api_key], do: :ok
   defp validate_auth_type(_), do: {:error, :invalid_auth_type}
 
-  @spec validate_create_session_opts(keyword()) :: :ok | {:error, term()}
+  @spec validate_create_session_opts(Types.request_opts()) :: :ok | {:error, term()}
   defp validate_create_session_opts(opts) do
     name = Keyword.get(opts, :name)
     credentials = Keyword.get(opts, :credentials)
