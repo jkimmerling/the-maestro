@@ -8,36 +8,17 @@ defmodule TheMaestro.Providers.Anthropic.OAuth do
   """
   @behaviour TheMaestro.Providers.Behaviours.Auth
 
-  alias TheMaestro.Types
-  alias TheMaestro.SavedAuthentication
   alias TheMaestro.Auth
+  alias TheMaestro.SavedAuthentication
+  alias TheMaestro.Types
 
   @impl true
   @spec create_session(Types.request_opts()) :: {:ok, Types.session_id()} | {:error, term()}
   def create_session(opts) when is_list(opts) do
-    name = Keyword.get(opts, :name)
-
-    code =
-      Keyword.get(opts, :auth_code_input) || Keyword.get(opts, :auth_code) ||
-        Keyword.get(opts, :code)
-
-    pkce = Keyword.get(opts, :pkce_params)
-
-    cond do
-      is_nil(name) or name == "" ->
-        {:error, :missing_session_name}
-
-      is_nil(code) or code == "" ->
-        {:error, :missing_auth_code}
-
-      is_nil(pkce) ->
-        {:error, :missing_pkce_params}
-
-      true ->
-        case Auth.finish_anthropic_oauth(code, pkce, name) do
-          {:ok, _token} -> {:ok, name}
-          {:error, reason} -> {:error, reason}
-        end
+    with {:ok, name, code, pkce} <- validate_opts(opts),
+         {:ok, %Auth.OAuthToken{} = token} <- Auth.exchange_code_for_tokens(code, pkce),
+         :ok <- Auth.persist_oauth_token(:anthropic, name, token) do
+      {:ok, name}
     end
   end
 
@@ -50,49 +31,62 @@ defmodule TheMaestro.Providers.Anthropic.OAuth do
   @impl true
   @spec refresh_tokens(Types.session_id()) :: {:ok, map()} | {:error, term()}
   def refresh_tokens(session_name) when is_binary(session_name) do
-    case SavedAuthentication.get_named_session(:anthropic, :oauth, session_name) do
-      %SavedAuthentication{credentials: %{"refresh_token" => refresh_token}} = _saved
-      when is_binary(refresh_token) and refresh_token != "" ->
-        cfg = Auth.AnthropicOAuthConfig.__struct__()
-        headers = [{"content-type", "application/json"}]
-
-        body = %{
-          "grant_type" => "refresh_token",
-          "client_id" => cfg.client_id,
-          "refresh_token" => refresh_token
-        }
-
-        req = Req.new(headers: headers, finch: :anthropic_finch)
-
-        case Req.request(req, method: :post, url: cfg.token_endpoint, json: body) do
-          {:ok, %Req.Response{status: 200, body: raw}} ->
-            decoded = if is_binary(raw), do: Jason.decode!(raw), else: raw
-
-            with {:ok, %Auth.OAuthToken{} = token} <- map_token_response(decoded),
-                 :ok <- Auth.persist_oauth_token(:anthropic, session_name, token) do
-              {:ok,
-               %{
-                 access_token: token.access_token,
-                 refresh_token: token.refresh_token,
-                 token_type: token.token_type,
-                 expiry: token.expiry,
-                 scope: token.scope
-               }}
-            end
-
-          {:ok, %Req.Response{status: status, body: body}} ->
-            {:error,
-             {:token_refresh_failed, status, (is_binary(body) && body) || Jason.encode!(body)}}
-
-          {:error, reason} ->
-            {:error, {:token_refresh_request_failed, reason}}
-        end
-
+    with %SavedAuthentication{credentials: %{"refresh_token" => refresh_token}} <-
+           SavedAuthentication.get_named_session(:anthropic, :oauth, session_name),
+         true <-
+           (is_binary(refresh_token) and refresh_token != "") or {:error, :no_refresh_token},
+         cfg <- Auth.AnthropicOAuthConfig.__struct__(),
+         headers <- [{"content-type", "application/json"}],
+         body <- %{
+           "grant_type" => "refresh_token",
+           "client_id" => cfg.client_id,
+           "refresh_token" => refresh_token
+         },
+         req <- Req.new(headers: headers, finch: :anthropic_finch),
+         {:ok, %Req.Response{status: 200, body: raw}} <-
+           Req.request(req, method: :post, url: cfg.token_endpoint, json: body),
+         decoded <- if(is_binary(raw), do: Jason.decode!(raw), else: raw),
+         {:ok, %Auth.OAuthToken{} = token} <- map_token_response(decoded),
+         :ok <- Auth.persist_oauth_token(:anthropic, session_name, token) do
+      {:ok,
+       %{
+         access_token: token.access_token,
+         refresh_token: token.refresh_token,
+         token_type: token.token_type,
+         expiry: token.expiry,
+         scope: token.scope
+       }}
+    else
       %SavedAuthentication{} ->
         {:error, :no_refresh_token}
 
-      _ ->
+      nil ->
         {:error, :not_found}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error,
+         {:token_refresh_failed, status, (is_binary(body) && body) || Jason.encode!(body)}}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  # Input validation helpers
+  defp validate_opts(opts) do
+    name = Keyword.get(opts, :name)
+
+    code =
+      Keyword.get(opts, :auth_code_input) || Keyword.get(opts, :auth_code) ||
+        Keyword.get(opts, :code)
+
+    pkce = Keyword.get(opts, :pkce_params)
+
+    cond do
+      !is_binary(name) or name == "" -> {:error, :missing_session_name}
+      !is_binary(code) or code == "" -> {:error, :missing_auth_code}
+      is_nil(pkce) -> {:error, :missing_pkce_params}
+      true -> {:ok, name, code, pkce}
     end
   end
 
