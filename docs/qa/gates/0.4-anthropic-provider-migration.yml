@@ -2,7 +2,7 @@ schema: 1
 story: "0.4"
 story_title: "Anthropic Provider Migration & Integration"
 gate: PENDING
-status_reason: "API‑key run executed with real key; OAuth E2E still pending and header/usage assertions outstanding."
+status_reason: "OAuth E2E pending manual authorization. API‑key run attempted with real key, but Anthropic returned 400: insufficient credit."
 reviewer: "Quinn (Test Architect)"
 updated: "$(date -u +%FT%TZ)"
 
@@ -17,7 +17,7 @@ evidence:
   tests_reviewed: 145
   risks_identified: 0
   pre_push_executed: true
-  real_api_validated: true
+  real_api_validated: false
   real_api_required: true
   precommit:
     executed: true
@@ -33,13 +33,13 @@ evidence:
     model: "claude-3-haiku-20240307"
     anthropic_api_key_len: 108
     results:
-      paris_check: false
-      second_prompt_completed: true
+      http_error: 400
+      http_error_reason: "insufficient_credit"
       model_list_ok: true
     notes: |
-      Executed scripts/test_anthropic_api_key_streaming_e2e.exs with REAL key from env.
-      Verified second prompt completed. Quick ad-hoc model listing via Provider.list_models/3 returned models.
-      Paris check via single‑prompt stream currently not detected due to 400 error body; streaming adapter synthesizes SSE error event for non‑2xx.
+      API‑key E2E attempted with REAL key from env, but Anthropic responded:
+        {"error":{"message":"Your credit balance is too low to access the Anthropic API.","type":"invalid_request_error"}, ...}
+      Dual-prompt success requires a funded key. Proceeding with OAuth E2E using your account.
   trace:
     ac_covered: [1, 2, 3, 4, 5]
     ac_gaps: [4]
