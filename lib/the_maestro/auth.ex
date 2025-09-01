@@ -136,6 +136,10 @@ defmodule TheMaestro.Auth do
 
   require Logger
   @dialyzer {:nowarn_function, persist_oauth_token: 3}
+  @dialyzer {:nowarn_function, save_gemini_session: 2}
+  @dialyzer {:nowarn_function, oauth_token_from_map: 1}
+  alias TheMaestro.Providers.Gemini.OAuth, as: GeminiOAuth
+  alias TheMaestro.SavedAuthentication
 
   # Embedded struct definitions per Phoenix conventions for simple structs
   defmodule AnthropicOAuthConfig do
@@ -247,6 +251,117 @@ defmodule TheMaestro.Auth do
   end
 
   # Public API functions
+
+  @doc """
+  Generate Gemini OAuth 2.0 authorization URL with PKCE parameters.
+
+  Uses Google accounts authorization endpoint and includes S256 PKCE challenge,
+  offline access, and required scopes for Gemini.
+
+  ## Returns
+
+    * `{:ok, {String.t(), PKCEParams.t()}}` - Success with URL and PKCE params
+
+  """
+  @spec generate_gemini_oauth_url() :: {:ok, {String.t(), PKCEParams.t()}}
+  def generate_gemini_oauth_url do
+    pkce = generate_pkce_params()
+
+    client_id =
+      System.get_env("GEMINI_OAUTH_CLIENT_ID") ||
+        "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
+
+    redirect_uri =
+      System.get_env("GEMINI_OAUTH_REDIRECT_URI") ||
+        "http://localhost:1455/oauth2callback"
+
+    scopes = [
+      "https://www.googleapis.com/auth/cloud-platform",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/generative-language.retriever"
+    ]
+
+    params = %{
+      "client_id" => client_id,
+      "redirect_uri" => redirect_uri,
+      "response_type" => "code",
+      "scope" => Enum.join(scopes, " "),
+      "state" => pkce.code_verifier,
+      "code_challenge" => pkce.code_challenge,
+      "code_challenge_method" => pkce.code_challenge_method,
+      "access_type" => "offline",
+      "prompt" => "consent"
+    }
+
+    # Note: v2 endpoint is the modern form; story examples use /oauth2/auth.
+    base =
+      System.get_env("GEMINI_AUTHORIZATION_ENDPOINT") ||
+        "https://accounts.google.com/o/oauth2/v2/auth"
+
+    {:ok, {base <> "?" <> URI.encode_query(params), pkce}}
+  end
+
+  @doc """
+  Finish Gemini OAuth: exchange authorization code for tokens and persist session.
+
+  Persists to `saved_authentications` under provider :gemini with auth_type :oauth.
+  Returns an OAuthToken struct mapped from Google's token response.
+  """
+  @spec finish_gemini_oauth(String.t(), PKCEParams.t(), String.t()) ::
+          {:ok, OAuthToken.t()} | {:error, term()}
+  def finish_gemini_oauth(auth_code, pkce_params, session_name) when is_binary(session_name) do
+    with {:ok, token_map} <-
+           GeminiOAuth.exchange_code_for_tokens(auth_code, %{
+             code_verifier: pkce_params.code_verifier
+           }),
+         {:ok, _} <- save_gemini_session(session_name, token_map) do
+      {:ok, oauth_token_from_map(token_map)}
+    end
+  end
+
+  defp save_gemini_session(session_name, token_map) do
+    attrs = saved_attrs_from_token_map(token_map)
+    SavedAuthentication.upsert_named_session(:gemini, :oauth, session_name, attrs)
+  end
+
+  defp saved_attrs_from_token_map(map) do
+    %{
+      credentials: %{
+        access_token: fetch_str(map, :access_token),
+        refresh_token: fetch_str(map, :refresh_token),
+        token_type: fetch_str(map, :token_type) || "Bearer",
+        scope: fetch_str(map, :scope)
+      },
+      expires_at: expires_at_from_map(map)
+    }
+  end
+
+  defp oauth_token_from_map(map) do
+    %OAuthToken{
+      access_token: fetch_str(map, :access_token),
+      refresh_token: fetch_str(map, :refresh_token),
+      id_token: fetch_str(map, :id_token),
+      expiry: fetch_int(map, :expiry),
+      scope: fetch_str(map, :scope),
+      token_type: fetch_str(map, :token_type) || "Bearer"
+    }
+  end
+
+  defp expires_at_from_map(map) do
+    case fetch_int(map, :expiry) do
+      int when is_integer(int) -> DateTime.from_unix!(int)
+      _ -> nil
+    end
+  end
+
+  defp fetch_str(map, key) do
+    Map.get(map, key) || Map.get(map, to_string(key))
+  end
+
+  defp fetch_int(map, key) do
+    Map.get(map, key) || Map.get(map, to_string(key))
+  end
 
   @doc """
   Generate OAuth authorization URL with PKCE parameters.
