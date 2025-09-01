@@ -134,33 +134,25 @@ defmodule TheMaestro.Streaming do
     * Stream of parsed SSE events as maps with :event_type and :data keys
 
   """
-  @spec parse_sse_stream(term(), keyword()) :: Enumerable.t()
-  def parse_sse_stream(stream, opts \\ []) do
-    buffer_size = Keyword.get(opts, :buffer_size, 8192)
-
-    Stream.resource(
-      fn ->
-        {stream, "", %{}}
+  @spec parse_sse_stream(Enumerable.t(), keyword()) :: Enumerable.t()
+  def parse_sse_stream(enum, _opts \\ []) do
+    # Accept any enumerable of iodata/binaries and turn it into SSE events.
+    Stream.transform(
+      enum,
+      fn -> "" end,
+      fn chunk, buffer ->
+        data = IO.iodata_to_binary(chunk)
+        new_buffer = buffer <> data
+        {events, remaining} = parse_sse_buffer(new_buffer)
+        {events, remaining}
       end,
-      fn {stream, buffer, state} ->
-        case read_stream_chunk(stream, buffer_size) do
-          {:ok, chunk} ->
-            new_buffer = buffer <> chunk
-            {events, remaining_buffer} = parse_sse_buffer(new_buffer)
-            {events, {stream, remaining_buffer, state}}
+      fn
+        buffer when is_binary(buffer) and buffer != "" ->
+          {events, _} = parse_sse_buffer(buffer)
+          events
 
-          {:done} ->
-            {events, _} = parse_sse_buffer(buffer)
-            {events ++ [%{event_type: "done", data: "[DONE]"}], nil}
-
-          {:error, reason} ->
-            Logger.error("Stream read error: #{inspect(reason)}")
-            {[%{event_type: "error", data: "Stream error: #{inspect(reason)}"}], nil}
-        end
-      end,
-      fn state ->
-        # Cleanup function
-        if state, do: cleanup_stream(state)
+        _ ->
+          []
       end
     )
   end
@@ -177,7 +169,14 @@ defmodule TheMaestro.Streaming do
   end
 
   # Parse SSE buffer into events
-  defp parse_sse_buffer(buffer) do
+  @doc """
+  Parse an accumulated SSE buffer into a list of events and remaining buffer.
+
+  Splits on double newlines to yield complete SSE events and returns the
+  remaining (possibly partial) buffer to be used on the next chunk.
+  """
+  @spec parse_sse_buffer(binary()) :: {[map()], binary()}
+  def parse_sse_buffer(buffer) do
     # Split on double newlines to separate events
     parts = String.split(buffer, "\n\n")
     {complete_events, remaining} = Enum.split(parts, length(parts) - 1)
@@ -192,7 +191,12 @@ defmodule TheMaestro.Streaming do
   end
 
   # Parse a single SSE event
-  defp parse_sse_event(event_text) do
+  @doc """
+  Parse a single SSE event text block into an event map.
+  Default event_type is "message" if none provided.
+  """
+  @spec parse_sse_event(binary()) :: %{event_type: binary(), data: binary()} | nil
+  def parse_sse_event(event_text) do
     lines = String.split(event_text, "\n")
 
     event = %{event_type: "message", data: ""}
@@ -216,23 +220,5 @@ defmodule TheMaestro.Streaming do
           acc
       end
     end)
-  end
-
-  # Read a chunk from the stream (implementation depends on stream type)
-  @spec read_stream_chunk(term(), non_neg_integer()) ::
-          {:ok, binary()} | {:done} | {:error, term()}
-  defp read_stream_chunk(stream, _buffer_size) do
-    cond do
-      is_binary(stream) -> {:ok, stream}
-      match?({:chunk, _}, stream) -> {:ok, elem(stream, 1)}
-      match?({:error, _}, stream) -> stream
-      true -> {:error, :unsupported_stream}
-    end
-  end
-
-  # Cleanup stream resources
-  defp cleanup_stream(_state) do
-    # Cleanup any stream resources if needed
-    :ok
   end
 end

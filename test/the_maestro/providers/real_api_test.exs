@@ -1,7 +1,7 @@
 defmodule TheMaestro.Providers.RealAPITest do
   use ExUnit.Case, async: false
 
-  alias TheMaestro.Providers.Client
+  alias TheMaestro.Providers.Http.ReqClientFactory
 
   @moduletag :real_api
 
@@ -22,10 +22,10 @@ defmodule TheMaestro.Providers.RealAPITest do
           Application.put_env(:the_maestro, :anthropic, test_config)
 
           try do
-            # Build client using our implementation
-            client = Client.build_client(:anthropic)
+            # Build Req client using our implementation
+            {:ok, req} = ReqClientFactory.create_client(:anthropic)
 
-            # Make a minimal API request
+            # Make a minimal API request via Req
             request_body = %{
               "model" => "claude-3-haiku-20240307",
               "max_tokens" => 10,
@@ -37,13 +37,14 @@ defmodule TheMaestro.Providers.RealAPITest do
               ]
             }
 
-            case Tesla.post(client, "/v1/messages", request_body) do
-              {:ok, %Tesla.Env{status: 200}} ->
+            case Req.request(req, method: :post, url: "/v1/messages", json: request_body) do
+              {:ok, %Req.Response{status: 200}} ->
                 IO.puts("✅ AC3 VALIDATED: Got 200 OK response - authentication successful!")
                 assert true
 
-              {:ok, %Tesla.Env{status: 400, body: body}} ->
-                error_message = get_in(body, ["error", "message"]) || ""
+              {:ok, %Req.Response{status: 400, body: body}} ->
+                decoded = if is_binary(body), do: Jason.decode!(body), else: body
+                error_message = get_in(decoded, ["error", "message"]) || ""
 
                 if String.contains?(error_message, "credit balance") do
                   IO.puts("✅ AC3 VALIDATED: Authentication successful (credit balance issue)")
@@ -53,15 +54,15 @@ defmodule TheMaestro.Providers.RealAPITest do
                   assert true, "Authentication worked but got request error: #{error_message}"
                 end
 
-              {:ok, %Tesla.Env{status: 401}} ->
+              {:ok, %Req.Response{status: 401}} ->
                 flunk("❌ AC3 FAILED: Got 401 Unauthorized - authentication not working")
 
-              {:ok, %Tesla.Env{status: 403}} ->
+              {:ok, %Req.Response{status: 403}} ->
                 flunk(
                   "❌ AC3 FAILED: Got 403 Forbidden - API key invalid or insufficient permissions"
                 )
 
-              {:ok, %Tesla.Env{status: status, body: _body}} ->
+              {:ok, %Req.Response{status: status}} ->
                 IO.puts("ℹ️  AC3: Got status #{status}")
 
                 if status < 500 do
@@ -70,7 +71,7 @@ defmodule TheMaestro.Providers.RealAPITest do
                   flunk("Server error: #{status}")
                 end
 
-              {:error, reason} ->
+              {:error, %Req.TransportError{reason: reason}} ->
                 flunk("Network error: #{inspect(reason)}")
             end
           after

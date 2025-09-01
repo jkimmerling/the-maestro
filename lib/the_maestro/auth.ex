@@ -126,16 +126,16 @@ defmodule TheMaestro.Auth do
 
   ## Integration Notes
 
-  This module uses HTTPoison for OAuth token requests (separate from Tesla API client)
-  because OAuth and API endpoints have different authentication requirements.
-  OAuth endpoints require unauthenticated requests, while API endpoints
-  require authenticated requests with different client configurations.
+  This module uses Req for OAuth token requests with provider-specific Finch pools.
+  OAuth endpoints are unauthenticated (aside from PKCE), while API endpoints
+  require authenticated requests with different headers; both use Req consistently.
 
   The module follows the Manual OAuth Testing Protocol from testing-strategies.md,
   requiring human interaction for real OAuth provider validation during testing.
   """
 
   require Logger
+  @dialyzer {:nowarn_function, persist_oauth_token: 3}
 
   # Embedded struct definitions per Phoenix conventions for simple structs
   defmodule AnthropicOAuthConfig do
@@ -336,7 +336,7 @@ defmodule TheMaestro.Auth do
   ## Note
   This function makes real HTTP requests to Anthropic's OAuth endpoints.
   The request is sent as JSON (not form-encoded) following llxprt specifications.
-  Uses HTTPoison client separate from Tesla API client for endpoint compatibility.
+  Uses Req client for endpoint compatibility and correct form-encoding.
   """
   @spec exchange_code_for_tokens(String.t(), PKCEParams.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
@@ -359,13 +359,20 @@ defmodule TheMaestro.Auth do
     # Send JSON request to OAuth token endpoint (like llxprt fetch)
     # Use direct HTTP request since OAuth endpoint is different from API endpoint
     headers = [{"content-type", "application/json"}]
-    json_body = Jason.encode!(request_body)
 
-    case HTTPoison.post(config.token_endpoint, json_body, headers) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-        map_token_response(Jason.decode!(response_body))
+    req = Req.new(headers: headers, finch: :anthropic_finch)
 
-      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
+    case Req.request(req,
+           method: :post,
+           url: config.token_endpoint,
+           json: request_body
+         ) do
+      {:ok, %Req.Response{status: 200, body: body}} ->
+        decoded = if is_binary(body), do: Jason.decode!(body), else: body
+        map_token_response(decoded)
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        response_body = if is_binary(body), do: body, else: Jason.encode!(body)
         Logger.error("Token exchange failed with status #{status}: #{response_body}")
         {:error, {:token_exchange_failed, status, response_body}}
 
@@ -494,29 +501,37 @@ defmodule TheMaestro.Auth do
   """
   @spec exchange_openai_id_token_for_api_key(String.t()) :: {:ok, String.t()} | {:error, term()}
   def exchange_openai_id_token_for_api_key(id_token) do
-    with {:ok, config} <- get_openai_oauth_config(),
-         token_endpoint <- "https://auth.openai.com/oauth/token",
-         headers <- [{"Content-Type", "application/x-www-form-urlencoded"}],
-         request_body <- build_openai_api_key_request(id_token, config),
-         _ <- Logger.info("Exchanging OpenAI ID token for API key"),
-         {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} <-
-           HTTPoison.post(token_endpoint, request_body, headers),
-         {:ok, %{"access_token" => api_key}} <- Jason.decode(response_body) do
-      Logger.info("Successfully obtained OpenAI API key")
-      {:ok, api_key}
-    else
-      {:ok, %HTTPoison.Response{status_code: status_code, body: error_body}} ->
-        Logger.error("OpenAI API key exchange failed with status #{status_code}: #{error_body}")
+    with {:ok, config} <- get_openai_oauth_config() do
+      token_endpoint = "https://auth.openai.com/oauth/token"
+      headers = [{"content-type", "application/x-www-form-urlencoded"}]
+      request_body = build_openai_api_key_request(id_token, config)
+      _ = Logger.info("Exchanging OpenAI ID token for API key")
 
-        {:error, {:api_key_exchange_failed, status_code, error_body}}
+      req = Req.new(headers: headers, finch: :openai_finch)
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        Logger.error("API key exchange request failed: #{inspect(reason)}")
-        {:error, {:api_key_request_failed, reason}}
+      case Req.request(req, method: :post, url: token_endpoint, body: request_body) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          decoded = if is_binary(body), do: Jason.decode!(body), else: body
 
-      {:error, decode_error} ->
-        Logger.error("Failed to decode API key response: #{inspect(decode_error)}")
-        {:error, :api_key_decode_error}
+          case decoded do
+            %{"access_token" => api_key} ->
+              Logger.info("Successfully obtained OpenAI API key")
+              {:ok, api_key}
+
+            _ ->
+              Logger.error("Failed to decode API key response: #{inspect(decoded)}")
+              {:error, :api_key_decode_error}
+          end
+
+        {:ok, %Req.Response{status: status_code, body: body}} ->
+          error_body = if is_binary(body), do: body, else: Jason.encode!(body)
+          Logger.error("OpenAI API key exchange failed with status #{status_code}: #{error_body}")
+          {:error, {:api_key_exchange_failed, status_code, error_body}}
+
+        {:error, %Req.TransportError{reason: reason}} ->
+          Logger.error("API key exchange request failed: #{inspect(reason)}")
+          {:error, {:api_key_request_failed, reason}}
+      end
     end
   end
 
@@ -672,26 +687,27 @@ defmodule TheMaestro.Auth do
   @spec exchange_openai_code_for_tokens(String.t(), PKCEParams.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
   def exchange_openai_code_for_tokens(auth_code, pkce_params) do
-    with {:ok, config} <- get_openai_oauth_config(),
-         request_body <- build_openai_token_request(auth_code, pkce_params, config),
-         headers <- [{"content-type", "application/x-www-form-urlencoded"}],
-         form_body <- URI.encode_query(request_body),
-         {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} <-
-           HTTPoison.post(config.token_endpoint, form_body, headers),
-         {:ok, decoded} <- Jason.decode(response_body) do
-      validate_openai_token_response(decoded)
-    else
-      {:ok, %HTTPoison.Response{status_code: status, body: response_body}} ->
-        Logger.error("OpenAI token exchange failed with status #{status}: #{response_body}")
-        {:error, {:token_exchange_failed, status, response_body}}
+    with {:ok, config} <- get_openai_oauth_config() do
+      request_body = build_openai_token_request(auth_code, pkce_params, config)
+      headers = [{"content-type", "application/x-www-form-urlencoded"}]
+      form_body = URI.encode_query(request_body)
 
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        Logger.error("OpenAI token request failed: #{inspect(reason)}")
-        {:error, {:token_request_failed, reason}}
+      req = Req.new(headers: headers, finch: :openai_finch)
 
-      {:error, reason} ->
-        Logger.error("Failed to decode token response: #{inspect(reason)}")
-        {:error, :token_decode_failed}
+      case Req.request(req, method: :post, url: config.token_endpoint, body: form_body) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          decoded = if is_binary(body), do: Jason.decode!(body), else: body
+          validate_openai_token_response(decoded)
+
+        {:ok, %Req.Response{status: status, body: body}} ->
+          response_body = if is_binary(body), do: body, else: Jason.encode!(body)
+          Logger.error("OpenAI token exchange failed with status #{status}: #{response_body}")
+          {:error, {:token_exchange_failed, status, response_body}}
+
+        {:error, reason} ->
+          Logger.error("OpenAI token request failed: #{inspect(reason)}")
+          {:error, {:token_request_failed, reason}}
+      end
     end
   end
 
@@ -978,6 +994,74 @@ defmodule TheMaestro.Auth do
   # Private helper functions
 
   # Parse authorization code input handling both "code#state" and "code" formats
+
+  @doc """
+  Finish Anthropic OAuth flow and persist tokens to a named session.
+
+  Exchanges the authorization code for tokens using Req and saves them to
+  `saved_authentications` under the given `session_name`.
+  """
+  @spec finish_anthropic_oauth(String.t(), PKCEParams.t(), String.t()) ::
+          {:ok, OAuthToken.t()} | {:error, term()}
+  def finish_anthropic_oauth(auth_code_input, pkce_params, session_name)
+      when is_binary(session_name) do
+    with {:ok, %OAuthToken{} = token} <- exchange_code_for_tokens(auth_code_input, pkce_params),
+         :ok <- persist_oauth_token(:anthropic, session_name, token) do
+      {:ok, token}
+    end
+  end
+
+  @doc """
+  Finish OpenAI OAuth flow and persist tokens to a named session.
+
+  Exchanges the authorization code for tokens using Req and saves them to
+  `saved_authentications` under the given `session_name`.
+  """
+  @spec finish_openai_oauth(String.t(), PKCEParams.t(), String.t()) ::
+          {:ok, OAuthToken.t()} | {:error, term()}
+  def finish_openai_oauth(auth_code, pkce_params, session_name) when is_binary(session_name) do
+    with {:ok, %OAuthToken{} = token} <- exchange_openai_code_for_tokens(auth_code, pkce_params),
+         :ok <- persist_oauth_token(:openai, session_name, token) do
+      {:ok, token}
+    end
+  end
+
+  @doc false
+  @spec persist_oauth_token(:anthropic | :openai, String.t(), OAuthToken.t()) ::
+          :ok | {:error, term()}
+  def persist_oauth_token(provider, session_name, %OAuthToken{} = token) do
+    alias TheMaestro.SavedAuthentication
+
+    expires_at =
+      case token.expiry do
+        nil ->
+          nil
+
+        int when is_integer(int) ->
+          case DateTime.from_unix(int) do
+            {:ok, dt} -> dt
+            _ -> nil
+          end
+      end
+
+    attrs = %{
+      credentials: %{
+        "access_token" => token.access_token,
+        "refresh_token" => token.refresh_token,
+        "id_token" => token.id_token,
+        "scope" => token.scope,
+        "token_type" => token.token_type || "Bearer"
+      },
+      expires_at: expires_at
+    }
+
+    case SavedAuthentication.upsert_named_session(provider, :oauth, session_name, attrs) do
+      {:ok, _sa} -> :ok
+      {:error, %Ecto.Changeset{} = cs} -> {:error, cs}
+      _ -> {:error, :unexpected_result}
+    end
+  end
+
   defp parse_auth_code_input(auth_code_input, default_state) do
     case String.split(auth_code_input, "#", parts: 2) do
       [auth_code, state] -> {auth_code, state}

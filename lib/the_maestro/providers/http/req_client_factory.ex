@@ -6,24 +6,34 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   Anthropic, OpenAI, and Gemini with ordered headers and connection pooling.
   """
 
+  alias TheMaestro.Providers.Http.ReqConfig
+  alias TheMaestro.SavedAuthentication
   alias TheMaestro.Types
 
   @typedoc "A configured Req request"
   @type request :: Req.Request.t()
 
-  @spec create_client(Types.provider(), Types.auth_type(), keyword()) ::
+  @spec create_client(Types.provider(), Types.auth_type(), Types.request_opts()) ::
           {:ok, request()} | {:error, term()}
   def create_client(provider, auth_type \\ :api_key, opts \\ []) do
-    with {:ok, base_url, pool} <- provider_base_and_pool(provider),
-         {:ok, headers} <- build_headers(provider, auth_type, opts),
-         retry_opts <- Keyword.get(opts, :retry, max_retries: 2, backoff_factor: 2.0) do
-      req =
-        Req.new(
+    with {:ok, base_url0, pool} <- provider_base_and_pool(provider),
+         {:ok, headers} <- build_headers(provider, auth_type, opts) do
+      base_url =
+        case provider do
+          :openai -> choose_openai_base_url(auth_type, opts, base_url0)
+          _ -> base_url0
+        end
+
+      # Merge base options with provider-specific options; caller opts (like :retry)
+      # should take precedence when provided.
+      merged_opts =
+        ReqConfig.merge_with_base(
           base_url: base_url,
           finch: pool,
-          headers: headers,
-          retry: retry_opts
+          headers: headers
         )
+
+      req = Req.new(merged_opts)
 
       {:ok, req}
     end
@@ -42,10 +52,18 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
 
   def provider_base_and_pool(_), do: {:error, :invalid_provider}
 
-  @spec build_headers(Types.provider(), Types.auth_type(), keyword()) ::
+  @spec build_headers(Types.provider(), Types.auth_type(), Types.request_opts()) ::
           {:ok, [{String.t(), String.t()}]} | {:error, term()}
-  def build_headers(:anthropic, :api_key, _opts) do
-    api_key = Application.get_env(:the_maestro, :anthropic, []) |> Keyword.get(:api_key)
+  def build_headers(:anthropic, :api_key, opts) do
+    session_name = Keyword.get(opts, :session)
+    saved = if session_name, do: get_saved_auth(:anthropic, :api_key, session_name), else: nil
+
+    api_key =
+      if is_map(saved) do
+        saved.credentials["api_key"]
+      else
+        Application.get_env(:the_maestro, :anthropic, []) |> Keyword.get(:api_key)
+      end
 
     case is_binary(api_key) and api_key != "" do
       true ->
@@ -65,13 +83,104 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     end
   end
 
-  def build_headers(:anthropic, :oauth, _opts) do
-    # OAuth header composition would include Bearer token pulled from DB/session
-    # For Story 0.2, leave unimplemented.
-    {:error, :not_implemented}
+  def build_headers(:anthropic, :oauth, opts) do
+    session_name = Keyword.get(opts, :session)
+
+    with {:ok, saved} <- fetch_saved(:anthropic, :oauth, session_name),
+         :ok <- ensure_not_expired(saved.expires_at),
+         {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
+      {:ok,
+       [
+         {"authorization", token_type <> " " <> access_token},
+         {"anthropic-version", "2023-06-01"},
+         {"anthropic-beta", "oauth-2025-04-20"},
+         {"user-agent", "llxprt/1.0"},
+         {"accept", "application/json"},
+         {"x-client-version", "1.0.0"}
+       ]}
+    end
   end
 
-  def build_headers(:openai, :api_key, _opts) do
+  def build_headers(:openai, :api_key, opts) do
+    case Keyword.get(opts, :session) do
+      session when is_binary(session) and session != "" ->
+        build_openai_api_key_headers_session(session)
+
+      _ ->
+        build_openai_api_key_headers_env()
+    end
+  end
+
+  def build_headers(:openai, :oauth, opts) do
+    session_name = Keyword.get(opts, :session)
+
+    with {:ok, saved} <- fetch_saved(:openai, :oauth, session_name),
+         :ok <- ensure_not_expired(saved.expires_at),
+         {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
+      org_id = Application.get_env(:the_maestro, :openai, []) |> Keyword.get(:organization_id)
+
+      base_headers = [
+        {"authorization", token_type <> " " <> access_token},
+        {"user-agent", "llxprt/1.0"},
+        {"accept", "application/json"},
+        {"x-client-version", "1.0.0"}
+      ]
+
+      headers =
+        case org_id do
+          id when is_binary(id) and id != "" ->
+            [{"openai-organization", id} | base_headers]
+
+          _ ->
+            base_headers
+        end
+
+      {:ok, headers}
+    end
+  end
+
+  def build_headers(:gemini, _auth_type, _opts) do
+    # No default headers for Gemini at this time
+    headers = []
+    {:ok, headers}
+  end
+
+  def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
+
+  # ===== OpenAI endpoint selection =====
+  defp choose_openai_base_url(_auth_type, opts, default) do
+    cfg = Application.get_env(:the_maestro, :openai, [])
+    mode = Keyword.get(opts, :mode, Keyword.get(cfg, :mode, :api))
+
+    case mode do
+      :chatgpt -> Keyword.get(cfg, :chatgpt_base_url, "https://chat.openai.com/backend-api")
+      :api -> Keyword.get(cfg, :api_base_url, default)
+      _ -> default
+    end
+  end
+
+  defp openai_base_headers(api_key) do
+    [
+      {"authorization", "Bearer #{api_key}"},
+      {"user-agent", "llxprt/1.0"},
+      {"accept", "application/json"},
+      {"x-client-version", "1.0.0"}
+    ]
+  end
+
+  defp build_openai_api_key_headers_session(session_name) do
+    case get_saved_auth(:openai, :api_key, session_name) do
+      %SavedAuthentication{credentials: %{"api_key" => api_key}}
+      when is_binary(api_key) and
+             api_key != "" ->
+        {:ok, openai_base_headers(api_key)}
+
+      _ ->
+        {:error, :missing_api_key}
+    end
+  end
+
+  defp build_openai_api_key_headers_env do
     cfg = Application.get_env(:the_maestro, :openai, [])
     api_key = Keyword.get(cfg, :api_key)
     org_id = Keyword.get(cfg, :organization_id)
@@ -84,26 +193,51 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
         {:error, :missing_org_id}
 
       true ->
-        headers = [
-          {"authorization", "Bearer #{api_key}"},
-          {"openai-organization", org_id},
-          {"openai-beta", "assistants v2"},
-          {"user-agent", "llxprt/1.0"},
-          {"accept", "application/json"},
-          {"x-client-version", "1.0.0"}
-        ]
-
-        {:ok, headers}
+        {:ok,
+         [
+           {"openai-organization", org_id},
+           {"openai-beta", "assistants v2"} | openai_base_headers(api_key)
+         ]}
     end
   end
 
-  def build_headers(:openai, :oauth, _opts), do: {:error, :not_implemented}
+  # ===== Internal helpers =====
 
-  def build_headers(:gemini, _auth_type, _opts) do
-    # No default headers for Gemini at this time
-    headers = []
-    {:ok, headers}
+  @spec get_saved_auth(atom(), atom(), String.t() | nil) :: SavedAuthentication.t() | nil
+  defp get_saved_auth(provider, auth_type, nil) do
+    provider
+    |> SavedAuthentication.list_by_provider()
+    |> Enum.find(&(&1.auth_type == auth_type))
   end
 
-  def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
+  defp get_saved_auth(provider, auth_type, session_name) when is_binary(session_name) do
+    SavedAuthentication.get_by_provider_and_name(provider, auth_type, session_name)
+  end
+
+  @spec fetch_saved(atom(), atom(), String.t() | nil) ::
+          {:ok, SavedAuthentication.t()} | {:error, :not_found}
+  defp fetch_saved(provider, auth_type, session_name) do
+    case get_saved_auth(provider, auth_type, session_name) do
+      %SavedAuthentication{} = saved -> {:ok, saved}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @spec ensure_not_expired(DateTime.t() | nil) :: :ok | {:error, :expired}
+  defp ensure_not_expired(nil), do: :ok
+
+  defp ensure_not_expired(%DateTime{} = expires_at) do
+    if DateTime.compare(DateTime.utc_now(), expires_at) == :lt, do: :ok, else: {:error, :expired}
+  end
+
+  @spec fetch_token(map()) :: {:ok, String.t(), String.t()} | {:error, :missing_token}
+  defp fetch_token(%{} = creds) do
+    case Map.get(creds, "access_token") do
+      token when is_binary(token) and token != "" ->
+        {:ok, token, Map.get(creds, "token_type", "Bearer")}
+
+      _ ->
+        {:error, :missing_token}
+    end
+  end
 end

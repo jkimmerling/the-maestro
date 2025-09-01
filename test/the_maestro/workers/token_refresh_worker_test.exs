@@ -3,14 +3,16 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
   use TheMaestro.DataCase
   use Oban.Testing, repo: TheMaestro.Repo
 
-  import Mox
-
   alias Oban.Job
   alias TheMaestro.Auth.OAuthToken
   alias TheMaestro.SavedAuthentication
   alias TheMaestro.Workers.TokenRefreshWorker
 
-  setup :verify_on_exit!
+  setup do
+    # Ensure no leftover req_request_fun between tests
+    on_exit(fn -> Application.delete_env(:the_maestro, :req_request_fun) end)
+    :ok
+  end
 
   describe "perform/1" do
     setup do
@@ -38,27 +40,25 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         })
         |> Repo.insert()
 
-      # Mock HTTPoison response for successful token refresh
-      expect(HTTPoisonMock, :post, fn
-        "https://auth.anthropic.com/oauth/token", body, [{"content-type", "application/json"}] ->
-          # Verify request body contains correct refresh token
-          decoded_body = Jason.decode!(body)
-          assert decoded_body["grant_type"] == "refresh_token"
-          assert decoded_body["refresh_token"] == "sk-ant-oar01-refresh-token"
+      # Inject Req request function for successful token refresh
+      Application.put_env(:the_maestro, :req_request_fun, fn _req, opts ->
+        assert Keyword.get(opts, :method) == :post
+        assert Keyword.get(opts, :url) == "https://auth.anthropic.com/oauth/token"
+        body = Keyword.get(opts, :json)
+        assert body["grant_type"] == "refresh_token"
+        assert body["refresh_token"] == "sk-ant-oar01-refresh-token"
 
-          # Return successful response
-          {:ok,
-           %HTTPoison.Response{
-             status_code: 200,
-             body:
-               Jason.encode!(%{
-                 "access_token" => "sk-ant-oat01-new-token",
-                 "refresh_token" => "sk-ant-oar01-new-refresh",
-                 "expires_in" => 3600,
-                 "token_type" => "Bearer",
-                 "scope" => "user:profile user:inference"
-               })
-           }}
+        {:ok,
+         %Req.Response{
+           status: 200,
+           body: %{
+             "access_token" => "sk-ant-oat01-new-token",
+             "refresh_token" => "sk-ant-oar01-new-refresh",
+             "expires_in" => 3600,
+             "token_type" => "Bearer",
+             "scope" => "user:profile user:inference"
+           }
+         }}
       end)
 
       # Create and execute Oban job
@@ -109,9 +109,9 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         })
         |> Repo.insert()
 
-      # Mock HTTPoison to return network error
-      expect(HTTPoisonMock, :post, fn _, _, _ ->
-        {:error, %HTTPoison.Error{reason: :timeout}}
+      # Inject Req request function to return network error
+      Application.put_env(:the_maestro, :req_request_fun, fn _req, _opts ->
+        {:error, %Req.TransportError{reason: :timeout}}
       end)
 
       job = %Job{
@@ -144,13 +144,9 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         })
         |> Repo.insert()
 
-      # Mock HTTPoison to return 401 (invalid refresh token)
-      expect(HTTPoisonMock, :post, fn _, _, _ ->
-        {:ok,
-         %HTTPoison.Response{
-           status_code: 401,
-           body: Jason.encode!(%{"error" => "invalid_grant"})
-         }}
+      # Inject Req request function to return 401 (invalid refresh token)
+      Application.put_env(:the_maestro, :req_request_fun, fn _req, _opts ->
+        {:ok, %Req.Response{status: 401, body: %{"error" => "invalid_grant"}}}
       end)
 
       job = %Job{
@@ -299,23 +295,23 @@ defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
         })
         |> Repo.insert()
 
-      # Mock successful HTTPoison response
-      expect(HTTPoisonMock, :post, fn
-        "https://auth.anthropic.com/oauth/token", body, _ ->
-          decoded = Jason.decode!(body)
-          assert decoded["refresh_token"] == "sk-ant-oar01-current"
+      # Inject Req request function for successful refresh
+      Application.put_env(:the_maestro, :req_request_fun, fn _req, opts ->
+        assert Keyword.get(opts, :method) == :post
+        assert Keyword.get(opts, :url) == "https://auth.anthropic.com/oauth/token"
+        decoded = Keyword.get(opts, :json)
+        assert decoded["refresh_token"] == "sk-ant-oar01-current"
 
-          {:ok,
-           %HTTPoison.Response{
-             status_code: 200,
-             body:
-               Jason.encode!(%{
-                 "access_token" => "sk-ant-oat01-refreshed",
-                 "refresh_token" => "sk-ant-oar01-refreshed",
-                 "expires_in" => 7200,
-                 "token_type" => "Bearer"
-               })
-           }}
+        {:ok,
+         %Req.Response{
+           status: 200,
+           body: %{
+             "access_token" => "sk-ant-oat01-refreshed",
+             "refresh_token" => "sk-ant-oar01-refreshed",
+             "expires_in" => 7200,
+             "token_type" => "Bearer"
+           }
+         }}
       end)
 
       assert {:ok, %OAuthToken{} = oauth_token} =

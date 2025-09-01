@@ -9,6 +9,7 @@ defmodule TheMaestro.ProviderTest do
       assert :openai in providers
       assert :anthropic in providers
       assert :gemini in providers
+      refute :behaviours in providers
     end
   end
 

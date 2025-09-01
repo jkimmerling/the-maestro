@@ -6,7 +6,7 @@ defmodule TheMaestro.Types do
   """
 
   @typedoc "Supported provider identifiers"
-  @type provider :: :openai | :anthropic | :gemini
+  @type provider :: atom()
 
   @typedoc "Supported authentication types"
   @type auth_type :: :oauth | :api_key
@@ -18,15 +18,17 @@ defmodule TheMaestro.Types do
   @type model_id :: String.t()
 
   @typedoc "Model information structure"
-  @type model :: %{
-          id: String.t(),
-          name: String.t(),
-          capabilities: [String.t()]
-        }
+  @type model :: TheMaestro.Models.Model.t()
 
   @typedoc "Provider capability descriptor"
   @type provider_capabilities :: %{
           auth_types: [auth_type()],
           features: [atom()]
         }
+
+  @typedoc "Opaque provider credentials map (API keys, OAuth tokens, etc.)"
+  @type credentials :: map()
+
+  @typedoc "Standard request options passed to HTTP helpers"
+  @type request_opts :: keyword()
 end

@@ -35,7 +35,7 @@ defmodule TheMaestro.SavedAuthentication do
 
   @type t :: %__MODULE__{
           id: integer() | nil,
-          provider: :anthropic | :openai | :gemini,
+          provider: atom(),
           auth_type: :api_key | :oauth,
           name: String.t(),
           credentials: map(),
@@ -48,7 +48,7 @@ defmodule TheMaestro.SavedAuthentication do
   @type attrs :: %{optional(atom()) => any()}
 
   schema "saved_authentications" do
-    field :provider, Ecto.Enum, values: [:anthropic, :openai, :gemini]
+    field :provider, TheMaestro.EctoTypes.Provider
     field :auth_type, Ecto.Enum, values: [:api_key, :oauth]
     field :name, :string
     field :credentials, :map
@@ -84,7 +84,7 @@ defmodule TheMaestro.SavedAuthentication do
     saved_authentication
     |> cast(atomized_attrs, [:provider, :auth_type, :name, :credentials, :expires_at])
     |> validate_required([:provider, :auth_type, :name, :credentials])
-    |> validate_inclusion(:provider, [:anthropic, :openai, :gemini])
+    # provider is a dynamic value; validated by domain flows during usage
     |> validate_inclusion(:auth_type, [:api_key, :oauth])
     |> validate_name()
     |> validate_oauth_expiry()
@@ -157,7 +157,9 @@ defmodule TheMaestro.SavedAuthentication do
     import Ecto.Query
 
     from(sa in __MODULE__,
-      where: sa.provider == ^provider and sa.auth_type == ^auth_type and sa.name == ^name
+      where:
+        sa.provider == ^provider_to_db(provider) and sa.auth_type == ^auth_type and
+          sa.name == ^name
     )
     |> Repo.one()
   end
@@ -179,7 +181,7 @@ defmodule TheMaestro.SavedAuthentication do
     import Ecto.Query
 
     from(sa in __MODULE__,
-      where: sa.provider == ^provider,
+      where: sa.provider == ^provider_to_db(provider),
       order_by: [asc: sa.auth_type, asc: sa.name]
     )
     |> Repo.all()
@@ -351,4 +353,6 @@ defmodule TheMaestro.SavedAuthentication do
 
   defp put_if_present(map, _k, nil), do: map
   defp put_if_present(map, k, v), do: Map.put(map, k, v)
+  defp provider_to_db(p) when is_atom(p), do: Atom.to_string(p)
+  defp provider_to_db(p) when is_binary(p), do: p
 end

@@ -6,6 +6,7 @@ defmodule TheMaestro.Providers.Behaviours.Models do
   retrieving detailed model information.
   """
 
+  alias TheMaestro.Models.Model
   alias TheMaestro.Types
 
   @type session_id :: Types.session_id()
@@ -23,7 +24,7 @@ defmodule TheMaestro.Providers.Behaviours.Models do
   - `{:ok, models}` - List of available models
   - `{:error, term()}` - Error details
   """
-  @callback list_models(session_id) :: {:ok, [Types.model()]} | {:error, term()}
+  @callback list_models(session_id) :: {:ok, [Model.t()]} | {:error, term()}
 
   @doc """
   Get detailed information about a specific model.
@@ -39,5 +40,5 @@ defmodule TheMaestro.Providers.Behaviours.Models do
   - `{:error, term()}` - Error details
   """
   @callback get_model_info(session_id, model_id :: String.t()) ::
-              {:ok, model_info :: map()} | {:error, term()}
+              {:ok, model_info :: Model.t()} | {:error, term()}
 end

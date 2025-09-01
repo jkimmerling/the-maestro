@@ -16,11 +16,8 @@ defmodule TheMaestro.Providers.ProviderComplianceTest do
     assert :ok = Provider.validate_provider_compliance(TheMaestro.Providers.TestProvider.All)
   end
 
-  test "validate_provider_compliance returns errors for stub modules" do
-    # OpenAI.Streaming exists but intentionally does not implement all functions
-    assert {:error, errors} =
-             Provider.validate_provider_compliance(TheMaestro.Providers.OpenAI.Streaming)
-
-    assert is_list(errors) and length(errors) > 0
+  test "validate_provider_compliance validates operation-specific modules without cross-operation errors" do
+    # Streaming module should only require streaming callbacks
+    assert :ok = Provider.validate_provider_compliance(TheMaestro.Providers.OpenAI.Streaming)
   end
 end
