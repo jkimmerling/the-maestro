@@ -8,7 +8,7 @@ alias TheMaestro.Auth
 alias TheMaestro.Provider
 
 session = System.get_env("ANTHROPIC_OAUTH_SESSION") || "oauth_test_anthropic"
-model = System.get_env("ANTHROPIC_MODEL") || "claude-3-haiku-20240307"
+model = System.get_env("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022"
 
 IO.puts("Generating Anthropic OAuth URL (PKCE)...")
 {:ok, {auth_url, pkce}} = Auth.generate_oauth_url()

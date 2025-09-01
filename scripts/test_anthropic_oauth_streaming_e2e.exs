@@ -7,7 +7,7 @@ Application.ensure_all_started(:finch)
 alias TheMaestro.Provider
 
 session = System.get_env("ANTHROPIC_OAUTH_SESSION") || "oauth_test_anthropic"
-model = System.get_env("ANTHROPIC_MODEL") || "claude-3-haiku-20240307"
+model = System.get_env("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022"
 
 defmodule AnthropicOAuthE2E do
   def stream_and_collect(session, messages, opts \\ []) do
@@ -56,4 +56,3 @@ IO.puts(if second_ok?, do: "\n✅ Completed second prompt\n", else: "\n❌ Secon
 if !(paris_ok? and second_ok?) do
   System.halt(2)
 end
-
