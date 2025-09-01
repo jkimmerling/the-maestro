@@ -26,6 +26,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
         body = %{
           "model" => model,
           "messages" => messages,
+          "max_tokens" => Keyword.get(opts, :max_tokens, 512),
           "stream" => true
         }
 

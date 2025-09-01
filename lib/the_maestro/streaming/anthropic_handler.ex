@@ -56,7 +56,7 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
   end
 
   def handle_event(%{event_type: event_type, data: data}, opts)
-      when event_type in ["message", "delta"] do
+      when is_binary(event_type) and is_binary(data) do
     case safe_json_decode(data) do
       {:ok, event} -> handle_anthropic_event(event, opts)
       {:error, reason} -> [error_message(reason)]
