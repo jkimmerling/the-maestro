@@ -177,8 +177,8 @@ defmodule TheMaestro.Streaming do
   """
   @spec parse_sse_buffer(binary()) :: {[map()], binary()}
   def parse_sse_buffer(buffer) do
-    # Split on double newlines to separate events
-    parts = String.split(buffer, "\n\n")
+    # Split on blank-line separators, tolerate CRLF
+    parts = Regex.split(~r/\r?\n\r?\n/, buffer)
     {complete_events, remaining} = Enum.split(parts, length(parts) - 1)
 
     events =
@@ -197,7 +197,7 @@ defmodule TheMaestro.Streaming do
   """
   @spec parse_sse_event(binary()) :: %{event_type: binary(), data: binary()} | nil
   def parse_sse_event(event_text) do
-    lines = String.split(event_text, "\n")
+    lines = Regex.split(~r/\r?\n/, event_text)
 
     event = %{event_type: "message", data: ""}
 
