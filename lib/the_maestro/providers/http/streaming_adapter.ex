@@ -111,7 +111,14 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
   defp safe_body_text(body) when is_binary(body), do: body
   defp safe_body_text(body) when is_list(body), do: IO.iodata_to_binary(body)
-  defp safe_body_text(body), do: inspect(body)
+
+  defp safe_body_text(body) do
+    if function_exported?(Enumerable, :impl_for, 1) and not is_nil(Enumerable.impl_for(body)) do
+      body |> Enum.into([]) |> IO.iodata_to_binary()
+    else
+      inspect(body)
+    end
+  end
 
   defp next_events(state) do
     # Pass through raw chunks; central SSE parsing happens in TheMaestro.Streaming

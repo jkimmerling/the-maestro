@@ -33,13 +33,16 @@ evidence:
     model: "claude-3-haiku-20240307"
     anthropic_api_key_len: 108
     results:
-      http_error: 400
-      http_error_reason: "insufficient_credit"
+      api_key_http_error: 400
+      api_key_http_error_reason: "insufficient_credit"
+      oauth_http_error: 400
+      oauth_http_error_reason: "credential_restricted_for_claude_code"
       model_list_ok: true
     notes: |
-      API‑key E2E attempted with REAL key from env, but Anthropic responded:
-        {"error":{"message":"Your credit balance is too low to access the Anthropic API.","type":"invalid_request_error"}, ...}
-      Dual-prompt success requires a funded key. Proceeding with OAuth E2E using your account.
+      API‑key E2E attempted with REAL key from env but returned insufficient credit.
+      OAuth E2E: tokens saved for session 'oauth_test_anthropic'; models list works, but POST /v1/messages returns 400 with message:
+        "This credential is only authorized for use with Claude Code and cannot be used for other API requests."
+      Action needed: Provide funded API key or authorize via an Anthropic OAuth app that grants inference API access (not Claude Code only).
   trace:
     ac_covered: [1, 2, 3, 4, 5]
     ac_gaps: [4]
