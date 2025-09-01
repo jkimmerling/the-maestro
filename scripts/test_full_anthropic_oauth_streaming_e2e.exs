@@ -35,11 +35,8 @@ acc1 =
     end
   end)
 
-if String.match?(String.downcase(acc1.content), ~r/\bparis\b/) do
-  IO.puts("\n✅ Verified answer contains 'Paris'")
-else
-  IO.puts("\n⚠️ Paris check did not match")
-end
+paris_ok? = String.match?(String.downcase(acc1.content), ~r/\bparis\b/)
+IO.puts(if paris_ok?, do: "\n✅ Verified answer contains 'Paris'", else: "\n❌ Paris check failed")
 
 IO.puts("\n=== Prompt 2: FastAPI + Stripe (wait up to 5 min) ===\n")
 task =
@@ -49,14 +46,30 @@ task =
     ], model: model)
   end)
 
-case Task.yield(task, 300_000) || Task.shutdown(task, :brutal_kill) do
-  {:ok, {:ok, stream2}} ->
-    stream2
-    |> TheMaestro.Streaming.parse_stream(:anthropic)
-    |> Enum.each(fn msg -> if msg.type == :content, do: IO.write(msg.content) end)
-    IO.puts("\n✅ Completed second prompt (or finished early)")
+acc2 =
+  case Task.yield(task, 300_000) || Task.shutdown(task, :brutal_kill) do
+    {:ok, {:ok, stream2}} ->
+      stream2
+      |> TheMaestro.Streaming.parse_stream(:anthropic)
+      |> Enum.reduce(%{content: ""}, fn msg, a ->
+        case msg.type do
+          :content -> IO.write(msg.content); %{a | content: a.content <> (msg.content || "")}
+          _ -> a
+        end
+      end)
 
-  {:ok, {:error, reason}} -> IO.puts("\n❌ Streaming error: #{inspect(reason)}")
-  nil -> IO.puts("\n⏱️  Timed out after 5 minutes; ending test run")
+    {:ok, {:error, reason}} ->
+      IO.puts("\n❌ Streaming error: #{inspect(reason)}")
+      %{content: ""}
+
+    nil ->
+      IO.puts("\n⏱️  Timed out after 5 minutes; ending test run")
+      %{content: ""}
+  end
+
+second_ok? = String.length(acc2.content) >= 120
+IO.puts(if second_ok?, do: "\n✅ Completed second prompt", else: "\n❌ Second prompt produced insufficient content")
+
+if !(paris_ok? and second_ok?) do
+  System.halt(2)
 end
-
