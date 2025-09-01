@@ -170,10 +170,20 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
 
   defp build_openai_api_key_headers_session(session_name) do
     case get_saved_auth(:openai, :api_key, session_name) do
-      %SavedAuthentication{credentials: %{"api_key" => api_key}}
+      %SavedAuthentication{credentials: creds = %{"api_key" => api_key}}
       when is_binary(api_key) and
              api_key != "" ->
-        {:ok, openai_base_headers(api_key)}
+        base = openai_base_headers(api_key)
+
+        headers =
+          base
+          |> maybe_prepend_header("openai-organization", creds["organization_id"])
+          |> maybe_prepend_header(
+            "openai-project",
+            creds["project_id"] || System.get_env("OPENAI_PROJECT")
+          )
+
+        {:ok, headers}
 
       _ ->
         {:error, :missing_api_key}
@@ -194,17 +204,12 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
         {:error, :missing_org_id}
 
       true ->
-        base = [
-          {"openai-organization", org_id},
-          {"openai-beta", "assistants v2"} | openai_base_headers(api_key)
-        ]
+        base = [{"openai-beta", "assistants v2"} | openai_base_headers(api_key)]
 
         headers =
-          if is_binary(project_id) and project_id != "" do
-            [{"openai-project", project_id} | base]
-          else
-            base
-          end
+          base
+          |> maybe_prepend_header("openai-organization", org_id)
+          |> maybe_prepend_header("openai-project", project_id)
 
         {:ok, headers}
     end
@@ -218,6 +223,12 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     |> SavedAuthentication.list_by_provider()
     |> Enum.find(&(&1.auth_type == auth_type))
   end
+
+  defp maybe_prepend_header(headers, _name, nil), do: headers
+  defp maybe_prepend_header(headers, name, ""), do: headers
+
+  defp maybe_prepend_header(headers, name, value) when is_binary(value),
+    do: [{name, value} | headers]
 
   defp get_saved_auth(provider, auth_type, session_name) when is_binary(session_name) do
     SavedAuthentication.get_by_provider_and_name(provider, auth_type, session_name)
