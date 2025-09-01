@@ -67,28 +67,57 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
     {:ok, task} =
       Task.start_link(fn ->
-        # Use Req's async streaming into this Task process, then forward chunks to parent
-        req_opts =
-          [
-            method: method,
-            url: url,
-            into: :self,
-            receive_timeout: timeout
-          ] ++
-            if(json != nil, do: [json: json], else: []) ++
-            if json == nil and body != nil, do: [body: body], else: []
-
-        resp = Req.request!(req, req_opts)
-
-        # Enumerate async body in the same Task (required by Req) and forward to parent
-        Enum.each(resp.body, fn chunk ->
-          send(parent, {:data, chunk})
-        end)
-
-        send(parent, :done)
+        req_opts = build_req_opts(method, url, body, json, timeout)
+        run_request_and_forward(req, req_opts, parent)
       end)
 
     %{task: task, buffer: "", done: false, timeout: timeout}
+  end
+
+  defp build_req_opts(method, url, body, json, timeout) do
+    base = [method: method, url: url, into: :self, receive_timeout: timeout]
+    json_opt = if json != nil, do: [json: json], else: []
+    body_opt = if json == nil and body != nil, do: [body: body], else: []
+    base ++ json_opt ++ body_opt
+  end
+
+  defp run_request_and_forward(req, req_opts, parent) do
+    case Req.request(req, req_opts) do
+      {:ok, %Req.Response{status: status} = resp} when status < 400 ->
+        forward_body_chunks(resp.body, parent)
+        send(parent, :done)
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        send(
+          parent,
+          {:data, error_event_payload(%{http_error: status, body: safe_body_text(body)})}
+        )
+
+        send(parent, :done)
+
+      {:error, reason} ->
+        send(parent, {:data, error_event_payload(%{request_error: inspect(reason)})})
+        send(parent, :done)
+    end
+  end
+
+  defp forward_body_chunks(enum, parent) do
+    Enum.each(enum, fn chunk -> send(parent, {:data, chunk}) end)
+  end
+
+  defp error_event_payload(map) do
+    "event: error\ndata: " <> Jason.encode!(map) <> "\n\n"
+  end
+
+  defp safe_body_text(body) when is_binary(body), do: body
+  defp safe_body_text(body) when is_list(body), do: IO.iodata_to_binary(body)
+
+  defp safe_body_text(body) do
+    if function_exported?(Enumerable, :impl_for, 1) and not is_nil(Enumerable.impl_for(body)) do
+      body |> Enum.into([]) |> IO.iodata_to_binary()
+    else
+      inspect(body)
+    end
   end
 
   defp next_events(state) do

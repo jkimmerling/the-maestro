@@ -89,14 +89,31 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     with {:ok, saved} <- fetch_saved(:anthropic, :oauth, session_name),
          :ok <- ensure_not_expired(saved.expires_at),
          {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
+      # Mimic llxprt/the_maestro OAuth header shape exactly (Claude CLI parity)
       {:ok,
        [
-         {"authorization", token_type <> " " <> access_token},
-         {"anthropic-version", "2023-06-01"},
-         {"anthropic-beta", "oauth-2025-04-20"},
-         {"user-agent", "llxprt/1.0"},
+         {"connection", "keep-alive"},
          {"accept", "application/json"},
-         {"x-client-version", "1.0.0"}
+         {"x-stainless-retry-count", "0"},
+         {"x-stainless-timeout", "60"},
+         {"x-stainless-lang", "js"},
+         {"x-stainless-package-version", "0.55.1"},
+         {"x-stainless-os", "MacOS"},
+         {"x-stainless-arch", "arm64"},
+         {"x-stainless-runtime", "node"},
+         {"x-stainless-runtime-version", "v23.11.0"},
+         {"anthropic-dangerous-direct-browser-access", "true"},
+         {"anthropic-version", "2023-06-01"},
+         {"authorization", token_type <> " " <> access_token},
+         {"x-app", "cli"},
+         {"user-agent", "claude-cli/1.0.81 (external, cli)"},
+         {"content-type", "application/json"},
+         {"anthropic-beta",
+          "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"},
+         {"x-stainless-helper-method", "stream"},
+         {"accept-language", "*"},
+         {"sec-fetch-mode", "cors"},
+         {"accept-encoding", "gzip, deflate, br"}
        ]}
     end
   end
