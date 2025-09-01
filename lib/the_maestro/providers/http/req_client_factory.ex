@@ -70,7 +70,6 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
         headers = [
           {"x-api-key", api_key},
           {"anthropic-version", "2023-06-01"},
-          {"anthropic-beta", "messages-2023-12-15"},
           {"user-agent", "llxprt/1.0"},
           {"accept", "application/json"},
           {"x-client-version", "1.0.0"}
@@ -93,7 +92,6 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
        [
          {"authorization", token_type <> " " <> access_token},
          {"anthropic-version", "2023-06-01"},
-         {"anthropic-beta", "oauth-2025-04-20"},
          {"user-agent", "llxprt/1.0"},
          {"accept", "application/json"},
          {"x-client-version", "1.0.0"}
