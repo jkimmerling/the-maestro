@@ -24,6 +24,18 @@ defmodule ConversationSendingTest do
       {:ok, tokens} ->
         case get_account_id_from_token(tokens.id_token) do
           {:ok, account_id} ->
+            # Prompt 1: Capital of France
+            Process.put(:acc_text, "")
+            send_test_message(tokens.access_token, account_id, "What is the capital of France?")
+            answer1 = (Process.get(:acc_text) || "") |> String.downcase()
+            if String.contains?(answer1, "paris") do
+              IO.puts("\n✅ Verified 'Paris' present in answer")
+            else
+              IO.puts("\n⚠️  'Paris' not detected in answer: #{String.slice(answer1, 0, 120)}...")
+            end
+
+            # Prompt 2: FastAPI + Stripe (allow long generation)
+            Process.put(:acc_text, "")
             send_test_message(tokens.access_token, account_id, "How would you write a FastAPI application that handles Stripe-based subscriptions?")
           {:error, reason} ->
             IO.puts("❌ Failed to extract account_id: #{inspect(reason)}")
@@ -233,9 +245,20 @@ defmodule ConversationSendingTest do
                 "response.output_text.delta" ->
                   if delta = event["delta"] do
                     cond do
-                      is_binary(delta) -> IO.write(delta)
-                      is_map(delta) and delta["text"] -> IO.write(delta["text"])
+                      is_binary(delta) ->
+                        IO.write(delta)
+                        Process.put(:acc_text, (Process.get(:acc_text) || "") <> delta)
+                      is_map(delta) and delta["text"] ->
+                        IO.write(delta["text"])
+                        Process.put(:acc_text, (Process.get(:acc_text) || "") <> (delta["text"] || ""))
                       true -> :ok
+                    end
+                  end
+                "response.content_part.delta" ->
+                  if part = event["part"] do
+                    if part["type"] == "output_text" and is_binary(part["text"]) do
+                      IO.write(part["text"])
+                      Process.put(:acc_text, (Process.get(:acc_text) || "") <> part["text"])
                     end
                   end
                 "response.completed" ->

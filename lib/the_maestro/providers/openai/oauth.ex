@@ -42,8 +42,8 @@ defmodule TheMaestro.Providers.OpenAI.OAuth do
   defp exchange_and_persist_api_key(name, %Auth.OAuthToken{} = tokens) do
     with {:ok, api_key} <- Auth.exchange_openai_id_token_for_api_key(tokens.id_token),
          {:ok, _sa} <-
-           SavedAuthentication.upsert_named_session(:openai, :oauth, name, %{
-             credentials: %{"access_token" => api_key, "token_type" => "Bearer"},
+           SavedAuthentication.upsert_named_session(:openai, :api_key, name, %{
+             credentials: %{api_key: api_key},
              expires_at: nil
            }) do
       {:ok, name}

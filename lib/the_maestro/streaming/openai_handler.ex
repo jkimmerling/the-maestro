@@ -58,8 +58,10 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     [done_message()]
   end
 
+  # For ChatGPT backend, event_type may be "response.created", "response.delta", etc.
+  # Decode JSON regardless of the event_type and route by the embedded "type" field.
   def handle_event(%{event_type: event_type, data: data}, opts)
-      when event_type in ["message", "delta"] do
+      when is_binary(event_type) and is_binary(data) do
     case safe_json_decode(data) do
       {:ok, event} -> handle_openai_event(event, opts)
       {:error, reason} -> [error_message(reason)]
@@ -90,6 +92,21 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     case get_in(event, ["item", "type"]) do
       "function_call" -> handle_function_call_start(event)
       "message" -> handle_message_item(event)
+      _ -> []
+    end
+  end
+
+  # Newer Responses event forms: content_part delta/done with output_text
+  defp handle_openai_event(%{"type" => "response.content_part.delta", "part" => part}, _opts) do
+    case part do
+      %{"type" => "output_text", "text" => text} when is_binary(text) -> handle_text_delta(text)
+      _ -> []
+    end
+  end
+
+  defp handle_openai_event(%{"type" => "response.content_part.done", "part" => part}, _opts) do
+    case part do
+      %{"type" => "output_text", "text" => text} when is_binary(text) -> handle_text_delta(text)
       _ -> []
     end
   end
@@ -133,10 +150,19 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     [done_message(%{response_id: get_in(event, ["response", "id"])}) | messages]
   end
 
-  defp handle_openai_event(event, _opts) do
-    # Log unknown events for debugging
-    Logger.debug("Unknown OpenAI event type: #{inspect(event)}")
+  defp handle_openai_event(event, opts) do
+    # Optionally log unknown events for debugging
+    if log_unknown_events?(opts) do
+      Logger.debug("Unknown OpenAI event type: #{inspect(event)}")
+    end
+
     []
+  end
+
+  defp log_unknown_events?(opts) do
+    Keyword.get(opts, :log_unknown_events, false) ||
+      System.get_env("STREAM_LOG_UNKNOWN_EVENTS") in ["1", "true", "TRUE"] ||
+      Application.get_env(:the_maestro, :log_unknown_stream_events, false)
   end
 
   # Handle text deltas with reasoning detection

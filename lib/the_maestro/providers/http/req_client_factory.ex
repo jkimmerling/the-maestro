@@ -184,6 +184,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     cfg = Application.get_env(:the_maestro, :openai, [])
     api_key = Keyword.get(cfg, :api_key)
     org_id = Keyword.get(cfg, :organization_id)
+    project_id = Keyword.get(cfg, :project_id) || System.get_env("OPENAI_PROJECT")
 
     cond do
       !is_binary(api_key) or api_key == "" ->
@@ -193,11 +194,19 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
         {:error, :missing_org_id}
 
       true ->
-        {:ok,
-         [
-           {"openai-organization", org_id},
-           {"openai-beta", "assistants v2"} | openai_base_headers(api_key)
-         ]}
+        base = [
+          {"openai-organization", org_id},
+          {"openai-beta", "assistants v2"} | openai_base_headers(api_key)
+        ]
+
+        headers =
+          if is_binary(project_id) and project_id != "" do
+            [{"openai-project", project_id} | base]
+          else
+            base
+          end
+
+        {:ok, headers}
     end
   end
 

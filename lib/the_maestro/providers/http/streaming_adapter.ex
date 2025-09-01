@@ -92,25 +92,21 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
   end
 
   defp next_events(state) do
-    # If marked done, halt the stream to avoid emitting duplicate events/timeouts
+    # Pass through raw chunks; central SSE parsing happens in TheMaestro.Streaming
     if state.done do
       {:halt, state}
     else
       receive do
         {:data, data} when is_binary(data) ->
-          buffer = state.buffer <> data
-          {events, remaining} = TheMaestro.Streaming.parse_sse_buffer(buffer)
-          {events, %{state | buffer: remaining}}
+          {[data], state}
 
         :done ->
-          {final_events, _} = TheMaestro.Streaming.parse_sse_buffer(state.buffer)
-          # Emit any remaining events, then halt on next invocation
-          {final_events, %{state | done: true}}
+          {:halt, %{state | done: true}}
       after
         state.timeout ->
-          # Emit a single timeout error and mark done so we terminate
-          error = [%{event_type: "error", data: "stream_timeout"}]
-          {error, %{state | done: true}}
+          # Emit a synthetic SSE error event as raw text, then halt
+          timeout_event = "event: error\ndata: stream_timeout\n\n"
+          {[timeout_event], %{state | done: true}}
       end
     end
   end
