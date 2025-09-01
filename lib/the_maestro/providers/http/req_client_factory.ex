@@ -156,11 +156,58 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     end
   end
 
-  def build_headers(:gemini, _auth_type, _opts) do
-    # No default headers for Gemini at this time
-    headers = []
-    {:ok, headers}
+  def build_headers(:gemini, :api_key, opts) do
+    saved = gemini_saved_auth(opts)
+    api_key = gemini_api_key(saved)
+    user_project = gemini_user_project(saved)
+
+    if is_binary(api_key) and api_key != "" do
+      headers =
+        [
+          {"x-goog-api-key", api_key},
+          {"accept", "application/json"}
+        ]
+        |> maybe_prepend_header("x-goog-user-project", user_project)
+
+      {:ok, headers}
+    else
+      # Keep Gemini client permissive when no key is present (test expectations)
+      {:ok, []}
+    end
   end
+
+  def build_headers(:gemini, :oauth, opts) do
+    session_name = Keyword.get(opts, :session)
+
+    with {:ok, saved} <- fetch_saved(:gemini, :oauth, session_name),
+         :ok <- ensure_not_expired(saved.expires_at),
+         {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
+      {:ok,
+       [
+         {"authorization", token_type <> " " <> access_token},
+         {"accept", "application/json"}
+       ]}
+    else
+      _ -> {:ok, []}
+    end
+  end
+
+  defp gemini_saved_auth(opts) do
+    case Keyword.get(opts, :session) do
+      s when is_binary(s) and s != "" -> get_saved_auth(:gemini, :api_key, s)
+      _ -> nil
+    end
+  end
+
+  defp gemini_api_key(%SavedAuthentication{credentials: %{"api_key" => key}}) when is_binary(key),
+    do: key
+
+  defp gemini_api_key(_), do: System.get_env("GOOGLE_API_KEY") || System.get_env("GEMINI_API_KEY")
+
+  defp gemini_user_project(%SavedAuthentication{credentials: %{"user_project" => proj}}),
+    do: proj
+
+  defp gemini_user_project(_), do: nil
 
   def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
 

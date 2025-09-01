@@ -26,6 +26,7 @@ defmodule TheMaestroWeb.Router do
 
     post "/oauth/openai/callback", OAuthController, :openai_callback
     post "/oauth/anthropic/callback", OAuthController, :anthropic_callback
+    post "/oauth/gemini/callback", OAuthController, :gemini_callback
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
