@@ -192,14 +192,14 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     end
   end
 
+  def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
+
   defp gemini_saved_auth(opts) do
     case Keyword.get(opts, :session) do
       s when is_binary(s) and s != "" -> get_saved_auth(:gemini, :api_key, s)
       _ -> nil
     end
   end
-
-  def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
 
   defp gemini_api_key(%SavedAuthentication{credentials: %{"api_key" => key}}) when is_binary(key),
     do: key
