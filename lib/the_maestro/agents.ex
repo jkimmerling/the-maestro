@@ -39,7 +39,7 @@ defmodule TheMaestro.Agents do
       ** (Ecto.NoResultsError)
 
   """
-  def get_agent!(id), do: Repo.get!(Agent, id) |> Repo.preload([:saved_authentication, :base_system_prompt, :persona])
+  def get_agent!(id), do: Repo.get!(Agent, id)
 
   @doc """
   Creates a agent.
@@ -103,6 +103,19 @@ defmodule TheMaestro.Agents do
 
   """
   def change_agent(%Agent{} = agent, attrs \\ %{}) do
-    Agent.changeset(agent, attrs)
+    changeset = Agent.changeset(agent, attrs)
+
+    # Prefill virtual JSON fields for form rendering when not explicitly provided
+    changeset
+    |> maybe_put_virtual(:tools_json, agent.tools)
+    |> maybe_put_virtual(:mcps_json, agent.mcps)
+    |> maybe_put_virtual(:memory_json, agent.memory)
+  end
+
+  defp maybe_put_virtual(%Ecto.Changeset{} = changeset, field, value) do
+    case Ecto.Changeset.get_change(changeset, field) do
+      nil -> Ecto.Changeset.put_change(changeset, field, Jason.encode!(value || %{}))
+      _ -> changeset
+    end
   end
 end

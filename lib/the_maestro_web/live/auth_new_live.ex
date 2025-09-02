@@ -22,7 +22,10 @@ defmodule TheMaestroWeb.AuthNewLive do
      |> assign(:oauth_url, nil)
      |> assign(:pkce_params, nil)
      |> assign(:auth_code, "")
-     |> assign(:error, nil)}
+     |> assign(:error, nil)
+     |> assign(:callback_listening, false)
+     |> assign(:callback_port, 1455)
+     |> assign(:callback_deadline, nil)}
   end
 
   @impl true
@@ -54,9 +57,11 @@ defmodule TheMaestroWeb.AuthNewLive do
           })
           # Ensure callback runtime is running with 180s timeout
           {:ok, %{port: port}} = TheMaestro.OAuthCallbackRuntime.ensure_started(timeout_ms: 180_000)
+          Process.send_after(self(), :tick, 1000)
           socket
           |> assign(:callback_port, port)
           |> assign(:callback_listening, true)
+          |> assign(:callback_deadline, System.monotonic_time(:millisecond) + 180_000)
         else
           socket
         end
@@ -100,6 +105,32 @@ defmodule TheMaestroWeb.AuthNewLive do
     else
       {:error, reason} -> {:noreply, assign(socket, :error, inspect(reason))}
       msg when is_binary(msg) -> {:noreply, assign(socket, :error, msg)}
+    end
+  end
+
+  @impl true
+  def handle_event("restart_listener", _params, socket) do
+    {:ok, %{port: port}} = TheMaestro.OAuthCallbackRuntime.ensure_started(timeout_ms: 180_000)
+    Process.send_after(self(), :tick, 1000)
+    {:noreply,
+     socket
+     |> assign(:callback_port, port)
+     |> assign(:callback_listening, true)
+     |> assign(:callback_deadline, System.monotonic_time(:millisecond) + 180_000)}
+  end
+
+  @impl true
+  def handle_info(:tick, socket) do
+    case socket.assigns.callback_deadline do
+      nil -> {:noreply, socket}
+      deadline ->
+        now = System.monotonic_time(:millisecond)
+        if now < deadline and socket.assigns.callback_listening do
+          Process.send_after(self(), :tick, 1000)
+          {:noreply, socket}
+        else
+          {:noreply, assign(socket, :callback_listening, false)}
+        end
     end
   end
 
@@ -192,9 +223,13 @@ defmodule TheMaestroWeb.AuthNewLive do
             <%= if @oauth_url && @provider == :openai do %>
               <p class="text-sm opacity-80">
                 <%= if @callback_listening do %>
-                  Listening on <code>http://localhost:<%= @callback_port || 1455 %>/auth/callback</code> for 180 seconds.
+                  Listening on <code>http://localhost:<%= @callback_port || 1455 %>/auth/callback</code>.
+                  <%= if @callback_deadline do %>
+                    Time remaining: <%= max(div(@callback_deadline - System.monotonic_time(:millisecond), 1000), 0) %>s
+                  <% end %>
                 <% else %>
-                  Initializing callback listener...
+                  Listener stopped.
+                  <button type="button" class="btn btn-xs" phx-click="restart_listener">Restart (180s)</button>
                 <% end %>
                 <br/>
                 After authorization, we will auto-complete and return you to the dashboard.

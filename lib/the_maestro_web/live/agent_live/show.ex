@@ -1,8 +1,6 @@
 defmodule TheMaestroWeb.AgentLive.Show do
   use TheMaestroWeb, :live_view
 
-  alias TheMaestro.Agents
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -22,9 +20,16 @@ defmodule TheMaestroWeb.AgentLive.Show do
 
       <.list>
         <:item title="Name">{@agent.name}</:item>
-        <:item title="Tools">{@agent.tools}</:item>
-        <:item title="Mcps">{@agent.mcps}</:item>
-        <:item title="Memory">{@agent.memory}</:item>
+        <:item title="Auth">
+          <%= if @agent.saved_authentication do %>
+            <%= @agent.saved_authentication.name %> (<%= @agent.saved_authentication.provider %>/<%= @agent.saved_authentication.auth_type %>)
+          <% else %>
+            —
+          <% end %>
+        </:item>
+        <:item title="Tools"><pre class="text-xs">{inspect(@agent.tools || %{}, pretty: true, limit: :infinity)}</pre></:item>
+        <:item title="MCPs"><pre class="text-xs">{inspect(@agent.mcps || %{}, pretty: true, limit: :infinity)}</pre></:item>
+        <:item title="Memory"><pre class="text-xs">{inspect(@agent.memory || %{}, pretty: true, limit: :infinity)}</pre></:item>
       </.list>
     </Layouts.app>
     """
@@ -35,6 +40,6 @@ defmodule TheMaestroWeb.AgentLive.Show do
     {:ok,
      socket
      |> assign(:page_title, "Show Agent")
-     |> assign(:agent, Agents.get_agent!(id))}
+     |> assign(:agent, TheMaestro.Repo.get!(TheMaestro.Agents.Agent, id) |> TheMaestro.Repo.preload([:saved_authentication, :base_system_prompt, :persona]))}
   end
 end

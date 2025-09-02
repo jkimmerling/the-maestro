@@ -12,20 +12,29 @@ defmodule TheMaestro.AgentsTest do
 
     test "list_agents/0 returns all agents" do
       agent = agent_fixture()
-      assert Agents.list_agents() == [agent]
+      assert Enum.map(Agents.list_agents(), & &1.id) == [agent.id]
     end
 
     test "get_agent!/1 returns the agent with given id" do
       agent = agent_fixture()
-      assert Agents.get_agent!(agent.id) == agent
+      assert Agents.get_agent!(agent.id).id == agent.id
     end
 
     test "create_agent/1 with valid data creates a agent" do
-      valid_attrs = %{memory: %{}, name: "some name", tools: %{}, mcps: %{}}
+      sa = TheMaestro.Repo.insert!(
+        TheMaestro.SavedAuthentication.changeset(%TheMaestro.SavedAuthentication{}, %{
+          provider: :openai,
+          auth_type: :api_key,
+          name: "test_openai_api_key_ctx",
+          credentials: %{"api_key" => "sk-test"}
+        })
+      )
+
+      valid_attrs = %{memory: %{}, name: "some_name", tools: %{}, mcps: %{}, auth_id: sa.id}
 
       assert {:ok, %Agent{} = agent} = Agents.create_agent(valid_attrs)
       assert agent.memory == %{}
-      assert agent.name == "some name"
+      assert agent.name == "some_name"
       assert agent.tools == %{}
       assert agent.mcps == %{}
     end
@@ -36,11 +45,11 @@ defmodule TheMaestro.AgentsTest do
 
     test "update_agent/2 with valid data updates the agent" do
       agent = agent_fixture()
-      update_attrs = %{memory: %{}, name: "some updated name", tools: %{}, mcps: %{}}
+      update_attrs = %{memory: %{}, name: "some_updated_name", tools: %{}, mcps: %{}}
 
       assert {:ok, %Agent{} = agent} = Agents.update_agent(agent, update_attrs)
       assert agent.memory == %{}
-      assert agent.name == "some updated name"
+      assert agent.name == "some_updated_name"
       assert agent.tools == %{}
       assert agent.mcps == %{}
     end
@@ -48,7 +57,7 @@ defmodule TheMaestro.AgentsTest do
     test "update_agent/2 with invalid data returns error changeset" do
       agent = agent_fixture()
       assert {:error, %Ecto.Changeset{}} = Agents.update_agent(agent, @invalid_attrs)
-      assert agent == Agents.get_agent!(agent.id)
+      assert Agents.get_agent!(agent.id).id == agent.id
     end
 
     test "delete_agent/1 deletes the agent" do

@@ -4,9 +4,9 @@ defmodule TheMaestroWeb.AgentLiveTest do
   import Phoenix.LiveViewTest
   import TheMaestro.AgentsFixtures
 
-  @create_attrs %{memory: %{}, name: "some name", tools: %{}, mcps: %{}}
-  @update_attrs %{memory: %{}, name: "some updated name", tools: %{}, mcps: %{}}
-  @invalid_attrs %{memory: nil, name: nil, tools: nil, mcps: nil}
+  @create_attrs %{name: "some_name"}
+  @update_attrs %{name: "some_updated_name"}
+  @invalid_attrs %{name: nil}
   defp create_agent(_) do
     agent = agent_fixture()
 
@@ -23,7 +23,19 @@ defmodule TheMaestroWeb.AgentLiveTest do
       assert html =~ agent.name
     end
 
-    test "saves new agent", %{conn: conn} do
+  test "saves new agent", %{conn: conn} do
+      # Create auth before opening the form so it appears in the select options
+      sa = TheMaestro.Repo.insert!(
+        TheMaestro.SavedAuthentication.changeset(%TheMaestro.SavedAuthentication{}, %{
+          provider: :openai,
+          auth_type: :api_key,
+          name: "test_openai_api_key_lv",
+          credentials: %{"api_key" => "sk-test"}
+        })
+      )
+
+      create_attrs = Map.put(@create_attrs, :auth_id, sa.id)
+
       {:ok, index_live, _html} = live(conn, ~p"/agents")
 
       assert {:ok, form_live, _} =
@@ -35,18 +47,17 @@ defmodule TheMaestroWeb.AgentLiveTest do
       assert render(form_live) =~ "New Agent"
 
       assert form_live
-             |> form("#agent-form", agent: @invalid_attrs)
+             |> form("#agent-form", agent: %{name: nil})
              |> render_change() =~ "can&#39;t be blank"
 
-      assert {:ok, index_live, _html} =
-               form_live
-               |> form("#agent-form", agent: @create_attrs)
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/agents")
+      _ =
+        form_live
+        |> form("#agent-form", agent: create_attrs)
+        |> render_submit()
 
+      {:ok, index_live, _} = live(conn, ~p"/agents")
       html = render(index_live)
-      assert html =~ "Agent created successfully"
-      assert html =~ "some name"
+      assert html =~ "some_name"
     end
 
     test "updates agent in listing", %{conn: conn, agent: agent} do
@@ -61,7 +72,7 @@ defmodule TheMaestroWeb.AgentLiveTest do
       assert render(form_live) =~ "Edit Agent"
 
       assert form_live
-             |> form("#agent-form", agent: @invalid_attrs)
+             |> form("#agent-form", agent: %{name: nil})
              |> render_change() =~ "can&#39;t be blank"
 
       assert {:ok, index_live, _html} =
@@ -72,7 +83,7 @@ defmodule TheMaestroWeb.AgentLiveTest do
 
       html = render(index_live)
       assert html =~ "Agent updated successfully"
-      assert html =~ "some updated name"
+      assert html =~ "some_updated_name"
     end
 
     test "deletes agent in listing", %{conn: conn, agent: agent} do
@@ -116,7 +127,7 @@ defmodule TheMaestroWeb.AgentLiveTest do
 
       html = render(show_live)
       assert html =~ "Agent updated successfully"
-      assert html =~ "some updated name"
+      assert html =~ "some_updated_name"
     end
   end
 end

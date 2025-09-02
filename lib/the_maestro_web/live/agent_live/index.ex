@@ -22,9 +22,9 @@ defmodule TheMaestroWeb.AgentLive.Index do
         row_click={fn {_id, agent} -> JS.navigate(~p"/agents/#{agent}") end}
       >
         <:col :let={{_id, agent}} label="Name">{agent.name}</:col>
-        <:col :let={{_id, agent}} label="Tools">{agent.tools}</:col>
-        <:col :let={{_id, agent}} label="Mcps">{agent.mcps}</:col>
-        <:col :let={{_id, agent}} label="Memory">{agent.memory}</:col>
+        <:col :let={{_id, agent}} label="Tools"><pre class="text-xs">{inspect(agent.tools || %{}, pretty: true, limit: :infinity)}</pre></:col>
+        <:col :let={{_id, agent}} label="Mcps"><pre class="text-xs">{inspect(agent.mcps || %{}, pretty: true, limit: :infinity)}</pre></:col>
+        <:col :let={{_id, agent}} label="Memory"><pre class="text-xs">{inspect(agent.memory || %{}, pretty: true, limit: :infinity)}</pre></:col>
         <:action :let={{_id, agent}}>
           <div class="sr-only">
             <.link navigate={~p"/agents/#{agent}"}>Show</.link>

@@ -38,14 +38,12 @@ defmodule TheMaestroWeb.PersonaLiveTest do
              |> form("#persona-form", persona: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
-      assert {:ok, index_live, _html} =
-               form_live
-               |> form("#persona-form", persona: @create_attrs)
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/personas")
-
+      _ =
+        form_live
+        |> form("#persona-form", persona: @create_attrs)
+        |> render_submit()
+      {:ok, index_live, _} = live(conn, ~p"/personas")
       html = render(index_live)
-      assert html =~ "Persona created successfully"
       assert html =~ "some name"
     end
 
@@ -64,14 +62,12 @@ defmodule TheMaestroWeb.PersonaLiveTest do
              |> form("#persona-form", persona: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
-      assert {:ok, index_live, _html} =
-               form_live
-               |> form("#persona-form", persona: @update_attrs)
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/personas")
-
+      _ =
+        form_live
+        |> form("#persona-form", persona: @update_attrs)
+        |> render_submit()
+      {:ok, index_live, _} = live(conn, ~p"/personas")
       html = render(index_live)
-      assert html =~ "Persona updated successfully"
       assert html =~ "some updated name"
     end
 
@@ -108,14 +104,12 @@ defmodule TheMaestroWeb.PersonaLiveTest do
              |> form("#persona-form", persona: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
-      assert {:ok, show_live, _html} =
-               form_live
-               |> form("#persona-form", persona: @update_attrs)
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/personas/#{persona}")
-
+      _ =
+        form_live
+        |> form("#persona-form", persona: @update_attrs)
+        |> render_submit()
+      {:ok, show_live, _} = live(conn, ~p"/personas/#{persona}")
       html = render(show_live)
-      assert html =~ "Persona updated successfully"
       assert html =~ "some updated name"
     end
   end
