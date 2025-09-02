@@ -199,6 +199,8 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     end
   end
 
+  def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
+
   defp gemini_api_key(%SavedAuthentication{credentials: %{"api_key" => key}}) when is_binary(key),
     do: key
 
@@ -208,8 +210,6 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     do: proj
 
   defp gemini_user_project(_), do: nil
-
-  def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
 
   # ===== OpenAI endpoint selection =====
   defp choose_openai_base_url(_auth_type, opts, default) do
@@ -288,15 +288,15 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     |> Enum.find(&(&1.auth_type == auth_type))
   end
 
-  defp maybe_prepend_header(headers, _name, nil), do: headers
-  defp maybe_prepend_header(headers, name, ""), do: headers
-
-  defp maybe_prepend_header(headers, name, value) when is_binary(value),
-    do: [{name, value} | headers]
-
   defp get_saved_auth(provider, auth_type, session_name) when is_binary(session_name) do
     SavedAuthentication.get_by_provider_and_name(provider, auth_type, session_name)
   end
+
+  defp maybe_prepend_header(headers, _name, nil), do: headers
+  defp maybe_prepend_header(headers, _name, ""), do: headers
+
+  defp maybe_prepend_header(headers, name, value) when is_binary(value),
+    do: [{name, value} | headers]
 
   @spec fetch_saved(atom(), atom(), String.t() | nil) ::
           {:ok, SavedAuthentication.t()} | {:error, :not_found}
