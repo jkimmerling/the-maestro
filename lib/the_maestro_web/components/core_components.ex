@@ -80,6 +80,22 @@ defmodule TheMaestroWeb.CoreComponents do
     """
   end
 
+  # Simple modal component
+  attr :id, :string, required: true
+  slot :inner_block, required: true
+  def modal(assigns) do
+    ~H"""
+    <div id={@id} class="fixed inset-0 z-50" phx-window-keydown="close_modal" phx-key="escape">
+      <div class="absolute inset-0 bg-black/40" />
+      <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="bg-base-100 rounded shadow-xl w-full max-w-2xl p-4">
+          {render_slot(@inner_block)}
+        </div>
+      </div>
+    </div>
+    """
+  end
+
   @doc """
   Renders a button with navigation support.
 
