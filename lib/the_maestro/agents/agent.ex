@@ -16,7 +16,10 @@ defmodule TheMaestro.Agents.Agent do
     field :memory_json, :string, virtual: true
 
     # Associations (note auth_id remains integer FK)
-    belongs_to :saved_authentication, TheMaestro.SavedAuthentication, foreign_key: :auth_id, type: :integer
+    belongs_to :saved_authentication, TheMaestro.SavedAuthentication,
+      foreign_key: :auth_id,
+      type: :integer
+
     belongs_to :base_system_prompt, TheMaestro.Prompts.BaseSystemPrompt, type: :binary_id
     belongs_to :persona, TheMaestro.Personas.Persona, type: :binary_id
 
@@ -63,12 +66,20 @@ defmodule TheMaestro.Agents.Agent do
 
   defp decode_json_field(changeset, src_field, dest_field) do
     case get_change(changeset, src_field) do
-      nil -> changeset
-      "" -> changeset
+      nil ->
+        changeset
+
+      "" ->
+        changeset
+
       json when is_binary(json) ->
         case Jason.decode(json) do
-          {:ok, %{} = map} -> put_change(changeset, dest_field, map)
-          {:ok, _other} -> add_error(changeset, src_field, "must be a JSON object")
+          {:ok, %{} = map} ->
+            put_change(changeset, dest_field, map)
+
+          {:ok, _other} ->
+            add_error(changeset, src_field, "must be a JSON object")
+
           {:error, %Jason.DecodeError{position: pos}} ->
             add_error(changeset, src_field, "invalid JSON at position #{pos}")
         end

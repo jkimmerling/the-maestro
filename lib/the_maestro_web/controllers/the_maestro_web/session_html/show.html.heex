@@ -1,0 +1,22 @@
+<Layouts.app flash={@flash}>
+  <.header>
+    Session {@session.id}
+    <:subtitle>This is a session record from your database.</:subtitle>
+    <:actions>
+      <.button navigate={~p"/the_maestro_web/sessions"}>
+        <.icon name="hero-arrow-left" />
+      </.button>
+      <.button
+        variant="primary"
+        navigate={~p"/the_maestro_web/sessions/#{@session}/edit?return_to=show"}
+      >
+        <.icon name="hero-pencil-square" /> Edit session
+      </.button>
+    </:actions>
+  </.header>
+
+  <.list>
+    <:item title="Name">{@session.name}</:item>
+    <:item title="Last used at">{@session.last_used_at}</:item>
+  </.list>
+</Layouts.app>

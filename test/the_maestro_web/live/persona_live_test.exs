@@ -42,6 +42,7 @@ defmodule TheMaestroWeb.PersonaLiveTest do
         form_live
         |> form("#persona-form", persona: @create_attrs)
         |> render_submit()
+
       {:ok, index_live, _} = live(conn, ~p"/personas")
       html = render(index_live)
       assert html =~ "some name"
@@ -66,6 +67,7 @@ defmodule TheMaestroWeb.PersonaLiveTest do
         form_live
         |> form("#persona-form", persona: @update_attrs)
         |> render_submit()
+
       {:ok, index_live, _} = live(conn, ~p"/personas")
       html = render(index_live)
       assert html =~ "some updated name"
@@ -108,6 +110,7 @@ defmodule TheMaestroWeb.PersonaLiveTest do
         form_live
         |> form("#persona-form", persona: @update_attrs)
         |> render_submit()
+
       {:ok, show_live, _} = live(conn, ~p"/personas/#{persona}")
       html = render(show_live)
       assert html =~ "some updated name"

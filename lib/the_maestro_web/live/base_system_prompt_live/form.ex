@@ -56,7 +56,12 @@ defmodule TheMaestroWeb.BaseSystemPromptLive.Form do
 
   @impl true
   def handle_event("validate", %{"base_system_prompt" => base_system_prompt_params}, socket) do
-    changeset = Prompts.change_base_system_prompt(socket.assigns.base_system_prompt, base_system_prompt_params)
+    changeset =
+      Prompts.change_base_system_prompt(
+        socket.assigns.base_system_prompt,
+        base_system_prompt_params
+      )
+
     {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
   end
 
@@ -65,7 +70,10 @@ defmodule TheMaestroWeb.BaseSystemPromptLive.Form do
   end
 
   defp save_base_system_prompt(socket, :edit, base_system_prompt_params) do
-    case Prompts.update_base_system_prompt(socket.assigns.base_system_prompt, base_system_prompt_params) do
+    case Prompts.update_base_system_prompt(
+           socket.assigns.base_system_prompt,
+           base_system_prompt_params
+         ) do
       {:ok, base_system_prompt} ->
         {:noreply,
          socket

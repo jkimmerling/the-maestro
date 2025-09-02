@@ -10,7 +10,11 @@ defmodule TheMaestro.OAuthState do
   use Agent
 
   @type t :: %{
-          optional(String.t()) => %{provider: atom(), session_name: String.t(), pkce_params: map()}
+          optional(String.t()) => %{
+            provider: atom(),
+            session_name: String.t(),
+            pkce_params: map()
+          }
         }
 
   @name __MODULE__

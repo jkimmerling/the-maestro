@@ -49,7 +49,10 @@ defmodule TheMaestroWeb.BaseSystemPromptLiveTest do
       assert html =~ "some name"
     end
 
-    test "updates base_system_prompt in listing", %{conn: conn, base_system_prompt: base_system_prompt} do
+    test "updates base_system_prompt in listing", %{
+      conn: conn,
+      base_system_prompt: base_system_prompt
+    } do
       {:ok, index_live, _html} = live(conn, ~p"/base_system_prompts")
 
       assert {:ok, form_live, _html} =
@@ -68,15 +71,22 @@ defmodule TheMaestroWeb.BaseSystemPromptLiveTest do
         form_live
         |> form("#base_system_prompt-form", base_system_prompt: @update_attrs)
         |> render_submit()
+
       {:ok, index_live, _} = live(conn, ~p"/base_system_prompts")
       html = render(index_live)
       assert html =~ "some updated name"
     end
 
-    test "deletes base_system_prompt in listing", %{conn: conn, base_system_prompt: base_system_prompt} do
+    test "deletes base_system_prompt in listing", %{
+      conn: conn,
+      base_system_prompt: base_system_prompt
+    } do
       {:ok, index_live, _html} = live(conn, ~p"/base_system_prompts")
 
-      assert index_live |> element("#base_system_prompts-#{base_system_prompt.id} a", "Delete") |> render_click()
+      assert index_live
+             |> element("#base_system_prompts-#{base_system_prompt.id} a", "Delete")
+             |> render_click()
+
       refute has_element?(index_live, "#base_system_prompts-#{base_system_prompt.id}")
     end
   end
@@ -91,14 +101,20 @@ defmodule TheMaestroWeb.BaseSystemPromptLiveTest do
       assert html =~ base_system_prompt.name
     end
 
-    test "updates base_system_prompt and returns to show", %{conn: conn, base_system_prompt: base_system_prompt} do
+    test "updates base_system_prompt and returns to show", %{
+      conn: conn,
+      base_system_prompt: base_system_prompt
+    } do
       {:ok, show_live, _html} = live(conn, ~p"/base_system_prompts/#{base_system_prompt}")
 
       assert {:ok, form_live, _} =
                show_live
                |> element("a", "Edit")
                |> render_click()
-               |> follow_redirect(conn, ~p"/base_system_prompts/#{base_system_prompt}/edit?return_to=show")
+               |> follow_redirect(
+                 conn,
+                 ~p"/base_system_prompts/#{base_system_prompt}/edit?return_to=show"
+               )
 
       assert render(form_live) =~ "Edit Base system prompt"
 
@@ -110,6 +126,7 @@ defmodule TheMaestroWeb.BaseSystemPromptLiveTest do
         form_live
         |> form("#base_system_prompt-form", base_system_prompt: @update_attrs)
         |> render_submit()
+
       {:ok, show_live, _} = live(conn, ~p"/base_system_prompts/#{base_system_prompt}")
       html = render(show_live)
       assert html =~ "some updated name"

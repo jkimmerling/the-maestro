@@ -3,6 +3,7 @@ defmodule TheMaestroWeb.DashboardLive do
 
   alias TheMaestro.Agents
   alias TheMaestro.Agents.Agent
+  alias TheMaestro.Conversations
   alias TheMaestro.Provider
   alias TheMaestro.SavedAuthentication
   import Ecto.Query
@@ -15,12 +16,16 @@ defmodule TheMaestroWeb.DashboardLive do
      socket
      |> assign(:auths, SavedAuthentication.list_all())
      |> assign(:agents, Agents.list_agents_with_auth())
+     |> assign(:sessions, Conversations.list_sessions_with_agents())
      |> assign(:show_agent_modal, false)
+     |> assign(:show_session_modal, false)
      |> assign(:agent_changeset, Agents.change_agent(%Agent{}))
      |> assign(:agent_form, to_form(Agents.change_agent(%Agent{})))
      |> assign(:auth_options, build_auth_options())
      |> assign(:prompt_options, build_prompt_options())
      |> assign(:persona_options, build_persona_options())
+     |> assign(:agent_options, build_agent_options())
+     |> assign(:session_form, to_form(Conversations.change_session(%Conversations.Session{})))
      |> assign(:page_title, "Dashboard")}
   end
 
@@ -29,7 +34,8 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply,
      socket
      |> assign(:auths, SavedAuthentication.list_all())
-     |> assign(:agents, Agents.list_agents_with_auth())}
+     |> assign(:agents, Agents.list_agents_with_auth())
+     |> assign(:sessions, Conversations.list_sessions_with_agents())}
   end
 
   @impl true
@@ -39,8 +45,10 @@ defmodule TheMaestroWeb.DashboardLive do
         sa = SavedAuthentication.get!(int)
         # Block deletion if agents reference this auth
         count = TheMaestro.Repo.aggregate(from(a in Agent, where: a.auth_id == ^sa.id), :count)
+
         if count > 0 do
-          {:noreply, put_flash(socket, :error, "Cannot delete auth: #{count} agent(s) reference it")}
+          {:noreply,
+           put_flash(socket, :error, "Cannot delete auth: #{count} agent(s) reference it")}
         else
           _ = Provider.delete_session(sa.provider, sa.auth_type, sa.name)
           {:noreply, assign(socket, :auths, SavedAuthentication.list_all())}
@@ -53,6 +61,7 @@ defmodule TheMaestroWeb.DashboardLive do
 
   def handle_event("open_agent_modal", _params, socket) do
     cs = Agents.change_agent(%Agent{})
+
     {:noreply,
      socket
      |> assign(:agent_changeset, cs)
@@ -79,6 +88,43 @@ defmodule TheMaestroWeb.DashboardLive do
     end
   end
 
+  def handle_event("open_session_modal", _params, socket) do
+    cs = Conversations.change_session(%Conversations.Session{})
+
+    {:noreply,
+     socket
+     |> assign(:session_form, to_form(cs))
+     |> assign(:show_session_modal, true)}
+  end
+
+  def handle_event("session_validate", %{"session" => params}, socket) do
+    cs =
+      Conversations.change_session(%Conversations.Session{}, params)
+      |> Map.put(:action, :validate)
+
+    {:noreply, assign(socket, session_form: to_form(cs, action: :validate))}
+  end
+
+  def handle_event("session_save", %{"session" => params}, socket) do
+    case Conversations.create_session(params) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Session created")
+         |> assign(:show_session_modal, false)
+         |> assign(:sessions, Conversations.list_sessions_with_agents())}
+
+      {:error, %Ecto.Changeset{} = cs} ->
+        {:noreply, assign(socket, session_form: to_form(cs))}
+    end
+  end
+
+  def handle_event("delete_session", %{"id" => id}, socket) do
+    s = Conversations.get_session!(id)
+    {:ok, _} = Conversations.delete_session(s)
+    {:noreply, assign(socket, :sessions, Conversations.list_sessions_with_agents())}
+  end
+
   @impl true
   def handle_info(%{topic: "oauth:events", event: "completed", payload: payload}, socket) do
     # Refresh list when a new auth is persisted by the callback server
@@ -93,7 +139,9 @@ defmodule TheMaestroWeb.DashboardLive do
 
   defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S %Z")
-  defp format_dt(%NaiveDateTime{} = ndt), do: Calendar.strftime(ndt, "%Y-%m-%d %H:%M:%S") <> " UTC"
+
+  defp format_dt(%NaiveDateTime{} = ndt),
+    do: Calendar.strftime(ndt, "%Y-%m-%d %H:%M:%S") <> " UTC"
 
   defp provider_label(p) when is_atom(p), do: Atom.to_string(p)
   defp provider_label(p) when is_binary(p), do: p
@@ -103,7 +151,8 @@ defmodule TheMaestroWeb.DashboardLive do
   defp map_count(_), do: 0
 
   defp build_auth_options do
-    SavedAuthentication.list_all() |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
+    SavedAuthentication.list_all()
+    |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
   end
 
   defp build_prompt_options do
@@ -119,6 +168,18 @@ defmodule TheMaestroWeb.DashboardLive do
       TheMaestro.Personas.list_personas() |> Enum.map(&{&1.name, &1.id})
     else
       []
+    end
+  end
+
+  defp build_agent_options do
+    Agents.list_agents_with_auth() |> Enum.map(&{&1.name, &1.id})
+  end
+
+  defp session_label(s) do
+    cond do
+      is_binary(s.name) and String.trim(s.name) != "" -> s.name
+      s.agent && s.agent.name -> s.agent.name <> " · sess-" <> String.slice(s.id, 0, 8)
+      true -> "sess-" <> String.slice(s.id, 0, 8)
     end
   end
 
@@ -146,15 +207,22 @@ defmodule TheMaestroWeb.DashboardLive do
           <tbody>
             <%= for sa <- @auths do %>
               <tr id={"auth-#{sa.id}"}>
-                <td><%= sa.name %></td>
-                <td><%= provider_label(sa.provider) %></td>
-                <td class="uppercase"><%= sa.auth_type %></td>
-                <td><%= format_dt(sa.expires_at) %></td>
-                <td><%= format_dt(sa.inserted_at) %></td>
+                <td>{sa.name}</td>
+                <td>{provider_label(sa.provider)}</td>
+                <td class="uppercase">{sa.auth_type}</td>
+                <td>{format_dt(sa.expires_at)}</td>
+                <td>{format_dt(sa.inserted_at)}</td>
                 <td class="space-x-2">
                   <.link navigate={~p"/auths/#{sa.id}"} class="btn btn-xs">View</.link>
                   <.link navigate={~p"/auths/#{sa.id}/edit"} class="btn btn-xs">Edit</.link>
-                  <button phx-click="delete" phx-value-id={sa.id} data-confirm="Delete this auth?" class="btn btn-xs btn-error">Delete</button>
+                  <button
+                    phx-click="delete"
+                    phx-value-id={sa.id}
+                    data-confirm="Delete this auth?"
+                    class="btn btn-xs btn-error"
+                  >
+                    Delete
+                  </button>
                 </td>
               </tr>
             <% end %>
@@ -170,28 +238,111 @@ defmodule TheMaestroWeb.DashboardLive do
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <%= for a <- @agents do %>
             <div class="card bg-base-200 p-4" id={"agent-" <> to_string(a.id)}>
-              <div class="font-semibold text-base"> <%= a.name %> </div>
-              <div class="text-sm opacity-80">Auth: <%= a.saved_authentication && a.saved_authentication.name %> (<%= a.saved_authentication && a.saved_authentication.provider %>/<%= a.saved_authentication && a.saved_authentication.auth_type %>)</div>
-              <div class="text-xs opacity-70">Tools: <%= map_count(a.tools) %> • MCPs: <%= map_count(a.mcps) %></div>
+              <div class="font-semibold text-base">{a.name}</div>
+              <div class="text-sm opacity-80">
+                Auth: {a.saved_authentication && a.saved_authentication.name} ({a.saved_authentication &&
+                  a.saved_authentication.provider}/{a.saved_authentication &&
+                  a.saved_authentication.auth_type})
+              </div>
+              <div class="text-xs opacity-70">
+                Tools: {map_count(a.tools)} • MCPs: {map_count(a.mcps)}
+              </div>
               <div class="mt-2 space-x-2">
                 <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id)}>View</.link>
-                <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id) <> "/edit"}>Edit</.link>
+                <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id) <> "/edit"}>
+                  Edit
+                </.link>
               </div>
             </div>
           <% end %>
         </div>
       </div>
 
-      <.modal :if={@show_agent_modal} id="agent-modal">
-        <h3 class="text-lg font-semibold mb-2">Create Agent</h3>
-        <.form for={@agent_form} id="agent-modal-form" phx-change="agent_validate" phx-submit="agent_save">
-          <.input field={@agent_form[:name]} type="text" label="Name" />
-          <.input field={@agent_form[:auth_id]} type="select" label="Saved Auth" options={@auth_options} prompt="Select an auth" />
-          <.input field={@agent_form[:base_system_prompt_id]} type="select" label="Base System Prompt" options={@prompt_options} prompt="(optional)" />
-          <.input field={@agent_form[:persona_id]} type="select" label="Persona" options={@persona_options} prompt="(optional)" />
+      <div class="mt-10">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-lg font-semibold">Sessions</h2>
+          <button class="btn" phx-click="open_session_modal">New Session</button>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <%= for s <- @sessions do %>
+            <div class="card bg-base-200 p-4" id={"session-" <> to_string(s.id)}>
+              <div class="font-semibold text-base">{session_label(s)}</div>
+              <div class="text-sm opacity-80">Agent: {s.agent && s.agent.name}</div>
+              <div class="text-xs opacity-70">Last used: {format_dt(s.last_used_at)}</div>
+              <div class="mt-2 space-x-2">
+                <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/chat"}>Go into chat</.link>
+                <.link class="btn btn-xs" navigate={~p"/the_maestro_web/sessions/#{s.id}/edit"}>
+                  Edit
+                </.link>
+                <button class="btn btn-xs btn-error" phx-click="delete_session" phx-value-id={s.id}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <.modal :if={@show_session_modal} id="session-modal">
+        <h3 class="text-lg font-semibold mb-2">Create Session</h3>
+        <.form
+          for={@session_form}
+          id="session-modal-form"
+          phx-submit="session_save"
+          phx-change="session_validate"
+        >
+          <.input field={@session_form[:name]} type="text" label="Name (optional)" />
+          <.input
+            field={@session_form[:agent_id]}
+            type="select"
+            label="Agent"
+            options={@agent_options}
+            prompt="Select an agent"
+          />
           <div class="mt-3 space-x-2">
             <button type="submit" class="btn btn-primary">Save</button>
-            <button type="button" class="btn" phx-click={JS.dispatch("phx:close-modal")}>Cancel</button>
+            <button type="button" class="btn" phx-click={JS.dispatch("phx:close-modal")}>
+              Cancel
+            </button>
+          </div>
+        </.form>
+      </.modal>
+
+      <.modal :if={@show_agent_modal} id="agent-modal">
+        <h3 class="text-lg font-semibold mb-2">Create Agent</h3>
+        <.form
+          for={@agent_form}
+          id="agent-modal-form"
+          phx-change="agent_validate"
+          phx-submit="agent_save"
+        >
+          <.input field={@agent_form[:name]} type="text" label="Name" />
+          <.input
+            field={@agent_form[:auth_id]}
+            type="select"
+            label="Saved Auth"
+            options={@auth_options}
+            prompt="Select an auth"
+          />
+          <.input
+            field={@agent_form[:base_system_prompt_id]}
+            type="select"
+            label="Base System Prompt"
+            options={@prompt_options}
+            prompt="(optional)"
+          />
+          <.input
+            field={@agent_form[:persona_id]}
+            type="select"
+            label="Persona"
+            options={@persona_options}
+            prompt="(optional)"
+          />
+          <div class="mt-3 space-x-2">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="button" class="btn" phx-click={JS.dispatch("phx:close-modal")}>
+              Cancel
+            </button>
           </div>
         </.form>
       </.modal>

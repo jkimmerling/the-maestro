@@ -30,6 +30,7 @@ defmodule TheMaestroWeb.AuthEditLive do
   @impl true
   def handle_event("save", _params, socket) do
     sa = socket.assigns.sa
+
     with :ok <- Provider.validate_session_name(socket.assigns.name),
          {:ok, sa} <- maybe_update(sa, socket.assigns) do
       {:noreply, push_navigate(socket, to: ~p"/auths/#{sa.id}")}
@@ -40,6 +41,7 @@ defmodule TheMaestroWeb.AuthEditLive do
 
   defp maybe_update(sa, assigns) do
     attrs = %{name: assigns.name}
+
     attrs =
       if sa.auth_type == :api_key do
         cred = Map.put(sa.credentials || %{}, "api_key", assigns.api_key)
@@ -60,7 +62,7 @@ defmodule TheMaestroWeb.AuthEditLive do
 
       <%= if @error do %>
         <div class="alert alert-error mb-4">
-          <span><%= @error %></span>
+          <span>{@error}</span>
         </div>
       <% end %>
 
@@ -83,7 +85,12 @@ defmodule TheMaestroWeb.AuthEditLive do
         <%= if @sa.auth_type == :api_key do %>
           <div>
             <label class="label">API Key</label>
-            <input name="auth[api_key]" type="password" value={@api_key} class="input input-bordered w-full" />
+            <input
+              name="auth[api_key]"
+              type="password"
+              value={@api_key}
+              class="input input-bordered w-full"
+            />
           </div>
         <% end %>
 

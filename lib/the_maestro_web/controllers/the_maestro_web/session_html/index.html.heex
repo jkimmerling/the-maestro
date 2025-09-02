@@ -1,0 +1,34 @@
+<Layouts.app flash={@flash}>
+  <.header>
+    Listing Sessions
+    <:actions>
+      <.button href={~p"/the_maestro_web/sessions/new"}>
+        <.icon name="hero-plus" /> New Session
+      </.button>
+    </:actions>
+  </.header>
+
+  <.table
+    id="sessions"
+    rows={@sessions}
+    row_click={&JS.navigate(~p"/the_maestro_web/sessions/#{&1}")}
+  >
+    <:col :let={session} label="Name">{session.name}</:col>
+    <:col :let={session} label="Last used at">{session.last_used_at}</:col>
+    <:action :let={session}>
+      <div class="sr-only">
+        <.link navigate={~p"/the_maestro_web/sessions/#{session}"}>Show</.link>
+      </div>
+      <.link navigate={~p"/the_maestro_web/sessions/#{session}/edit"}>Edit</.link>
+    </:action>
+    <:action :let={session}>
+      <.link
+        href={~p"/the_maestro_web/sessions/#{session}"}
+        method="delete"
+        data-confirm="Are you sure?"
+      >
+        Delete
+      </.link>
+    </:action>
+  </.table>
+</Layouts.app>

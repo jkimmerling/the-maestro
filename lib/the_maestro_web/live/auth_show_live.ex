@@ -13,6 +13,7 @@ defmodule TheMaestroWeb.AuthShowLive do
   @impl true
   def handle_event("refresh_tokens", _params, socket) do
     sa = socket.assigns.sa
+
     case Provider.refresh_tokens(String.to_atom(sa.provider), sa.name) do
       {:ok, _} -> {:noreply, assign(socket, :sa, SavedAuthentication.get!(sa.id))}
       {:error, reason} -> {:noreply, put_flash(socket, :error, inspect(reason))}
@@ -21,10 +22,15 @@ defmodule TheMaestroWeb.AuthShowLive do
 
   defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S %Z")
-  defp format_dt(%NaiveDateTime{} = ndt), do: Calendar.strftime(ndt, "%Y-%m-%d %H:%M:%S") <> " UTC"
+
+  defp format_dt(%NaiveDateTime{} = ndt),
+    do: Calendar.strftime(ndt, "%Y-%m-%d %H:%M:%S") <> " UTC"
 
   defp redact_credentials(%{"api_key" => _} = cred), do: Map.put(cred, "api_key", "••••••••••")
-  defp redact_credentials(%{"access_token" => _} = cred), do: Map.put(cred, "access_token", "••••••••••")
+
+  defp redact_credentials(%{"access_token" => _} = cred),
+    do: Map.put(cred, "access_token", "••••••••••")
+
   defp redact_credentials(cred) when is_map(cred), do: cred
   defp redact_credentials(_), do: %{}
 

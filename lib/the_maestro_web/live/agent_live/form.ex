@@ -17,10 +17,28 @@ defmodule TheMaestroWeb.AgentLive.Form do
 
       <.form for={@form} id="agent-form" phx-change="validate" phx-submit="save">
         <.input field={@form[:name]} type="text" label="Name" />
-        <.input field={@form[:auth_id]} type="select" label="Saved Auth" options={@auth_options} prompt="Select an auth" />
+        <.input
+          field={@form[:auth_id]}
+          type="select"
+          label="Saved Auth"
+          options={@auth_options}
+          prompt="Select an auth"
+        />
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <.input field={@form[:base_system_prompt_id]} type="select" label="Base System Prompt (optional)" options={@prompt_options} prompt="None" />
-          <.input field={@form[:persona_id]} type="select" label="Persona (optional)" options={@persona_options} prompt="None" />
+          <.input
+            field={@form[:base_system_prompt_id]}
+            type="select"
+            label="Base System Prompt (optional)"
+            options={@prompt_options}
+            prompt="None"
+          />
+          <.input
+            field={@form[:persona_id]}
+            type="select"
+            label="Persona (optional)"
+            options={@persona_options}
+            prompt="None"
+          />
         </div>
         <.input field={@form[:tools_json]} type="textarea" rows="5" label="Tools (JSON object)" />
         <.input field={@form[:mcps_json]} type="textarea" rows="5" label="MCPs (JSON object)" />

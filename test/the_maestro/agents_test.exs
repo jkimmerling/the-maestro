@@ -21,14 +21,15 @@ defmodule TheMaestro.AgentsTest do
     end
 
     test "create_agent/1 with valid data creates a agent" do
-      sa = TheMaestro.Repo.insert!(
-        TheMaestro.SavedAuthentication.changeset(%TheMaestro.SavedAuthentication{}, %{
-          provider: :openai,
-          auth_type: :api_key,
-          name: "test_openai_api_key_ctx",
-          credentials: %{"api_key" => "sk-test"}
-        })
-      )
+      sa =
+        TheMaestro.Repo.insert!(
+          TheMaestro.SavedAuthentication.changeset(%TheMaestro.SavedAuthentication{}, %{
+            provider: :openai,
+            auth_type: :api_key,
+            name: "test_openai_api_key_ctx",
+            credentials: %{"api_key" => "sk-test"}
+          })
+        )
 
       valid_attrs = %{memory: %{}, name: "some_name", tools: %{}, mcps: %{}, auth_id: sa.id}
 

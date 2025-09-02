@@ -21,6 +21,7 @@ defmodule TheMaestro.OAuthCallbackPlug do
     state = Map.get(params, "state")
 
     mapping = if is_binary(state), do: OAuthState.take(state), else: nil
+
     case {code, state, mapping} do
       {code, state, %{provider: provider, session_name: name, pkce_params: pkce}}
       when is_binary(code) and is_binary(state) ->
@@ -39,9 +40,13 @@ defmodule TheMaestro.OAuthCallbackPlug do
               provider: to_string(provider),
               session_name: name
             })
+
             OAuthCallbackRuntime.notify_success()
-          _ -> :ok
+
+          _ ->
+            :ok
         end
+
         respond(conn, result)
 
       _ ->

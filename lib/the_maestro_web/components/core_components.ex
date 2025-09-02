@@ -83,6 +83,7 @@ defmodule TheMaestroWeb.CoreComponents do
   # Simple modal component
   attr :id, :string, required: true
   slot :inner_block, required: true
+
   def modal(assigns) do
     ~H"""
     <div id={@id} class="fixed inset-0 z-50" phx-window-keydown="close_modal" phx-key="escape">

@@ -14,7 +14,10 @@ defmodule TheMaestroWeb.BaseSystemPromptLive.Show do
           <.button navigate={~p"/base_system_prompts"}>
             <.icon name="hero-arrow-left" />
           </.button>
-          <.button variant="primary" navigate={~p"/base_system_prompts/#{@base_system_prompt}/edit?return_to=show"}>
+          <.button
+            variant="primary"
+            navigate={~p"/base_system_prompts/#{@base_system_prompt}/edit?return_to=show"}
+          >
             <.icon name="hero-pencil-square" /> Edit base_system_prompt
           </.button>
         </:actions>

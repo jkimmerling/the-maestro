@@ -22,14 +22,20 @@ defmodule TheMaestroWeb.AgentLive.Show do
         <:item title="Name">{@agent.name}</:item>
         <:item title="Auth">
           <%= if @agent.saved_authentication do %>
-            <%= @agent.saved_authentication.name %> (<%= @agent.saved_authentication.provider %>/<%= @agent.saved_authentication.auth_type %>)
+            {@agent.saved_authentication.name} ({@agent.saved_authentication.provider}/{@agent.saved_authentication.auth_type})
           <% else %>
             —
           <% end %>
         </:item>
-        <:item title="Tools"><pre class="text-xs">{inspect(@agent.tools || %{}, pretty: true, limit: :infinity)}</pre></:item>
-        <:item title="MCPs"><pre class="text-xs">{inspect(@agent.mcps || %{}, pretty: true, limit: :infinity)}</pre></:item>
-        <:item title="Memory"><pre class="text-xs">{inspect(@agent.memory || %{}, pretty: true, limit: :infinity)}</pre></:item>
+        <:item title="Tools">
+          <pre class="text-xs">{inspect(@agent.tools || %{}, pretty: true, limit: :infinity)}</pre>
+        </:item>
+        <:item title="MCPs">
+          <pre class="text-xs">{inspect(@agent.mcps || %{}, pretty: true, limit: :infinity)}</pre>
+        </:item>
+        <:item title="Memory">
+          <pre class="text-xs">{inspect(@agent.memory || %{}, pretty: true, limit: :infinity)}</pre>
+        </:item>
       </.list>
     </Layouts.app>
     """
@@ -40,6 +46,10 @@ defmodule TheMaestroWeb.AgentLive.Show do
     {:ok,
      socket
      |> assign(:page_title, "Show Agent")
-     |> assign(:agent, TheMaestro.Repo.get!(TheMaestro.Agents.Agent, id) |> TheMaestro.Repo.preload([:saved_authentication, :base_system_prompt, :persona]))}
+     |> assign(
+       :agent,
+       TheMaestro.Repo.get!(TheMaestro.Agents.Agent, id)
+       |> TheMaestro.Repo.preload([:saved_authentication, :base_system_prompt, :persona])
+     )}
   end
 end

@@ -223,6 +223,7 @@ defmodule TheMaestro.SavedAuthentication do
   @spec update(t(), attrs()) :: {:ok, t()} | {:error, Ecto.Changeset.t()}
   def update(%__MODULE__{} = saved_auth, attrs) do
     alias TheMaestro.Repo
+
     saved_auth
     |> changeset(attrs)
     |> Repo.update()

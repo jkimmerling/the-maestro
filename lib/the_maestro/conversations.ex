@@ -1,0 +1,273 @@
+defmodule TheMaestro.Conversations.ChatEntry do
+  use Ecto.Schema
+  import Ecto.Changeset
+
+  @primary_key {:id, :binary_id, autogenerate: true}
+  @foreign_key_type :binary_id
+
+  schema "chat_history" do
+    field :turn_index, :integer
+    field :actor, :string
+    field :provider, :string
+    field :request_headers, :map, default: %{}
+    field :response_headers, :map, default: %{}
+    field :combined_chat, :map, default: %{}
+    field :edit_version, :integer, default: 0
+
+    field :session_id, :binary_id
+
+    timestamps(type: :utc_datetime)
+  end
+
+  def changeset(entry, attrs) do
+    entry
+    |> cast(attrs, [
+      :session_id,
+      :turn_index,
+      :actor,
+      :provider,
+      :request_headers,
+      :response_headers,
+      :combined_chat,
+      :edit_version
+    ])
+    |> validate_required([:session_id, :turn_index, :actor, :combined_chat])
+    |> validate_inclusion(:actor, ["user", "assistant", "tool", "system"])
+    |> foreign_key_constraint(:session_id)
+    |> unique_constraint([:session_id, :turn_index])
+  end
+end
+
+defmodule TheMaestro.Conversations do
+  @moduledoc """
+  The Conversations context.
+  """
+
+  import Ecto.Query, warn: false
+  alias TheMaestro.Repo
+
+  alias TheMaestro.Conversations.ChatEntry
+  alias TheMaestro.Conversations.Session
+
+  @doc """
+  Returns the list of sessions.
+
+  ## Examples
+
+      iex> list_sessions()
+      [%Session{}, ...]
+
+  """
+  def list_sessions do
+    Repo.all(Session)
+  end
+
+  @doc """
+  Returns sessions preloaded with their agents for dashboard cards.
+  """
+  def list_sessions_with_agents do
+    Repo.all(from s in Session, preload: [:agent, :latest_chat_entry])
+  end
+
+  @doc """
+  Gets a single session.
+
+  Raises `Ecto.NoResultsError` if the Session does not exist.
+
+  ## Examples
+
+      iex> get_session!(123)
+      %Session{}
+
+      iex> get_session!(456)
+      ** (Ecto.NoResultsError)
+
+  """
+  def get_session!(id), do: Repo.get!(Session, id)
+
+  @doc """
+  Creates a session.
+
+  ## Examples
+
+      iex> create_session(%{field: value})
+      {:ok, %Session{}}
+
+      iex> create_session(%{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def create_session(attrs) do
+    %Session{}
+    |> Session.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Updates a session.
+
+  ## Examples
+
+      iex> update_session(session, %{field: new_value})
+      {:ok, %Session{}}
+
+      iex> update_session(session, %{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def update_session(%Session{} = session, attrs) do
+    session
+    |> Session.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes a session.
+
+  ## Examples
+
+      iex> delete_session(session)
+      {:ok, %Session{}}
+
+      iex> delete_session(session)
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def delete_session(%Session{} = session) do
+    Repo.delete(session)
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for tracking session changes.
+
+  ## Examples
+
+      iex> change_session(session)
+      %Ecto.Changeset{data: %Session{}}
+
+  """
+  def change_session(%Session{} = session, attrs \\ %{}) do
+    Session.changeset(session, attrs)
+  end
+
+  # ===== Chat History APIs =====
+
+  @doc """
+  Returns the list of chat entries for a session ordered by turn_index.
+  """
+  def list_chat_entries(session_id) do
+    Repo.all(from e in ChatEntry, where: e.session_id == ^session_id, order_by: e.turn_index)
+  end
+
+  @doc """
+  Gets a single chat entry.
+  """
+  def get_chat_entry!(id), do: Repo.get!(ChatEntry, id)
+
+  @doc """
+  Creates a chat entry.
+  """
+  def create_chat_entry(attrs) do
+    %ChatEntry{}
+    |> ChatEntry.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Updates a chat entry.
+  """
+  def update_chat_entry(%ChatEntry{} = entry, attrs) do
+    entry
+    |> ChatEntry.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes a chat entry.
+  """
+  def delete_chat_entry(%ChatEntry{} = entry) do
+    Repo.delete(entry)
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for tracking chat entry changes.
+  """
+  def change_chat_entry(%ChatEntry{} = entry, attrs \\ %{}) do
+    ChatEntry.changeset(entry, attrs)
+  end
+
+  @doc """
+  Returns the latest snapshot row for the session if one exists.
+  """
+  def latest_snapshot(session_id) do
+    Repo.one(
+      from e in ChatEntry,
+        where: e.session_id == ^session_id,
+        order_by: [desc: e.turn_index],
+        limit: 1
+    )
+  end
+
+  @doc """
+  Computes the next turn_index for a session (0-based).
+  """
+  def next_turn_index(session_id) do
+    max =
+      Repo.one(
+        from e in ChatEntry,
+          where: e.session_id == ^session_id,
+          select: max(e.turn_index)
+      ) || -1
+
+    max + 1
+  end
+
+  @doc """
+  Seeds an initial system message snapshot if none exists for the session.
+  Returns {:ok, {session, snapshot}}.
+  """
+  def ensure_seeded_snapshot(%Session{} = session) do
+    case latest_snapshot(session.id) do
+      %ChatEntry{} = entry ->
+        {:ok, {session, entry}}
+
+      nil ->
+        # Build a minimal canonical chat with a system message from agent persona/prompt
+        session = Repo.preload(session, agent: [:base_system_prompt, :persona])
+
+        system_text =
+          [
+            get_in(session, [:agent, :base_system_prompt, :prompt_text]),
+            get_in(session, [:agent, :persona, :prompt_text])
+          ]
+          |> Enum.filter(&is_binary/1)
+          |> Enum.join("\n\n")
+
+        canonical = %{
+          "messages" =>
+            if(system_text != "",
+              do: [
+                %{"role" => "system", "content" => [%{"type" => "text", "text" => system_text}]}
+              ],
+              else: []
+            )
+        }
+
+        idx = 0
+
+        {:ok, entry} =
+          create_chat_entry(%{
+            session_id: session.id,
+            turn_index: idx,
+            actor: "system",
+            provider: nil,
+            request_headers: %{},
+            response_headers: %{},
+            combined_chat: canonical,
+            edit_version: 0
+          })
+
+        {:ok, {session, entry}}
+    end
+  end
+end

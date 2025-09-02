@@ -1,0 +1,12 @@
+<Layouts.app flash={@flash}>
+  <.header>
+    New Session
+    <:subtitle>Use this form to manage session records in your database.</:subtitle>
+  </.header>
+
+  <.session_form
+    changeset={@changeset}
+    action={~p"/the_maestro_web/sessions"}
+    return_to={~p"/the_maestro_web/sessions"}
+  />
+</Layouts.app>

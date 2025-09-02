@@ -36,9 +36,18 @@ defmodule TheMaestroWeb.Router do
     live "/agents/new", AgentLive.Form, :new
     live "/agents/:id", AgentLive.Show, :show
     live "/agents/:id/edit", AgentLive.Form, :edit
+
+    # Sessions Chat
+    live "/sessions/:id/chat", SessionChatLive, :chat
   end
 
   # Other scopes may use custom stacks.
+  # Generated controllers for Sessions (HTML CRUD)
+  scope "/the_maestro_web", TheMaestroWeb.TheMaestroWeb do
+    pipe_through :browser
+    resources "/sessions", SessionController
+  end
+
   scope "/api", TheMaestroWeb do
     pipe_through :api
 

@@ -23,16 +23,17 @@ defmodule TheMaestroWeb.AgentLiveTest do
       assert html =~ agent.name
     end
 
-  test "saves new agent", %{conn: conn} do
+    test "saves new agent", %{conn: conn} do
       # Create auth before opening the form so it appears in the select options
-      sa = TheMaestro.Repo.insert!(
-        TheMaestro.SavedAuthentication.changeset(%TheMaestro.SavedAuthentication{}, %{
-          provider: :openai,
-          auth_type: :api_key,
-          name: "test_openai_api_key_lv",
-          credentials: %{"api_key" => "sk-test"}
-        })
-      )
+      sa =
+        TheMaestro.Repo.insert!(
+          TheMaestro.SavedAuthentication.changeset(%TheMaestro.SavedAuthentication{}, %{
+            provider: :openai,
+            auth_type: :api_key,
+            name: "test_openai_api_key_lv",
+            credentials: %{"api_key" => "sk-test"}
+          })
+        )
 
       create_attrs = Map.put(@create_attrs, :auth_id, sa.id)
 

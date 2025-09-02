@@ -9,6 +9,7 @@ defmodule TheMaestro.ConfigMigration do
   @doc "Run a best-effort migration and emit a summary report string."
   def migrate_legacy_config do
     legacy = read_legacy_config()
+
     provider_configs = %{
       openai: convert_legacy_openai_config(Map.get(legacy, :openai)),
       anthropic: convert_legacy_anthropic_config(Map.get(legacy, :anthropic)),

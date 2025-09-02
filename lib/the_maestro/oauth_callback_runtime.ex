@@ -102,10 +102,12 @@ defmodule TheMaestro.OAuthCallbackRuntime do
 
   defp stop_server(%{server_pid: pid, timer_ref: tref} = state) do
     if is_reference(tref), do: Process.cancel_timer(tref)
+
     if is_pid(pid) do
       # Graceful shutdown
       ref = Process.monitor(pid)
       Process.exit(pid, :normal)
+
       receive do
         {:DOWN, ^ref, :process, ^pid, _} -> :ok
       after
@@ -118,7 +120,9 @@ defmodule TheMaestro.OAuthCallbackRuntime do
 
   defp port_from_env do
     case System.get_env("OPENAI_REDIRECT_PORT") do
-      nil -> 1455
+      nil ->
+        1455
+
       s ->
         case Integer.parse(s) do
           {p, _} -> p

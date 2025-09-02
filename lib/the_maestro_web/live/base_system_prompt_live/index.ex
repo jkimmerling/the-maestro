@@ -19,10 +19,16 @@ defmodule TheMaestroWeb.BaseSystemPromptLive.Index do
       <.table
         id="base_system_prompts"
         rows={@streams.base_system_prompts}
-        row_click={fn {_id, base_system_prompt} -> JS.navigate(~p"/base_system_prompts/#{base_system_prompt}") end}
+        row_click={
+          fn {_id, base_system_prompt} ->
+            JS.navigate(~p"/base_system_prompts/#{base_system_prompt}")
+          end
+        }
       >
         <:col :let={{_id, base_system_prompt}} label="Name">{base_system_prompt.name}</:col>
-        <:col :let={{_id, base_system_prompt}} label="Prompt text">{base_system_prompt.prompt_text}</:col>
+        <:col :let={{_id, base_system_prompt}} label="Prompt text">
+          {base_system_prompt.prompt_text}
+        </:col>
         <:action :let={{_id, base_system_prompt}}>
           <div class="sr-only">
             <.link navigate={~p"/base_system_prompts/#{base_system_prompt}"}>Show</.link>
