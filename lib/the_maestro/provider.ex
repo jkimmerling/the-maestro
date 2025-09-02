@@ -334,8 +334,19 @@ defmodule TheMaestro.Provider do
     name = Keyword.get(opts, :name)
     credentials = Keyword.get(opts, :credentials)
 
+    # Support both API key style (credentials present) and OAuth style (auth_code + pkce_params)
+    oauth_ok? =
+      case {Keyword.get(opts, :auth_code) || Keyword.get(opts, :code), Keyword.get(opts, :pkce_params)} do
+        {code, pkce} when is_binary(code) and code != "" and not is_nil(pkce) -> true
+        _ -> false
+      end
+
     with :ok <- validate_session_name_presence_and_format(name),
-         :ok <- validate_credentials_presence_and_shape(credentials) do
+         :ok <-
+           (case credentials do
+              nil -> if oauth_ok?, do: :ok, else: {:error, :missing_credentials}
+              cred -> validate_credentials_presence_and_shape(cred)
+            end) do
       :ok
     else
       {:error, _} = err -> err

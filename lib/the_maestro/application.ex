@@ -20,6 +20,9 @@ defmodule TheMaestro.Application do
       finch_child_spec(:openai_finch, finch_pools[:openai]),
       finch_child_spec(:gemini_finch, finch_pools[:gemini]),
       {Phoenix.PubSub, name: TheMaestro.PubSub},
+      # OAuth state store and runtime manager (server starts on-demand)
+      TheMaestro.OAuthState,
+      TheMaestro.OAuthCallbackRuntime,
       # Provider registry for automatic discovery and validation
       TheMaestro.ProviderRegistry,
       # Start to serve requests, typically the last entry

@@ -188,6 +188,47 @@ defmodule TheMaestro.SavedAuthentication do
   end
 
   @doc """
+  Lists all saved authentications across all providers.
+
+  Results are ordered by `inserted_at` descending, then by provider/auth_type/name
+  for stable display in UIs.
+  """
+  @spec list_all() :: [t()]
+  def list_all do
+    alias TheMaestro.Repo
+    import Ecto.Query
+
+    from(sa in __MODULE__,
+      order_by: [desc: sa.inserted_at, asc: sa.provider, asc: sa.auth_type, asc: sa.name]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Fetches a single saved authentication by id.
+  Raises if not found.
+  """
+  @spec get!(integer()) :: t()
+  def get!(id) when is_integer(id) do
+    alias TheMaestro.Repo
+    Repo.get!(__MODULE__, id)
+  end
+
+  @doc """
+  Updates a saved authentication record.
+
+  Only `name`, `credentials`, and `expires_at` are expected to change post‑creation.
+  Provider and auth_type are treated as immutable for existing records.
+  """
+  @spec update(t(), attrs()) :: {:ok, t()} | {:error, Ecto.Changeset.t()}
+  def update(%__MODULE__{} = saved_auth, attrs) do
+    alias TheMaestro.Repo
+    saved_auth
+    |> changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
   Creates a new named session for the given provider and auth type.
 
   ## Parameters

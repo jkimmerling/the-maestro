@@ -16,8 +16,11 @@ defmodule TheMaestroWeb.Router do
 
   scope "/", TheMaestroWeb do
     pipe_through :browser
-
-    get "/", PageController, :home
+    live "/", DashboardLive, :index
+    live "/dashboard", DashboardLive, :index
+    live "/auths/new", AuthNewLive, :new
+    live "/auths/:id", AuthShowLive, :show
+    live "/auths/:id/edit", AuthEditLive, :edit
   end
 
   # Other scopes may use custom stacks.
