@@ -1,8 +1,8 @@
 defmodule TheMaestroWeb.SessionEditLive do
   use TheMaestroWeb, :live_view
 
-  alias TheMaestro.Conversations
   alias TheMaestro.Agents
+  alias TheMaestro.Conversations
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do

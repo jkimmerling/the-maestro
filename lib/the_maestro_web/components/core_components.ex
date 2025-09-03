@@ -112,7 +112,11 @@ defmodule TheMaestroWeb.CoreComponents do
   slot :inner_block, required: true
 
   def button(%{rest: rest} = assigns) do
-    variants = %{"primary" => "btn-primary", "danger" => "btn-danger", nil => "btn-primary btn-soft"}
+    variants = %{
+      "primary" => "btn-primary",
+      "danger" => "btn-danger",
+      nil => "btn-primary btn-soft"
+    }
 
     assigns =
       assign_new(assigns, :class, fn ->

@@ -90,9 +90,10 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
       {:ok, %Req.Response{status: status, body: body} = resp} ->
         # For non-2xx/3xx, body may still be an async stream; drain it if possible
         error_text =
-          cond do
-            enumerable?(body) -> drain_async_body(body)
-            true -> safe_body_text(body)
+          if enumerable?(body) do
+            drain_async_body(body)
+          else
+            safe_body_text(body)
           end
 
         send(
@@ -118,14 +119,10 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
   end
 
   defp drain_async_body(enum) do
-    try do
-      enum
-      |> Enum.into([])
-      |> IO.iodata_to_binary()
-      |> safe_binary()
-    rescue
-      _ -> inspect(enum)
-    end
+    enum
+    |> Enum.into([])
+    |> IO.iodata_to_binary()
+    |> safe_binary()
   end
 
   defp error_event_payload(map) do
@@ -139,20 +136,17 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
   defp safe_body_text(%{} = body) do
     # Best-effort JSON for maps; fallback to inspect if encoding fails
-    try do
-      Jason.encode!(body)
-    rescue
+    case Jason.encode(body) do
+      {:ok, json} -> json
       _ -> inspect(body)
     end
   end
 
   defp safe_body_text(body) do
-    cond do
-      function_exported?(Enumerable, :impl_for, 1) and not is_nil(Enumerable.impl_for(body)) ->
-        body |> Enum.into([]) |> IO.iodata_to_binary() |> safe_binary()
-
-      true ->
-        inspect(body)
+    if function_exported?(Enumerable, :impl_for, 1) and not is_nil(Enumerable.impl_for(body)) do
+      body |> Enum.into([]) |> IO.iodata_to_binary() |> safe_binary()
+    else
+      inspect(body)
     end
   end
 

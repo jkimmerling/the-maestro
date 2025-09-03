@@ -199,52 +199,43 @@ defmodule TheMaestro.Streaming do
   def parse_sse_event(event_text) do
     lines = Regex.split(~r/\r?\n/, event_text)
 
-    event = %{event_type: "message", data: ""}
+    lines
+    |> Enum.reduce(%{event_type: "message", data: ""}, &accumulate_line/2)
+    |> ensure_data_fallback(event_text)
+  end
 
-    result =
-      Enum.reduce(lines, event, fn line, acc ->
-        cond do
-          String.starts_with?(line, "event: ") ->
-            %{acc | event_type: String.trim_leading(line, "event: ")}
+  defp accumulate_line(line, acc) do
+    trimmed = String.trim(line)
 
-          String.starts_with?(line, "data: ") ->
-            data = String.trim_leading(line, "data: ")
-            existing_data = Map.get(acc, :data, "")
-            new_data = (existing_data == "" && data) || existing_data <> "\n" <> data
-            %{acc | data: new_data}
+    cond do
+      trimmed == "" ->
+        acc
 
-          String.trim(line) == "" ->
-            acc
+      String.starts_with?(trimmed, "event: ") ->
+        %{acc | event_type: String.trim_leading(trimmed, "event: ")}
 
-          true ->
-            # Some providers stream raw JSON lines without SSE prefixes.
-            # If this looks like JSON, treat it as data line.
-            trimmed = String.trim(line)
+      String.starts_with?(trimmed, "data: ") ->
+        append_data_line(acc, String.trim_leading(trimmed, "data: "))
 
-            if String.starts_with?(trimmed, "{") or String.starts_with?(trimmed, "[") do
-              existing_data = Map.get(acc, :data, "")
-              new_data = (existing_data == "" && trimmed) || existing_data <> "\n" <> trimmed
-              %{acc | data: new_data}
-            else
-              acc
-            end
-        end
-      end)
+      looks_like_json?(trimmed) ->
+        append_data_line(acc, trimmed)
 
-    # Final fallback: if no data lines were captured but the whole block looks like JSON,
-    # assign it to data so downstream handlers can decode it.
-    case result do
-      %{data: ""} ->
-        trimmed = String.trim(event_text)
-
-        if String.starts_with?(trimmed, "{") or String.starts_with?(trimmed, "[") do
-          %{result | data: trimmed}
-        else
-          result
-        end
-
-      _ ->
-        result
+      true ->
+        acc
     end
   end
+
+  defp append_data_line(%{data: ""} = acc, data), do: %{acc | data: data}
+  defp append_data_line(acc, data), do: %{acc | data: acc.data <> "\n" <> data}
+
+  defp looks_like_json?(<<"{"::utf8, _::binary>>), do: true
+  defp looks_like_json?(<<"["::utf8, _::binary>>), do: true
+  defp looks_like_json?(_), do: false
+
+  defp ensure_data_fallback(%{data: ""} = acc, event_text) do
+    trimmed = String.trim(event_text)
+    if looks_like_json?(trimmed), do: %{acc | data: trimmed}, else: acc
+  end
+
+  defp ensure_data_fallback(acc, _event_text), do: acc
 end

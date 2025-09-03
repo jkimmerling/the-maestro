@@ -3,8 +3,8 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   alias TheMaestro.Conversations
   alias TheMaestro.Conversations.Translator
-  alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
   alias TheMaestro.Provider
+  alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
   require Logger
 
   @impl true
@@ -198,28 +198,27 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # Try to pick a valid model from the provider's list; fallback to defaults
   defp pick_model_for_session(session, provider) do
+    chosen = session.agent.model_id
+
+    if is_binary(chosen) and chosen != "" do
+      chosen
+    else
+      choose_model_from_provider(session, provider)
+    end
+  end
+
+  defp choose_model_from_provider(session, provider) do
     default = default_model_for_session(session, provider)
     session_name = session.agent.saved_authentication.name
     auth_type = session.agent.saved_authentication.auth_type
-    chosen = session.agent.model_id
 
-    case chosen do
-      model when is_binary(model) and model != "" ->
-        model
+    case Provider.list_models(provider, auth_type, session_name) do
+      {:ok, models} when is_list(models) and models != [] ->
+        ids = Enum.map(models, & &1.id)
+        if default in ids, do: default, else: hd(ids)
 
       _ ->
-        case Provider.list_models(provider, auth_type, session_name) do
-          {:ok, models} when is_list(models) and models != [] ->
-            ids = Enum.map(models, & &1.id)
-
-            cond do
-              default in ids -> default
-              true -> hd(ids)
-            end
-
-          _ ->
-            default
-        end
+        default
     end
   end
 
@@ -234,31 +233,6 @@ defmodule TheMaestroWeb.SessionChatLive do
     do: Anthropic.Streaming.stream_chat(session_name, messages, model: model)
 
   require Logger
-
-  defp stream_to_text(provider, stream) do
-    messages =
-      TheMaestro.Streaming.parse_stream(stream, provider, log_unknown_events: true)
-      |> Enum.to_list()
-
-    # Debug: log non-content messages for diagnosis
-    Enum.each(messages, fn
-      %{type: :error} = m -> Logger.error("stream error: #{inspect(m)}")
-      %{type: t} = m when t != :content -> Logger.debug("stream event: #{inspect(m)}")
-      _ -> :ok
-    end)
-
-    text =
-      messages
-      |> Enum.filter(&match?(%{type: :content}, &1))
-      |> Enum.map(&(&1.content || ""))
-      |> Enum.join()
-
-    if text == "" do
-      Logger.warning("stream produced no content; provider=#{inspect(provider)}")
-    end
-
-    text
-  end
 
   @impl true
   # Show thinking indicator until first text arrives
@@ -298,23 +272,13 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   def handle_info({:ai_stream, id, %{type: :done}}, %{assigns: %{stream_id: id}} = socket) do
-    # Finalize assistant turn
     session = socket.assigns.session
     final_text = socket.assigns.partial_answer || ""
+
+    provider = effective_provider(socket, session)
+    req_meta = build_req_meta(socket, session, provider)
+
     updated = socket.assigns.pending_canonical || %{"messages" => []}
-
-    provider =
-      socket.assigns.used_provider ||
-        session.agent.saved_authentication.provider |> to_string() |> String.to_existing_atom()
-
-    req_meta = %{
-      "provider" => Atom.to_string(provider),
-      "model" => socket.assigns.used_model || default_model_for_session(session, provider),
-      "auth_type" =>
-        to_string(socket.assigns.used_auth_type || session.agent.saved_authentication.auth_type),
-      "auth_name" => socket.assigns.used_auth_name || session.agent.saved_authentication.name,
-      "usage" => socket.assigns.used_usage || %{}
-    }
 
     updated2 =
       put_in(
@@ -323,34 +287,7 @@ defmodule TheMaestroWeb.SessionChatLive do
         updated["messages"] ++ [assistant_msg_with_meta(final_text, req_meta)]
       )
 
-    if String.trim(final_text) != "" do
-      req_hdrs = %{
-        "provider" => req_meta["provider"],
-        "model" => req_meta["model"],
-        "auth_type" => req_meta["auth_type"],
-        "auth_name" => req_meta["auth_name"]
-      }
-
-      resp_hdrs = %{"usage" => socket.assigns.used_usage || %{}}
-
-      {:ok, entry} =
-        Conversations.create_chat_entry(%{
-          session_id: session.id,
-          turn_index: Conversations.next_turn_index(session.id),
-          actor: "assistant",
-          provider: req_meta["provider"],
-          request_headers: req_hdrs,
-          response_headers: resp_hdrs,
-          combined_chat: updated2,
-          edit_version: 0
-        })
-
-      {:ok, _} =
-        Conversations.update_session(session, %{
-          latest_chat_entry_id: entry.id,
-          last_used_at: DateTime.utc_now()
-        })
-    end
+    persist_assistant_turn(session, final_text, req_meta, updated2, socket.assigns.used_usage)
 
     meta = %{
       "provider" => req_meta["provider"],
@@ -360,15 +297,7 @@ defmodule TheMaestroWeb.SessionChatLive do
       "usage" => req_meta["usage"]
     }
 
-    messages =
-      (socket.assigns.messages || []) ++
-        [
-          %{
-            "role" => "assistant",
-            "content" => [%{"type" => "text", "text" => final_text}],
-            "_meta" => meta
-          }
-        ]
+    messages = append_assistant_message(socket.assigns.messages || [], final_text, meta)
 
     {:noreply,
      socket
@@ -385,6 +314,68 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # Ignore stale stream messages
   def handle_info({:ai_stream, _other, _msg}, socket), do: {:noreply, socket}
+
+  defp effective_provider(socket, session) do
+    socket.assigns.used_provider ||
+      session.agent.saved_authentication.provider |> to_string() |> String.to_existing_atom()
+  end
+
+  defp build_req_meta(socket, session, provider) do
+    %{
+      "provider" => Atom.to_string(provider),
+      "model" => socket.assigns.used_model || default_model_for_session(session, provider),
+      "auth_type" =>
+        to_string(socket.assigns.used_auth_type || session.agent.saved_authentication.auth_type),
+      "auth_name" => socket.assigns.used_auth_name || session.agent.saved_authentication.name,
+      "usage" => socket.assigns.used_usage || %{}
+    }
+  end
+
+  defp persist_assistant_turn(_session, final_text, _req_meta, _updated2, _used_usage)
+       when final_text == "",
+       do: :ok
+
+  defp persist_assistant_turn(session, _final_text, req_meta, updated2, used_usage) do
+    req_hdrs = %{
+      "provider" => req_meta["provider"],
+      "model" => req_meta["model"],
+      "auth_type" => req_meta["auth_type"],
+      "auth_name" => req_meta["auth_name"]
+    }
+
+    resp_hdrs = %{"usage" => used_usage || %{}}
+
+    {:ok, entry} =
+      Conversations.create_chat_entry(%{
+        session_id: session.id,
+        turn_index: Conversations.next_turn_index(session.id),
+        actor: "assistant",
+        provider: req_meta["provider"],
+        request_headers: req_hdrs,
+        response_headers: resp_hdrs,
+        combined_chat: updated2,
+        edit_version: 0
+      })
+
+    {:ok, _} =
+      Conversations.update_session(session, %{
+        latest_chat_entry_id: entry.id,
+        last_used_at: DateTime.utc_now()
+      })
+
+    :ok
+  end
+
+  defp append_assistant_message(messages, final_text, meta) do
+    messages ++
+      [
+        %{
+          "role" => "assistant",
+          "content" => [%{"type" => "text", "text" => final_text}],
+          "_meta" => meta
+        }
+      ]
+  end
 
   defp dedup_delta(current, chunk) when is_binary(current) and is_binary(chunk) do
     cond do

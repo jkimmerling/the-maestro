@@ -200,21 +200,12 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   defp build_model_options(%{"auth_id" => auth_id}) when is_binary(auth_id) and auth_id != "" do
-    case Integer.parse(auth_id) do
-      {id, _} ->
-        case SavedAuthentication.get!(id) do
-          %SavedAuthentication{} = sa ->
-            case Provider.list_models(sa.provider, sa.auth_type, sa.name) do
-              {:ok, models} -> Enum.map(models, fn m -> {m.name || m.id, m.id} end)
-              _ -> []
-            end
-
-          _ ->
-            []
-        end
-
-      :error ->
-        []
+    with {id, _} <- Integer.parse(auth_id),
+         %SavedAuthentication{} = sa <- SavedAuthentication.get!(id),
+         {:ok, models} <- Provider.list_models(sa.provider, sa.auth_type, sa.name) do
+      Enum.map(models, fn m -> {m.name || m.id, m.id} end)
+    else
+      _ -> []
     end
   end
 
@@ -237,104 +228,11 @@ defmodule TheMaestroWeb.DashboardLive do
         <.link navigate={~p"/auths/new"} class="btn btn-primary">New Auth</.link>
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="table table-zebra w-full">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Provider</th>
-              <th>Auth Type</th>
-              <th>Expiration</th>
-              <th>Created</th>
-              <th class="w-40">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <%= for sa <- @auths do %>
-              <tr id={"auth-#{sa.id}"}>
-                <td>{sa.name}</td>
-                <td>{provider_label(sa.provider)}</td>
-                <td class="uppercase">{sa.auth_type}</td>
-                <td>{format_dt(sa.expires_at)}</td>
-                <td>{format_dt(sa.inserted_at)}</td>
-                <td class="space-x-2">
-                  <.link navigate={~p"/auths/#{sa.id}"} class="btn btn-xs">View</.link>
-                  <.link navigate={~p"/auths/#{sa.id}/edit"} class="btn btn-xs">Edit</.link>
-                  <button
-                    phx-click="delete"
-                    phx-value-id={sa.id}
-                    data-confirm="Delete this auth?"
-                    class="btn btn-xs btn-error"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            <% end %>
-          </tbody>
-        </table>
-      </div>
+      <.auths_table auths={@auths} />
 
-      <div class="mt-10">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-lg font-semibold">Agents</h2>
-          <button class="btn" phx-click="open_agent_modal">New Agent</button>
-        </div>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <%= for a <- @agents do %>
-            <div class="card bg-base-200 p-4" id={"agent-" <> to_string(a.id)}>
-              <div class="font-semibold text-base">{a.name}</div>
-              <div class="text-sm opacity-80">
-                Auth: {a.saved_authentication && a.saved_authentication.name} ({a.saved_authentication &&
-                  a.saved_authentication.provider}/{a.saved_authentication &&
-                  a.saved_authentication.auth_type})
-              </div>
-              <div class="text-xs opacity-70">
-                Tools: {map_count(a.tools)} • MCPs: {map_count(a.mcps)}
-              </div>
-              <div class="mt-2 space-x-2">
-                <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id)}>View</.link>
-                <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id) <> "/edit"}>
-                  Edit
-                </.link>
-                <button
-                  class="btn btn-xs btn-error"
-                  phx-click="delete_agent"
-                  phx-value-id={a.id}
-                  data-confirm="Delete this agent?"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          <% end %>
-        </div>
-      </div>
+      <.agents_grid agents={@agents} />
 
-      <div class="mt-10">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-lg font-semibold">Sessions</h2>
-          <button class="btn" phx-click="open_session_modal">New Session</button>
-        </div>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <%= for s <- @sessions do %>
-            <div class="card bg-base-200 p-4" id={"session-" <> to_string(s.id)}>
-              <div class="font-semibold text-base">{session_label(s)}</div>
-              <div class="text-sm opacity-80">Agent: {s.agent && s.agent.name}</div>
-              <div class="text-xs opacity-70">Last used: {format_dt(s.last_used_at)}</div>
-              <div class="mt-2 space-x-2">
-                <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/chat"}>Go into chat</.link>
-                <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/edit"}>
-                  Edit
-                </.link>
-                <button class="btn btn-xs btn-error" phx-click="delete_session" phx-value-id={s.id}>
-                  Delete
-                </button>
-              </div>
-            </div>
-          <% end %>
-        </div>
-      </div>
+      <.sessions_grid sessions={@sessions} />
 
       <.modal :if={@show_session_modal} id="session-modal">
         <h3 class="text-lg font-semibold mb-2">Create Session</h3>
@@ -407,6 +305,124 @@ defmodule TheMaestroWeb.DashboardLive do
         </.form>
       </.modal>
     </Layouts.app>
+    """
+  end
+
+  # ===== Extracted components to reduce nesting =====
+  attr :auths, :list, required: true
+
+  defp auths_table(assigns) do
+    ~H"""
+    <div class="overflow-x-auto">
+      <table class="table table-zebra w-full">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Provider</th>
+            <th>Auth Type</th>
+            <th>Expiration</th>
+            <th>Created</th>
+            <th class="w-40">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%= for sa <- @auths do %>
+            <tr id={"auth-#{sa.id}"}>
+              <td>{sa.name}</td>
+              <td>{provider_label(sa.provider)}</td>
+              <td class="uppercase">{sa.auth_type}</td>
+              <td>{format_dt(sa.expires_at)}</td>
+              <td>{format_dt(sa.inserted_at)}</td>
+              <td class="space-x-2">
+                <.link navigate={~p"/auths/#{sa.id}"} class="btn btn-xs">View</.link>
+                <.link navigate={~p"/auths/#{sa.id}/edit"} class="btn btn-xs">Edit</.link>
+                <button
+                  phx-click="delete"
+                  phx-value-id={sa.id}
+                  data-confirm="Delete this auth?"
+                  class="btn btn-xs btn-error"
+                >
+                  Delete
+                </button>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+    """
+  end
+
+  attr :agents, :list, required: true
+
+  defp agents_grid(assigns) do
+    ~H"""
+    <div class="mt-10">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-lg font-semibold">Agents</h2>
+        <button class="btn" phx-click="open_agent_modal">New Agent</button>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <%= for a <- @agents do %>
+          <div class="card bg-base-200 p-4" id={"agent-" <> to_string(a.id)}>
+            <div class="font-semibold text-base">{a.name}</div>
+            <div class="text-sm opacity-80">
+              Auth: {a.saved_authentication && a.saved_authentication.name} ({a.saved_authentication &&
+                a.saved_authentication.provider}/{a.saved_authentication &&
+                a.saved_authentication.auth_type})
+            </div>
+            <div class="text-xs opacity-70">
+              Tools: {map_count(a.tools)} • MCPs: {map_count(a.mcps)}
+            </div>
+            <div class="mt-2 space-x-2">
+              <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id)}>View</.link>
+              <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id) <> "/edit"}>
+                Edit
+              </.link>
+              <button
+                class="btn btn-xs btn-error"
+                phx-click="delete_agent"
+                phx-value-id={a.id}
+                data-confirm="Delete this agent?"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  attr :sessions, :list, required: true
+
+  defp sessions_grid(assigns) do
+    ~H"""
+    <div class="mt-10">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-lg font-semibold">Sessions</h2>
+        <button class="btn" phx-click="open_session_modal">New Session</button>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <%= for s <- @sessions do %>
+          <div class="card bg-base-200 p-4" id={"session-" <> to_string(s.id)}>
+            <div class="font-semibold text-base">{session_label(s)}</div>
+            <div class="text-sm opacity-80">Agent: {s.agent && s.agent.name}</div>
+            <div class="text-xs opacity-70">Last used: {format_dt(s.last_used_at)}</div>
+            <div class="mt-2 space-x-2">
+              <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/chat"}>Go into chat</.link>
+              <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/edit"}>
+                Edit
+              </.link>
+              <button class="btn btn-xs btn-error" phx-click="delete_session" phx-value-id={s.id}>
+                Delete
+              </button>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
     """
   end
 end
