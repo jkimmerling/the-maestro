@@ -136,7 +136,23 @@ defmodule TheMaestro.Tools.Router do
     end
   end
 
-  defp replace(_root, _args, _policy, _opts), do: {:error, :unsupported_tool}
+  @dialyzer {:nowarn_function, replace: 4}
+  defp replace(root, args, policy, opts) do
+    case ensure_trusted(policy, opts) do
+      :ok ->
+        case FileSystem.replace(root,
+               file_path: Map.get(args, "file_path"),
+               old_string: Map.get(args, "old_string"),
+               new_string: Map.get(args, "new_string"),
+               expected_replacements: Map.get(args, "expected_replacements")
+             ) do
+          {:ok, count} -> {:ok, %{text: "Replaced #{count} occurrences."}}
+          {:error, e} -> {:error, e}
+        end
+
+      {:error, e} -> {:error, e}
+    end
+  end
 
   defp glob(root, args) do
     case FileSystem.glob(root, pattern: Map.get(args, "pattern"), path: Map.get(args, "path")) do
