@@ -61,6 +61,8 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         "stream" => true
       }
 
+      payload = maybe_put_tools(payload, Keyword.get(opts, :tools))
+
       StreamingAdapter.stream_request(req,
         method: :post,
         url: "/v1/responses",
@@ -99,13 +101,14 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
             ]
           }
         ],
-        "tools" => [],
-        "tool_choice" => "auto",
+        # tools added below if provided
         "parallel_tool_calls" => true,
         "store" => false,
         "stream" => true,
         "text" => %{"verbosity" => "medium"}
       }
+
+      payload = maybe_put_tools(payload, Keyword.get(opts, :tools))
 
       StreamingAdapter.stream_request(req,
         method: :post,
@@ -117,6 +120,14 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
       nil -> {:error, :session_not_found}
     end
   end
+
+  defp maybe_put_tools(payload, tools) when is_list(tools) and tools != [] do
+    payload
+    |> Map.put("tools", tools)
+    |> Map.put("tool_choice", "auto")
+  end
+
+  defp maybe_put_tools(payload, _), do: payload
 
   defp chatgpt_user_agent do
     # Align with test script default

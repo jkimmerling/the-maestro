@@ -5,7 +5,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   alias TheMaestro.Conversations.Translator
   alias TheMaestro.Provider
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
-  alias TheMaestro.Streaming, as: Streaming
+  alias TheMaestro.Providers.OpenAI.ToolsTranslator, as: OpenAITools
   # ToolsRouter not available on this branch; tool function-calls disabled for now
   require Logger
 
@@ -146,6 +146,7 @@ defmodule TheMaestroWeb.SessionChatLive do
       Task.start_link(fn ->
         case call_provider(
                provider,
+               session.agent,
                session.agent.saved_authentication.name,
                provider_msgs,
                model
@@ -225,13 +226,16 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   # Return {:ok, stream}
-  defp call_provider(:openai, session_name, messages, model),
-    do: OpenAI.Streaming.stream_chat(session_name, messages, model: model)
+  defp call_provider(:openai, agent, session_name, messages, model) do
+    tools = TheMaestro.Tools.Registry.list_tools(agent)
+    tool_decls = OpenAITools.declare_tools(tools)
+    OpenAI.Streaming.stream_chat(session_name, messages, model: model, tools: tool_decls)
+  end
 
-  defp call_provider(:gemini, session_name, messages, model),
+  defp call_provider(:gemini, _agent, session_name, messages, model),
     do: Gemini.Streaming.stream_chat(session_name, messages, model: model)
 
-  defp call_provider(:anthropic, session_name, messages, model),
+  defp call_provider(:anthropic, _agent, session_name, messages, model),
     do: Anthropic.Streaming.stream_chat(session_name, messages, model: model)
 
   require Logger
@@ -318,29 +322,6 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # Ignore stale stream messages
   def handle_info({:ai_stream, _other, _msg}, socket), do: {:noreply, socket}
-
-  defp start_stream_with_canonical(new_canonical, provider, model, session_name) do
-    {:ok, provider_msgs} = Translator.to_provider(new_canonical, provider)
-    stream_id = Ecto.UUID.generate()
-    parent = self()
-
-    task =
-      Task.start_link(fn ->
-        case call_provider(provider, session_name, provider_msgs, model) do
-          {:ok, stream} ->
-            for msg <-
-                  TheMaestro.Streaming.parse_stream(stream, provider, log_unknown_events: true),
-                do: send(parent, {:ai_stream, stream_id, msg})
-
-          {:error, reason} ->
-            send(parent, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
-            send(parent, {:ai_stream, stream_id, %{type: :done}})
-        end
-      end)
-      |> elem(1)
-
-    {stream_id, task}
-  end
 
   # tool_result_text omitted (tools execution disabled)
 
