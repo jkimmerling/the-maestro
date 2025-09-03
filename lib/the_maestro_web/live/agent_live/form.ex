@@ -53,9 +53,109 @@ defmodule TheMaestroWeb.AgentLive.Form do
             prompt="None"
           />
         </div>
-        <.input field={@form[:tools_json]} type="textarea" rows="5" label="Tools (JSON object)" />
-        <.input field={@form[:mcps_json]} type="textarea" rows="5" label="MCPs (JSON object)" />
-        <.input field={@form[:memory_json]} type="textarea" rows="5" label="Memory (JSON object)" />
+
+        <div class="divider my-4">Tools</div>
+
+        <div class="mb-3 text-sm opacity-80">
+          Select which tools this agent can use during a session. Use the Advanced toggle to edit JSON directly if needed.
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-3">
+          <div>
+            <div class="font-semibold mb-2">Available Tools</div>
+            <div class="space-y-1 max-h-60 overflow-auto pr-1">
+              <%= for tool <- @available_tools do %>
+                <label class="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    name="agent[tools][enabled_tools][]"
+                    value={tool.name}
+                    class="checkbox checkbox-sm mt-0.5"
+                    checked={tool.name in (@enabled_tools || [])}
+                  />
+                  <span>
+                    <div class="font-medium">{tool.name}</div>
+                    <div class="text-xs opacity-70">{tool.description}</div>
+                  </span>
+                </label>
+              <% end %>
+            </div>
+          </div>
+
+          <div>
+            <div class="font-semibold mb-2">Tool & Safety Settings</div>
+            <.input
+              name="agent[tools][trust]"
+              type="checkbox"
+              label="Allow tool writes without extra confirmation (trust)"
+              checked={@tools_map["trust"] || false}
+            />
+            <.input
+              name="agent[tools][allow_chaining]"
+              type="checkbox"
+              label="Allow shell command chaining (&&, ||, ;)"
+              checked={@tools_map["allow_chaining"] || false}
+            />
+            <.input
+              name="agent[tools][sudo_allowed]"
+              type="checkbox"
+              label="Allow sudo in shell (dangerous)"
+              checked={@tools_map["sudo_allowed"] || false}
+            />
+            <.input
+              name="agent[tools][token_cap]"
+              type="number"
+              label="Token cap for tool outputs"
+              value={@tools_map["token_cap"] || 100_000}
+              min="1000"
+              step="1000"
+            />
+            <.input
+              name="agent[tools][denylist]"
+              type="textarea"
+              label="Additional denylist patterns (one per line)"
+              rows="3"
+              value={Enum.join(List.wrap(@tools_map["denylist"] || []), "\n")}
+            />
+            <div class="mt-2">
+              <label class="label mb-1">Preferred Search Backend</label>
+              <select name="agent[tools][search_backends][]" class="select w-full">
+                <%= for opt <- ["tavily", "duckduckgo"] do %>
+                  <option value={opt} selected={List.first(@search_backends) == opt}>{opt}</option>
+                <% end %>
+              </select>
+              <input
+                type="hidden"
+                name="agent[tools][search_backends][]"
+                value={
+                  (@search_backends -- [List.first(@search_backends || [])]) |> List.first() ||
+                    "duckduckgo"
+                }
+              />
+              <div class="text-xs opacity-70 mt-1">
+                Order is respected; remaining backends fill after the preferred one.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <label class="label cursor-pointer">
+            <span class="label-text">Advanced: Edit raw JSON maps</span>
+            <input
+              type="checkbox"
+              class="toggle"
+              phx-click="toggle_advanced"
+              checked={@advanced_json?}
+            />
+          </label>
+        </div>
+
+        <div :if={@advanced_json?} class="mt-2">
+          <.input field={@form[:tools_json]} type="textarea" rows="5" label="Tools (JSON object)" />
+          <.input field={@form[:mcps_json]} type="textarea" rows="5" label="MCPs (JSON object)" />
+          <.input field={@form[:memory_json]} type="textarea" rows="5" label="Memory (JSON object)" />
+        </div>
         <footer>
           <.button phx-disable-with="Saving..." variant="primary">Save Agent</.button>
           <.button navigate={return_path(@return_to, @agent)}>Cancel</.button>
@@ -70,8 +170,10 @@ defmodule TheMaestroWeb.AgentLive.Form do
     {:ok,
      socket
      |> assign(:return_to, return_to(params["return_to"]))
+     |> assign(:advanced_json?, false)
      |> load_form_options()
-     |> apply_action(socket.assigns.live_action, params)}
+     |> apply_action(socket.assigns.live_action, params)
+     |> load_tools_ui_state()}
   end
 
   defp return_to("show"), do: "show"
@@ -142,7 +244,8 @@ defmodule TheMaestroWeb.AgentLive.Form do
     {:noreply,
      socket
      |> assign(:model_options, model_opts)
-     |> assign(:form, to_form(changeset, action: :validate))}
+     |> assign(:form, to_form(changeset, action: :validate))
+     |> load_tools_ui_state()}
   end
 
   def handle_event("save", %{"agent" => agent_params}, socket) do
@@ -156,6 +259,11 @@ defmodule TheMaestroWeb.AgentLive.Form do
      socket
      |> put_flash(:info, "Agent deleted")
      |> push_navigate(to: return_path("index", nil))}
+  end
+
+  @impl true
+  def handle_event("toggle_advanced", _params, socket) do
+    {:noreply, assign(socket, :advanced_json?, !socket.assigns.advanced_json?)}
   end
 
   defp save_agent(socket, :edit, agent_params) do
@@ -201,5 +309,43 @@ defmodule TheMaestroWeb.AgentLive.Form do
     else
       _ -> []
     end
+  end
+
+  # ===== Tools UI helpers =====
+  defp load_tools_ui_state(socket) do
+    changeset = socket.assigns.form.source
+
+    tools_map =
+      (changeset.changes[:tools] || changeset.data.tools || %{})
+      |> normalize_tools_map()
+
+    enabled_tools = Map.get(tools_map, "enabled_tools", [])
+    backends = Map.get(tools_map, "search_backends", ["tavily", "duckduckgo"])
+
+    assign(socket,
+      available_tools: TheMaestro.Tools.Registry.list_tools(%{}),
+      tools_map: tools_map,
+      enabled_tools: enabled_tools,
+      search_backends: backends
+    )
+  end
+
+  defp normalize_tools_map(%{} = m) do
+    # Convert textarea denylist (string) into list when validating
+    case m do
+      %{"denylist" => s} when is_binary(s) ->
+        Map.put(m, "denylist", split_lines(s))
+
+      _ ->
+        m
+    end
+  end
+
+  defp normalize_tools_map(_), do: %{}
+
+  defp split_lines(str) when is_binary(str) do
+    str
+    |> String.split(["\r\n", "\n", "\r"], trim: true)
+    |> Enum.reject(&(&1 == ""))
   end
 end

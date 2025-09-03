@@ -5,6 +5,8 @@ defmodule TheMaestroWeb.SessionChatLive do
   alias TheMaestro.Conversations.Translator
   alias TheMaestro.Provider
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
+  alias TheMaestro.Streaming, as: Streaming
+  # ToolsRouter not available on this branch; tool function-calls disabled for now
   require Logger
 
   @impl true
@@ -254,6 +256,8 @@ defmodule TheMaestroWeb.SessionChatLive do
     {:noreply, assign(socket, partial_answer: new_partial, thinking?: false)}
   end
 
+  # Tool function calls: execute via Router and continue streaming with injected results
+  # Note: provider function_call handling is disabled on this branch
   def handle_info(
         {:ai_stream, id, %{type: :error, error: err}},
         %{assigns: %{stream_id: id}} = socket
@@ -314,6 +318,31 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # Ignore stale stream messages
   def handle_info({:ai_stream, _other, _msg}, socket), do: {:noreply, socket}
+
+  defp start_stream_with_canonical(new_canonical, provider, model, session_name) do
+    {:ok, provider_msgs} = Translator.to_provider(new_canonical, provider)
+    stream_id = Ecto.UUID.generate()
+    parent = self()
+
+    task =
+      Task.start_link(fn ->
+        case call_provider(provider, session_name, provider_msgs, model) do
+          {:ok, stream} ->
+            for msg <-
+                  TheMaestro.Streaming.parse_stream(stream, provider, log_unknown_events: true),
+                do: send(parent, {:ai_stream, stream_id, msg})
+
+          {:error, reason} ->
+            send(parent, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
+            send(parent, {:ai_stream, stream_id, %{type: :done}})
+        end
+      end)
+      |> elem(1)
+
+    {stream_id, task}
+  end
+
+  # tool_result_text omitted (tools execution disabled)
 
   defp effective_provider(socket, session) do
     socket.assigns.used_provider ||
