@@ -37,6 +37,12 @@ defmodule TheMaestroWeb.AgentLive.Form do
           options={@model_options}
           prompt="Auto-select from provider"
         />
+        <.input
+          field={@form[:working_directory]}
+          type="text"
+          label="Working Directory (absolute path)"
+          placeholder="/Users/you/Development/project"
+        />
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <.input
             field={@form[:base_system_prompt_id]}

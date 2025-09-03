@@ -10,6 +10,7 @@ defmodule TheMaestro.Agents.Agent do
     field :mcps, :map, default: %{}
     field :memory, :map, default: %{}
     field :model_id, :string
+    field :working_directory, :string
 
     # Virtual JSON fields for form editing
     field :tools_json, :string, virtual: true
@@ -39,6 +40,7 @@ defmodule TheMaestro.Agents.Agent do
       :mcps_json,
       :memory_json,
       :model_id,
+      :working_directory,
       :auth_id,
       :base_system_prompt_id,
       :persona_id
@@ -50,6 +52,7 @@ defmodule TheMaestro.Agents.Agent do
     |> decode_json_field(:mcps_json, :mcps)
     |> decode_json_field(:memory_json, :memory)
     |> normalize_maps()
+    |> validate_working_directory()
     |> foreign_key_constraint(:auth_id)
     |> foreign_key_constraint(:base_system_prompt_id)
     |> foreign_key_constraint(:persona_id)
@@ -84,6 +87,21 @@ defmodule TheMaestro.Agents.Agent do
 
           {:error, %Jason.DecodeError{position: pos}} ->
             add_error(changeset, src_field, "invalid JSON at position #{pos}")
+        end
+    end
+  end
+
+  defp validate_working_directory(changeset) do
+    case get_change(changeset, :working_directory) || get_field(changeset, :working_directory) do
+      nil -> changeset
+      "" -> changeset
+      dir when is_binary(dir) ->
+        abs = Path.expand(dir)
+
+        if Path.type(abs) != :absolute do
+          add_error(changeset, :working_directory, "must be an absolute path")
+        else
+          put_change(changeset, :working_directory, abs)
         end
     end
   end
