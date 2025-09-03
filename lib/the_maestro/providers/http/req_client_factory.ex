@@ -133,11 +133,11 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
 
     with {:ok, saved} <- fetch_saved(:openai, :oauth, session_name),
          :ok <- ensure_not_expired(saved.expires_at),
-         {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
+         {:ok, access_token, _token_type} <- fetch_token(saved.credentials) do
       org_id = Application.get_env(:the_maestro, :openai, []) |> Keyword.get(:organization_id)
 
       base_headers = [
-        {"authorization", token_type <> " " <> access_token},
+        {"authorization", "Bearer " <> access_token},
         {"user-agent", "llxprt/1.0"},
         {"accept", "application/json"},
         {"x-client-version", "1.0.0"}

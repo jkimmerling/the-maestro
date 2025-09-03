@@ -12,9 +12,15 @@ defmodule TheMaestro.Conversations.Translator do
   def to_provider(%{"messages" => msgs}, :gemini), do: {:ok, Enum.map(msgs, &to_gemini_msg/1)}
   def to_provider(_c, _), do: {:error, :invalid_canonical}
 
-  @spec from_provider(map() | list() | binary(), provider()) :: {:ok, canonical()} | {:error, term()}
+  @spec from_provider(map() | list() | binary(), provider()) ::
+          {:ok, canonical()} | {:error, term()}
   def from_provider(text, _provider) when is_binary(text) do
-    {:ok, %{"messages" => [%{"role" => "assistant", "content" => [%{"type" => "text", "text" => text}]}]}}
+    {:ok,
+     %{
+       "messages" => [
+         %{"role" => "assistant", "content" => [%{"type" => "text", "text" => text}]}
+       ]
+     }}
   end
 
   def from_provider(msgs, :gemini) when is_list(msgs) do

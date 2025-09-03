@@ -37,8 +37,9 @@ defmodule TheMaestroWeb.Router do
     live "/agents/:id", AgentLive.Show, :show
     live "/agents/:id/edit", AgentLive.Form, :edit
 
-    # Sessions Chat
+    # Sessions LiveViews
     live "/sessions/:id/chat", SessionChatLive, :chat
+    live "/sessions/:id/edit", SessionEditLive, :edit
   end
 
   # Other scopes may use custom stacks.

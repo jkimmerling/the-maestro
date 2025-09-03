@@ -4,7 +4,8 @@ defmodule TheMaestroWeb.AgentLive.Form do
   alias TheMaestro.Agents
   alias TheMaestro.Agents.Agent
   alias TheMaestro.SavedAuthentication
-  alias TheMaestro.{Personas, Prompts}
+  alias TheMaestro.{Personas, Prompts, Provider}
+  alias TheMaestro.SavedAuthentication
 
   @impl true
   def render(assigns) do
@@ -13,6 +14,11 @@ defmodule TheMaestroWeb.AgentLive.Form do
       <.header>
         {@page_title}
         <:subtitle>Use this form to manage agent records in your database.</:subtitle>
+        <:actions :if={@live_action == :edit}>
+          <.button phx-click="delete" data-confirm="Delete this agent?" variant="danger">
+            Delete
+          </.button>
+        </:actions>
       </.header>
 
       <.form for={@form} id="agent-form" phx-change="validate" phx-submit="save">
@@ -23,6 +29,13 @@ defmodule TheMaestroWeb.AgentLive.Form do
           label="Saved Auth"
           options={@auth_options}
           prompt="Select an auth"
+        />
+        <.input
+          field={@form[:model_id]}
+          type="select"
+          label="Model"
+          options={@model_options}
+          prompt="Auto-select from provider"
         />
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <.input
@@ -104,20 +117,45 @@ defmodule TheMaestroWeb.AgentLive.Form do
         _ -> []
       end
 
+    # Preload model options based on current agent auth_id (if any)
+    model_opts = model_options_for_agent(socket.assigns[:agent])
+
     socket
     |> assign(:auth_options, auths)
     |> assign(:prompt_options, prompts)
     |> assign(:persona_options, personas)
+    |> assign(:model_options, model_opts)
   end
 
   @impl true
   def handle_event("validate", %{"agent" => agent_params}, socket) do
     changeset = Agents.change_agent(socket.assigns.agent, agent_params)
-    {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
+
+    # If auth_id changed in the form input, refresh model options
+    model_opts =
+      case Map.get(agent_params, "auth_id") do
+        nil -> socket.assigns.model_options || []
+        "" -> []
+        id when is_binary(id) -> model_options_for_auth_id(id)
+      end
+
+    {:noreply,
+     socket
+     |> assign(:model_options, model_opts)
+     |> assign(:form, to_form(changeset, action: :validate))}
   end
 
   def handle_event("save", %{"agent" => agent_params}, socket) do
     save_agent(socket, socket.assigns.live_action, agent_params)
+  end
+
+  def handle_event("delete", _params, socket) do
+    {:ok, _} = Agents.delete_agent(socket.assigns.agent)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Agent deleted")
+     |> push_navigate(to: return_path("index", nil))}
   end
 
   defp save_agent(socket, :edit, agent_params) do
@@ -148,4 +186,20 @@ defmodule TheMaestroWeb.AgentLive.Form do
 
   defp return_path("index", _agent), do: ~p"/agents"
   defp return_path("show", agent), do: ~p"/agents/#{agent}"
+
+  defp model_options_for_agent(nil), do: []
+  defp model_options_for_agent(%Agent{auth_id: nil}), do: []
+
+  defp model_options_for_agent(%Agent{auth_id: auth_id}) when is_integer(auth_id),
+    do: model_options_for_auth_id(Integer.to_string(auth_id))
+
+  defp model_options_for_auth_id(auth_id_str) when is_binary(auth_id_str) do
+    with {auth_id, _} <- Integer.parse(auth_id_str),
+         %SavedAuthentication{} = sa <- SavedAuthentication.get!(auth_id),
+         {:ok, models} <- Provider.list_models(sa.provider, sa.auth_type, sa.name) do
+      Enum.map(models, fn m -> {m.name || m.id, m.id} end)
+    else
+      _ -> []
+    end
+  end
 end

@@ -235,11 +235,21 @@ defmodule TheMaestro.Conversations do
         # Build a minimal canonical chat with a system message from agent persona/prompt
         session = Repo.preload(session, agent: [:base_system_prompt, :persona])
 
+        # Safely extract prompt text from preloaded associations without using Access on structs
+        bsp_text =
+          case session.agent do
+            %{base_system_prompt: %{prompt_text: pt}} when is_binary(pt) -> pt
+            _ -> nil
+          end
+
+        persona_text =
+          case session.agent do
+            %{persona: %{prompt_text: pt}} when is_binary(pt) -> pt
+            _ -> nil
+          end
+
         system_text =
-          [
-            get_in(session, [:agent, :base_system_prompt, :prompt_text]),
-            get_in(session, [:agent, :persona, :prompt_text])
-          ]
+          [bsp_text, persona_text]
           |> Enum.filter(&is_binary/1)
           |> Enum.join("\n\n")
 

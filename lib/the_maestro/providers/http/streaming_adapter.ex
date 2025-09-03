@@ -87,10 +87,19 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
         forward_body_chunks(resp.body, parent)
         send(parent, :done)
 
-      {:ok, %Req.Response{status: status, body: body}} ->
+      {:ok, %Req.Response{status: status, body: body} = resp} ->
+        # For non-2xx/3xx, body may still be an async stream; drain it if possible
+        error_text =
+          if enumerable?(body) do
+            drain_async_body(body)
+          else
+            safe_body_text(body)
+          end
+
         send(
           parent,
-          {:data, error_event_payload(%{http_error: status, body: safe_body_text(body)})}
+          {:data,
+           error_event_payload(%{http_error: status, body: error_text, headers: resp.headers})}
         )
 
         send(parent, :done)
@@ -105,20 +114,76 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
     Enum.each(enum, fn chunk -> send(parent, {:data, chunk}) end)
   end
 
-  defp error_event_payload(map) do
-    "event: error\ndata: " <> Jason.encode!(map) <> "\n\n"
+  defp enumerable?(term) do
+    function_exported?(Enumerable, :impl_for, 1) and not is_nil(Enumerable.impl_for(term))
   end
 
-  defp safe_body_text(body) when is_binary(body), do: body
-  defp safe_body_text(body) when is_list(body), do: IO.iodata_to_binary(body)
+  defp drain_async_body(enum) do
+    enum
+    |> Enum.into([])
+    |> IO.iodata_to_binary()
+    |> safe_binary()
+  end
+
+  defp error_event_payload(map) do
+    # Ensure the error payload is always JSON-encodable by sanitizing values
+    safe_map = sanitize_for_json(map)
+    "event: error\ndata: " <> Jason.encode!(safe_map) <> "\n\n"
+  end
+
+  defp safe_body_text(body) when is_binary(body), do: safe_binary(body)
+  defp safe_body_text(body) when is_list(body), do: body |> IO.iodata_to_binary() |> safe_binary()
+
+  defp safe_body_text(%{} = body) do
+    # Best-effort JSON for maps; fallback to inspect if encoding fails
+    case Jason.encode(body) do
+      {:ok, json} -> json
+      _ -> inspect(body)
+    end
+  end
 
   defp safe_body_text(body) do
     if function_exported?(Enumerable, :impl_for, 1) and not is_nil(Enumerable.impl_for(body)) do
-      body |> Enum.into([]) |> IO.iodata_to_binary()
+      body |> Enum.into([]) |> IO.iodata_to_binary() |> safe_binary()
     else
       inspect(body)
     end
   end
+
+  defp safe_binary(bin) when is_binary(bin) do
+    cond do
+      String.valid?(bin) ->
+        bin
+
+      gzipped?(bin) ->
+        try do
+          ungz = :zlib.gunzip(bin)
+          if String.valid?(ungz), do: ungz, else: "base64:gzip:" <> Base.encode64(ungz)
+        rescue
+          _ -> "base64:gzip:" <> Base.encode64(bin)
+        end
+
+      true ->
+        # Not UTF-8 and not gzip; return base64 so JSON encoding won't fail
+        "base64:" <> Base.encode64(bin)
+    end
+  end
+
+  defp gzipped?(<<0x1F, 0x8B, _rest::binary>>), do: true
+  defp gzipped?(_), do: false
+
+  defp sanitize_for_json(map) when is_map(map) do
+    map
+    |> Enum.map(fn {k, v} -> {k, sanitize_value(v)} end)
+    |> Enum.into(%{})
+  end
+
+  defp sanitize_value(v) when is_binary(v),
+    do: if(String.valid?(v), do: v, else: "base64:" <> Base.encode64(v))
+
+  defp sanitize_value(v) when is_list(v), do: v |> IO.iodata_to_binary() |> sanitize_value()
+  defp sanitize_value(%{} = v), do: sanitize_for_json(v)
+  defp sanitize_value(v), do: v
 
   defp next_events(state) do
     # Pass through raw chunks; central SSE parsing happens in TheMaestro.Streaming

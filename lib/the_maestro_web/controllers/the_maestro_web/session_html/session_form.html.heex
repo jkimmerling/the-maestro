@@ -1,5 +1,12 @@
 <.form :let={f} for={@changeset} action={@action}>
   <.input field={f[:name]} type="text" label="Name" />
+  <.input
+    field={f[:agent_id]}
+    type="select"
+    label="Agent"
+    options={@agent_options}
+    prompt="Select an agent"
+  />
   <.input field={f[:last_used_at]} type="datetime-local" label="Last used at" />
   <footer>
     <.button variant="primary">Save Session</.button>

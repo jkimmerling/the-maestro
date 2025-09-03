@@ -199,26 +199,43 @@ defmodule TheMaestro.Streaming do
   def parse_sse_event(event_text) do
     lines = Regex.split(~r/\r?\n/, event_text)
 
-    event = %{event_type: "message", data: ""}
-
-    Enum.reduce(lines, event, fn line, acc ->
-      cond do
-        String.starts_with?(line, "event: ") ->
-          %{acc | event_type: String.trim_leading(line, "event: ")}
-
-        String.starts_with?(line, "data: ") ->
-          data = String.trim_leading(line, "data: ")
-          existing_data = Map.get(acc, :data, "")
-          new_data = (existing_data == "" && data) || existing_data <> "\n" <> data
-          %{acc | data: new_data}
-
-        String.trim(line) == "" ->
-          acc
-
-        true ->
-          # Ignore other fields like id:, retry:, etc.
-          acc
-      end
-    end)
+    lines
+    |> Enum.reduce(%{event_type: "message", data: ""}, &accumulate_line/2)
+    |> ensure_data_fallback(event_text)
   end
+
+  defp accumulate_line(line, acc) do
+    trimmed = String.trim(line)
+
+    cond do
+      trimmed == "" ->
+        acc
+
+      String.starts_with?(trimmed, "event: ") ->
+        %{acc | event_type: String.trim_leading(trimmed, "event: ")}
+
+      String.starts_with?(trimmed, "data: ") ->
+        append_data_line(acc, String.trim_leading(trimmed, "data: "))
+
+      looks_like_json?(trimmed) ->
+        append_data_line(acc, trimmed)
+
+      true ->
+        acc
+    end
+  end
+
+  defp append_data_line(%{data: ""} = acc, data), do: %{acc | data: data}
+  defp append_data_line(acc, data), do: %{acc | data: acc.data <> "\n" <> data}
+
+  defp looks_like_json?(<<"{"::utf8, _::binary>>), do: true
+  defp looks_like_json?(<<"["::utf8, _::binary>>), do: true
+  defp looks_like_json?(_), do: false
+
+  defp ensure_data_fallback(%{data: ""} = acc, event_text) do
+    trimmed = String.trim(event_text)
+    if looks_like_json?(trimmed), do: %{acc | data: trimmed}, else: acc
+  end
+
+  defp ensure_data_fallback(acc, _event_text), do: acc
 end
