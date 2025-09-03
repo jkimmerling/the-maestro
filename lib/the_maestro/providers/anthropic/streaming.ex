@@ -44,6 +44,8 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
               base_body
           end
 
+        body = maybe_put_tools(body, Keyword.get(opts, :tools))
+
         StreamingAdapter.stream_request(req, method: :post, url: "/v1/messages", json: body)
       end
     end
@@ -55,6 +57,14 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
     Logger.debug("Anthropic.Streaming.parse_stream_event/2 stub called")
     {[], state}
   end
+
+  defp maybe_put_tools(body, tools) when is_list(tools) and tools != [] do
+    body
+    |> Map.put("tools", tools)
+    |> Map.put("tool_choice", "auto")
+  end
+
+  defp maybe_put_tools(body, _), do: body
 
   @spec detect_auth_type(String.t()) :: {:ok, :oauth | :api_key} | {:error, term()}
   defp detect_auth_type(session_id) do

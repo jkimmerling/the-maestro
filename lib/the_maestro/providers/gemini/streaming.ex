@@ -34,6 +34,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
           "stream" => true
         }
 
+        payload = maybe_put_tools(payload, Keyword.get(opts, :tools))
+
         StreamingAdapter.stream_request(
           req,
           method: :post,
@@ -64,6 +66,12 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
         {:error, :session_not_found}
     end
   end
+
+  defp maybe_put_tools(payload, tools) when is_list(tools) and tools != [] do
+    Map.put(payload, "tools", tools)
+  end
+
+  defp maybe_put_tools(payload, _), do: payload
 
   @doc false
   @spec normalize_messages([map()]) :: [map()]

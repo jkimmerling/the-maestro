@@ -125,7 +125,8 @@ defmodule TheMaestro.Tools.Impl.FileSystem do
         |> Enum.filter(fn {line, _i} -> Regex.match?(re, line) end)
         |> Enum.map(fn {line, i} -> "#{Path.relative_to(file, root)}:#{i}:#{line}" end)
 
-      _ -> []
+      _ ->
+        []
     end
   end
 

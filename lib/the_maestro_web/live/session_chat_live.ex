@@ -5,6 +5,8 @@ defmodule TheMaestroWeb.SessionChatLive do
   alias TheMaestro.Conversations.Translator
   alias TheMaestro.Provider
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
+  alias TheMaestro.Providers.Anthropic.ToolsTranslator, as: AnthropicTools
+  alias TheMaestro.Providers.Gemini.ToolsTranslator, as: GeminiTools
   alias TheMaestro.Providers.OpenAI.ToolsTranslator, as: OpenAITools
   alias TheMaestro.Tools.Router, as: ToolsRouter
   require Logger
@@ -232,11 +234,17 @@ defmodule TheMaestroWeb.SessionChatLive do
     OpenAI.Streaming.stream_chat(session_name, messages, model: model, tools: tool_decls)
   end
 
-  defp call_provider(:gemini, _agent, session_name, messages, model),
-    do: Gemini.Streaming.stream_chat(session_name, messages, model: model)
+  defp call_provider(:gemini, agent, session_name, messages, model) do
+    tools = TheMaestro.Tools.Registry.list_tools(agent)
+    tool_decls = GeminiTools.declare_tools(tools)
+    Gemini.Streaming.stream_chat(session_name, messages, model: model, tools: tool_decls)
+  end
 
-  defp call_provider(:anthropic, _agent, session_name, messages, model),
-    do: Anthropic.Streaming.stream_chat(session_name, messages, model: model)
+  defp call_provider(:anthropic, agent, session_name, messages, model) do
+    tools = TheMaestro.Tools.Registry.list_tools(agent)
+    tool_decls = AnthropicTools.declare_tools(tools)
+    Anthropic.Streaming.stream_chat(session_name, messages, model: model, tools: tool_decls)
+  end
 
   require Logger
 
@@ -404,6 +412,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   @dialyzer {:nowarn_function, tool_result_text: 4}
   defp tool_result_text(agent, session_id, trust?, call_map) do
     res = ToolsRouter.execute(agent, call_map, session_id: session_id, trust: trust?)
+
     case res do
       {:ok, data} -> "[tool #{data.name}]:\n\n" <> (to_string(data.text) |> String.trim())
       {:error, reason} -> "[tool_error]: #{inspect(reason)}"

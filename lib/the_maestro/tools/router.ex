@@ -24,6 +24,7 @@ defmodule TheMaestro.Tools.Router do
 
   @spec execute(map(), map(), keyword()) :: {:ok, tool_result()} | {:error, term()}
   def execute(agent, call, opts \\ [])
+
   def execute(agent, call, opts) when is_map(call) do
     with {:ok, name, args, call_id} <- normalize_call(call),
          {:ok, result} <- do_execute(agent, name, args, opts) do
@@ -67,13 +68,22 @@ defmodule TheMaestro.Tools.Router do
   end
 
   defp dispatch("run_shell_command", root, policy, args, _opts), do: run_shell(root, args, policy)
-  defp dispatch("list_directory", root, policy, args, _opts), do: list_directory(root, args, policy)
+
+  defp dispatch("list_directory", root, policy, args, _opts),
+    do: list_directory(root, args, policy)
+
   defp dispatch("read_file", root, policy, args, _opts), do: read_file(root, args, policy)
   defp dispatch("glob", root, _policy, args, _opts), do: glob(root, args)
-  defp dispatch("search_file_content", root, _policy, args, _opts), do: search_file_content(root, args)
+
+  defp dispatch("search_file_content", root, _policy, args, _opts),
+    do: search_file_content(root, args)
+
   defp dispatch("write_file", root, policy, args, opts), do: write_file(root, args, policy, opts)
   defp dispatch("replace", root, policy, args, opts), do: replace(root, args, policy, opts)
-  defp dispatch("read_many_files", root, policy, args, _opts), do: read_many_files(root, args, policy)
+
+  defp dispatch("read_many_files", root, policy, args, _opts),
+    do: read_many_files(root, args, policy)
+
   defp dispatch(other, _root, _policy, _args, _opts), do: {:error, {:unknown_tool, other}}
 
   defp run_shell(root, args, policy) do
@@ -121,7 +131,8 @@ defmodule TheMaestro.Tools.Router do
           {:error, e} -> {:error, e}
         end
 
-      {:error, e} -> {:error, e}
+      {:error, e} ->
+        {:error, e}
     end
   end
 
@@ -145,10 +156,11 @@ defmodule TheMaestro.Tools.Router do
   end
 
   defp read_many_files(root, args, policy) do
-    paths = case Map.get(args, "paths") do
-      list when is_list(list) -> list
-      _ -> []
-    end
+    paths =
+      case Map.get(args, "paths") do
+        list when is_list(list) -> list
+        _ -> []
+      end
 
     texts =
       Enum.map(paths, fn p ->
