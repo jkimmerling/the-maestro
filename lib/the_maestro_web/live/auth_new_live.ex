@@ -113,7 +113,7 @@ defmodule TheMaestroWeb.AuthNewLive do
          {:ok, _} <-
            Provider.create_session(socket.assigns.provider, :oauth,
              name: socket.assigns.name,
-             pkce_params: pkce_to_kw(pkce),
+             pkce_params: Map.new(pkce_to_kw(pkce)),
              auth_code: code
            ) do
       {:noreply, push_navigate(socket, to: ~p"/dashboard")}

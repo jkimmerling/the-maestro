@@ -135,20 +135,18 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
   end
 
   defp build_user_text(messages) do
-    # Wrap last user message in <user_instructions> as per reference script
-    msg =
+    # Build a full conversation transcript so ChatGPT backend has context
+    # Messages can be maps with string or atom keys: %{"role" => r, "content" => t}
+    transcript =
       messages
-      |> Enum.reverse()
-      |> Enum.find(fn m -> Map.get(m, :role) == "user" or Map.get(m, "role") == "user" end)
+      |> Enum.map(fn m ->
+        role = Map.get(m, :role) || Map.get(m, "role") || "user"
+        content = Map.get(m, :content) || Map.get(m, "content") || ""
+        "#{role}: #{content}"
+      end)
+      |> Enum.join("\n\n")
 
-    text =
-      cond do
-        is_map(msg) and is_binary(Map.get(msg, :content)) -> Map.get(msg, :content)
-        is_map(msg) and is_binary(Map.get(msg, "content")) -> Map.get(msg, "content")
-        true -> ""
-      end
-
-    "<user_instructions>\n\n" <> text <> "\n\n</user_instructions>"
+    "<conversation>\n\n" <> transcript <> "\n\n</conversation>"
   end
 
   defp normalize_messages_for_responses(messages) do

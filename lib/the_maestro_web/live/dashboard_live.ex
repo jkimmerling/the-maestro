@@ -6,7 +6,6 @@ defmodule TheMaestroWeb.DashboardLive do
   alias TheMaestro.Conversations
   alias TheMaestro.Provider
   alias TheMaestro.SavedAuthentication
-  import Ecto.Query
 
   @impl true
   def mount(_params, _session, socket) do
@@ -35,7 +34,11 @@ defmodule TheMaestroWeb.DashboardLive do
      socket
      |> assign(:auths, SavedAuthentication.list_all())
      |> assign(:agents, Agents.list_agents_with_auth())
-     |> assign(:sessions, Conversations.list_sessions_with_agents())}
+     |> assign(:sessions, Conversations.list_sessions_with_agents())
+     |> assign(:auth_options, build_auth_options())
+     |> assign(:agent_options, build_agent_options())
+     |> assign(:prompt_options, build_prompt_options())
+     |> assign(:persona_options, build_persona_options())}
   end
 
   @impl true
@@ -43,16 +46,15 @@ defmodule TheMaestroWeb.DashboardLive do
     case Integer.parse(id) do
       {int, _} ->
         sa = SavedAuthentication.get!(int)
-        # Block deletion if agents reference this auth
-        count = TheMaestro.Repo.aggregate(from(a in Agent, where: a.auth_id == ^sa.id), :count)
+        # Allow deletion; DB FK now nilifies agent.auth_id
+        _ = Provider.delete_session(sa.provider, sa.auth_type, sa.name)
 
-        if count > 0 do
-          {:noreply,
-           put_flash(socket, :error, "Cannot delete auth: #{count} agent(s) reference it")}
-        else
-          _ = Provider.delete_session(sa.provider, sa.auth_type, sa.name)
-          {:noreply, assign(socket, :auths, SavedAuthentication.list_all())}
-        end
+        {:noreply,
+         socket
+         |> put_flash(:info, "Auth deleted; linked agents detached.")
+         |> assign(:auths, SavedAuthentication.list_all())
+         |> assign(:auth_options, build_auth_options())
+         |> assign(:agents, Agents.list_agents_with_auth())}
 
       :error ->
         {:noreply, socket}
@@ -66,12 +68,19 @@ defmodule TheMaestroWeb.DashboardLive do
      socket
      |> assign(:agent_changeset, cs)
      |> assign(:agent_form, to_form(cs))
+     |> assign(:model_options, [])
+     |> assign(:auth_options, build_auth_options())
      |> assign(:show_agent_modal, true)}
   end
 
   def handle_event("agent_validate", %{"agent" => params}, socket) do
     cs = Agents.change_agent(%Agent{}, params) |> Map.put(:action, :validate)
-    {:noreply, assign(socket, agent_changeset: cs, agent_form: to_form(cs, action: :validate))}
+    model_opts = build_model_options(params)
+
+    {:noreply,
+     socket
+     |> assign(:model_options, model_opts)
+     |> assign(agent_changeset: cs, agent_form: to_form(cs, action: :validate))}
   end
 
   def handle_event("agent_save", %{"agent" => params}, socket) do
@@ -81,7 +90,9 @@ defmodule TheMaestroWeb.DashboardLive do
          socket
          |> put_flash(:info, "Agent created")
          |> assign(:show_agent_modal, false)
-         |> assign(:agents, Agents.list_agents_with_auth())}
+         |> assign(:agents, Agents.list_agents_with_auth())
+         |> assign(:model_options, [])
+         |> assign(:agent_options, build_agent_options())}
 
       {:error, %Ecto.Changeset{} = cs} ->
         {:noreply, assign(socket, agent_changeset: cs, agent_form: to_form(cs))}
@@ -93,6 +104,7 @@ defmodule TheMaestroWeb.DashboardLive do
 
     {:noreply,
      socket
+     |> assign(:agent_options, build_agent_options())
      |> assign(:session_form, to_form(cs))
      |> assign(:show_session_modal, true)}
   end
@@ -125,6 +137,17 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply, assign(socket, :sessions, Conversations.list_sessions_with_agents())}
   end
 
+  def handle_event("delete_agent", %{"id" => id}, socket) do
+    agent = Agents.get_agent!(id)
+    {:ok, _} = Agents.delete_agent(agent)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Agent deleted")
+     |> assign(:agents, Agents.list_agents_with_auth())
+     |> assign(:agent_options, build_agent_options())}
+  end
+
   @impl true
   def handle_info(%{topic: "oauth:events", event: "completed", payload: payload}, socket) do
     # Refresh list when a new auth is persisted by the callback server
@@ -132,6 +155,7 @@ defmodule TheMaestroWeb.DashboardLive do
      socket
      |> put_flash(:info, "OAuth completed for #{payload["provider"]}: #{payload["session_name"]}")
      |> assign(:auths, SavedAuthentication.list_all())
+     |> assign(:auth_options, build_auth_options())
      |> assign(:agents, Agents.list_agents_with_auth())}
   end
 
@@ -174,6 +198,27 @@ defmodule TheMaestroWeb.DashboardLive do
   defp build_agent_options do
     Agents.list_agents_with_auth() |> Enum.map(&{&1.name, &1.id})
   end
+
+  defp build_model_options(%{"auth_id" => auth_id}) when is_binary(auth_id) and auth_id != "" do
+    case Integer.parse(auth_id) do
+      {id, _} ->
+        case SavedAuthentication.get!(id) do
+          %SavedAuthentication{} = sa ->
+            case Provider.list_models(sa.provider, sa.auth_type, sa.name) do
+              {:ok, models} -> Enum.map(models, fn m -> {m.name || m.id, m.id} end)
+              _ -> []
+            end
+
+          _ ->
+            []
+        end
+
+      :error ->
+        []
+    end
+  end
+
+  defp build_model_options(_), do: []
 
   defp session_label(s) do
     cond do
@@ -252,6 +297,14 @@ defmodule TheMaestroWeb.DashboardLive do
                 <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id) <> "/edit"}>
                   Edit
                 </.link>
+                <button
+                  class="btn btn-xs btn-error"
+                  phx-click="delete_agent"
+                  phx-value-id={a.id}
+                  data-confirm="Delete this agent?"
+                >
+                  Delete
+                </button>
               </div>
             </div>
           <% end %>
@@ -271,7 +324,7 @@ defmodule TheMaestroWeb.DashboardLive do
               <div class="text-xs opacity-70">Last used: {format_dt(s.last_used_at)}</div>
               <div class="mt-2 space-x-2">
                 <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/chat"}>Go into chat</.link>
-                <.link class="btn btn-xs" navigate={~p"/the_maestro_web/sessions/#{s.id}/edit"}>
+                <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/edit"}>
                   Edit
                 </.link>
                 <button class="btn btn-xs btn-error" phx-click="delete_session" phx-value-id={s.id}>
@@ -323,6 +376,13 @@ defmodule TheMaestroWeb.DashboardLive do
             label="Saved Auth"
             options={@auth_options}
             prompt="Select an auth"
+          />
+          <.input
+            field={@agent_form[:model_id]}
+            type="select"
+            label="Model"
+            options={@model_options}
+            prompt="Auto-select from provider"
           />
           <.input
             field={@agent_form[:base_system_prompt_id]}

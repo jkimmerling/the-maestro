@@ -15,7 +15,8 @@ defmodule TheMaestro.Providers.Anthropic.OAuth do
   @impl true
   @spec create_session(Types.request_opts()) :: {:ok, Types.session_id()} | {:error, term()}
   def create_session(opts) when is_list(opts) do
-    with {:ok, name, code, pkce} <- validate_opts(opts),
+    with {:ok, name, code, pkce0} <- validate_opts(opts),
+         pkce <- normalize_pkce(pkce0),
          {:ok, %Auth.OAuthToken{} = token} <- Auth.exchange_code_for_tokens(code, pkce),
          :ok <- Auth.persist_oauth_token(:anthropic, name, token) do
       {:ok, name}
@@ -89,6 +90,12 @@ defmodule TheMaestro.Providers.Anthropic.OAuth do
       true -> {:ok, name, code, pkce}
     end
   end
+
+  # Accept PKCE params in various shapes and normalize to a map with atom keys
+  defp normalize_pkce(%TheMaestro.Auth.PKCEParams{} = pkce), do: Map.from_struct(pkce)
+  defp normalize_pkce(pkce) when is_list(pkce), do: Map.new(pkce)
+  defp normalize_pkce(pkce) when is_map(pkce), do: pkce
+  defp normalize_pkce(_), do: %{}
 
   # Local mapping to Auth.OAuthToken for Anthropic responses
   defp map_token_response(response_body) do

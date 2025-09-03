@@ -10,7 +10,10 @@ defmodule TheMaestro.Conversations.Session do
     field :last_used_at, :utc_datetime
 
     belongs_to :agent, TheMaestro.Agents.Agent, type: :binary_id
-    field :latest_chat_entry_id, :binary_id
+    # Associate the latest chat snapshot for quick preload in dashboards
+    belongs_to :latest_chat_entry, TheMaestro.Conversations.ChatEntry,
+      foreign_key: :latest_chat_entry_id,
+      type: :binary_id
 
     timestamps(type: :utc_datetime)
   end

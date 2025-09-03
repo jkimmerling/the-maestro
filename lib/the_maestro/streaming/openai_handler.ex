@@ -96,6 +96,9 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     end
   end
 
+  # Initial creation event – no content to emit
+  defp handle_openai_event(%{"type" => "response.created"}, _opts), do: []
+
   # Newer Responses event forms: content_part delta/done with output_text
   defp handle_openai_event(%{"type" => "response.content_part.delta", "part" => part}, _opts) do
     case part do
@@ -109,6 +112,27 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
       %{"type" => "output_text", "text" => text} when is_binary(text) -> handle_text_delta(text)
       _ -> []
     end
+  end
+
+  # Model has started working but no content yet
+  defp handle_openai_event(%{"type" => "response.in_progress"}, _opts) do
+    [content_message("", %{thinking: true})]
+  end
+
+  # Additional ChatGPT events observed: 'content_part.added' and 'output_text.done'
+  defp handle_openai_event(%{"type" => "response.content_part.added", "part" => part}, _opts) do
+    case part do
+      %{"type" => "output_text", "text" => text} when is_binary(text) and text != "" ->
+        handle_text_delta(text)
+
+      _ ->
+        []
+    end
+  end
+
+  defp handle_openai_event(%{"type" => "response.output_text.done", "text" => text}, _opts)
+       when is_binary(text) do
+    handle_text_delta(text)
   end
 
   defp handle_openai_event(%{"type" => "response.function_call_arguments.delta"} = event, _opts) do
@@ -127,6 +151,10 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
 
   defp handle_openai_event(%{"type" => "response.completed"} = event, _opts) do
     messages = []
+
+    # If no deltas were emitted, try to extract any final text present in the response
+    texts = extract_texts_from_completed(event)
+    messages = Enum.reduce(texts, messages, fn t, acc -> [content_message(t) | acc] end)
 
     # Extract usage data if present
     messages =
@@ -150,6 +178,16 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     [done_message(%{response_id: get_in(event, ["response", "id"])}) | messages]
   end
 
+  # ChatGPT backend sometimes emits a generic delta wrapper
+  # Example payloads observed in the wild:
+  #  - {"type":"response.delta","delta":{"type":"message","content":[{"type":"output_text","text":"Hello"}]}}
+  #  - {"type":"response.delta","delta":{"type":"output_text","text":" world"}}
+  #  - {"type":"response.delta","delta":{"type":"content_part","index":0,"content_part":{"type":"output_text","text":"!"}}}
+  defp handle_openai_event(%{"type" => "response.delta", "delta" => delta}, _opts) do
+    extract_texts_from_delta(delta)
+    |> Enum.flat_map(&handle_text_delta/1)
+  end
+
   defp handle_openai_event(event, opts) do
     # Optionally log unknown events for debugging
     if log_unknown_events?(opts) do
@@ -157,6 +195,44 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     end
 
     []
+  end
+
+  # ===== Helpers for flexible delta shapes =====
+  defp extract_texts_from_delta(%{"type" => "output_text", "text" => text}) when is_binary(text),
+    do: [text]
+
+  defp extract_texts_from_delta(%{"type" => "message", "content" => parts}) when is_list(parts) do
+    parts
+    |> Enum.flat_map(&extract_texts_from_delta/1)
+  end
+
+  defp extract_texts_from_delta(%{"type" => "content_part", "content_part" => part}),
+    do: extract_texts_from_delta(part)
+
+  defp extract_texts_from_delta(%{"type" => "text_delta", "text" => text}) when is_binary(text),
+    do: [text]
+
+  defp extract_texts_from_delta(%{"text" => text}) when is_binary(text), do: [text]
+  defp extract_texts_from_delta(_), do: []
+
+  defp extract_texts_from_completed(event) do
+    cond do
+      is_binary(text = get_in(event, ["response", "output_text"])) ->
+        [text]
+
+      is_list(out = get_in(event, ["response", "output"])) ->
+        out
+        |> Enum.flat_map(fn
+          %{"type" => "message", "content" => parts} when is_list(parts) ->
+            parts |> Enum.flat_map(&extract_texts_from_delta/1)
+
+          _ ->
+            []
+        end)
+
+      true ->
+        []
+    end
   end
 
   defp log_unknown_events?(opts) do
@@ -195,8 +271,9 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
         []
 
       {:not_reasoning} ->
+        # Emit only the delta to avoid duplication when providers send cumulative snapshots
         put_text_accumulator("")
-        [content_message(new_accumulator)]
+        [content_message(delta)]
     end
   end
 
@@ -364,4 +441,6 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     Process.delete(@function_calls_key)
     Process.delete(@text_accumulator_key)
   end
+
+  # ChatGPT emits when a new content part is added; sometimes empty text
 end

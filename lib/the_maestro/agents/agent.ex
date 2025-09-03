@@ -9,6 +9,7 @@ defmodule TheMaestro.Agents.Agent do
     field :tools, :map, default: %{}
     field :mcps, :map, default: %{}
     field :memory, :map, default: %{}
+    field :model_id, :string
 
     # Virtual JSON fields for form editing
     field :tools_json, :string, virtual: true
@@ -37,6 +38,7 @@ defmodule TheMaestro.Agents.Agent do
       :tools_json,
       :mcps_json,
       :memory_json,
+      :model_id,
       :auth_id,
       :base_system_prompt_id,
       :persona_id

@@ -201,24 +201,50 @@ defmodule TheMaestro.Streaming do
 
     event = %{event_type: "message", data: ""}
 
-    Enum.reduce(lines, event, fn line, acc ->
-      cond do
-        String.starts_with?(line, "event: ") ->
-          %{acc | event_type: String.trim_leading(line, "event: ")}
+    result =
+      Enum.reduce(lines, event, fn line, acc ->
+        cond do
+          String.starts_with?(line, "event: ") ->
+            %{acc | event_type: String.trim_leading(line, "event: ")}
 
-        String.starts_with?(line, "data: ") ->
-          data = String.trim_leading(line, "data: ")
-          existing_data = Map.get(acc, :data, "")
-          new_data = (existing_data == "" && data) || existing_data <> "\n" <> data
-          %{acc | data: new_data}
+          String.starts_with?(line, "data: ") ->
+            data = String.trim_leading(line, "data: ")
+            existing_data = Map.get(acc, :data, "")
+            new_data = (existing_data == "" && data) || existing_data <> "\n" <> data
+            %{acc | data: new_data}
 
-        String.trim(line) == "" ->
-          acc
+          String.trim(line) == "" ->
+            acc
 
-        true ->
-          # Ignore other fields like id:, retry:, etc.
-          acc
-      end
-    end)
+          true ->
+            # Some providers stream raw JSON lines without SSE prefixes.
+            # If this looks like JSON, treat it as data line.
+            trimmed = String.trim(line)
+
+            if String.starts_with?(trimmed, "{") or String.starts_with?(trimmed, "[") do
+              existing_data = Map.get(acc, :data, "")
+              new_data = (existing_data == "" && trimmed) || existing_data <> "\n" <> trimmed
+              %{acc | data: new_data}
+            else
+              acc
+            end
+        end
+      end)
+
+    # Final fallback: if no data lines were captured but the whole block looks like JSON,
+    # assign it to data so downstream handlers can decode it.
+    case result do
+      %{data: ""} ->
+        trimmed = String.trim(event_text)
+
+        if String.starts_with?(trimmed, "{") or String.starts_with?(trimmed, "[") do
+          %{result | data: trimmed}
+        else
+          result
+        end
+
+      _ ->
+        result
+    end
   end
 end
