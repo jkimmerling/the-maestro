@@ -6,7 +6,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   alias TheMaestro.Provider
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
   alias TheMaestro.Providers.OpenAI.ToolsTranslator, as: OpenAITools
-  # ToolsRouter not available on this branch; tool function-calls disabled for now
+  alias TheMaestro.Tools.Router, as: ToolsRouter
   require Logger
 
   @impl true
@@ -261,7 +261,35 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   # Tool function calls: execute via Router and continue streaming with injected results
-  # Note: provider function_call handling is disabled on this branch
+  def handle_info(
+        {:ai_stream, id, %{type: :function_call, function_call: calls}},
+        %{assigns: %{stream_id: id}} = socket
+      ) do
+    session = socket.assigns.session
+    provider = effective_provider(socket, session)
+    model = socket.assigns.used_model || default_model_for_session(session, provider)
+
+    kill_stream_if_any(socket)
+
+    new_canonical = reduce_with_tool_calls(calls || [], socket.assigns.pending_canonical, session)
+
+    {stream_id, task} =
+      start_stream_with_canonical(
+        new_canonical,
+        provider,
+        model,
+        session.agent.saved_authentication.name,
+        session.agent
+      )
+
+    {:noreply,
+     socket
+     |> assign(:stream_task, task)
+     |> assign(:stream_id, stream_id)
+     |> assign(:pending_canonical, new_canonical)
+     |> assign(:thinking?, true)}
+  end
+
   def handle_info(
         {:ai_stream, id, %{type: :error, error: err}},
         %{assigns: %{stream_id: id}} = socket
@@ -323,7 +351,64 @@ defmodule TheMaestroWeb.SessionChatLive do
   # Ignore stale stream messages
   def handle_info({:ai_stream, _other, _msg}, socket), do: {:noreply, socket}
 
-  # tool_result_text omitted (tools execution disabled)
+  # ===== Helpers for function-call loop =====
+  defp kill_stream_if_any(socket) do
+    if task = socket.assigns.stream_task do
+      Process.exit(task, :kill)
+    end
+  end
+
+  defp reduce_with_tool_calls(calls, canonical, session) do
+    Enum.reduce(calls, canonical, fn call, acc ->
+      call_map = build_call_map(call)
+      trust? = (session.agent.tools || %{})["trust"] || false
+      result_text = tool_result_text(session.agent, session.id, trust?, call_map)
+      put_in(acc, ["messages"], (acc["messages"] || []) ++ [user_msg(result_text)])
+    end)
+  end
+
+  defp build_call_map(call) do
+    %{
+      "id" => Map.get(call, :id) || Map.get(call, "id"),
+      "function" => %{
+        "name" => get_in(call, [:function, :name]) || get_in(call, ["function", "name"]),
+        "arguments" =>
+          get_in(call, [:function, :arguments]) || get_in(call, ["function", "arguments"]) || "{}"
+      }
+    }
+  end
+
+  defp start_stream_with_canonical(new_canonical, provider, model, session_name, agent) do
+    {:ok, provider_msgs} = Translator.to_provider(new_canonical, provider)
+    stream_id = Ecto.UUID.generate()
+    parent = self()
+
+    task =
+      Task.start_link(fn ->
+        case call_provider(provider, agent, session_name, provider_msgs, model) do
+          {:ok, stream} ->
+            for msg <-
+                  TheMaestro.Streaming.parse_stream(stream, provider, log_unknown_events: true),
+                do: send(parent, {:ai_stream, stream_id, msg})
+
+          {:error, reason} ->
+            send(parent, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
+            send(parent, {:ai_stream, stream_id, %{type: :done}})
+        end
+      end)
+      |> elem(1)
+
+    {stream_id, task}
+  end
+
+  @dialyzer {:nowarn_function, tool_result_text: 4}
+  defp tool_result_text(agent, session_id, trust?, call_map) do
+    res = ToolsRouter.execute(agent, call_map, session_id: session_id, trust: trust?)
+    case res do
+      {:ok, data} -> "[tool #{data.name}]:\n\n" <> (to_string(data.text) |> String.trim())
+      {:error, reason} -> "[tool_error]: #{inspect(reason)}"
+    end
+  end
 
   defp effective_provider(socket, session) do
     socket.assigns.used_provider ||
