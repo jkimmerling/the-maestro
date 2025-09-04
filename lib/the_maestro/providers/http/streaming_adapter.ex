@@ -8,6 +8,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
   """
 
   alias TheMaestro.Types
+  require Logger
 
   @typedoc "Parsed SSE-like event"
   @type sse_event :: %{event_type: String.t(), data: String.t()}
@@ -82,8 +83,16 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
   end
 
   defp run_request_and_forward(req, req_opts, parent) do
+    if http_debug?() do
+      log_outbound_request(req, req_opts)
+    end
+
     case Req.request(req, req_opts) do
       {:ok, %Req.Response{status: status} = resp} when status < 400 ->
+        if http_debug?() do
+          Logger.debug("HTTP resp: status=#{status} (streaming body)")
+        end
+
         forward_body_chunks(resp.body, parent)
         send(parent, :done)
 
@@ -105,13 +114,23 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
         send(parent, :done)
 
       {:error, reason} ->
+        if http_debug?() do
+          Logger.debug("HTTP error: #{inspect(reason)}")
+        end
+
         send(parent, {:data, error_event_payload(%{request_error: inspect(reason)})})
         send(parent, :done)
     end
   end
 
   defp forward_body_chunks(enum, parent) do
-    Enum.each(enum, fn chunk -> send(parent, {:data, chunk}) end)
+    Enum.each(enum, fn chunk ->
+      if http_debug?() do
+        log_inbound_chunk(chunk)
+      end
+
+      send(parent, {:data, chunk})
+    end)
   end
 
   defp enumerable?(term) do
@@ -203,5 +222,46 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
           {[timeout_event], %{state | done: true}}
       end
     end
+  end
+
+  # ===== Debug helpers =====
+  defp http_debug? do
+    System.get_env("HTTP_DEBUG") in ["1", "true", "TRUE"] ||
+      Application.get_env(:the_maestro, :http_debug, false)
+  end
+
+  defp log_outbound_request(_req, req_opts) do
+    method = Keyword.get(req_opts, :method, :get)
+    url = Keyword.get(req_opts, :url)
+    json = Keyword.get(req_opts, :json)
+    body = Keyword.get(req_opts, :body)
+
+    snippet =
+      cond do
+        json ->
+          "json=" <> truncate_safe(Jason.encode!(json), 1200)
+
+        is_binary(body) ->
+          "body_bytes=" <> Integer.to_string(byte_size(body))
+
+        true ->
+          ""
+      end
+
+    Logger.debug("HTTP req: #{method} #{url} #{snippet}")
+  rescue
+    _ -> :ok
+  end
+
+  defp log_inbound_chunk(chunk) when is_binary(chunk) do
+    # SSE lines can be large; print a short snippet
+    prefix = String.slice(chunk, 0, 400)
+    Logger.debug("HTTP chunk: \n" <> prefix <> if(byte_size(chunk) > 400, do: "...", else: ""))
+  end
+
+  defp log_inbound_chunk(_), do: :ok
+
+  defp truncate_safe(str, max) when is_binary(str) do
+    if byte_size(str) > max, do: String.slice(str, 0, max) <> "...", else: str
   end
 end
