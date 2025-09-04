@@ -15,21 +15,22 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
 
-    {:ok,
-     socket
-     |> assign(:page_title, "Chat")
-     |> assign(:session, session)
-     |> assign(:message, "")
-     |> assign(:messages, current_messages(session.id))
-     |> assign(:streaming?, false)
-     |> assign(:partial_answer, "")
-     |> assign(:stream_id, nil)
-     |> assign(:stream_task, nil)
-     |> assign(:pending_canonical, nil)
-     |> assign(:thinking?, false)
-     |> assign(:summary, compute_summary(current_messages(session.id)))
-     |> assign(:editing_latest, false)
-     |> assign(:latest_json, nil)}
+     {:ok,
+      socket
+      |> assign(:page_title, "Chat")
+      |> assign(:session, session)
+      |> assign(:message, "")
+      |> assign(:messages, current_messages(session.id))
+      |> assign(:streaming?, false)
+      |> assign(:partial_answer, "")
+      |> assign(:stream_id, nil)
+      |> assign(:stream_task, nil)
+      |> assign(:pending_canonical, nil)
+      |> assign(:thinking?, false)
+       |> assign(:tool_calls, [])
+      |> assign(:summary, compute_summary(current_messages(session.id)))
+      |> assign(:editing_latest, false)
+      |> assign(:latest_json, nil)}
   end
 
   @impl true
@@ -173,6 +174,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:used_auth_type, auth_type)
     |> assign(:used_auth_name, auth_name)
     |> assign(:used_usage, nil)
+    |> assign(:tool_calls, [])
     |> assign(:used_t0_ms, t0)
   end
 

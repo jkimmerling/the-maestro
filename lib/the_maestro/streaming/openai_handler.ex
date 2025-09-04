@@ -91,6 +91,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
   defp handle_openai_event(%{"type" => "response.output_item.added"} = event, _opts) do
     case get_in(event, ["item", "type"]) do
       "function_call" -> handle_function_call_start(event)
+      "custom_tool_call" -> handle_custom_tool_call_start(event)
       "message" -> handle_message_item(event)
       _ -> []
     end
@@ -144,6 +145,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
   defp handle_openai_event(%{"type" => "response.output_item.done"} = event, _opts) do
     case get_in(event, ["item", "type"]) do
       "function_call" -> handle_function_call_done(event)
+      "custom_tool_call" -> handle_custom_tool_call_done(event)
       "message" -> handle_message_done(event)
       _ -> []
     end
@@ -345,6 +347,68 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
         [function_call_message([function_call])]
       else
         []
+      end
+    else
+      []
+    end
+  end
+
+  # ===== Custom Tool Calls (e.g., ChatGPT Codex apply_patch) =====
+  # Start tracking a custom tool call. Arguments may arrive only at `.done`.
+  defp handle_custom_tool_call_start(event) do
+    item = Map.get(event, "item", %{})
+    function_calls = get_function_calls()
+
+    call_data = %{
+      id: Map.get(item, "call_id") || Map.get(item, "id"),
+      name: Map.get(item, "name", ""),
+      # For custom tools, the payload key is often `input` rather than `arguments`.
+      arguments: Map.get(item, "input", "")
+    }
+
+    new_calls = Map.put(function_calls, call_data.id, call_data)
+    put_function_calls(new_calls)
+    []
+  end
+
+  # Emit a function_call message for a completed custom tool call.
+  defp handle_custom_tool_call_done(event) do
+    item = Map.get(event, "item", %{})
+    item_id = Map.get(item, "id") || Map.get(item, "call_id")
+
+    if item_id do
+      function_calls = get_function_calls()
+      final_input = Map.get(item, "input")
+
+      if call_data = Map.get(function_calls, item_id) do
+        updated_args =
+          case final_input do
+            nil -> call_data.arguments
+            input when is_binary(input) -> input
+            other -> to_string(other)
+          end
+
+        function_call = %FunctionCall{
+          id: call_data.id,
+          function: %Function{name: call_data.name, arguments: updated_args}
+        }
+
+        new_calls = Map.delete(function_calls, item_id)
+        put_function_calls(new_calls)
+
+        [function_call_message([function_call])]
+      else
+        # If we didn't see a prior `added`, still emit using available fields
+        id = item_id
+        name = Map.get(item, "name", "")
+        args =
+          case final_input do
+            nil -> ""
+            input when is_binary(input) -> input
+            other -> to_string(other)
+          end
+        function_call = %FunctionCall{id: id, function: %Function{name: name, arguments: args}}
+        [function_call_message([function_call])]
       end
     else
       []
