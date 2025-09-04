@@ -7,7 +7,6 @@ defmodule TheMaestroWeb.SessionChatLive do
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
   alias TheMaestro.Providers.Anthropic.ToolsTranslator, as: AnthropicTools
   alias TheMaestro.Providers.Gemini.ToolsTranslator, as: GeminiTools
-  alias TheMaestro.Providers.OpenAI.ToolsTranslator, as: OpenAITools
   alias TheMaestro.Tools.Router, as: ToolsRouter
   require Logger
 
@@ -230,21 +229,29 @@ defmodule TheMaestroWeb.SessionChatLive do
   # Return {:ok, stream}
   defp call_provider(:openai, agent, session_name, messages, model) do
     tools = TheMaestro.Tools.Registry.list_tools(agent)
-    tool_decls = OpenAITools.declare_tools(tools)
-    OpenAI.Streaming.stream_chat(session_name, messages, model: model, tools: tool_decls)
+    tool_names = Enum.map(tools, fn t -> Map.get(t, :name) || Map.get(t, "name") end)
+    Logger.debug("OpenAI: agent-enabled tools=#{inspect(tool_names)}")
+
+    OpenAI.Streaming.stream_chat(session_name, messages, model: model, tools: tools)
   end
 
   defp call_provider(:gemini, agent, session_name, messages, model) do
     tools = TheMaestro.Tools.Registry.list_tools(agent)
     tool_decls = GeminiTools.declare_tools(tools)
+    tool_names = Enum.map(tools, fn t -> Map.get(t, :name) || Map.get(t, "name") end)
+    Logger.debug("Gemini: agent-enabled tools=#{inspect(tool_names)}")
     Gemini.Streaming.stream_chat(session_name, messages, model: model, tools: tool_decls)
   end
 
   defp call_provider(:anthropic, agent, session_name, messages, model) do
     tools = TheMaestro.Tools.Registry.list_tools(agent)
     tool_decls = AnthropicTools.declare_tools(tools)
+    tool_names = Enum.map(tools, fn t -> Map.get(t, :name) || Map.get(t, "name") end)
+    Logger.debug("Anthropic: agent-enabled tools=#{inspect(tool_names)}")
     Anthropic.Streaming.stream_chat(session_name, messages, model: model, tools: tool_decls)
   end
+
+  # tools preamble intentionally removed; provider now uses its base instructions
 
   require Logger
 

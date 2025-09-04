@@ -30,6 +30,10 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
           "stream" => true
         }
 
+        tools = Keyword.get(opts, :tools, [])
+        tool_names = Enum.map(tools, fn t -> Map.get(t, :name) || Map.get(t, "name") end)
+        Logger.debug("Anthropic: model=#{model} tools=#{inspect(tool_names)}")
+
         # Claude Code parity: add system prompt for OAuth tokens
         body =
           case auth_type do
@@ -44,7 +48,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
               base_body
           end
 
-        body = maybe_put_tools(body, Keyword.get(opts, :tools))
+        body = maybe_put_tools(body, tools)
 
         StreamingAdapter.stream_request(req, method: :post, url: "/v1/messages", json: body)
       end

@@ -34,7 +34,10 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
           "stream" => true
         }
 
-        payload = maybe_put_tools(payload, Keyword.get(opts, :tools))
+        tools = Keyword.get(opts, :tools, [])
+        tool_names = Enum.map(tools, fn t -> Map.get(t, :name) || Map.get(t, "name") end)
+        Logger.debug("Gemini: model=#{model} tools=#{inspect(tool_names)}")
+        payload = maybe_put_tools(payload, tools)
 
         StreamingAdapter.stream_request(
           req,

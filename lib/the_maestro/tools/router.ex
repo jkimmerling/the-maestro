@@ -150,7 +150,8 @@ defmodule TheMaestro.Tools.Router do
           {:error, e} -> {:error, e}
         end
 
-      {:error, e} -> {:error, e}
+      {:error, e} ->
+        {:error, e}
     end
   end
 

@@ -11,12 +11,17 @@ defmodule TheMaestro.Providers.OpenAI.ToolsTranslator do
     [%{"type" => "function", "function" => %{"name" => name, "description" => desc, "parameters" => schema}}]
   """
 
-  @spec declare_tools([map()]) :: [map()]
-  def declare_tools(tools) when is_list(tools) do
-    Enum.map(tools, &to_openai_tool/1)
+  @spec declare_tools_enterprise([map()]) :: [map()]
+  def declare_tools_enterprise(tools) when is_list(tools) do
+    Enum.map(tools, &to_openai_enterprise_tool/1)
   end
 
-  defp to_openai_tool(%{name: name, description: desc, parameters: schema}) do
+  @spec declare_tools_chatgpt([map()]) :: [map()]
+  def declare_tools_chatgpt(tools) when is_list(tools) do
+    Enum.map(tools, &to_openai_chatgpt_tool/1)
+  end
+
+  defp to_openai_enterprise_tool(%{name: name, description: desc, parameters: schema}) do
     %{
       "type" => "function",
       "function" => %{
@@ -27,7 +32,7 @@ defmodule TheMaestro.Providers.OpenAI.ToolsTranslator do
     }
   end
 
-  defp to_openai_tool(%{"name" => name, "description" => desc, "parameters" => schema}) do
+  defp to_openai_enterprise_tool(%{"name" => name, "description" => desc, "parameters" => schema}) do
     %{
       "type" => "function",
       "function" => %{
@@ -35,6 +40,28 @@ defmodule TheMaestro.Providers.OpenAI.ToolsTranslator do
         "description" => desc,
         "parameters" => schema
       }
+    }
+  end
+
+  # ChatGPT Personal (codex/responses) has historically required top-level name/parameters
+  # and, in some variants, a function wrapper/type. Provide both for compatibility.
+  defp to_openai_chatgpt_tool(%{name: name, description: desc, parameters: schema}) do
+    %{
+      "type" => "function",
+      "name" => name,
+      "description" => desc,
+      "parameters" => schema,
+      "function" => %{"name" => name, "description" => desc, "parameters" => schema}
+    }
+  end
+
+  defp to_openai_chatgpt_tool(%{"name" => name, "description" => desc, "parameters" => schema}) do
+    %{
+      "type" => "function",
+      "name" => name,
+      "description" => desc,
+      "parameters" => schema,
+      "function" => %{"name" => name, "description" => desc, "parameters" => schema}
     }
   end
 end

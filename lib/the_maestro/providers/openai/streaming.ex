@@ -11,6 +11,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
   require Logger
   alias TheMaestro.Providers.Http.ReqClientFactory
   alias TheMaestro.Providers.Http.StreamingAdapter
+  alias TheMaestro.Providers.OpenAI.ToolsTranslator, as: OAITools
   alias TheMaestro.SavedAuthentication
   alias TheMaestro.Streaming.OpenAIHandler
   alias TheMaestro.Types
@@ -61,7 +62,9 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         "stream" => true
       }
 
-      payload = maybe_put_tools(payload, Keyword.get(opts, :tools))
+      tools = Keyword.get(opts, :tools, [])
+      Logger.debug("OpenAI Enterprise: model=#{model} tools=#{inspect(tool_names(tools))}")
+      payload = maybe_put_tools_enterprise(payload, tools)
 
       StreamingAdapter.stream_request(req,
         method: :post,
@@ -108,7 +111,13 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         "text" => %{"verbosity" => "medium"}
       }
 
-      payload = maybe_put_tools(payload, Keyword.get(opts, :tools))
+      tools = Keyword.get(opts, :tools, [])
+
+      Logger.debug(
+        "OpenAI ChatGPT: model=#{model} tools=#{inspect(tool_names(tools))} instructions_snippet=#{inspect(String.slice(instructions, 0, 200))}"
+      )
+
+      payload = maybe_put_tools_chatgpt(payload, tools)
 
       StreamingAdapter.stream_request(req,
         method: :post,
@@ -121,13 +130,30 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
     end
   end
 
-  defp maybe_put_tools(payload, tools) when is_list(tools) and tools != [] do
+  defp maybe_put_tools_enterprise(payload, tools) when is_list(tools) and tools != [] do
+    decls = OAITools.declare_tools_enterprise(tools)
+
     payload
-    |> Map.put("tools", tools)
+    |> Map.put("tools", decls)
     |> Map.put("tool_choice", "auto")
   end
 
-  defp maybe_put_tools(payload, _), do: payload
+  defp maybe_put_tools_enterprise(payload, _), do: payload
+
+  defp maybe_put_tools_chatgpt(payload, tools) when is_list(tools) and tools != [] do
+    # Use compatibility shape for ChatGPT Personal (include both top-level name and function wrapper)
+    decls = OAITools.declare_tools_chatgpt(tools)
+
+    payload
+    |> Map.put("tools", decls)
+    |> Map.put("tool_choice", "auto")
+  end
+
+  defp maybe_put_tools_chatgpt(payload, _), do: payload
+
+  defp tool_names(tools) do
+    Enum.map(tools, fn t -> Map.get(t, :name) || Map.get(t, "name") end)
+  end
 
   defp chatgpt_user_agent do
     # Align with test script default
