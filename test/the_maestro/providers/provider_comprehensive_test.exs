@@ -76,21 +76,22 @@ defmodule TheMaestro.Providers.ProviderComprehensiveTest do
 
   describe "Task 5.1: Universal Interface Testing - delete_session/3" do
     test "deletes existing session" do
+      session = "test_session-" <> Integer.to_string(System.unique_integer([:positive]))
       # First create a session in database
       {:ok, _saved_auth} =
         SavedAuthentication.create_named_session(
           :openai,
           :api_key,
-          "test_session",
+          session,
           %{api_key: "test-key"}
         )
 
-      result = Provider.delete_session(:openai, :api_key, "test_session")
+      result = Provider.delete_session(:openai, :api_key, session)
 
       case result do
         :ok ->
           # Verify session was deleted
-          assert is_nil(SavedAuthentication.get_named_session(:openai, :api_key, "test_session"))
+          assert is_nil(SavedAuthentication.get_named_session(:openai, :api_key, session))
 
         {:error, :not_implemented} ->
           # Expected for stub implementation
@@ -135,16 +136,17 @@ defmodule TheMaestro.Providers.ProviderComprehensiveTest do
 
   describe "Task 5.1: Universal Interface Testing - list_models/3" do
     test "lists models with valid parameters" do
+      session = "test_session-" <> Integer.to_string(System.unique_integer([:positive]))
       # Create a test session
       {:ok, _} =
         SavedAuthentication.create_named_session(
           :openai,
           :api_key,
-          "test_session",
+          session,
           %{api_key: "test-key"}
         )
 
-      result = Provider.list_models(:openai, :api_key, "test_session")
+      result = Provider.list_models(:openai, :api_key, session)
 
       case result do
         {:ok, models} when is_list(models) ->
@@ -160,30 +162,33 @@ defmodule TheMaestro.Providers.ProviderComprehensiveTest do
     end
 
     test "handles different auth types" do
+      api_name = "api_session-" <> String.slice(Ecto.UUID.generate(), 0, 6)
       # Test API key auth
       {:ok, _} =
         SavedAuthentication.create_named_session(
           :openai,
           :api_key,
-          "api_session",
+          api_name,
           %{api_key: "test-key"}
         )
 
-      api_result = Provider.list_models(:openai, :api_key, "api_session")
+      api_result = Provider.list_models(:openai, :api_key, api_name)
 
       # Test OAuth auth
+      oauth_name = "oauth_session-" <> String.slice(Ecto.UUID.generate(), 0, 6)
+
       {:ok, _} =
         SavedAuthentication.create_named_session(
           :openai,
           :oauth,
-          "oauth_session",
+          oauth_name,
           %{
             access_token: "test-token",
             expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
           }
         )
 
-      oauth_result = Provider.list_models(:openai, :oauth, "oauth_session")
+      oauth_result = Provider.list_models(:openai, :oauth, oauth_name)
 
       # Both should either work or fail consistently
       assert is_tuple(api_result) and is_tuple(oauth_result)
@@ -197,19 +202,20 @@ defmodule TheMaestro.Providers.ProviderComprehensiveTest do
 
   describe "Task 5.1: Universal Interface Testing - stream_chat/4" do
     test "initiates streaming with valid parameters" do
+      session = "test_session-" <> Integer.to_string(System.unique_integer([:positive]))
       # Create a test session
       {:ok, _} =
         SavedAuthentication.create_named_session(
           :openai,
           :api_key,
-          "test_session",
+          session,
           %{api_key: "test-key"}
         )
 
       messages = [%{role: "user", content: "Hello"}]
       options = [model: "gpt-3.5-turbo"]
 
-      result = Provider.stream_chat(:openai, "test_session", messages, options)
+      result = Provider.stream_chat(:openai, session, messages, options)
 
       case result do
         {:ok, stream} ->
@@ -225,17 +231,19 @@ defmodule TheMaestro.Providers.ProviderComprehensiveTest do
     end
 
     test "validates message format" do
+      session = "test_session-" <> Integer.to_string(System.unique_integer([:positive]))
+
       {:ok, _} =
         SavedAuthentication.create_named_session(
           :openai,
           :api_key,
-          "test_session",
+          session,
           %{api_key: "test-key"}
         )
 
       # Invalid messages format
       invalid_messages = ["invalid", "message", "format"]
-      result = Provider.stream_chat(:openai, "test_session", invalid_messages, [])
+      result = Provider.stream_chat(:openai, session, invalid_messages, [])
 
       case result do
         {:error, :invalid_messages} ->
@@ -252,15 +260,17 @@ defmodule TheMaestro.Providers.ProviderComprehensiveTest do
     end
 
     test "handles empty messages" do
+      session = "test_session-" <> Integer.to_string(System.unique_integer([:positive]))
+
       {:ok, _} =
         SavedAuthentication.create_named_session(
           :openai,
           :api_key,
-          "test_session",
+          session,
           %{api_key: "test-key"}
         )
 
-      result = Provider.stream_chat(:openai, "test_session", [], [])
+      result = Provider.stream_chat(:openai, session, [], [])
 
       case result do
         {:error, :empty_messages} ->
@@ -343,19 +353,21 @@ defmodule TheMaestro.Providers.ProviderComprehensiveTest do
     end
 
     test "timeout handling for provider operations" do
+      session = "test_session-" <> Integer.to_string(System.unique_integer([:positive]))
+
       # This would test timeout behavior - for now just ensure the interface accepts timeout options
       {:ok, _} =
         SavedAuthentication.create_named_session(
           :openai,
           :api_key,
-          "test_session",
+          session,
           %{api_key: "test-key"}
         )
 
       options = [timeout: 5000]
       messages = [%{role: "user", content: "Hello"}]
 
-      result = Provider.stream_chat(:openai, "test_session", messages, options)
+      result = Provider.stream_chat(:openai, session, messages, options)
       # Should not crash due to timeout parameter
       assert is_tuple(result)
     end

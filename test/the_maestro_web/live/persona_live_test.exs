@@ -4,8 +4,7 @@ defmodule TheMaestroWeb.PersonaLiveTest do
   import Phoenix.LiveViewTest
   import TheMaestro.PersonasFixtures
 
-  @create_attrs %{name: "some name", prompt_text: "some prompt_text"}
-  @update_attrs %{name: "some updated name", prompt_text: "some updated prompt_text"}
+  defp uniq_name(base), do: base <> "-" <> Integer.to_string(System.unique_integer([:positive]))
   @invalid_attrs %{name: nil, prompt_text: nil}
   defp create_persona(_) do
     persona = persona_fixture()
@@ -34,18 +33,20 @@ defmodule TheMaestroWeb.PersonaLiveTest do
 
       assert render(form_live) =~ "New Persona"
 
+      create_attrs = %{name: uniq_name("some name"), prompt_text: "some prompt_text"}
+
       assert form_live
              |> form("#persona-form", persona: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
       _ =
         form_live
-        |> form("#persona-form", persona: @create_attrs)
+        |> form("#persona-form", persona: create_attrs)
         |> render_submit()
 
       {:ok, index_live, _} = live(conn, ~p"/personas")
       html = render(index_live)
-      assert html =~ "some name"
+      assert html =~ create_attrs.name
     end
 
     test "updates persona in listing", %{conn: conn, persona: persona} do
@@ -63,14 +64,19 @@ defmodule TheMaestroWeb.PersonaLiveTest do
              |> form("#persona-form", persona: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
+      update_attrs = %{
+        name: uniq_name("some updated name"),
+        prompt_text: "some updated prompt_text"
+      }
+
       _ =
         form_live
-        |> form("#persona-form", persona: @update_attrs)
+        |> form("#persona-form", persona: update_attrs)
         |> render_submit()
 
       {:ok, index_live, _} = live(conn, ~p"/personas")
       html = render(index_live)
-      assert html =~ "some updated name"
+      assert html =~ update_attrs.name
     end
 
     test "deletes persona in listing", %{conn: conn, persona: persona} do
@@ -106,14 +112,19 @@ defmodule TheMaestroWeb.PersonaLiveTest do
              |> form("#persona-form", persona: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
+      update_attrs = %{
+        name: uniq_name("some updated name"),
+        prompt_text: "some updated prompt_text"
+      }
+
       _ =
         form_live
-        |> form("#persona-form", persona: @update_attrs)
+        |> form("#persona-form", persona: update_attrs)
         |> render_submit()
 
       {:ok, show_live, _} = live(conn, ~p"/personas/#{persona}")
       html = render(show_live)
-      assert html =~ "some updated name"
+      assert html =~ update_attrs.name
     end
   end
 end

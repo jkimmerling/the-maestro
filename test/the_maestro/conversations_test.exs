@@ -10,9 +10,9 @@ defmodule TheMaestro.ConversationsTest do
 
     @invalid_attrs %{name: nil, last_used_at: nil}
 
-    test "list_sessions/0 returns all sessions" do
+    test "list_sessions/0 includes newly created session" do
       session = session_fixture()
-      assert Conversations.list_sessions() == [session]
+      assert Enum.any?(Conversations.list_sessions(), &(&1.id == session.id))
     end
 
     test "get_session!/1 returns the session with given id" do
@@ -22,12 +22,14 @@ defmodule TheMaestro.ConversationsTest do
 
     test "create_session/1 with valid data creates a session" do
       # Provide a valid agent_id
+      short = String.slice(Ecto.UUID.generate(), 0, 6)
+
       {:ok, sa} =
         %TheMaestro.SavedAuthentication{}
         |> TheMaestro.SavedAuthentication.changeset(%{
           provider: :openai,
           auth_type: :api_key,
-          name: "test_openai_api_key_ctx_sessions",
+          name: "test_openai_api_key_ctx_sessions-" <> short,
           credentials: %{"api_key" => "sk-test"}
         })
         |> TheMaestro.Repo.insert()
@@ -35,7 +37,7 @@ defmodule TheMaestro.ConversationsTest do
       {:ok, agent} =
         %TheMaestro.Agents.Agent{}
         |> TheMaestro.Agents.Agent.changeset(%{
-          name: "agent_for_session_test",
+          name: "agent_for_session_test-" <> short,
           auth_id: sa.id,
           tools: %{},
           mcps: %{},

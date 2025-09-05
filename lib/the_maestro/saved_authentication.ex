@@ -330,6 +330,25 @@ defmodule TheMaestro.SavedAuthentication do
   end
 
   @doc """
+  Clones an existing named session into a new session name for the same provider/auth_type.
+
+  Returns {:ok, cloned} or {:error, reason}.
+  """
+  @spec clone_named_session(atom(), atom(), String.t(), String.t()) ::
+          {:ok, t()} | {:error, term()}
+  def clone_named_session(provider, auth_type, from_name, to_name) do
+    alias TheMaestro.Repo
+
+    case get_by_provider_and_name(provider, auth_type, from_name) do
+      nil ->
+        {:error, :source_session_not_found}
+
+      %__MODULE__{credentials: creds, expires_at: exp} ->
+        create_named_session(provider, auth_type, to_name, %{credentials: creds, expires_at: exp})
+    end
+  end
+
+  @doc """
   Gets a legacy saved authentication (for backwards compatibility).
   Uses "default_{provider}_{auth_type}" as the session name.
 

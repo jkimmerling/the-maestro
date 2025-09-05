@@ -14,15 +14,19 @@ defmodule TheMaestro.ConversationsFixtures do
       |> TheMaestro.SavedAuthentication.changeset(%{
         provider: :openai,
         auth_type: :api_key,
-        name: "test_openai_api_key_session_fixture",
+        name:
+          "test_openai_api_key_session_fixture-" <>
+            Integer.to_string(System.unique_integer([:positive])),
         credentials: %{"api_key" => "sk-test"}
       })
       |> TheMaestro.Repo.insert()
 
+    short = String.slice(Ecto.UUID.generate(), 0, 6)
+
     {:ok, agent} =
       %TheMaestro.Agents.Agent{}
       |> TheMaestro.Agents.Agent.changeset(%{
-        name: "agent_for_session",
+        name: "agent_for_session-" <> short,
         auth_id: sa.id,
         tools: %{},
         mcps: %{},

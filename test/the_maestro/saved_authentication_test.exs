@@ -4,12 +4,16 @@ defmodule TheMaestro.SavedAuthenticationTest do
 
   alias TheMaestro.SavedAuthentication
 
+  defp uniq(name \\ "test_session") do
+    name <> "-" <> Integer.to_string(System.unique_integer([:positive]))
+  end
+
   describe "changeset/2" do
     test "valid OAuth changeset with all required fields" do
       valid_attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
-        name: "test_session",
+        name: uniq("test_session_oauth"),
         credentials: %{
           "access_token" => "sk-ant-oat01-test-token",
           "refresh_token" => "sk-ant-oar01-test-refresh",
@@ -29,7 +33,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       valid_attrs = %{
         provider: :anthropic,
         auth_type: :api_key,
-        name: "test_api_session",
+        name: uniq("test_api_session"),
         credentials: %{
           "api_key" => "sk-ant-api03-test-key"
         }
@@ -114,7 +118,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       invalid_attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
-        name: "test_session",
+        name: uniq(),
         credentials: %{
           "access_token" => "sk-ant-oat01-token",
           "refresh_token" => "sk-ant-oar01-refresh"
@@ -184,7 +188,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       valid_attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
-        name: "test_session",
+        name: uniq("db_oauth"),
         credentials: %{
           "access_token" => "sk-ant-oat01-db-test",
           "refresh_token" => "sk-ant-oar01-db-test",
@@ -210,7 +214,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       valid_attrs = %{
         provider: :openai,
         auth_type: :api_key,
-        name: "test_session",
+        name: uniq("db_api_key"),
         credentials: %{
           "api_key" => "sk-openai-test-key"
         }
@@ -229,6 +233,11 @@ defmodule TheMaestro.SavedAuthenticationTest do
     end
 
     test "enforces unique constraint on provider, auth_type, and name" do
+      # Ensure a clean slate for the names used in this test
+      Repo.delete_all(
+        from sa in SavedAuthentication, where: sa.name in ["test_session", "different_session"]
+      )
+
       attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
@@ -271,7 +280,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       oauth_attrs = %{
         provider: :anthropic,
         auth_type: :oauth,
-        name: "oauth_session",
+        name: uniq("oauth_session"),
         credentials: %{"access_token" => "oauth-token"},
         expires_at: DateTime.utc_now()
       }
@@ -285,7 +294,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
       api_key_attrs = %{
         provider: :anthropic,
         auth_type: :api_key,
-        name: "api_key_session",
+        name: uniq("api_key_session"),
         credentials: %{"api_key" => "api-key-token"}
       }
 
@@ -315,7 +324,7 @@ defmodule TheMaestro.SavedAuthenticationTest do
         |> SavedAuthentication.changeset(%{
           provider: :anthropic,
           auth_type: :oauth,
-          name: "complex_session",
+          name: uniq("complex_session"),
           credentials: complex_credentials,
           expires_at: DateTime.utc_now()
         })
@@ -330,6 +339,15 @@ defmodule TheMaestro.SavedAuthenticationTest do
     end
 
     test "querying by provider and auth_type" do
+      # Clean up any previous test data with these fixed names to prevent collisions
+      names = [
+        "session_anthropic_oauth",
+        "session_anthropic_api_key",
+        "session_openai_api_key",
+        "session_gemini_api_key"
+      ]
+
+      Repo.delete_all(from sa in SavedAuthentication, where: sa.name in ^names)
       # Insert multiple authentications
       providers_and_types = [
         {:anthropic, :oauth},
@@ -374,7 +392,9 @@ defmodule TheMaestro.SavedAuthenticationTest do
       anthropic_auths =
         Repo.all(
           from sa in SavedAuthentication,
-            where: sa.provider == :anthropic
+            where:
+              sa.provider == :anthropic and
+                sa.name in ["session_anthropic_oauth", "session_anthropic_api_key"]
         )
 
       assert length(anthropic_auths) == 2

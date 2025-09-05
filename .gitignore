@@ -60,3 +60,9 @@ Thumbs.db
 
 # BMad core files (if not needed in version control)
 # .bmad-core/
+
+
+*.py
+*.log
+*.dump
+__pycache__/

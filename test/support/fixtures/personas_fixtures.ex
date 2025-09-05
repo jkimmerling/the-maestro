@@ -11,7 +11,7 @@ defmodule TheMaestro.PersonasFixtures do
     {:ok, persona} =
       attrs
       |> Enum.into(%{
-        name: "some name",
+        name: "some name-" <> Ecto.UUID.generate(),
         prompt_text: "some prompt_text"
       })
       |> TheMaestro.Personas.create_persona()

@@ -183,6 +183,7 @@ defmodule TheMaestroWeb.CoreComponents do
   attr :options, :list, doc: "the options to pass to Phoenix.HTML.Form.options_for_select/2"
   attr :multiple, :boolean, default: false, doc: "the multiple flag for select inputs"
   attr :class, :string, default: nil, doc: "the input class to use over defaults"
+  attr :help, :string, default: nil, doc: "optional help text rendered under the field"
   attr :error_class, :string, default: nil, doc: "the input error class to use over defaults"
 
   attr :rest, :global,
@@ -243,6 +244,7 @@ defmodule TheMaestroWeb.CoreComponents do
           {Phoenix.HTML.Form.options_for_select(@options, @value)}
         </select>
       </label>
+      <p :if={@help} class="mt-1 text-xs text-base-content/70">{@help}</p>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
@@ -263,6 +265,7 @@ defmodule TheMaestroWeb.CoreComponents do
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
       </label>
+      <p :if={@help} class="mt-1 text-xs text-base-content/70">{@help}</p>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
@@ -286,6 +289,7 @@ defmodule TheMaestroWeb.CoreComponents do
           {@rest}
         />
       </label>
+      <p :if={@help} class="mt-1 text-xs text-base-content/70">{@help}</p>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """

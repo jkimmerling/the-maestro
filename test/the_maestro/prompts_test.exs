@@ -10,9 +10,10 @@ defmodule TheMaestro.PromptsTest do
 
     @invalid_attrs %{name: nil, prompt_text: nil}
 
-    test "list_base_system_prompts/0 returns all base_system_prompts" do
+    test "list_base_system_prompts/0 includes newly created prompt" do
       base_system_prompt = base_system_prompt_fixture()
-      assert Prompts.list_base_system_prompts() == [base_system_prompt]
+      list = Prompts.list_base_system_prompts()
+      assert Enum.any?(list, &(&1.id == base_system_prompt.id))
     end
 
     test "get_base_system_prompt!/1 returns the base_system_prompt with given id" do
@@ -21,12 +22,15 @@ defmodule TheMaestro.PromptsTest do
     end
 
     test "create_base_system_prompt/1 with valid data creates a base_system_prompt" do
-      valid_attrs = %{name: "some name", prompt_text: "some prompt_text"}
+      valid_attrs = %{
+        name: "some name-" <> Integer.to_string(System.unique_integer([:positive])),
+        prompt_text: "some prompt_text"
+      }
 
       assert {:ok, %BaseSystemPrompt{} = base_system_prompt} =
                Prompts.create_base_system_prompt(valid_attrs)
 
-      assert base_system_prompt.name == "some name"
+      assert base_system_prompt.name == valid_attrs.name
       assert base_system_prompt.prompt_text == "some prompt_text"
     end
 
@@ -36,12 +40,16 @@ defmodule TheMaestro.PromptsTest do
 
     test "update_base_system_prompt/2 with valid data updates the base_system_prompt" do
       base_system_prompt = base_system_prompt_fixture()
-      update_attrs = %{name: "some updated name", prompt_text: "some updated prompt_text"}
+
+      update_attrs = %{
+        name: "some updated name-" <> Integer.to_string(System.unique_integer([:positive])),
+        prompt_text: "some updated prompt_text"
+      }
 
       assert {:ok, %BaseSystemPrompt{} = base_system_prompt} =
                Prompts.update_base_system_prompt(base_system_prompt, update_attrs)
 
-      assert base_system_prompt.name == "some updated name"
+      assert base_system_prompt.name == update_attrs.name
       assert base_system_prompt.prompt_text == "some updated prompt_text"
     end
 

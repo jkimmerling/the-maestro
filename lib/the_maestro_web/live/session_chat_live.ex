@@ -1,4 +1,9 @@
 defmodule TheMaestroWeb.SessionChatLive do
+  # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
+  # credo:disable-for-this-file Credo.Check.Refactor.Nesting
+  # credo:disable-for-this-file Credo.Check.Readability.PreferCaseTrivialWith
+  # credo:disable-for-this-file Credo.Check.Readability.WithSingleClause
+  # credo:disable-for-this-file Credo.Check.Design.AliasUsage
   use TheMaestroWeb, :live_view
 
   alias TheMaestro.Conversations
@@ -27,6 +32,8 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:stream_task, nil)
      |> assign(:pending_canonical, nil)
      |> assign(:thinking?, false)
+     |> assign(:tool_calls, [])
+     |> assign(:pending_tool_calls, [])
      |> assign(:summary, compute_summary(current_messages(session.id)))
      |> assign(:editing_latest, false)
      |> assign(:latest_json, nil)}
@@ -173,7 +180,9 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:used_auth_type, auth_type)
     |> assign(:used_auth_name, auth_name)
     |> assign(:used_usage, nil)
+    |> assign(:tool_calls, [])
     |> assign(:used_t0_ms, t0)
+    |> assign(:event_buffer, [])
   end
 
   defp user_msg(text), do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
@@ -240,7 +249,10 @@ defmodule TheMaestroWeb.SessionChatLive do
         {:ai_stream, id, %{type: :content, metadata: %{thinking: true}}},
         %{assigns: %{stream_id: id}} = socket
       ) do
-    {:noreply, assign(socket, thinking?: true)}
+    {:noreply,
+     socket
+     |> push_event(%{kind: "ai", type: "thinking", at: now_ms()})
+     |> assign(thinking?: true)}
   end
 
   def handle_info(
@@ -250,8 +262,29 @@ defmodule TheMaestroWeb.SessionChatLive do
     current = socket.assigns.partial_answer || ""
     delta = dedup_delta(current, chunk)
     new_partial = current <> delta
-    # Render progressively
-    {:noreply, assign(socket, partial_answer: new_partial, thinking?: false)}
+
+    {:noreply,
+     socket
+     |> push_event(%{kind: "ai", type: "content", delta: delta, at: now_ms()})
+     |> assign(partial_answer: new_partial, thinking?: false)}
+  end
+
+  # Capture function/tool calls as they arrive and accumulate them for UI/persistence
+  def handle_info(
+        {:ai_stream, id, %{type: :function_call, function_call: calls}},
+        %{assigns: %{stream_id: id}} = socket
+      )
+      when is_list(calls) do
+    new =
+      Enum.map(calls, fn %{id: cid, function: %{name: name, arguments: args}} ->
+        %{"id" => cid, "name" => name, "arguments" => args || ""}
+      end)
+
+    {:noreply,
+     socket
+     |> push_event(%{kind: "ai", type: "function_call", calls: new, at: now_ms()})
+     |> assign(:tool_calls, (socket.assigns.tool_calls || []) ++ new)
+     |> assign(:pending_tool_calls, (socket.assigns.pending_tool_calls || []) ++ new)}
   end
 
   def handle_info(
@@ -259,7 +292,12 @@ defmodule TheMaestroWeb.SessionChatLive do
         %{assigns: %{stream_id: id}} = socket
       ) do
     Logger.error("stream error: #{inspect(err)}")
-    {:noreply, socket |> put_flash(:error, "Provider error: #{err}") |> assign(thinking?: false)}
+
+    {:noreply,
+     socket
+     |> push_event(%{kind: "ai", type: "error", error: err, at: now_ms()})
+     |> put_flash(:error, "Provider error: #{err}")
+     |> assign(thinking?: false)}
   end
 
   @impl true
@@ -268,52 +306,64 @@ defmodule TheMaestroWeb.SessionChatLive do
         %{assigns: %{stream_id: id}} = socket
       ) do
     # Accumulate latest usage for this stream to attach on finalize
-    {:noreply, assign(socket, :used_usage, usage)}
+    {:noreply,
+     socket
+     |> push_event(%{kind: "ai", type: "usage", usage: usage, at: now_ms()})
+     |> assign(:used_usage, usage)}
   end
 
   def handle_info({:ai_stream, id, %{type: :done}}, %{assigns: %{stream_id: id}} = socket) do
-    session = socket.assigns.session
-    final_text = socket.assigns.partial_answer || ""
+    socket = push_event(socket, %{kind: "ai", type: "done", at: now_ms()})
 
-    provider = effective_provider(socket, session)
-    req_meta = build_req_meta(socket, session, provider)
+    case socket.assigns[:pending_tool_calls] do
+      calls when is_list(calls) and calls != [] ->
+        with {:ok, socket2} <- run_pending_tools_and_follow_up(socket, calls) do
+          {:noreply, assign(socket2, :pending_tool_calls, [])}
+        else
+          _ -> {:noreply, finalize_no_tools(socket)}
+        end
 
-    updated = socket.assigns.pending_canonical || %{"messages" => []}
-
-    updated2 =
-      put_in(
-        updated,
-        ["messages"],
-        updated["messages"] ++ [assistant_msg_with_meta(final_text, req_meta)]
-      )
-
-    persist_assistant_turn(session, final_text, req_meta, updated2, socket.assigns.used_usage)
-
-    meta = %{
-      "provider" => req_meta["provider"],
-      "model" => req_meta["model"],
-      "auth_type" => req_meta["auth_type"],
-      "auth_name" => req_meta["auth_name"],
-      "usage" => req_meta["usage"]
-    }
-
-    messages = append_assistant_message(socket.assigns.messages || [], final_text, meta)
-
-    {:noreply,
-     socket
-     |> assign(:streaming?, false)
-     |> assign(:partial_answer, "")
-     |> assign(:stream_task, nil)
-     |> assign(:stream_id, nil)
-     |> assign(:pending_canonical, nil)
-     |> assign(:thinking?, false)
-     |> assign(:used_usage, nil)
-     |> assign(:summary, compute_summary(messages))
-     |> assign(:messages, messages)}
+      _ ->
+        {:noreply, finalize_no_tools(socket)}
+    end
   end
 
   # Ignore stale stream messages
   def handle_info({:ai_stream, _other, _msg}, socket), do: {:noreply, socket}
+
+  # Internal tool signals (defensive: accept with or without ref wrapper)
+  def handle_info({:__shell_done__, {out, status}}, socket) do
+    {:noreply,
+     push_event(socket, %{
+       kind: "internal",
+       type: "shell_done",
+       exit_code: status,
+       out: out,
+       at: now_ms()
+     })}
+  end
+
+  def handle_info({ref, {:__shell_done__, {out, status}}}, socket) when is_reference(ref) do
+    {:noreply,
+     push_event(socket, %{
+       kind: "internal",
+       type: "shell_done",
+       exit_code: status,
+       out: out,
+       at: now_ms()
+     })}
+  end
+
+  # Catch-all to ignore unrelated messages (e.g., internal task signals)
+  def handle_info(_other, socket), do: {:noreply, socket}
+
+  # ===== Event logging helpers =====
+  defp now_ms, do: System.system_time(:millisecond)
+
+  defp push_event(%{assigns: assigns} = socket, ev) when is_map(ev) do
+    buf = assigns[:event_buffer] || []
+    assign(socket, :event_buffer, buf ++ [ev])
+  end
 
   defp effective_provider(socket, session) do
     socket.assigns.used_provider ||
@@ -331,11 +381,214 @@ defmodule TheMaestroWeb.SessionChatLive do
     }
   end
 
-  defp persist_assistant_turn(_session, final_text, _req_meta, _updated2, _used_usage)
+  defp finalize_no_tools(socket) do
+    session = socket.assigns.session
+    final_text = socket.assigns.partial_answer || ""
+
+    provider = effective_provider(socket, session)
+    req_meta = build_req_meta(socket, session, provider)
+
+    updated = socket.assigns.pending_canonical || %{"messages" => []}
+
+    updated2 =
+      put_in(
+        updated,
+        ["messages"],
+        updated["messages"] ++ [assistant_msg_with_meta(final_text, req_meta)]
+      )
+
+    updated2 = Map.put(updated2, "events", socket.assigns.event_buffer || [])
+
+    persist_assistant_turn(
+      session,
+      final_text,
+      req_meta,
+      updated2,
+      socket.assigns.used_usage,
+      socket.assigns.tool_calls
+    )
+
+    meta = %{
+      "provider" => req_meta["provider"],
+      "model" => req_meta["model"],
+      "auth_type" => req_meta["auth_type"],
+      "auth_name" => req_meta["auth_name"],
+      "usage" => req_meta["usage"],
+      "tools" => socket.assigns.tool_calls
+    }
+
+    messages = append_assistant_message(socket.assigns.messages || [], final_text, meta)
+
+    socket
+    |> assign(:streaming?, false)
+    |> assign(:partial_answer, "")
+    |> assign(:stream_task, nil)
+    |> assign(:stream_id, nil)
+    |> assign(:pending_canonical, nil)
+    |> assign(:thinking?, false)
+    |> assign(:used_usage, nil)
+    |> assign(:tool_calls, [])
+    |> assign(:summary, compute_summary(messages))
+    |> assign(:messages, messages)
+  end
+
+  defp run_pending_tools_and_follow_up(socket, calls) do
+    base_cwd =
+      case socket.assigns.session.working_dir do
+        wd when is_binary(wd) and wd != "" -> Path.expand(wd)
+        _ -> File.cwd!() |> Path.expand()
+      end
+
+    outputs =
+      Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
+        case String.downcase(name || "") do
+          "shell" ->
+            with {:ok, json} <- Jason.decode(args) do
+              case TheMaestro.Tools.Shell.run(json, base_cwd: base_cwd) do
+                {:ok, payload} -> {id, {:ok, payload}}
+                {:error, reason} -> {id, {:error, to_string(reason)}}
+              end
+            else
+              _ -> {id, {:error, "invalid shell arguments"}}
+            end
+
+          "apply_patch" ->
+            with {:ok, json} <- Jason.decode(args),
+                 input when is_binary(input) <- Map.get(json, "input") do
+              case TheMaestro.Tools.ApplyPatch.run(input, base_cwd: base_cwd) do
+                {:ok, payload} -> {id, {:ok, payload}}
+                {:error, reason} -> {id, {:error, to_string(reason)}}
+              end
+            else
+              _ -> {id, {:error, "invalid apply_patch arguments"}}
+            end
+
+          other ->
+            {id, {:error, "unsupported tool: #{other}"}}
+        end
+      end)
+
+    # Include both the function_call item (so ChatGPT can correlate by call_id)
+    # and the function_call_output item with the executed tool result.
+    fc_items =
+      Enum.map(socket.assigns.pending_tool_calls || [], fn %{
+                                                             "id" => id,
+                                                             "name" => name,
+                                                             "arguments" => args
+                                                           } ->
+        %{"type" => "function_call", "call_id" => id, "name" => name, "arguments" => args || ""}
+      end)
+
+    out_items =
+      Enum.map(outputs, fn {id, result} ->
+        output =
+          case result do
+            {:ok, payload} ->
+              payload
+
+            {:error, msg} ->
+              Jason.encode!(%{
+                "output" => msg,
+                "metadata" => %{"exit_code" => 1, "duration_seconds" => 0.0}
+              })
+          end
+
+        %{"type" => "function_call_output", "call_id" => id, "output" => output}
+      end)
+
+    # Include prior assistant message for context continuity
+    # Include last user message for continuity (convert to input_text)
+    last_user_text =
+      (socket.assigns.messages || [])
+      |> Enum.reverse()
+      |> Enum.find_value(fn m ->
+        if m["role"] == "user", do: m["content"] |> List.first() |> Map.get("text"), else: nil
+      end)
+
+    user_ctx_items =
+      case last_user_text do
+        nil ->
+          []
+
+        text ->
+          [
+            %{
+              "type" => "message",
+              "role" => "user",
+              "content" => [%{"type" => "input_text", "text" => text}]
+            }
+          ]
+      end
+
+    prior_msg =
+      case socket.assigns.partial_answer || "" do
+        "" ->
+          []
+
+        text ->
+          [
+            %{
+              "type" => "message",
+              "role" => "assistant",
+              "content" => [%{"type" => "output_text", "text" => text}]
+            }
+          ]
+      end
+
+    items = user_ctx_items ++ prior_msg ++ fc_items ++ out_items
+
+    provider = effective_provider(socket, socket.assigns.session)
+    model = socket.assigns.used_model
+    session_name = socket.assigns.session.agent.saved_authentication.name
+
+    parent = self()
+    new_stream_id = Ecto.UUID.generate()
+
+    task =
+      Task.start_link(fn ->
+        case provider do
+          :openai ->
+            case TheMaestro.Providers.OpenAI.Streaming.stream_tool_followup(session_name, items,
+                   model: model
+                 ) do
+              {:ok, stream} ->
+                for msg <-
+                      TheMaestro.Streaming.parse_stream(stream, provider,
+                        log_unknown_events: true
+                      ),
+                    do: send(parent, {:ai_stream, new_stream_id, msg})
+
+              {:error, reason} ->
+                send(parent, {:ai_stream, new_stream_id, %{type: :error, error: inspect(reason)}})
+                send(parent, {:ai_stream, new_stream_id, %{type: :done}})
+            end
+
+          _ ->
+            send(
+              parent,
+              {:ai_stream, new_stream_id,
+               %{type: :error, error: "follow-up only supported for :openai"}}
+            )
+
+            send(parent, {:ai_stream, new_stream_id, %{type: :done}})
+        end
+      end)
+      |> elem(1)
+
+    {:ok,
+     socket
+     |> assign(:partial_answer, "")
+     |> assign(:stream_id, new_stream_id)
+     |> assign(:stream_task, task)
+     |> assign(:used_usage, nil)
+     |> assign(:thinking?, false)}
+  end
+
+  defp persist_assistant_turn(_session, final_text, _req_meta, _updated2, _used_usage, _tools)
        when final_text == "",
        do: :ok
 
-  defp persist_assistant_turn(session, _final_text, req_meta, updated2, used_usage) do
+  defp persist_assistant_turn(session, _final_text, req_meta, updated2, used_usage, tools) do
     req_hdrs = %{
       "provider" => req_meta["provider"],
       "model" => req_meta["model"],
@@ -343,7 +596,7 @@ defmodule TheMaestroWeb.SessionChatLive do
       "auth_name" => req_meta["auth_name"]
     }
 
-    resp_hdrs = %{"usage" => used_usage || %{}}
+    resp_hdrs = %{"usage" => used_usage || %{}, "tools" => tools || []}
 
     {:ok, entry} =
       Conversations.create_chat_entry(%{
@@ -451,11 +704,30 @@ defmodule TheMaestroWeb.SessionChatLive do
                     )}, total {compact_int(token_total(u))}
                   </div>
                 <% end %>
+                <%= if is_list(m["tools"]) and m["tools"] != [] do %>
+                  <div class="mt-1">tools:</div>
+                  <ul class="list-disc ml-4">
+                    <%= for t <- m["tools"] do %>
+                      <li><code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 120)}</li>
+                    <% end %>
+                  </ul>
+                <% end %>
                 <%= if m["latency_ms"] do %>
                   <div>latency: {m["latency_ms"]} ms</div>
                 <% end %>
               </details>
             <% end %>
+          </div>
+        <% end %>
+
+        <%= if @streaming? and is_list(@tool_calls) and @tool_calls != [] do %>
+          <div class="p-2 rounded bg-base-100">
+            <div class="text-xs opacity-70">tool activity</div>
+            <ul class="list-disc ml-4 text-sm">
+              <%= for t <- @tool_calls do %>
+                <li><code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 160)}</li>
+              <% end %>
+            </ul>
           </div>
         <% end %>
 

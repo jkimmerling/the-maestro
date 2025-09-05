@@ -1,5 +1,5 @@
 defmodule TheMaestro.Providers.NamedSessionsTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   use TheMaestro.DataCase
 
   alias Ecto.Adapters.SQL
@@ -8,30 +8,35 @@ defmodule TheMaestro.Providers.NamedSessionsTest do
 
   describe "named sessions lifecycle" do
     test "supports multiple sessions per provider/auth_type" do
+      s1_name = "work_" <> String.slice(Ecto.UUID.generate(), 0, 6)
+      s2_name = "personal_" <> String.slice(Ecto.UUID.generate(), 0, 6)
+
       {:ok, s1} =
-        SavedAuthentication.create_named_session(:openai, :api_key, "work", %{api_key: "k1"})
+        SavedAuthentication.create_named_session(:openai, :api_key, s1_name, %{api_key: "k1"})
 
       {:ok, s2} =
-        SavedAuthentication.create_named_session(:openai, :api_key, "personal", %{api_key: "k2"})
+        SavedAuthentication.create_named_session(:openai, :api_key, s2_name, %{api_key: "k2"})
 
-      assert s1.name == "work"
-      assert s2.name == "personal"
+      assert s1.name == s1_name
+      assert s2.name == s2_name
 
       sessions = SavedAuthentication.list_by_provider(:openai)
       names = Enum.map(sessions, & &1.name)
-      assert "work" in names
-      assert "personal" in names
+      assert s1_name in names
+      assert s2_name in names
     end
 
     test "enforces uniqueness on provider + auth_type + name" do
+      base = "team_" <> String.slice(Ecto.UUID.generate(), 0, 6)
+
       {:ok, _} =
-        SavedAuthentication.create_named_session(:anthropic, :oauth, "team", %{
+        SavedAuthentication.create_named_session(:anthropic, :oauth, base, %{
           access_token: "t1",
           expires_at: DateTime.utc_now()
         })
 
       {:error, changeset} =
-        SavedAuthentication.create_named_session(:anthropic, :oauth, "team", %{
+        SavedAuthentication.create_named_session(:anthropic, :oauth, base, %{
           access_token: "t2",
           expires_at: DateTime.utc_now()
         })
@@ -40,35 +45,48 @@ defmodule TheMaestro.Providers.NamedSessionsTest do
     end
 
     test "delete_named_session removes existing session and is idempotent" do
+      name = "cic_" <> String.slice(Ecto.UUID.generate(), 0, 6)
+
       {:ok, _} =
-        SavedAuthentication.create_named_session(:gemini, :api_key, "cic", %{api_key: "k3"})
+        SavedAuthentication.create_named_session(:gemini, :api_key, name, %{api_key: "k3"})
 
       # Ensure it exists
-      assert SavedAuthentication.get_named_session(:gemini, :api_key, "cic")
+      assert SavedAuthentication.get_named_session(:gemini, :api_key, name)
 
       # Deleting is idempotent; allow :ok or not_found
-      assert SavedAuthentication.delete_named_session(:gemini, :api_key, "cic") in [
+      assert SavedAuthentication.delete_named_session(:gemini, :api_key, name) in [
                :ok,
                {:error, :not_found}
              ]
 
-      assert SavedAuthentication.delete_named_session(:gemini, :api_key, "cic") in [
+      assert SavedAuthentication.delete_named_session(:gemini, :api_key, name) in [
                :ok,
                {:error, :not_found}
              ]
     end
 
     test "get_named_session returns the expected record" do
-      {:ok, _} =
-        SavedAuthentication.create_named_session(:openai, :api_key, "dev", %{api_key: "k4"})
+      name = "dev_" <> String.slice(Ecto.UUID.generate(), 0, 6)
 
-      session = SavedAuthentication.get_named_session(:openai, :api_key, "dev")
+      {:ok, _} =
+        SavedAuthentication.create_named_session(:openai, :api_key, name, %{api_key: "k4"})
+
+      session = SavedAuthentication.get_named_session(:openai, :api_key, name)
       assert session
-      assert session.name == "dev"
+      assert session.name == name
     end
 
     test "get_by_provider/2 returns legacy default-named session for compatibility" do
-      # Seed a default-named session and verify legacy getter finds it
+      # Ensure no prior default-named session exists, then insert and verify legacy getter finds it
+      import Ecto.Query
+
+      TheMaestro.Repo.delete_all(
+        from sa in SavedAuthentication,
+          where:
+            sa.provider == "openai" and sa.auth_type == :api_key and
+              sa.name == "default_openai_api_key"
+      )
+
       {:ok, _} =
         SavedAuthentication.create_named_session(:openai, :api_key, "default_openai_api_key", %{
           api_key: "k5"
@@ -107,7 +125,7 @@ defmodule TheMaestro.Providers.NamedSessionsTest do
     test "performance: listing many sessions remains responsive" do
       # Insert many sessions and ensure list_by_provider returns all
       for i <- 1..50 do
-        name = "sess_" <> Integer.to_string(i)
+        name = "sess_" <> Integer.to_string(i) <> "_" <> String.slice(Ecto.UUID.generate(), 0, 4)
 
         {:ok, _} =
           SavedAuthentication.create_named_session(:anthropic, :api_key, name, %{

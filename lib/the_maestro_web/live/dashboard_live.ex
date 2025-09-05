@@ -25,6 +25,7 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:persona_options, build_persona_options())
      |> assign(:agent_options, build_agent_options())
      |> assign(:session_form, to_form(Conversations.change_session(%Conversations.Session{})))
+     |> assign(:show_session_dir_picker, false)
      |> assign(:page_title, "Dashboard")}
   end
 
@@ -117,6 +118,21 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply, assign(socket, session_form: to_form(cs, action: :validate))}
   end
 
+  def handle_event("open_session_dir_picker", _params, socket) do
+    {:noreply, assign(socket, :show_session_dir_picker, true)}
+  end
+
+  def handle_event("session_use_root_dir", _params, socket) do
+    wd = File.cwd!() |> Path.expand()
+
+    cs =
+      Conversations.change_session(%Conversations.Session{}, %{"working_dir" => wd})
+      |> Map.put(:action, :validate)
+
+    {:noreply, assign(socket, session_form: to_form(cs, action: :validate))}
+  end
+
+  # Keep all handle_event/3 clauses grouped together to avoid warnings
   def handle_event("session_save", %{"session" => params}, socket) do
     case Conversations.create_session(params) do
       {:ok, _} ->
@@ -124,6 +140,7 @@ defmodule TheMaestroWeb.DashboardLive do
          socket
          |> put_flash(:info, "Session created")
          |> assign(:show_session_modal, false)
+         |> assign(:show_session_dir_picker, false)
          |> assign(:sessions, Conversations.list_sessions_with_agents())}
 
       {:error, %Ecto.Changeset{} = cs} ->
@@ -131,21 +148,26 @@ defmodule TheMaestroWeb.DashboardLive do
     end
   end
 
-  def handle_event("delete_session", %{"id" => id}, socket) do
-    s = Conversations.get_session!(id)
-    {:ok, _} = Conversations.delete_session(s)
-    {:noreply, assign(socket, :sessions, Conversations.list_sessions_with_agents())}
-  end
+  # moved earlier to keep handle_event clauses grouped
 
-  def handle_event("delete_agent", %{"id" => id}, socket) do
-    agent = Agents.get_agent!(id)
-    {:ok, _} = Agents.delete_agent(agent)
+  # Keep all handle_event/3 clauses grouped together to avoid warnings
+  # moved earlier to keep handle_event clauses grouped
+
+  @impl true
+  def handle_info({TheMaestroWeb.DirectoryPicker, :selected, path, :new_session}, socket) do
+    cs =
+      Conversations.change_session(%Conversations.Session{}, %{"working_dir" => path})
+      |> Map.put(:action, :validate)
 
     {:noreply,
      socket
-     |> put_flash(:info, "Agent deleted")
-     |> assign(:agents, Agents.list_agents_with_auth())
-     |> assign(:agent_options, build_agent_options())}
+     |> assign(:session_form, to_form(cs, action: :validate))
+     |> assign(:show_session_dir_picker, false)}
+  end
+
+  @impl true
+  def handle_info({TheMaestroWeb.DirectoryPicker, :cancel, :new_session}, socket) do
+    {:noreply, assign(socket, :show_session_dir_picker, false)}
   end
 
   @impl true
@@ -160,6 +182,8 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  # duplicate clauses removed; see earlier grouped handle_event/3 definitions
 
   defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S %Z")
@@ -250,6 +274,22 @@ defmodule TheMaestroWeb.DashboardLive do
             options={@agent_options}
             prompt="Select an agent"
           />
+          <div class="mt-2 grid gap-2">
+            <.input
+              field={@session_form[:working_dir]}
+              type="text"
+              label="Working directory"
+              placeholder={Path.expand(".")}
+            />
+            <div>
+              <button type="button" class="btn btn-xs" phx-click="session_use_root_dir">
+                Use project root
+              </button>
+              <button type="button" class="btn btn-xs ml-2" phx-click="open_session_dir_picker">
+                Browse…
+              </button>
+            </div>
+          </div>
           <div class="mt-3 space-x-2">
             <button type="submit" class="btn btn-primary">Save</button>
             <button type="button" class="btn" phx-click={JS.dispatch("phx:close-modal")}>
@@ -257,6 +297,14 @@ defmodule TheMaestroWeb.DashboardLive do
             </button>
           </div>
         </.form>
+        <.modal :if={@show_session_dir_picker} id="dir-picker-session-new">
+          <.live_component
+            module={TheMaestroWeb.DirectoryPicker}
+            id="dirpick-session-new"
+            start_path={@session_form[:working_dir].value || Path.expand(".")}
+            context={:new_session}
+          />
+        </.modal>
       </.modal>
 
       <.modal :if={@show_agent_modal} id="agent-modal">
@@ -303,6 +351,14 @@ defmodule TheMaestroWeb.DashboardLive do
             </button>
           </div>
         </.form>
+        <.modal :if={@show_session_dir_picker} id="dir-picker-session-new">
+          <.live_component
+            module={TheMaestroWeb.DirectoryPicker}
+            id="dirpick-session-new"
+            start_path={@session_form[:working_dir].value || Path.expand(".")}
+            context={:new_session}
+          />
+        </.modal>
       </.modal>
     </Layouts.app>
     """

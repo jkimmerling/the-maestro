@@ -8,10 +8,13 @@ defmodule TheMaestro.PromptsFixtures do
   Generate a base_system_prompt.
   """
   def base_system_prompt_fixture(attrs \\ %{}) do
+    # Ensure unique name per call to avoid unique constraint violations across tests
+    default_name = "some name-" <> Ecto.UUID.generate()
+
     {:ok, base_system_prompt} =
       attrs
       |> Enum.into(%{
-        name: "some name",
+        name: default_name,
         prompt_text: "some prompt_text"
       })
       |> TheMaestro.Prompts.create_base_system_prompt()

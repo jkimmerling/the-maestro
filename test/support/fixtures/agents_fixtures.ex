@@ -9,12 +9,14 @@ defmodule TheMaestro.AgentsFixtures do
   """
   def agent_fixture(attrs \\ %{}) do
     # Ensure there is a SavedAuthentication to satisfy FK
+    short = String.slice(Ecto.UUID.generate(), 0, 8)
+
     {:ok, sa} =
       %TheMaestro.SavedAuthentication{}
       |> TheMaestro.SavedAuthentication.changeset(%{
         provider: :openai,
         auth_type: :api_key,
-        name: "test_openai_api_key",
+        name: "tok-" <> short,
         credentials: %{"api_key" => "sk-test"}
       })
       |> TheMaestro.Repo.insert()
@@ -22,7 +24,7 @@ defmodule TheMaestro.AgentsFixtures do
     base_attrs = %{
       mcps: %{},
       memory: %{},
-      name: "some_name",
+      name: "some_name-" <> short,
       tools: %{},
       auth_id: sa.id
     }
