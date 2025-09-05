@@ -62,6 +62,18 @@ defmodule TheMaestroWeb.DashboardLive do
     end
   end
 
+  # Delete a chat session from the dashboard Sessions grid
+  def handle_event("delete_session", %{"id" => id}, socket) do
+    # Session IDs are UUID strings; fetch and delete
+    session = Conversations.get_session!(id)
+    {:ok, _} = Conversations.delete_session(session)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Session deleted")
+     |> assign(:sessions, Conversations.list_sessions_with_agents())}
+  end
+
   def handle_event("open_agent_modal", _params, socket) do
     cs = Agents.change_agent(%Agent{})
 

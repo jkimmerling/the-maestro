@@ -183,6 +183,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:tool_calls, [])
     |> assign(:used_t0_ms, t0)
     |> assign(:event_buffer, [])
+    |> assign(:retry_attempts, 0)
   end
 
   defp user_msg(text), do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
@@ -293,11 +294,37 @@ defmodule TheMaestroWeb.SessionChatLive do
       ) do
     Logger.error("stream error: #{inspect(err)}")
 
-    {:noreply,
-     socket
-     |> push_event(%{kind: "ai", type: "error", error: err, at: now_ms()})
-     |> put_flash(:error, "Provider error: #{err}")
-     |> assign(thinking?: false)}
+    # Handle Anthropic overloads with bounded backoff retries
+    attempts = socket.assigns[:retry_attempts] || 0
+
+    if socket.assigns[:used_provider] == :anthropic and anth_overloaded?(err) and attempts < 2 do
+      # Cancel current stream task if running
+      if task = socket.assigns.stream_task do
+        Process.exit(task, :kill)
+      end
+
+      next = attempts + 1
+      delay_ms = next * 750
+      Process.send_after(self(), {:retry_stream, next}, delay_ms)
+
+      {:noreply,
+       socket
+       |> push_event(%{
+         kind: "ai",
+         type: "error",
+         error: "Anthropic overloaded — retrying (attempt #{next}/2) in #{delay_ms}ms",
+         at: now_ms()
+       })
+       |> put_flash(:info, "Anthropic overloaded — retrying (#{next}/2) in #{delay_ms}ms")
+       |> assign(thinking?: false)
+       |> assign(:retry_attempts, next)}
+    else
+      {:noreply,
+       socket
+       |> push_event(%{kind: "ai", type: "error", error: err, at: now_ms()})
+       |> put_flash(:error, "Provider error: #{err}")
+       |> assign(thinking?: false)}
+    end
   end
 
   @impl true
@@ -331,6 +358,46 @@ defmodule TheMaestroWeb.SessionChatLive do
   # Ignore stale stream messages
   def handle_info({:ai_stream, _other, _msg}, socket), do: {:noreply, socket}
 
+  # Internal: retry the current provider call after a backoff
+  def handle_info({:retry_stream, _attempt} = _msg, socket) do
+    # Only retry if we still have a pending canonical and we are on a supported provider
+    case socket.assigns do
+      %{pending_canonical: canon, used_provider: provider} when is_map(canon) and not is_nil(provider) ->
+        model = socket.assigns.used_model || default_model_for_session(socket.assigns.session, provider)
+        {:ok, provider_msgs} = Translator.to_provider(canon, provider)
+
+        # Start a fresh streaming task with a new stream id
+        parent = self()
+        stream_id = Ecto.UUID.generate()
+
+        task =
+          Task.start_link(fn ->
+            case call_provider(provider, socket.assigns.used_auth_name, provider_msgs, model) do
+              {:ok, stream} ->
+                for msg <- TheMaestro.Streaming.parse_stream(stream, provider, log_unknown_events: true),
+                    do: send(parent, {:ai_stream, stream_id, msg})
+
+              {:error, reason} ->
+                send(parent, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
+                send(parent, {:ai_stream, stream_id, %{type: :done}})
+            end
+          end)
+          |> elem(1)
+
+        {:noreply,
+         socket
+         |> assign(:stream_id, stream_id)
+         |> assign(:stream_task, task)
+         |> assign(:used_provider, provider)
+         |> assign(:used_model, model)
+         |> assign(:used_usage, nil)
+         |> assign(:thinking?, false)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   # Internal tool signals (defensive: accept with or without ref wrapper)
   def handle_info({:__shell_done__, {out, status}}, socket) do
     {:noreply,
@@ -363,6 +430,27 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp push_event(%{assigns: assigns} = socket, ev) when is_map(ev) do
     buf = assigns[:event_buffer] || []
     assign(socket, :event_buffer, buf ++ [ev])
+  end
+
+  # Detect Anthropic overloaded errors from error strings
+  defp anth_overloaded?(err) when is_binary(err) do
+    down = String.downcase(err)
+
+    cond do
+      String.contains?(down, "overloaded_error") -> true
+      String.contains?(down, "\"overloaded\"") -> true
+      true ->
+        case :binary.match(err, "{") do
+          {idx, _} ->
+            json = String.slice(err, idx..-1)
+            case Jason.decode(json) do
+              {:ok, %{"error" => %{"type" => t}}} when is_binary(t) -> String.contains?(String.downcase(t), "overloaded")
+              {:ok, %{"type" => t}} when is_binary(t) -> String.contains?(String.downcase(t), "overloaded")
+              _ -> false
+            end
+          :nomatch -> false
+        end
+    end
   end
 
   defp effective_provider(socket, session) do
@@ -442,6 +530,27 @@ defmodule TheMaestroWeb.SessionChatLive do
     outputs =
       Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
         case String.downcase(name || "") do
+          "bash" ->
+            with {:ok, json} <- Jason.decode(args),
+                 cmd when is_binary(cmd) <- Map.get(json, "command") do
+              timeout_ms =
+                case Map.get(json, "timeout") do
+                  t when is_integer(t) -> t
+                  t when is_float(t) -> trunc(t)
+                  _ -> nil
+                end
+
+              shell_args =
+                %{"command" => ["bash", "-lc", cmd]}
+                |> maybe_put_timeout(timeout_ms)
+
+              case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
+                {:ok, payload} -> {id, {:ok, payload}}
+                {:error, reason} -> {id, {:error, to_string(reason)}}
+              end
+            else
+              _ -> {id, {:error, "invalid bash arguments"}}
+            end
           "shell" ->
             with {:ok, json} <- Jason.decode(args) do
               case TheMaestro.Tools.Shell.run(json, base_cwd: base_cwd) do
@@ -563,11 +672,76 @@ defmodule TheMaestroWeb.SessionChatLive do
                 send(parent, {:ai_stream, new_stream_id, %{type: :done}})
             end
 
+          :anthropic ->
+            # Build Anthropic follow-up messages with tool_use + tool_result blocks
+            canon = socket.assigns.pending_canonical || %{"messages" => []}
+            prev_msgs = canon["messages"] || []
+            last_user =
+              prev_msgs
+              |> Enum.reverse()
+              |> Enum.find(%{"role" => "user", "content" => [%{"type" => "text", "text" => ""}]}, fn m ->
+                (m["role"] || "") == "user"
+              end)
+
+            # Assistant tool_use content from pending calls
+            tool_uses =
+              Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
+                input =
+                  case Jason.decode(args || "") do
+                    {:ok, parsed} -> parsed
+                    _ -> %{}
+                  end
+
+                %{"type" => "tool_use", "id" => id, "name" => name, "input" => input}
+              end)
+
+            # User tool_result content from executed outputs
+            tool_results =
+              Enum.map(outputs, fn {id, result} ->
+                case result do
+                  {:ok, payload} ->
+                    %{"type" => "tool_result", "tool_use_id" => id, "content" => payload}
+
+                  {:error, reason} ->
+                    %{"type" => "tool_result", "tool_use_id" => id, "content" => to_string(reason)}
+                end
+              end)
+
+            anth_messages =
+              [
+                # Prior user message for context
+                %{
+                  "role" => "user",
+                  "content" => (last_user["content"] || [%{"type" => "text", "text" => ""}])
+                },
+                # Assistant tool_use blocks we received
+                %{"role" => "assistant", "content" => tool_uses},
+                # Our tool results
+                %{"role" => "user", "content" => tool_results}
+              ]
+
+            case TheMaestro.Providers.Anthropic.Streaming.stream_tool_followup(
+                   session_name,
+                   anth_messages,
+                   model: model
+                 ) do
+              {:ok, stream} ->
+                for msg <-
+                      TheMaestro.Streaming.parse_stream(stream, provider,
+                        log_unknown_events: true
+                      ),
+                    do: send(parent, {:ai_stream, new_stream_id, msg})
+
+              {:error, reason} ->
+                send(parent, {:ai_stream, new_stream_id, %{type: :error, error: inspect(reason)}})
+                send(parent, {:ai_stream, new_stream_id, %{type: :done}})
+            end
+
           _ ->
             send(
               parent,
               {:ai_stream, new_stream_id,
-               %{type: :error, error: "follow-up only supported for :openai"}}
+               %{type: :error, error: "follow-up only supported for :openai and :anthropic"}}
             )
 
             send(parent, {:ai_stream, new_stream_id, %{type: :done}})
@@ -583,6 +757,9 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:used_usage, nil)
      |> assign(:thinking?, false)}
   end
+
+  defp maybe_put_timeout(map, nil), do: map
+  defp maybe_put_timeout(map, t) when is_integer(t) and t > 0, do: Map.put(map, "timeout_ms", t)
 
   defp persist_assistant_turn(_session, final_text, _req_meta, _updated2, _used_usage, _tools)
        when final_text == "",
