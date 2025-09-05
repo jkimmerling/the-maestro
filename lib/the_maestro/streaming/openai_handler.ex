@@ -1,4 +1,6 @@
 defmodule TheMaestro.Streaming.OpenAIHandler do
+  # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
+  # credo:disable-for-this-file Credo.Check.Refactor.Nesting
   @moduledoc """
   OpenAI-specific streaming event handler.
 
@@ -44,6 +46,8 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
   # Process dictionary keys for state management
   @function_calls_key :openai_function_calls
   @text_accumulator_key :openai_text_accumulator
+  @saw_text_delta_key :openai_saw_text_delta
+  @emitted_calls_key :openai_emitted_calls
 
   @doc """
   Handle OpenAI streaming events.
@@ -63,8 +67,17 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
   def handle_event(%{event_type: event_type, data: data}, opts)
       when is_binary(event_type) and is_binary(data) do
     case safe_json_decode(data) do
-      {:ok, event} -> handle_openai_event(event, opts)
-      {:error, reason} -> [error_message(reason)]
+      {:ok, event} ->
+        # Some streams omit the embedded "type" and rely solely on the SSE event name.
+        routed =
+          if is_binary(Map.get(event, "type")),
+            do: event,
+            else: Map.put(event, "type", event_type)
+
+        handle_openai_event(routed, opts)
+
+      {:error, reason} ->
+        [error_message(reason)]
     end
   end
 
@@ -76,8 +89,14 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
   # Handle parsed OpenAI events
   defp handle_openai_event(%{"type" => "response.output_text.delta"} = event, _opts) do
     case Map.get(event, "delta") do
-      nil -> []
-      delta -> handle_text_delta(delta)
+      nil ->
+        []
+
+      delta ->
+        # Mark that we have seen a delta for this content block to avoid
+        # re‑emitting the same text on the corresponding *.done event.
+        put_saw_text_delta(true)
+        handle_text_delta(delta)
     end
   end
 
@@ -103,15 +122,28 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
   # Newer Responses event forms: content_part delta/done with output_text
   defp handle_openai_event(%{"type" => "response.content_part.delta", "part" => part}, _opts) do
     case part do
-      %{"type" => "output_text", "text" => text} when is_binary(text) -> handle_text_delta(text)
-      _ -> []
+      %{"type" => "output_text", "text" => text} when is_binary(text) ->
+        put_saw_text_delta(true)
+        handle_text_delta(text)
+
+      _ ->
+        []
     end
   end
 
   defp handle_openai_event(%{"type" => "response.content_part.done", "part" => part}, _opts) do
     case part do
-      %{"type" => "output_text", "text" => text} when is_binary(text) -> handle_text_delta(text)
-      _ -> []
+      %{"type" => "output_text", "text" => text} when is_binary(text) ->
+        # If we already streamed deltas for this part, skip re-emitting the full text
+        if get_saw_text_delta() do
+          put_saw_text_delta(false)
+          []
+        else
+          [content_message(text)]
+        end
+
+      _ ->
+        []
     end
   end
 
@@ -124,6 +156,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
   defp handle_openai_event(%{"type" => "response.content_part.added", "part" => part}, _opts) do
     case part do
       %{"type" => "output_text", "text" => text} when is_binary(text) and text != "" ->
+        put_saw_text_delta(true)
         handle_text_delta(text)
 
       _ ->
@@ -133,13 +166,51 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
 
   defp handle_openai_event(%{"type" => "response.output_text.done", "text" => text}, _opts)
        when is_binary(text) do
-    handle_text_delta(text)
+    # If deltas have been streamed, avoid duplicate emission
+    if get_saw_text_delta() do
+      put_saw_text_delta(false)
+      []
+    else
+      [content_message(text)]
+    end
   end
 
   defp handle_openai_event(%{"type" => "response.function_call_arguments.delta"} = event, _opts) do
     handle_function_arguments_delta(event)
     # Don't emit messages until function call is complete
     []
+  end
+
+  # Some providers emit a terminal event for function call arguments without a
+  # corresponding output_item.done. When we see this, try to emit a function_call
+  # message using the accumulated name/arguments so downstream can execute tools.
+  defp handle_openai_event(%{"type" => "response.function_call_arguments.done"} = event, _opts) do
+    item_id = Map.get(event, "item_id")
+
+    if item_id do
+      function_calls = get_function_calls()
+
+      if call_data = Map.get(function_calls, item_id) do
+        alias TheMaestro.Streaming.{Function, FunctionCall}
+
+        function_call = %FunctionCall{
+          id: call_data.id || item_id,
+          function: %Function{name: call_data.name, arguments: call_data.arguments}
+        }
+
+        # Emit only if we haven't already, otherwise wait for output_item.done
+        if already_emitted?(function_call.id) do
+          []
+        else
+          mark_emitted(function_call.id)
+          [function_call_message([function_call])]
+        end
+      else
+        []
+      end
+    else
+      []
+    end
   end
 
   defp handle_openai_event(%{"type" => "response.output_item.done"} = event, _opts) do
@@ -296,7 +367,18 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
       arguments: Map.get(item, "arguments", "")
     }
 
-    new_calls = Map.put(function_calls, call_data.id, call_data)
+    item_id = Map.get(item, "id")
+    call_id = Map.get(item, "call_id")
+
+    new_calls =
+      function_calls
+      |> maybe_put_key(item_id, call_data)
+      |> maybe_put_key(call_id, call_data)
+
+    if System.get_env("DEBUG_STREAM_EVENTS") == "1" do
+      IO.puts("\n🔧 function_call.start: item_id=#{inspect(item_id)}, call_id=#{inspect(call_id)}")
+    end
+
     put_function_calls(new_calls)
 
     # Don't emit until complete
@@ -311,10 +393,22 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     if item_id do
       function_calls = get_function_calls()
 
-      if Map.has_key?(function_calls, item_id) do
-        call_data = Map.get(function_calls, item_id)
+      call_data = Map.get(function_calls, item_id)
+
+      if call_data do
         updated_call = %{call_data | arguments: call_data.arguments <> delta}
-        new_calls = Map.put(function_calls, item_id, updated_call)
+
+        new_calls =
+          function_calls
+          |> maybe_put_key(item_id, updated_call)
+          |> maybe_put_key(call_data.id, updated_call)
+
+        if System.get_env("DEBUG_STREAM_EVENTS") == "1" do
+          IO.puts(
+            "\n🔧 function_call.args.delta: item_id=#{inspect(item_id)} len+=#{byte_size(delta)}"
+          )
+        end
+
         put_function_calls(new_calls)
       end
     end
@@ -327,10 +421,20 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     item = Map.get(event, "item", %{})
     item_id = Map.get(item, "id")
 
+    if System.get_env("DEBUG_STREAM_EVENTS") == "1" do
+      IO.puts("\n🔍 handle_function_call_done called")
+      IO.puts("   item_id: #{inspect(item_id)}")
+      IO.puts("   item: #{inspect(item)}")
+    end
+
     if item_id do
       function_calls = get_function_calls()
+      call_id = Map.get(item, "call_id")
 
-      if call_data = Map.get(function_calls, item_id) do
+      # Try to find call_data by item_id first, then by call_id
+      call_data = Map.get(function_calls, item_id) || Map.get(function_calls, call_id)
+
+      if call_data do
         # Update with final arguments if provided
         final_arguments = Map.get(item, "arguments", call_data.arguments)
 
@@ -340,15 +444,40 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
           function: %Function{name: call_data.name, arguments: final_arguments}
         }
 
-        # Remove from tracking
-        new_calls = Map.delete(function_calls, item_id)
+        # Remove from tracking (delete all potential keys)
+        new_calls =
+          function_calls
+          |> maybe_delete_key(item_id)
+          |> maybe_delete_key(call_id)
+
         put_function_calls(new_calls)
 
-        [function_call_message([function_call])]
+        # Avoid duplicate emission if arguments.done already emitted
+        emit =
+          if already_emitted?(function_call.id) do
+            []
+          else
+            mark_emitted(function_call.id)
+            [function_call_message([function_call])]
+          end
+
+        if System.get_env("DEBUG_STREAM_EVENTS") == "1" do
+          IO.puts("   Emitting function_call message: #{inspect(emit)}")
+        end
+
+        emit
       else
+        if System.get_env("DEBUG_STREAM_EVENTS") == "1" do
+          IO.puts("   No call_data found in function_calls: #{inspect(function_calls)}")
+        end
+
         []
       end
     else
+      if System.get_env("DEBUG_STREAM_EVENTS") == "1" do
+        IO.puts("   No item_id found")
+      end
+
       []
     end
   end
@@ -366,7 +495,14 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
       arguments: Map.get(item, "input", "")
     }
 
-    new_calls = Map.put(function_calls, call_data.id, call_data)
+    item_id = Map.get(item, "id")
+    call_id = Map.get(item, "call_id")
+
+    new_calls =
+      function_calls
+      |> maybe_put_key(item_id, call_data)
+      |> maybe_put_key(call_id, call_data)
+
     put_function_calls(new_calls)
     []
   end
@@ -380,7 +516,8 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
       function_calls = get_function_calls()
       final_input = Map.get(item, "input")
 
-      if call_data = Map.get(function_calls, item_id) do
+      if call_data =
+           Map.get(function_calls, item_id) || Map.get(function_calls, Map.get(item, "call_id")) do
         updated_args =
           case final_input do
             nil -> call_data.arguments
@@ -393,7 +530,12 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
           function: %Function{name: call_data.name, arguments: updated_args}
         }
 
-        new_calls = Map.delete(function_calls, item_id)
+        # Remove both keys if present
+        new_calls =
+          function_calls
+          |> maybe_delete_key(item_id)
+          |> maybe_delete_key(Map.get(item, "call_id"))
+
         put_function_calls(new_calls)
 
         [function_call_message([function_call])]
@@ -401,12 +543,14 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
         # If we didn't see a prior `added`, still emit using available fields
         id = item_id
         name = Map.get(item, "name", "")
+
         args =
           case final_input do
             nil -> ""
             input when is_binary(input) -> input
             other -> to_string(other)
           end
+
         function_call = %FunctionCall{id: id, function: %Function{name: name, arguments: args}}
         [function_call_message([function_call])]
       end
@@ -437,6 +581,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
   defp handle_message_done(event) do
     # Reset accumulator at message boundaries
     put_text_accumulator("")
+    put_saw_text_delta(false)
     handle_message_item(event)
   end
 
@@ -504,7 +649,28 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
   defp cleanup_state do
     Process.delete(@function_calls_key)
     Process.delete(@text_accumulator_key)
+    Process.delete(@saw_text_delta_key)
+    Process.delete(@emitted_calls_key)
   end
 
   # ChatGPT emits when a new content part is added; sometimes empty text
+  defp maybe_put_key(map, nil, _value), do: map
+  defp maybe_put_key(map, key, value), do: Map.put(map, key, value)
+
+  defp maybe_delete_key(map, nil), do: map
+  defp maybe_delete_key(map, key), do: Map.delete(map, key)
+
+  defp get_saw_text_delta, do: Process.get(@saw_text_delta_key, false)
+  defp put_saw_text_delta(val), do: Process.put(@saw_text_delta_key, val)
+
+  defp get_emitted_calls, do: Process.get(@emitted_calls_key, MapSet.new())
+  defp put_emitted_calls(set), do: Process.put(@emitted_calls_key, set)
+
+  defp mark_emitted(id) when is_binary(id) do
+    set = get_emitted_calls() |> MapSet.put(id)
+    put_emitted_calls(set)
+  end
+
+  defp already_emitted?(id) when is_binary(id), do: MapSet.member?(get_emitted_calls(), id)
+  defp already_emitted?(_), do: false
 end

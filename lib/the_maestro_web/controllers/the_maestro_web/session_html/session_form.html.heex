@@ -8,6 +8,13 @@
     prompt="Select an agent"
   />
   <.input field={f[:last_used_at]} type="datetime-local" label="Last used at" />
+  <.input
+    field={f[:working_dir]}
+    type="text"
+    label="Working directory"
+    placeholder={Path.expand(".")}
+    help="Absolute path on the host where tools (e.g., shell) execute. Leave blank to use the project root."
+  />
   <footer>
     <.button variant="primary">Save Session</.button>
     <.button :if={@return_to} href={@return_to}>Cancel</.button>

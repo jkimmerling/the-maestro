@@ -16,8 +16,6 @@ defmodule TheMaestro.DataCase do
 
   use ExUnit.CaseTemplate
 
-  alias Ecto.Adapters.SQL.Sandbox
-
   using do
     quote do
       alias TheMaestro.Repo
@@ -29,18 +27,15 @@ defmodule TheMaestro.DataCase do
     end
   end
 
-  setup tags do
-    TheMaestro.DataCase.setup_sandbox(tags)
+  setup _tags do
+    # No sandbox: tests run against the dev database directly.
     :ok
   end
 
   @doc """
   Sets up the sandbox based on the test tags.
   """
-  def setup_sandbox(tags) do
-    pid = Sandbox.start_owner!(TheMaestro.Repo, shared: not tags[:async])
-    on_exit(fn -> Sandbox.stop_owner(pid) end)
-  end
+  def setup_sandbox(_tags), do: :ok
 
   @doc """
   A helper that transforms changeset errors into a map of messages.

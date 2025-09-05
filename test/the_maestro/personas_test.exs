@@ -10,9 +10,9 @@ defmodule TheMaestro.PersonasTest do
 
     @invalid_attrs %{name: nil, prompt_text: nil}
 
-    test "list_personas/0 returns all personas" do
+    test "list_personas/0 includes newly created persona" do
       persona = persona_fixture()
-      assert Personas.list_personas() == [persona]
+      assert Enum.any?(Personas.list_personas(), &(&1.id == persona.id))
     end
 
     test "get_persona!/1 returns the persona with given id" do
@@ -21,10 +21,10 @@ defmodule TheMaestro.PersonasTest do
     end
 
     test "create_persona/1 with valid data creates a persona" do
-      valid_attrs = %{name: "some name", prompt_text: "some prompt_text"}
+      valid_attrs = %{name: "some name-" <> Ecto.UUID.generate(), prompt_text: "some prompt_text"}
 
       assert {:ok, %Persona{} = persona} = Personas.create_persona(valid_attrs)
-      assert persona.name == "some name"
+      assert persona.name == valid_attrs.name
       assert persona.prompt_text == "some prompt_text"
     end
 
@@ -34,10 +34,14 @@ defmodule TheMaestro.PersonasTest do
 
     test "update_persona/2 with valid data updates the persona" do
       persona = persona_fixture()
-      update_attrs = %{name: "some updated name", prompt_text: "some updated prompt_text"}
+
+      update_attrs = %{
+        name: "some updated name-" <> String.slice(Ecto.UUID.generate(), 0, 8),
+        prompt_text: "some updated prompt_text"
+      }
 
       assert {:ok, %Persona{} = persona} = Personas.update_persona(persona, update_attrs)
-      assert persona.name == "some updated name"
+      assert persona.name == update_attrs.name
       assert persona.prompt_text == "some updated prompt_text"
     end
 

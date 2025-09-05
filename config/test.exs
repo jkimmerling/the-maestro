@@ -10,8 +10,7 @@ config :the_maestro, TheMaestro.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "the_maestro_test#{System.get_env("MIX_TEST_PARTITION")}",
-  pool: Ecto.Adapters.SQL.Sandbox,
+  database: System.get_env("MIX_TEST_PARTITION", "the_maestro_test"),
   pool_size: System.schedulers_online() * 2
 
 # We don't run a server during test. If one is required,

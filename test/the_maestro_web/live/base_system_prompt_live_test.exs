@@ -4,6 +4,7 @@ defmodule TheMaestroWeb.BaseSystemPromptLiveTest do
   import Phoenix.LiveViewTest
   import TheMaestro.PromptsFixtures
 
+  defp uniq_name(base), do: base <> "-" <> String.slice(Ecto.UUID.generate(), 0, 8)
   @create_attrs %{name: "some name", prompt_text: "some prompt_text"}
   @update_attrs %{name: "some updated name", prompt_text: "some updated prompt_text"}
   @invalid_attrs %{name: nil, prompt_text: nil}
@@ -38,15 +39,17 @@ defmodule TheMaestroWeb.BaseSystemPromptLiveTest do
              |> form("#base_system_prompt-form", base_system_prompt: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
+      create_attrs = %{name: uniq_name("some name"), prompt_text: "some prompt_text"}
+
       _ =
         form_live
-        |> form("#base_system_prompt-form", base_system_prompt: @create_attrs)
+        |> form("#base_system_prompt-form", base_system_prompt: create_attrs)
         |> render_submit()
 
       # Navigate to index and assert flash/content instead of relying on redirect
       {:ok, index_live, _} = live(conn, ~p"/base_system_prompts")
       html = render(index_live)
-      assert html =~ "some name"
+      assert html =~ create_attrs.name
     end
 
     test "updates base_system_prompt in listing", %{
@@ -67,14 +70,19 @@ defmodule TheMaestroWeb.BaseSystemPromptLiveTest do
              |> form("#base_system_prompt-form", base_system_prompt: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
+      update_attrs = %{
+        name: uniq_name("some updated name"),
+        prompt_text: "some updated prompt_text"
+      }
+
       _ =
         form_live
-        |> form("#base_system_prompt-form", base_system_prompt: @update_attrs)
+        |> form("#base_system_prompt-form", base_system_prompt: update_attrs)
         |> render_submit()
 
       {:ok, index_live, _} = live(conn, ~p"/base_system_prompts")
       html = render(index_live)
-      assert html =~ "some updated name"
+      assert html =~ update_attrs.name
     end
 
     test "deletes base_system_prompt in listing", %{
@@ -122,14 +130,19 @@ defmodule TheMaestroWeb.BaseSystemPromptLiveTest do
              |> form("#base_system_prompt-form", base_system_prompt: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
+      update_attrs = %{
+        name: uniq_name("some updated name"),
+        prompt_text: "some updated prompt_text"
+      }
+
       _ =
         form_live
-        |> form("#base_system_prompt-form", base_system_prompt: @update_attrs)
+        |> form("#base_system_prompt-form", base_system_prompt: update_attrs)
         |> render_submit()
 
       {:ok, show_live, _} = live(conn, ~p"/base_system_prompts/#{base_system_prompt}")
       html = render(show_live)
-      assert html =~ "some updated name"
+      assert html =~ update_attrs.name
     end
   end
 end

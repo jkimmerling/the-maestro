@@ -24,12 +24,14 @@ defmodule TheMaestroWeb.TheMaestroWeb.SessionControllerTest do
   describe "create session" do
     test "redirects to show when data is valid", %{conn: conn} do
       # Create agent first
+      short = String.slice(Ecto.UUID.generate(), 0, 6)
+
       {:ok, sa} =
         %TheMaestro.SavedAuthentication{}
         |> TheMaestro.SavedAuthentication.changeset(%{
           provider: :openai,
           auth_type: :api_key,
-          name: "test_openai_api_key_ctrl",
+          name: "test_openai_api_key_ctrl-" <> short,
           credentials: %{"api_key" => "sk-test"}
         })
         |> TheMaestro.Repo.insert()
@@ -37,7 +39,7 @@ defmodule TheMaestroWeb.TheMaestroWeb.SessionControllerTest do
       {:ok, agent} =
         %TheMaestro.Agents.Agent{}
         |> TheMaestro.Agents.Agent.changeset(%{
-          name: "agent_for_session_ctrl",
+          name: "agent_for_session_ctrl-" <> short,
           auth_id: sa.id,
           tools: %{},
           mcps: %{},

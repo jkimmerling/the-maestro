@@ -217,29 +217,60 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   """
   @spec refresh_token_for_provider(String.t(), String.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
-  def refresh_token_for_provider(provider, _auth_id) do
+  def refresh_token_for_provider(provider, auth_id) do
     import Ecto.Query, warn: false
     alias TheMaestro.{Repo, SavedAuthentication}
 
-    # First, get the current stored token
-    provider_atom = String.to_existing_atom(provider)
+    # Validate provider support explicitly to avoid ambiguous :not_found results
+    supported = ["anthropic"]
 
-    query =
-      from sa in SavedAuthentication,
-        where: sa.provider == ^provider_atom and sa.auth_type == :oauth,
-        select: sa
+    if provider not in supported do
+      {:error, {:unsupported_provider, provider}}
+    else
+      # First, get the current stored token
+      provider_atom = String.to_existing_atom(provider)
 
-    case Repo.one(query) do
-      nil ->
-        {:error, :not_found}
+      # Prefer selecting by the specific auth_id provided
+      case parse_int(auth_id) do
+        {:ok, int_id} ->
+          query =
+            from sa in SavedAuthentication,
+              where:
+                sa.id == ^int_id and sa.provider == ^provider_atom and sa.auth_type == :oauth,
+              select: sa
 
-      %SavedAuthentication{} = saved_auth ->
-        process_token_refresh(provider, saved_auth)
+          case Repo.one(query) do
+            nil -> {:error, :not_found}
+            %SavedAuthentication{} = saved_auth -> process_token_refresh(provider, saved_auth)
+          end
+
+        :error ->
+          # Fallback to single record by provider if auth_id is invalid
+          query =
+            from sa in SavedAuthentication,
+              where: sa.provider == ^provider_atom and sa.auth_type == :oauth,
+              select: sa
+
+          case Repo.one(query) do
+            nil -> {:error, :not_found}
+            %SavedAuthentication{} = saved_auth -> process_token_refresh(provider, saved_auth)
+          end
+      end
     end
   rescue
     ArgumentError ->
       {:error, {:unsupported_provider, provider}}
   end
+
+  defp parse_int(val) when is_binary(val) do
+    case Integer.parse(val) do
+      {i, _} -> {:ok, i}
+      :error -> :error
+    end
+  end
+
+  defp parse_int(val) when is_integer(val), do: {:ok, val}
+  defp parse_int(_), do: :error
 
   # Process token refresh for a saved authentication record
   defp process_token_refresh(

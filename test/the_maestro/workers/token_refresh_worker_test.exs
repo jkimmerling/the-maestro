@@ -1,5 +1,5 @@
 defmodule TheMaestro.Workers.TokenRefreshWorkerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   use TheMaestro.DataCase
   use Oban.Testing, repo: TheMaestro.Repo
 
