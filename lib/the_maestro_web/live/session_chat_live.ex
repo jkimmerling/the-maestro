@@ -530,6 +530,27 @@ defmodule TheMaestroWeb.SessionChatLive do
     outputs =
       Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
         case String.downcase(name || "") do
+          "bash" ->
+            with {:ok, json} <- Jason.decode(args),
+                 cmd when is_binary(cmd) <- Map.get(json, "command") do
+              timeout_ms =
+                case Map.get(json, "timeout") do
+                  t when is_integer(t) -> t
+                  t when is_float(t) -> trunc(t)
+                  _ -> nil
+                end
+
+              shell_args =
+                %{"command" => ["bash", "-lc", cmd]}
+                |> maybe_put_timeout(timeout_ms)
+
+              case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
+                {:ok, payload} -> {id, {:ok, payload}}
+                {:error, reason} -> {id, {:error, to_string(reason)}}
+              end
+            else
+              _ -> {id, {:error, "invalid bash arguments"}}
+            end
           "shell" ->
             with {:ok, json} <- Jason.decode(args) do
               case TheMaestro.Tools.Shell.run(json, base_cwd: base_cwd) do
@@ -736,6 +757,9 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:used_usage, nil)
      |> assign(:thinking?, false)}
   end
+
+  defp maybe_put_timeout(map, nil), do: map
+  defp maybe_put_timeout(map, t) when is_integer(t) and t > 0, do: Map.put(map, "timeout_ms", t)
 
   defp persist_assistant_turn(_session, final_text, _req_meta, _updated2, _used_usage, _tools)
        when final_text == "",
