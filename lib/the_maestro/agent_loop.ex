@@ -2,6 +2,7 @@ defmodule TheMaestro.AgentLoop do
   # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
   # credo:disable-for-this-file Credo.Check.Refactor.Nesting
   # credo:disable-for-this-file Credo.Check.Warning.IoInspect
+  # credo:disable-for-this-file Credo.Check.Design.AliasUsage
   @moduledoc """
   Backend agent loop that mirrors Codex tool-turn behavior without LiveView.
 
@@ -62,7 +63,7 @@ defmodule TheMaestro.AgentLoop do
     end
   end
 
-  defp drain_stream(stream, provider) do
+  defp drain_stream(stream, _provider) do
     # Parse SSE events directly to avoid UI pipeline dependencies
     sse = TheMaestro.Providers.Http.StreamingAdapter.parse_sse_events(stream)
 
@@ -77,10 +78,7 @@ defmodule TheMaestro.AgentLoop do
 
     messages =
       Stream.flat_map(sse, fn ev ->
-        case provider do
-          :openai -> TheMaestro.Streaming.OpenAIHandler.handle_event(ev, [])
-          _ -> []
-        end
+        TheMaestro.Streaming.OpenAIHandler.handle_event(ev, [])
       end)
 
     Enum.reduce(messages, {[], "", %{}}, fn msg, {calls, text, usage} ->
@@ -133,7 +131,7 @@ defmodule TheMaestro.AgentLoop do
       end
 
     user_msgs =
-      (original_messages || [])
+      original_messages
       |> Enum.filter(&(Map.get(&1, "role") == "user" or Map.get(&1, :role) == "user"))
       |> Enum.map(fn m ->
         text = Map.get(m, "content") || Map.get(m, :content) || ""

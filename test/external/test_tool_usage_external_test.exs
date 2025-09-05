@@ -9,9 +9,13 @@ defmodule TheMaestro.External.ToolUsageExternalTest do
   # No sandbox here: set USE_REAL_DB=1 to bypass Ecto sandbox entirely
 
   test "OpenAI OAuth via ChatGPTAgent clone: shell tool turn end-to-end" do
+    if System.get_env("USE_REAL_DB") != "1" do
+      IO.puts("\n⏭️  Skipping external DB test — set USE_REAL_DB=1 to run")
+      assert true
+    else
     # Find Agent row named ChatGPTAgent and load its SavedAuthentication
     import Ecto.Query
-    alias TheMaestro.{Repo, Agents.Agent, SavedAuthentication}
+    alias TheMaestro.{Agents.Agent, Repo, SavedAuthentication}
 
     agent = Repo.one(from a in Agent, where: a.name == ^"ChatGPTAgent")
 
@@ -122,6 +126,7 @@ defmodule TheMaestro.External.ToolUsageExternalTest do
 
         :ok = TheMaestro.SavedAuthentication.delete_named_session(:openai, :oauth, new_session)
       end
+    end
     end
   end
 end

@@ -31,7 +31,14 @@ defmodule TheMaestroWeb.ConnCase do
     end
   end
 
-  setup _tags do
+  setup tags do
+    if System.get_env("USE_REAL_DB") != "1" do
+      :ok = Ecto.Adapters.SQL.Sandbox.checkout(TheMaestro.Repo)
+      unless tags[:async] do
+        Ecto.Adapters.SQL.Sandbox.mode(TheMaestro.Repo, {:shared, self()})
+      end
+    end
+
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 end

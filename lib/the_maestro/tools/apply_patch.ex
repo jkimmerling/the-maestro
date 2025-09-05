@@ -188,13 +188,13 @@ defmodule TheMaestro.Tools.ApplyPatch do
 
     {out_lines, idx, ok?} =
       Enum.reduce(hunks, {[], 0, true}, fn hunk, {acc, pos, ok} ->
-        if not ok do
-          {acc, pos, ok}
-        else
+        if ok do
           case apply_hunk(hunk, orig_lines, pos, acc) do
             {:ok, new_acc, new_pos} -> {new_acc, new_pos, true}
             {:error, _} = e -> {acc, pos, e}
           end
+        else
+          {acc, pos, ok}
         end
       end)
 

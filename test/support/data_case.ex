@@ -27,9 +27,16 @@ defmodule TheMaestro.DataCase do
     end
   end
 
-  setup _tags do
-    # No sandbox: tests run against the dev database directly.
-    :ok
+  setup tags do
+    if System.get_env("USE_REAL_DB") == "1" do
+      :ok
+    else
+      :ok = Ecto.Adapters.SQL.Sandbox.checkout(TheMaestro.Repo)
+      unless tags[:async] do
+        Ecto.Adapters.SQL.Sandbox.mode(TheMaestro.Repo, {:shared, self()})
+      end
+      :ok
+    end
   end
 
   @doc """

@@ -11,6 +11,7 @@ config :the_maestro, TheMaestro.Repo,
   password: "postgres",
   hostname: "localhost",
   database: System.get_env("MIX_TEST_PARTITION", "the_maestro_test"),
+  pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 
 # We don't run a server during test. If one is required,
@@ -18,7 +19,8 @@ config :the_maestro, TheMaestro.Repo,
 config :the_maestro, TheMaestroWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "po3ahnNmd3zvxzgN5T0h9NlcB0pVQGcsxXnC6Izlpg5wXtsFiAiMsmXi+ksAJv2X",
-  server: false
+  server: false,
+  sql_sandbox: true
 
 # In test we don't send emails
 config :the_maestro, TheMaestro.Mailer, adapter: Swoosh.Adapters.Test

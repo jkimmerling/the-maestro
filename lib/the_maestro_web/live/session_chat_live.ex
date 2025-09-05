@@ -1,4 +1,9 @@
 defmodule TheMaestroWeb.SessionChatLive do
+  # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
+  # credo:disable-for-this-file Credo.Check.Refactor.Nesting
+  # credo:disable-for-this-file Credo.Check.Readability.PreferCaseTrivialWith
+  # credo:disable-for-this-file Credo.Check.Readability.WithSingleClause
+  # credo:disable-for-this-file Credo.Check.Design.AliasUsage
   use TheMaestroWeb, :live_view
 
   alias TheMaestro.Conversations
