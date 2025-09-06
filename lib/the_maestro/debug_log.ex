@@ -21,7 +21,9 @@ defmodule TheMaestro.DebugLog do
 
   def level do
     case System.get_env("HTTP_DEBUG_LEVEL") do
-      nil -> "high"
+      nil ->
+        "high"
+
       l ->
         name = String.downcase(l)
         if Map.has_key?(@levels, name), do: name, else: "high"

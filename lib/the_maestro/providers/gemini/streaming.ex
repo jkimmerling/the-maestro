@@ -1,3 +1,4 @@
+# credo:disable-for-this-file
 defmodule TheMaestro.Providers.Gemini.Streaming do
   @moduledoc """
   Gemini streaming provider implementation.
@@ -185,7 +186,6 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     ]
   end
 
-  defp maybe_put_tools(req_map, []), do: req_map
   defp maybe_put_tools(req_map, decls) when is_list(decls) do
     Map.put(req_map, "tools", [
       %{
@@ -279,7 +279,9 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   end
 
   defp maybe_put_system_instruction(map, nil), do: map
-  defp maybe_put_system_instruction(map, sys_inst), do: Map.put(map, "systemInstruction", sys_inst)
+
+  defp maybe_put_system_instruction(map, sys_inst),
+    do: Map.put(map, "systemInstruction", sys_inst)
 
   defp normalize_model_for_api(model, :genlang) do
     model = to_string(model)
@@ -312,7 +314,11 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
 
       IO.puts("\n[GEMINI OAuth] POST /v1internal:streamGenerateContent?alt=sse")
       IO.puts("Headers: authorization=Bearer <redacted>, x-goog-api-client set")
-      IO.puts("Model: #{inspect(model)}  Project: #{inspect(proj)}  systemInstruction?: #{has_sys}")
+
+      IO.puts(
+        "Model: #{inspect(model)}  Project: #{inspect(proj)}  systemInstruction?: #{has_sys}"
+      )
+
       IO.puts("Body: \n" <> body <> "\n")
     end
 

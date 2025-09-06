@@ -99,6 +99,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
           end
 
         maybe_debug_error_response(status, resp.headers, error_text)
+
         send(
           parent,
           {:data,
@@ -212,6 +213,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
       end
     end
   end
+
   # ===== Debug helpers =====
   defp maybe_debug_request(req, method, url, body, json) do
     if TheMaestro.DebugLog.enabled?() do
@@ -219,6 +221,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
       headers = TheMaestro.DebugLog.sanitize_headers(req.headers)
 
       TheMaestro.DebugLog.puts("\n[HTTP] #{String.upcase(to_string(method))} #{url}")
+
       if TheMaestro.DebugLog.level_at_least?(lvl) do
         TheMaestro.DebugLog.print_kv("Headers", Map.new(headers))
       end

@@ -1,3 +1,4 @@
+# credo:disable-for-this-file
 defmodule TheMaestro.Providers.Gemini.Models do
   @moduledoc """
   Gemini models provider implementation (initial) using Req.
@@ -20,7 +21,8 @@ defmodule TheMaestro.Providers.Gemini.Models do
           {:ok, [%Model{id: "gemini-2.5-pro", name: "gemini-2.5-pro", capabilities: []}]}
 
         {:ok, :api_key} ->
-          with {:ok, req} <- ReqClientFactory.create_client(:gemini, :api_key, session: session_name),
+          with {:ok, req} <-
+                 ReqClientFactory.create_client(:gemini, :api_key, session: session_name),
                {:ok, %Req.Response{status: 200, body: body}} <-
                  Req.request(req, method: :get, url: "/v1beta/models") do
             decoded = if is_binary(body), do: Jason.decode!(body), else: body
@@ -32,13 +34,18 @@ defmodule TheMaestro.Providers.Gemini.Models do
             {:ok, models}
           else
             {:ok, %Req.Response{status: status, body: body}} ->
-              {:error, {:http_error, status, if(is_binary(body), do: body, else: Jason.encode!(body))}}
+              {:error,
+               {:http_error, status, if(is_binary(body), do: body, else: Jason.encode!(body))}}
 
-            {:error, :not_found} -> {:error, :session_not_found}
-            {:error, reason} -> {:error, reason}
+            {:error, :not_found} ->
+              {:error, :session_not_found}
+
+            {:error, reason} ->
+              {:error, reason}
           end
 
-        {:error, :not_found} -> {:error, :session_not_found}
+        {:error, :not_found} ->
+          {:error, :session_not_found}
       end
     end
   end

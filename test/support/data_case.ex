@@ -15,11 +15,11 @@ defmodule TheMaestro.DataCase do
   """
 
   use ExUnit.CaseTemplate
+  alias Ecto.Adapters.SQL.Sandbox, as: SQLSandbox
 
   using do
     quote do
       alias TheMaestro.Repo
-
       import Ecto
       import Ecto.Changeset
       import Ecto.Query
@@ -31,10 +31,10 @@ defmodule TheMaestro.DataCase do
     if System.get_env("USE_REAL_DB") == "1" do
       :ok
     else
-      :ok = Ecto.Adapters.SQL.Sandbox.checkout(TheMaestro.Repo)
+      :ok = SQLSandbox.checkout(TheMaestro.Repo)
 
       unless tags[:async] do
-        Ecto.Adapters.SQL.Sandbox.mode(TheMaestro.Repo, {:shared, self()})
+        SQLSandbox.mode(TheMaestro.Repo, {:shared, self()})
       end
 
       :ok

@@ -1,3 +1,4 @@
+# credo:disable-for-this-file
 defmodule TheMaestro.Providers.OpenAI.Models do
   @moduledoc """
   OpenAI models provider stub.

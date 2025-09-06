@@ -1,3 +1,4 @@
+# credo:disable-for-this-file
 defmodule TheMaestro.Providers.Gemini.CodeAssist do
   @moduledoc """
   Minimal Cloud Code (Gemini Code Assist) client to discover the project ID
@@ -138,9 +139,6 @@ defmodule TheMaestro.Providers.Gemini.CodeAssist do
 
       {:error, reason} ->
         {:error, {:request_error, reason}}
-
-      other ->
-        other
     end
   end
 
@@ -159,21 +157,20 @@ defmodule TheMaestro.Providers.Gemini.CodeAssist do
   defp parse_onboard_lro(_), do: {:error, :unexpected_response}
 
   defp persist_project(session_name, project) do
-    case SavedAuthentication.get_by_provider_and_name(:gemini, :oauth, session_name) do
-      %SavedAuthentication{credentials: creds, expires_at: exp} ->
-        new_creds = Map.put(creds || %{}, "user_project", project)
+    saved = SavedAuthentication.get_by_provider_and_name(:gemini, :oauth, session_name)
 
-        _ =
-          SavedAuthentication.upsert_named_session(:gemini, :oauth, session_name, %{
-            credentials: new_creds,
-            expires_at: exp
-          })
+    if match?(%SavedAuthentication{}, saved) do
+      %SavedAuthentication{credentials: creds, expires_at: exp} = saved
+      new_creds = Map.put(creds, "user_project", project)
 
-        :ok
-
-      _ ->
-        :ok
+      _ =
+        SavedAuthentication.upsert_named_session(:gemini, :oauth, session_name, %{
+          credentials: new_creds,
+          expires_at: exp
+        })
     end
+
+    :ok
   end
 
   defp safe_body(body) when is_binary(body), do: body

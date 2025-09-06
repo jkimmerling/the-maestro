@@ -596,9 +596,15 @@ defmodule TheMaestroWeb.SessionChatLive do
             with {:ok, json} <- Jason.decode(args) do
               cmd = Map.get(json, "command")
               dir = Map.get(json, "directory")
+
               if is_binary(cmd) and byte_size(String.trim(cmd)) > 0 do
                 shell_args = %{"command" => ["bash", "-lc", cmd]}
-                shell_args = if is_binary(dir) and dir != "", do: Map.put(shell_args, "workdir", dir), else: shell_args
+
+                shell_args =
+                  if is_binary(dir) and dir != "",
+                    do: Map.put(shell_args, "workdir", dir),
+                    else: shell_args
+
                 case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
                   {:ok, payload} -> {id, {:ok, payload}}
                   {:error, reason} -> {id, {:error, to_string(reason)}}
@@ -615,6 +621,7 @@ defmodule TheMaestroWeb.SessionChatLive do
               path = Map.get(json, "path") || base_cwd
               path = Path.expand(path, base_cwd)
               shell_args = %{"command" => ["bash", "-lc", "ls -la"], "workdir" => path}
+
               case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
                 {:ok, payload} -> {id, {:ok, payload}}
                 {:error, reason} -> {id, {:error, to_string(reason)}}
@@ -827,7 +834,8 @@ defmodule TheMaestroWeb.SessionChatLive do
 
                   if text == "", do: [], else: [%{"text" => text}]
 
-                _ -> []
+                _ ->
+                  []
               end
 
             # Map outputs (id -> result) and attach names
@@ -836,6 +844,7 @@ defmodule TheMaestroWeb.SessionChatLive do
             fr_parts =
               Enum.map(outputs, fn {id, result} ->
                 name = (call_lookup[id] || %{})["name"] || "run_shell_command"
+
                 response =
                   case result do
                     {:ok, payload} ->
@@ -844,7 +853,8 @@ defmodule TheMaestroWeb.SessionChatLive do
                         _ -> %{"output" => payload}
                       end
 
-                    {:error, reason} -> %{"error" => to_string(reason)}
+                    {:error, reason} ->
+                      %{"error" => to_string(reason)}
                   end
 
                 %{"functionResponse" => %{"name" => name, "id" => id, "response" => response}}
@@ -863,7 +873,10 @@ defmodule TheMaestroWeb.SessionChatLive do
               end)
 
             contents =
-              (if last_user_parts == [], do: [], else: [%{"role" => "user", "parts" => last_user_parts}]) ++
+              if(last_user_parts == [],
+                do: [],
+                else: [%{"role" => "user", "parts" => last_user_parts}]
+              ) ++
                 [%{"role" => "assistant", "parts" => fc_parts}] ++
                 [%{"role" => "tool", "parts" => fr_parts}]
 

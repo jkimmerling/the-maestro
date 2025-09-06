@@ -21,9 +21,11 @@ defmodule TheMaestro.AgentLoop do
           usage: map()
         }
 
-  @spec run_turn(:openai, String.t(), String.t(), [map()], keyword()) ::
+  @spec run_turn(:openai | :anthropic | :gemini, String.t(), String.t(), [map()], keyword()) ::
           {:ok, result} | {:error, term()}
-  def run_turn(:openai, session_name, model, messages, opts \\ []) when is_list(messages) do
+  def run_turn(_provider, _session_name, _model, _messages, _opts \\ [])
+
+  def run_turn(:openai, session_name, model, messages, opts) when is_list(messages) do
     adapter = Keyword.get(opts, :streaming_adapter)
     session_uuid = Ecto.UUID.generate()
 
@@ -125,6 +127,7 @@ defmodule TheMaestro.AgentLoop do
 
             # If the model issues additional function calls, loop once more.
             calls2 = dedup_calls_by_id(calls2)
+
             if calls2 == [] do
               {:ok, %{final_text: answer2, tools: calls, usage: usage2 || %{}}}
             else
@@ -362,13 +365,15 @@ defmodule TheMaestro.AgentLoop do
             end
 
           "shell" ->
-            with {:ok, json} <- Jason.decode(args || "{}") do
-              case TheMaestro.Tools.Shell.run(json, base_cwd: base_cwd) do
-                {:ok, payload} -> {id, {:ok, payload}}
-                {:error, reason} -> {id, {:error, to_string(reason)}}
-              end
-            else
-              _ -> {id, {:error, "invalid shell arguments"}}
+            case Jason.decode(args || "{}") do
+              {:ok, json} ->
+                case TheMaestro.Tools.Shell.run(json, base_cwd: base_cwd) do
+                  {:ok, payload} -> {id, {:ok, payload}}
+                  {:error, reason} -> {id, {:error, to_string(reason)}}
+                end
+
+              _ ->
+                {id, {:error, "invalid shell arguments"}}
             end
 
           other ->
@@ -414,7 +419,7 @@ defmodule TheMaestro.AgentLoop do
   end
 
   # ===== Gemini follow-up builder =====
-  defp build_gemini_tool_followup(original_messages, calls, opts \\ []) do
+  defp build_gemini_tool_followup(original_messages, calls, opts) do
     base_cwd = File.cwd!()
     prior_answer_text = Keyword.get(opts, :prior_answer_text, "")
 
@@ -502,7 +507,9 @@ defmodule TheMaestro.AgentLoop do
 
     if is_binary(cmd) and byte_size(String.trim(cmd)) > 0 do
       shell_args = %{"command" => ["bash", "-lc", cmd]}
-      shell_args = if is_binary(dir) and dir != "", do: Map.put(shell_args, "workdir", dir), else: shell_args
+
+      shell_args =
+        if is_binary(dir) and dir != "", do: Map.put(shell_args, "workdir", dir), else: shell_args
 
       case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
         {:ok, payload_json} ->
@@ -511,7 +518,8 @@ defmodule TheMaestro.AgentLoop do
             _ -> {:ok, %{"output" => payload_json}}
           end
 
-        {:error, reason} -> {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
       end
     else
       {:error, "missing command"}
@@ -531,15 +539,27 @@ defmodule TheMaestro.AgentLoop do
           _ -> {:ok, %{"output" => payload_json}}
         end
 
-      {:error, reason} -> {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   defp do_exec_gemini_tool(other, args, base_cwd) do
     # Accept our generic name too
     case other do
-      "shell" -> do_exec_gemini_tool("run_shell_command", Map.put(args, "command", Map.get(args, "command") || Enum.join(Map.get(args, "argv") || [], " ")), base_cwd)
-      _ -> {:error, "unsupported tool: #{other}"}
+      "shell" ->
+        do_exec_gemini_tool(
+          "run_shell_command",
+          Map.put(
+            args,
+            "command",
+            Map.get(args, "command") || Enum.join(Map.get(args, "argv") || [], " ")
+          ),
+          base_cwd
+        )
+
+      _ ->
+        {:error, "unsupported tool: #{other}"}
     end
   end
 
