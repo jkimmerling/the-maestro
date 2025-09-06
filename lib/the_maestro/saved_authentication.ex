@@ -248,6 +248,7 @@ defmodule TheMaestro.SavedAuthentication do
   @dialyzer {:nowarn_function, create_named_session: 4}
   def create_named_session(provider, auth_type, name, attrs) do
     alias TheMaestro.Repo
+    alias TheMaestro.Workers.TokenRefreshWorker
 
     atomized = atomize_keys(attrs)
     normalized = normalize_credentials_for_auth(auth_type, atomized)
@@ -258,9 +259,13 @@ defmodule TheMaestro.SavedAuthentication do
       |> Map.put(:auth_type, auth_type)
       |> Map.put(:name, name)
 
-    %__MODULE__{}
-    |> changeset(full_attrs)
-    |> Repo.insert()
+    with {:ok, saved} <- %__MODULE__{} |> changeset(full_attrs) |> Repo.insert() do
+      if auth_type == :oauth do
+        _ = TokenRefreshWorker.schedule_for_auth(saved)
+      end
+
+      {:ok, saved}
+    end
   end
 
   @doc """
@@ -282,6 +287,7 @@ defmodule TheMaestro.SavedAuthentication do
   @dialyzer {:nowarn_function, upsert_named_session: 4}
   def upsert_named_session(provider, auth_type, name, attrs) do
     alias TheMaestro.Repo
+    alias TheMaestro.Workers.TokenRefreshWorker
 
     atomized = atomize_keys(attrs)
     normalized = normalize_credentials_for_auth(auth_type, atomized)
@@ -292,12 +298,19 @@ defmodule TheMaestro.SavedAuthentication do
       |> Map.put(:auth_type, auth_type)
       |> Map.put(:name, name)
 
-    %__MODULE__{}
-    |> changeset(full_attrs)
-    |> Repo.insert(
-      on_conflict: {:replace, [:credentials, :expires_at, :updated_at]},
-      conflict_target: [:provider, :auth_type, :name]
-    )
+    with {:ok, saved} <-
+           %__MODULE__{}
+           |> changeset(full_attrs)
+           |> Repo.insert(
+             on_conflict: {:replace, [:credentials, :expires_at, :updated_at]},
+             conflict_target: [:provider, :auth_type, :name]
+           ) do
+      if auth_type == :oauth do
+        _ = TokenRefreshWorker.schedule_for_auth(saved)
+      end
+
+      {:ok, saved}
+    end
   end
 
   @doc """
@@ -316,12 +329,17 @@ defmodule TheMaestro.SavedAuthentication do
   @spec delete_named_session(atom(), atom(), String.t()) :: :ok | {:error, term()}
   def delete_named_session(provider, auth_type, name) do
     alias TheMaestro.Repo
+    alias TheMaestro.Workers.TokenRefreshWorker
 
     case get_by_provider_and_name(provider, auth_type, name) do
       nil ->
         {:error, :not_found}
 
       saved_auth ->
+        if auth_type == :oauth do
+          _ = TokenRefreshWorker.cancel_for_auth(saved_auth)
+        end
+
         case Repo.delete(saved_auth) do
           {:ok, _} -> :ok
           error -> error

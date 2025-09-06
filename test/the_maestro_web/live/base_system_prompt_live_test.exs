@@ -5,8 +5,7 @@ defmodule TheMaestroWeb.BaseSystemPromptLiveTest do
   import TheMaestro.PromptsFixtures
 
   defp uniq_name(base), do: base <> "-" <> String.slice(Ecto.UUID.generate(), 0, 8)
-  @create_attrs %{name: "some name", prompt_text: "some prompt_text"}
-  @update_attrs %{name: "some updated name", prompt_text: "some updated prompt_text"}
+  # attributes defined inline in each test to avoid warnings-as-errors
   @invalid_attrs %{name: nil, prompt_text: nil}
   defp create_base_system_prompt(_) do
     base_system_prompt = base_system_prompt_fixture()
