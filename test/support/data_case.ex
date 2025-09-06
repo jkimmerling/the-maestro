@@ -32,9 +32,11 @@ defmodule TheMaestro.DataCase do
       :ok
     else
       :ok = Ecto.Adapters.SQL.Sandbox.checkout(TheMaestro.Repo)
+
       unless tags[:async] do
         Ecto.Adapters.SQL.Sandbox.mode(TheMaestro.Repo, {:shared, self()})
       end
+
       :ok
     end
   end

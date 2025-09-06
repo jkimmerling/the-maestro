@@ -12,6 +12,8 @@
 Application.ensure_all_started(:logger)
 
 alias TheMaestro.Auth
+alias TheMaestro.OAuthCallbackRuntime
+alias TheMaestro.OAuthState
 
 defmodule PKCEStore do
   @base Path.join(System.user_home!(), ".maestro")
@@ -44,11 +46,13 @@ defmodule Url do
     redirect_uri = System.get_env("GEMINI_OAUTH_REDIRECT_URI") ||
       "http://localhost:1455/oauth2callback"
 
+    # Match gemini-cli scopes exactly; do not include restricted
+    # generative-language.* scopes which are not registered for the
+    # published Desktop client ID used by the official CLI.
     scopes = [
       "https://www.googleapis.com/auth/cloud-platform",
       "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/userinfo.profile",
-      "https://www.googleapis.com/auth/generative-language.retriever"
+      "https://www.googleapis.com/auth/userinfo.profile"
     ]
 
     params = %{
@@ -72,11 +76,29 @@ end
 
 defmodule Main do
   def run(["start", session]) when is_binary(session) do
+    # Ensure local callback listener is running (port 1455 by default)
+    {:ok, %{port: port}} = OAuthCallbackRuntime.ensure_started(timeout_ms: 180_000)
+
     {:ok, {auth_url, pkce}} = Auth.generate_gemini_oauth_url()
-    PKCEStore.save(session, Map.from_struct(pkce))
+    pkce_map = Map.from_struct(pkce)
+    PKCEStore.save(session, pkce_map)
+
+    # Register state → context so /auth/callback can finalize automatically
+    state = pkce_map["code_verifier"] || pkce_map[:code_verifier]
+    OAuthState.put(state, %{
+      provider: :gemini,
+      session_name: session,
+      pkce_params: %{
+        code_verifier: state,
+        code_challenge: pkce_map["code_challenge"] || pkce_map[:code_challenge],
+        code_challenge_method:
+          pkce_map["code_challenge_method"] || pkce_map[:code_challenge_method]
+      }
+    })
 
     IO.puts("\nGemini OAuth URL (open in browser):\n\n" <> auth_url <> "\n")
     IO.puts("Saved PKCE to: #{PKCEStore.path(session)}")
+    IO.puts("Listening for callback at: http://localhost:#{port}/auth/callback (auto-closes on success)")
     IO.puts("\nWhen you get the authorization code, either:
   1) Finish directly:
      mix run scripts/gemini_oauth_cli_helper.exs finish #{session} AUTH_CODE
@@ -133,4 +155,3 @@ Usage:
 end
 
 Main.run(System.argv())
-

@@ -97,6 +97,60 @@ defmodule TheMaestro.AgentLoop do
     end
   end
 
+  @spec run_turn(:gemini, String.t(), String.t(), [map()], keyword()) ::
+          {:ok, result} | {:error, term()}
+  def run_turn(:gemini, session_name, model, messages, opts) when is_list(messages) do
+    adapter = Keyword.get(opts, :streaming_adapter)
+
+    stream_opts =
+      [model: model] ++ if(adapter, do: [streaming_adapter: adapter], else: [])
+
+    with {:ok, stream} <- Provider.stream_chat(:gemini, session_name, messages, stream_opts) do
+      {calls, answer, usage} = drain_stream_generic(stream, :gemini)
+      calls = dedup_calls_by_id(calls)
+
+      if calls == [] do
+        {:ok, %{final_text: answer, tools: [], usage: usage || %{}}}
+      else
+        # Execute tools and stream follow-ups until completion
+        followup_contents = build_gemini_tool_followup(messages, calls, prior_answer_text: answer)
+
+        case TheMaestro.Providers.Gemini.Streaming.stream_tool_followup(
+               session_name,
+               followup_contents,
+               model: model
+             ) do
+          {:ok, stream2} ->
+            {calls2, answer2, usage2} = drain_stream_generic(stream2, :gemini)
+
+            # If the model issues additional function calls, loop once more.
+            calls2 = dedup_calls_by_id(calls2)
+            if calls2 == [] do
+              {:ok, %{final_text: answer2, tools: calls, usage: usage2 || %{}}}
+            else
+              contents3 = build_gemini_tool_followup(messages, calls2, prior_answer_text: answer2)
+
+              case TheMaestro.Providers.Gemini.Streaming.stream_tool_followup(
+                     session_name,
+                     contents3,
+                     model: model
+                   ) do
+                {:ok, stream3} ->
+                  {_calls3, answer3, usage3} = drain_stream_generic(stream3, :gemini)
+                  {:ok, %{final_text: answer3, tools: calls ++ calls2, usage: usage3 || %{}}}
+
+                {:error, reason} ->
+                  {:error, reason}
+              end
+            end
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      end
+    end
+  end
+
   defp drain_stream(stream, _provider) do
     # Parse SSE events directly to avoid UI pipeline dependencies
     sse = TheMaestro.Providers.Http.StreamingAdapter.parse_sse_events(stream)
@@ -325,8 +379,11 @@ defmodule TheMaestro.AgentLoop do
     tool_results =
       Enum.map(outputs, fn {id, result} ->
         case result do
-          {:ok, payload} -> %{"type" => "tool_result", "tool_use_id" => id, "content" => payload}
-          {:error, reason} -> %{"type" => "tool_result", "tool_use_id" => id, "content" => to_string(reason)}
+          {:ok, payload} ->
+            %{"type" => "tool_result", "tool_use_id" => id, "content" => payload}
+
+          {:error, reason} ->
+            %{"type" => "tool_result", "tool_use_id" => id, "content" => to_string(reason)}
         end
       end)
 
@@ -356,7 +413,138 @@ defmodule TheMaestro.AgentLoop do
     {anth_messages, outputs}
   end
 
+  # ===== Gemini follow-up builder =====
+  defp build_gemini_tool_followup(original_messages, calls, opts \\ []) do
+    base_cwd = File.cwd!()
+    prior_answer_text = Keyword.get(opts, :prior_answer_text, "")
+
+    # Build tool responses by executing each call
+    outputs =
+      Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
+        case exec_gemini_tool(name, args, base_cwd) do
+          {:ok, response_map} -> {id, name, {:ok, response_map}}
+          {:error, msg} -> {id, name, {:error, msg}}
+        end
+      end)
+
+    # Build functionResponse parts preserving call ids and names
+    fr_parts =
+      Enum.map(outputs, fn {id, name, result} ->
+        response =
+          case result do
+            {:ok, map} -> map
+            {:error, msg} -> %{"error" => to_string(msg)}
+          end
+
+        %{"functionResponse" => %{"name" => name, "id" => id, "response" => response}}
+      end)
+
+    # Build assistant functionCall parts echoing the model's prior function calls
+    fc_parts =
+      Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
+        decoded_args =
+          case Jason.decode(args || "{}") do
+            {:ok, m} when is_map(m) -> m
+            _ -> %{}
+          end
+
+        %{"functionCall" => %{"name" => name, "id" => id, "args" => decoded_args}}
+      end)
+
+    # Use the last user message as continuity context
+    last_user =
+      original_messages
+      |> Enum.reverse()
+      |> Enum.find(fn m -> (Map.get(m, "role") || Map.get(m, :role)) == "user" end)
+
+    user_text =
+      case last_user do
+        %{} = m -> Map.get(m, "content") || Map.get(m, :content) || ""
+        _ -> ""
+      end
+
+    user_content =
+      [%{"text" => to_string(user_text)}]
+      |> Enum.reject(fn p -> (p["text"] || "") == "" end)
+
+    tool_msg = %{"role" => "tool", "parts" => fr_parts}
+    assistant_fc_msg = %{"role" => "assistant", "parts" => fc_parts}
+
+    base =
+      if user_content == [] do
+        []
+      else
+        [%{"role" => "user", "parts" => user_content}]
+      end
+
+    # Include prior assistant text as regular assistant content part if present
+    assistant_part =
+      case String.trim(prior_answer_text || "") do
+        "" -> []
+        txt -> [%{"role" => "assistant", "parts" => [%{"text" => txt}]}]
+      end
+
+    base ++ assistant_part ++ [assistant_fc_msg, tool_msg]
+  end
+
+  defp exec_gemini_tool(name, args_json, base_cwd) do
+    name = String.downcase(to_string(name || ""))
+
+    case Jason.decode(args_json || "{}") do
+      {:ok, args} -> do_exec_gemini_tool(name, args, base_cwd)
+      _ -> {:error, "invalid tool arguments"}
+    end
+  end
+
+  defp do_exec_gemini_tool("run_shell_command", args, base_cwd) do
+    cmd = Map.get(args, "command") || Map.get(args, :command)
+    dir = Map.get(args, "directory") || Map.get(args, :directory)
+
+    if is_binary(cmd) and byte_size(String.trim(cmd)) > 0 do
+      shell_args = %{"command" => ["bash", "-lc", cmd]}
+      shell_args = if is_binary(dir) and dir != "", do: Map.put(shell_args, "workdir", dir), else: shell_args
+
+      case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
+        {:ok, payload_json} ->
+          case Jason.decode(payload_json) do
+            {:ok, map} -> {:ok, map}
+            _ -> {:ok, %{"output" => payload_json}}
+          end
+
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, "missing command"}
+    end
+  end
+
+  defp do_exec_gemini_tool("list_directory", args, base_cwd) do
+    path = Map.get(args, "path") || base_cwd
+    path = Path.expand(path, base_cwd)
+    # Execute in the target path as working directory to avoid shell quoting needs
+    shell_args = %{"command" => ["bash", "-lc", "ls -la"], "workdir" => path}
+
+    case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
+      {:ok, payload_json} ->
+        case Jason.decode(payload_json) do
+          {:ok, map} -> {:ok, map}
+          _ -> {:ok, %{"output" => payload_json}}
+        end
+
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_exec_gemini_tool(other, args, base_cwd) do
+    # Accept our generic name too
+    case other do
+      "shell" -> do_exec_gemini_tool("run_shell_command", Map.put(args, "command", Map.get(args, "command") || Enum.join(Map.get(args, "argv") || [], " ")), base_cwd)
+      _ -> {:error, "unsupported tool: #{other}"}
+    end
+  end
+
   defp maybe_put_timeout(map, shell_timeout: nil), do: map
+
   defp maybe_put_timeout(map, shell_timeout: t) when is_integer(t) and t > 0,
     do: Map.put(map, "timeout_ms", t)
 end

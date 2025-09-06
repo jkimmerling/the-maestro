@@ -39,6 +39,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
   # ===== Internal Req streaming integration =====
   defp do_stream_request(req, method, path_or_url, body, json, timeout) do
+    req = maybe_debug_request(req, method, path_or_url, body, json)
     # Ensure SSE-friendly headers are present
     req =
       req
@@ -84,6 +85,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
   defp run_request_and_forward(req, req_opts, parent) do
     case Req.request(req, req_opts) do
       {:ok, %Req.Response{status: status} = resp} when status < 400 ->
+        maybe_debug_response_headers(status, resp.headers)
         forward_body_chunks(resp.body, parent)
         send(parent, :done)
 
@@ -96,6 +98,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
             safe_body_text(body)
           end
 
+        maybe_debug_error_response(status, resp.headers, error_text)
         send(
           parent,
           {:data,
@@ -105,13 +108,17 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
         send(parent, :done)
 
       {:error, reason} ->
+        maybe_debug_transport_error(reason)
         send(parent, {:data, error_event_payload(%{request_error: inspect(reason)})})
         send(parent, :done)
     end
   end
 
   defp forward_body_chunks(enum, parent) do
-    Enum.each(enum, fn chunk -> send(parent, {:data, chunk}) end)
+    Enum.each(enum, fn chunk ->
+      maybe_debug_chunk(chunk)
+      send(parent, {:data, chunk})
+    end)
   end
 
   defp enumerable?(term) do
@@ -192,6 +199,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
     else
       receive do
         {:data, data} when is_binary(data) ->
+          # Already logged raw chunks in forward_body_chunks
           {[data], state}
 
         :done ->
@@ -202,6 +210,56 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
           timeout_event = "event: error\ndata: stream_timeout\n\n"
           {[timeout_event], %{state | done: true}}
       end
+    end
+  end
+  # ===== Debug helpers =====
+  defp maybe_debug_request(req, method, url, body, json) do
+    if TheMaestro.DebugLog.enabled?() do
+      lvl = TheMaestro.DebugLog.level()
+      headers = TheMaestro.DebugLog.sanitize_headers(req.headers)
+
+      TheMaestro.DebugLog.puts("\n[HTTP] #{String.upcase(to_string(method))} #{url}")
+      if TheMaestro.DebugLog.level_at_least?(lvl) do
+        TheMaestro.DebugLog.print_kv("Headers", Map.new(headers))
+      end
+
+      cond do
+        is_map(json) -> TheMaestro.DebugLog.dump("Body", Jason.encode!(json))
+        is_binary(body) -> TheMaestro.DebugLog.dump("Body", body)
+        true -> :ok
+      end
+    end
+
+    req
+  end
+
+  defp maybe_debug_response_headers(status, headers) do
+    if TheMaestro.DebugLog.enabled?() do
+      h = headers |> Enum.into(%{})
+      TheMaestro.DebugLog.puts("[HTTP] Status: #{status}")
+      TheMaestro.DebugLog.print_kv("RespHeaders", h)
+    end
+  end
+
+  defp maybe_debug_error_response(status, headers, body) do
+    if TheMaestro.DebugLog.enabled?() do
+      TheMaestro.DebugLog.puts("[HTTP ERROR] Status: #{status}")
+      TheMaestro.DebugLog.print_kv("RespHeaders", Enum.into(headers, %{}))
+      TheMaestro.DebugLog.dump("Body", body)
+    end
+  end
+
+  defp maybe_debug_transport_error(reason) do
+    if TheMaestro.DebugLog.enabled?() do
+      TheMaestro.DebugLog.puts("[HTTP TRANSPORT ERROR] #{inspect(reason)}")
+    end
+  end
+
+  defp maybe_debug_chunk(chunk) do
+    if TheMaestro.DebugLog.enabled?() and TheMaestro.DebugLog.level_at_least?("everything") do
+      # Chunk is iodata or binary; convert to binary to log
+      bin = IO.iodata_to_binary(chunk)
+      TheMaestro.DebugLog.dump("[SSE CHUNK]", bin)
     end
   end
 end

@@ -179,20 +179,45 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   def build_headers(:gemini, :oauth, opts) do
     session_name = Keyword.get(opts, :session)
 
-    with {:ok, saved} <- fetch_saved(:gemini, :oauth, session_name),
-         :ok <- ensure_not_expired(saved.expires_at),
+    with {:ok, saved0} <- fetch_saved(:gemini, :oauth, session_name),
+         {:ok, saved} <- maybe_refresh_gemini_if_expired(saved0, session_name),
          {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
       {:ok,
        [
          {"authorization", token_type <> " " <> access_token},
-         {"accept", "application/json"}
+         {"accept", "application/json"},
+         {"x-goog-api-client", x_goog_api_client_header()}
        ]}
     else
       _ -> {:ok, []}
     end
   end
 
+  defp x_goog_api_client_header do
+    # Mirror gemini-cli value; static string is acceptable for compatibility
+    # gemini-cli sends gl-node/<node-version>
+    "gl-node/20.19.4"
+  end
+
   def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
+
+  # If the saved OAuth token is expired, attempt a refresh and re-fetch.
+  defp maybe_refresh_gemini_if_expired(%SavedAuthentication{} = saved, session_name) do
+    case ensure_not_expired(saved.expires_at) do
+      :ok -> {:ok, saved}
+      {:error, :expired} ->
+        # Best-effort refresh; if it fails, return the original saved to propagate error upstream
+        case TheMaestro.Providers.Gemini.OAuth.refresh_tokens(session_name) do
+          {:ok, _new} ->
+            case fetch_saved(:gemini, :oauth, session_name) do
+              {:ok, saved2} -> {:ok, saved2}
+              other -> other
+            end
+
+          _ -> {:ok, saved}
+        end
+    end
+  end
 
   defp gemini_saved_auth(opts) do
     case Keyword.get(opts, :session) do

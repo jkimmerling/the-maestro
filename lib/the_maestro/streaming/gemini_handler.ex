@@ -60,8 +60,15 @@ defmodule TheMaestro.Streaming.GeminiHandler do
   defp handle_gemini_event(event, _opts) do
     messages = []
 
+    # Cloud Code responses wrap payload under "response"
+    evt =
+      case event do
+        %{"response" => %{} = resp} -> resp
+        _ -> event
+      end
+
     # Extract candidates
-    candidates = Map.get(event, "candidates", [])
+    candidates = Map.get(evt, "candidates", [])
 
     # Process each candidate
     messages =
@@ -71,7 +78,7 @@ defmodule TheMaestro.Streaming.GeminiHandler do
 
     # Extract usage information if present
     messages =
-      if usage = Map.get(event, "usageMetadata") do
+      if usage = Map.get(evt, "usageMetadata") do
         usage_msg =
           usage_message(%{
             prompt_tokens: Map.get(usage, "promptTokenCount", 0),

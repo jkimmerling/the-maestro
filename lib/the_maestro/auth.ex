@@ -273,13 +273,18 @@ defmodule TheMaestro.Auth do
 
     redirect_uri =
       System.get_env("GEMINI_OAUTH_REDIRECT_URI") ||
-        "http://localhost:1455/oauth2callback"
+        "http://localhost:1455/auth/callback"
 
+    # IMPORTANT: Match gemini-cli personal OAuth scopes exactly.
+    # Official CLI uses only Cloud Platform + basic profile scopes.
+    # Requesting additional scopes like generative-language.retriever causes
+    # "Unregistered scope(s)" and 403 restricted_client errors for the
+    # published Desktop client_id. Keep this list in lockstep with
+    # source/gemini-cli/packages/core/src/code_assist/oauth2.ts (OAUTH_SCOPE).
     scopes = [
       "https://www.googleapis.com/auth/cloud-platform",
       "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/userinfo.profile",
-      "https://www.googleapis.com/auth/generative-language.retriever"
+      "https://www.googleapis.com/auth/userinfo.profile"
     ]
 
     params = %{

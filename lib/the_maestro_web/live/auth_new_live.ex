@@ -48,10 +48,10 @@ defmodule TheMaestroWeb.AuthNewLive do
       url_state = extract_state(url)
 
       socket =
-        if socket.assigns.provider == :openai and is_binary(url_state) do
+        if socket.assigns.provider in [:openai, :gemini] and is_binary(url_state) do
           # Save mapping so callback server can complete flow
           TheMaestro.OAuthState.put(url_state, %{
-            provider: :openai,
+            provider: socket.assigns.provider,
             session_name: socket.assigns.name,
             pkce_params: Map.new(pkce_to_kw(pkce))
           })
@@ -65,7 +65,10 @@ defmodule TheMaestroWeb.AuthNewLive do
           socket
           |> assign(:callback_port, port)
           |> assign(:callback_listening, true)
-          |> assign(:callback_deadline, System.monotonic_time(:millisecond) + 180_000)
+          |> assign(
+            :callback_deadline,
+            System.monotonic_time(:millisecond) + 180_000
+          )
         else
           socket
         end

@@ -205,7 +205,10 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
           "pattern" => %{"type" => "string"},
           "path" => %{"type" => "string"},
           "glob" => %{"type" => "string"},
-          "output_mode" => %{"type" => "string", "enum" => ["content", "files_with_matches", "count"]},
+          "output_mode" => %{
+            "type" => "string",
+            "enum" => ["content", "files_with_matches", "count"]
+          },
           "-B" => %{"type" => "number"},
           "-A" => %{"type" => "number"},
           "-C" => %{"type" => "number"},
@@ -370,7 +373,10 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
               "type" => "object",
               "properties" => %{
                 "content" => %{"type" => "string", "minLength" => 1},
-                "status" => %{"type" => "string", "enum" => ["pending", "in_progress", "completed"]},
+                "status" => %{
+                  "type" => "string",
+                  "enum" => ["pending", "in_progress", "completed"]
+                },
                 "activeForm" => %{"type" => "string", "minLength" => 1}
               },
               "required" => ["content", "status", "activeForm"],
@@ -471,7 +477,13 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
             content
 
           true ->
-            [%{"type" => "text", "text" => to_string(content), "cache_control" => %{"type" => "ephemeral"}}]
+            [
+              %{
+                "type" => "text",
+                "text" => to_string(content),
+                "cache_control" => %{"type" => "ephemeral"}
+              }
+            ]
         end
 
       %{"role" => role, "content" => blocks}

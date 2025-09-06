@@ -15,27 +15,30 @@ defmodule TheMaestro.Providers.Gemini.Models do
     if Mix.env() == :test and System.get_env("RUN_REAL_API_TEST") != "1" do
       {:error, :not_implemented}
     else
-      with {:ok, auth} <- detect_auth(session_name),
-           {:ok, req} <- ReqClientFactory.create_client(:gemini, auth, session: session_name),
-           {:ok, %Req.Response{status: 200, body: body}} <-
-             Req.request(req, method: :get, url: "/v1beta/models") do
-        decoded = if is_binary(body), do: Jason.decode!(body), else: body
-        items = Map.get(decoded, "models", [])
+      case detect_auth(session_name) do
+        {:ok, :oauth} ->
+          {:ok, [%Model{id: "gemini-2.5-pro", name: "gemini-2.5-pro", capabilities: []}]}
 
-        models =
-          Enum.map(items, fn %{"name" => id} -> %Model{id: id, name: id, capabilities: []} end)
+        {:ok, :api_key} ->
+          with {:ok, req} <- ReqClientFactory.create_client(:gemini, :api_key, session: session_name),
+               {:ok, %Req.Response{status: 200, body: body}} <-
+                 Req.request(req, method: :get, url: "/v1beta/models") do
+            decoded = if is_binary(body), do: Jason.decode!(body), else: body
+            items = Map.get(decoded, "models", [])
 
-        {:ok, models}
-      else
-        {:ok, %Req.Response{status: status, body: body}} ->
-          {:error,
-           {:http_error, status, if(is_binary(body), do: body, else: Jason.encode!(body))}}
+            models =
+              Enum.map(items, fn %{"name" => id} -> %Model{id: id, name: id, capabilities: []} end)
 
-        {:error, :not_found} ->
-          {:error, :session_not_found}
+            {:ok, models}
+          else
+            {:ok, %Req.Response{status: status, body: body}} ->
+              {:error, {:http_error, status, if(is_binary(body), do: body, else: Jason.encode!(body))}}
 
-        {:error, reason} ->
-          {:error, reason}
+            {:error, :not_found} -> {:error, :session_not_found}
+            {:error, reason} -> {:error, reason}
+          end
+
+        {:error, :not_found} -> {:error, :session_not_found}
       end
     end
   end
