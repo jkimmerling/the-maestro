@@ -86,8 +86,8 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   def build_headers(:anthropic, :oauth, opts) do
     session_name = Keyword.get(opts, :session)
 
-    with {:ok, saved} <- fetch_saved(:anthropic, :oauth, session_name),
-         :ok <- ensure_not_expired(saved.expires_at),
+    with {:ok, saved0} <- fetch_saved(:anthropic, :oauth, session_name),
+         {:ok, saved} <- maybe_refresh_anthropic_if_expired(saved0, session_name),
          {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
       # Mimic llxprt/the_maestro OAuth header shape exactly (Claude CLI parity)
       {:ok,
@@ -131,8 +131,8 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   def build_headers(:openai, :oauth, opts) do
     session_name = Keyword.get(opts, :session)
 
-    with {:ok, saved} <- fetch_saved(:openai, :oauth, session_name),
-         :ok <- ensure_not_expired(saved.expires_at),
+    with {:ok, saved0} <- fetch_saved(:openai, :oauth, session_name),
+         {:ok, saved} <- maybe_refresh_openai_if_expired(saved0, session_name),
          {:ok, access_token, _token_type} <- fetch_token(saved.credentials) do
       org_id = Application.get_env(:the_maestro, :openai, []) |> Keyword.get(:organization_id)
 
@@ -209,6 +209,30 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     if expired?(saved.expires_at) do
       _ = GeminiOAuth.refresh_tokens(session_name)
       case fetch_saved(:gemini, :oauth, session_name) do
+        {:ok, saved2} -> {:ok, saved2}
+        _ -> {:ok, saved}
+      end
+    else
+      {:ok, saved}
+    end
+  end
+
+  defp maybe_refresh_anthropic_if_expired(%SavedAuthentication{} = saved, session_name) do
+    if expired?(saved.expires_at) do
+      _ = TheMaestro.Providers.Anthropic.OAuth.refresh_tokens(session_name)
+      case fetch_saved(:anthropic, :oauth, session_name) do
+        {:ok, saved2} -> {:ok, saved2}
+        _ -> {:ok, saved}
+      end
+    else
+      {:ok, saved}
+    end
+  end
+
+  defp maybe_refresh_openai_if_expired(%SavedAuthentication{} = saved, session_name) do
+    if expired?(saved.expires_at) do
+      _ = TheMaestro.Providers.OpenAI.OAuth.refresh_tokens(session_name)
+      case fetch_saved(:openai, :oauth, session_name) do
         {:ok, saved2} -> {:ok, saved2}
         _ -> {:ok, saved}
       end

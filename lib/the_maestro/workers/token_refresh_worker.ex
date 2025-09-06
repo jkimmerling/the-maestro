@@ -162,6 +162,12 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   @spec schedule_refresh_job(String.t(), DateTime.t()) ::
           {:ok, Oban.Job.t()} | {:error, term()}
   def schedule_refresh_job(provider, expires_at) do
+    schedule_refresh_job(provider, expires_at, "temp_auth_id")
+  end
+
+  @spec schedule_refresh_job(String.t(), DateTime.t(), String.t()) ::
+          {:ok, Oban.Job.t()} | {:error, term()}
+  def schedule_refresh_job(provider, expires_at, auth_id) do
     now = DateTime.utc_now()
     total_lifetime = DateTime.diff(expires_at, now, :second)
 
@@ -179,16 +185,47 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
         refresh_at
       end
 
-    job_args = %{
-      "provider" => provider,
-      # Will be populated from database in Task 4
-      "auth_id" => "temp_auth_id",
-      "retry_count" => 0
-    }
+    job_args = %{"provider" => provider, "auth_id" => auth_id, "retry_count" => 0}
 
-    job_args
-    |> new(scheduled_at: final_refresh_at)
+    new(job_args, scheduled_at: final_refresh_at)
     |> Oban.insert()
+  end
+
+  @doc """
+  Schedule (or upsert) a refresh job for a SavedAuthentication record.
+
+  If `expires_at` is nil, schedules a conservative refresh in 45 minutes.
+  """
+  @spec schedule_for_auth(TheMaestro.SavedAuthentication.t()) ::
+          {:ok, Oban.Job.t()} | {:error, term()}
+  def schedule_for_auth(%SavedAuthentication{} = saved) do
+    provider = saved.provider |> to_string()
+    auth_id = to_string(saved.id)
+    expires_at = saved.expires_at || DateTime.add(DateTime.utc_now(), 45 * 60, :second)
+
+    schedule_refresh_job(provider, expires_at, auth_id)
+  end
+
+  @doc """
+  Cancel any scheduled/available refresh jobs for a SavedAuthentication.
+  """
+  @spec cancel_for_auth(TheMaestro.SavedAuthentication.t()) :: {non_neg_integer(), nil | [term()]}
+  def cancel_for_auth(%SavedAuthentication{} = saved) do
+    import Ecto.Query, warn: false
+    alias Oban.Job
+    alias TheMaestro.Repo
+
+    provider = saved.provider |> to_string()
+    auth_id = to_string(saved.id)
+
+    Repo.delete_all(
+      from j in Job,
+        where:
+          j.worker == ^__MODULE__ and
+            j.queue == ^to_string(__MODULE__.__info__(:attributes)[:queue] || :default) and
+            fragment("(args->>?) = ?", "provider", ^provider) and
+            fragment("(args->>?) = ?", "auth_id", ^auth_id) and j.state in ["scheduled", "available"]
+    )
   end
 
   @doc """
@@ -294,6 +331,17 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
       "anthropic" -> refresh_anthropic_token(refresh_token)
       _ -> {:error, {:unsupported_provider, provider}}
     end
+  end
+
+  @doc """
+  Foreground refresh using provider modules by session name.
+
+  Used internally if we choose to refresh via provider APIs that persist tokens
+  themselves rather than handling raw refresh token exchange here.
+  """
+  @spec provider_refresh_by_session(atom(), String.t()) :: {:ok, map()} | {:error, term()}
+  def provider_refresh_by_session(provider, session_name) when is_atom(provider) do
+    TheMaestro.Provider.refresh_tokens(provider, session_name)
   end
 
   # Update stored OAuth token in database with new credentials
