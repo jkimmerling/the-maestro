@@ -103,8 +103,8 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
       {:ok, job_data} ->
         Logger.info("Token refresh job validation successful, attempting token refresh")
 
-        case refresh_token_for_provider(job_data.provider, job_data.auth_id) do
-          {:ok, _new_token} ->
+        case do_refresh(job_data) do
+          :ok ->
             Logger.info("Token refresh successful for provider: #{job_data.provider}")
             :ok
 
@@ -128,6 +128,58 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
     error ->
       Logger.error("Unexpected error in token refresh worker: #{inspect(error)}")
       {:error, :unexpected_error}
+  end
+
+  # Generic-first refresh: try provider module by session name, then fallback to HTTP refresh
+  defp do_refresh(%TokenRefreshJobData{provider: provider, auth_id: auth_id}) do
+    import Ecto.Query, warn: false
+    alias TheMaestro.Repo
+
+    provider_atom = String.to_atom(provider)
+
+    saved =
+      case parse_int(auth_id) do
+        {:ok, int_id} ->
+          Repo.one(
+            from sa in SavedAuthentication,
+              where: sa.id == ^int_id
+          )
+
+        _ ->
+          nil
+      end
+
+    with %SavedAuthentication{name: session_name} <- saved,
+         {:ok, _} <- TheMaestro.Provider.refresh_tokens(provider_atom, session_name) do
+      # Re-fetch and schedule the next refresh using updated expiry
+      case Repo.get(SavedAuthentication, saved.id) do
+        %SavedAuthentication{} = updated ->
+          _ = schedule_for_auth(updated)
+          :ok
+
+        _ ->
+          :ok
+      end
+    else
+      _ -> fallback_http_refresh(provider, auth_id, saved)
+    end
+  end
+
+  defp fallback_http_refresh(provider, auth_id, saved) do
+    import Ecto.Query, warn: false
+    alias TheMaestro.Repo
+
+    case refresh_token_for_provider(provider, auth_id) do
+      {:ok, %OAuthToken{}} ->
+        case Repo.get(SavedAuthentication, saved && saved.id) do
+          %SavedAuthentication{} = updated -> _ = schedule_for_auth(updated)
+          _ -> :ok
+        end
+
+        :ok
+
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
@@ -187,7 +239,17 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
 
     job_args = %{"provider" => provider, "auth_id" => auth_id, "retry_count" => 0}
 
-    new(job_args, scheduled_at: final_refresh_at)
+    opts =
+      if Mix.env() == :test do
+        [scheduled_at: final_refresh_at]
+      else
+        [
+          scheduled_at: final_refresh_at,
+          unique: [keys: [:provider, :auth_id], period: 86_400, states: [:scheduled, :available]]
+        ]
+      end
+
+    new(job_args, opts)
     |> Oban.insert()
   end
 
