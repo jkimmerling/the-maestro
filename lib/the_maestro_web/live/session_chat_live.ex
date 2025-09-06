@@ -160,6 +160,11 @@ defmodule TheMaestroWeb.SessionChatLive do
                   TheMaestro.Streaming.parse_stream(stream, provider, log_unknown_events: true),
                 do: send(parent, {:ai_stream, stream_id, msg})
 
+            # Gemini streams do not emit an explicit :done message; signal completion.
+            if provider == :gemini do
+              send(parent, {:ai_stream, stream_id, %{type: :done}})
+            end
+
           {:error, reason} ->
             send(parent, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
             send(parent, {:ai_stream, stream_id, %{type: :done}})
@@ -203,7 +208,14 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp default_model_for_session(_session, :anthropic), do: "claude-3-5-sonnet"
-  defp default_model_for_session(_session, :gemini), do: "gemini-1.5-pro-latest"
+
+  defp default_model_for_session(session, :gemini) do
+    case session.agent.saved_authentication.auth_type do
+      :oauth -> "gemini-2.5-pro"
+      _ -> "gemini-1.5-pro-latest"
+    end
+  end
+
   defp default_model_for_session(_session, _), do: ""
 
   # Try to pick a valid model from the provider's list; fallback to defaults
@@ -362,8 +374,11 @@ defmodule TheMaestroWeb.SessionChatLive do
   def handle_info({:retry_stream, _attempt} = _msg, socket) do
     # Only retry if we still have a pending canonical and we are on a supported provider
     case socket.assigns do
-      %{pending_canonical: canon, used_provider: provider} when is_map(canon) and not is_nil(provider) ->
-        model = socket.assigns.used_model || default_model_for_session(socket.assigns.session, provider)
+      %{pending_canonical: canon, used_provider: provider}
+      when is_map(canon) and not is_nil(provider) ->
+        model =
+          socket.assigns.used_model || default_model_for_session(socket.assigns.session, provider)
+
         {:ok, provider_msgs} = Translator.to_provider(canon, provider)
 
         # Start a fresh streaming task with a new stream id
@@ -374,7 +389,10 @@ defmodule TheMaestroWeb.SessionChatLive do
           Task.start_link(fn ->
             case call_provider(provider, socket.assigns.used_auth_name, provider_msgs, model) do
               {:ok, stream} ->
-                for msg <- TheMaestro.Streaming.parse_stream(stream, provider, log_unknown_events: true),
+                for msg <-
+                      TheMaestro.Streaming.parse_stream(stream, provider,
+                        log_unknown_events: true
+                      ),
                     do: send(parent, {:ai_stream, stream_id, msg})
 
               {:error, reason} ->
@@ -437,18 +455,30 @@ defmodule TheMaestroWeb.SessionChatLive do
     down = String.downcase(err)
 
     cond do
-      String.contains?(down, "overloaded_error") -> true
-      String.contains?(down, "\"overloaded\"") -> true
+      String.contains?(down, "overloaded_error") ->
+        true
+
+      String.contains?(down, "\"overloaded\"") ->
+        true
+
       true ->
         case :binary.match(err, "{") do
           {idx, _} ->
             json = String.slice(err, idx..-1)
+
             case Jason.decode(json) do
-              {:ok, %{"error" => %{"type" => t}}} when is_binary(t) -> String.contains?(String.downcase(t), "overloaded")
-              {:ok, %{"type" => t}} when is_binary(t) -> String.contains?(String.downcase(t), "overloaded")
-              _ -> false
+              {:ok, %{"error" => %{"type" => t}}} when is_binary(t) ->
+                String.contains?(String.downcase(t), "overloaded")
+
+              {:ok, %{"type" => t}} when is_binary(t) ->
+                String.contains?(String.downcase(t), "overloaded")
+
+              _ ->
+                false
             end
-          :nomatch -> false
+
+          :nomatch ->
+            false
         end
     end
   end
@@ -551,6 +581,7 @@ defmodule TheMaestroWeb.SessionChatLive do
             else
               _ -> {id, {:error, "invalid bash arguments"}}
             end
+
           "shell" ->
             with {:ok, json} <- Jason.decode(args) do
               case TheMaestro.Tools.Shell.run(json, base_cwd: base_cwd) do
@@ -559,6 +590,44 @@ defmodule TheMaestroWeb.SessionChatLive do
               end
             else
               _ -> {id, {:error, "invalid shell arguments"}}
+            end
+
+          "run_shell_command" ->
+            with {:ok, json} <- Jason.decode(args) do
+              cmd = Map.get(json, "command")
+              dir = Map.get(json, "directory")
+
+              if is_binary(cmd) and byte_size(String.trim(cmd)) > 0 do
+                shell_args = %{"command" => ["bash", "-lc", cmd]}
+
+                shell_args =
+                  if is_binary(dir) and dir != "",
+                    do: Map.put(shell_args, "workdir", dir),
+                    else: shell_args
+
+                case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
+                  {:ok, payload} -> {id, {:ok, payload}}
+                  {:error, reason} -> {id, {:error, to_string(reason)}}
+                end
+              else
+                {id, {:error, "missing command"}}
+              end
+            else
+              _ -> {id, {:error, "invalid run_shell_command arguments"}}
+            end
+
+          "list_directory" ->
+            with {:ok, json} <- Jason.decode(args) do
+              path = Map.get(json, "path") || base_cwd
+              path = Path.expand(path, base_cwd)
+              shell_args = %{"command" => ["bash", "-lc", "ls -la"], "workdir" => path}
+
+              case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
+                {:ok, payload} -> {id, {:ok, payload}}
+                {:error, reason} -> {id, {:error, to_string(reason)}}
+              end
+            else
+              _ -> {id, {:error, "invalid list_directory arguments"}}
             end
 
           "apply_patch" ->
@@ -676,12 +745,16 @@ defmodule TheMaestroWeb.SessionChatLive do
             # Build Anthropic follow-up messages with tool_use + tool_result blocks
             canon = socket.assigns.pending_canonical || %{"messages" => []}
             prev_msgs = canon["messages"] || []
+
             last_user =
               prev_msgs
               |> Enum.reverse()
-              |> Enum.find(%{"role" => "user", "content" => [%{"type" => "text", "text" => ""}]}, fn m ->
-                (m["role"] || "") == "user"
-              end)
+              |> Enum.find(
+                %{"role" => "user", "content" => [%{"type" => "text", "text" => ""}]},
+                fn m ->
+                  (m["role"] || "") == "user"
+                end
+              )
 
             # Assistant tool_use content from pending calls
             tool_uses =
@@ -703,7 +776,11 @@ defmodule TheMaestroWeb.SessionChatLive do
                     %{"type" => "tool_result", "tool_use_id" => id, "content" => payload}
 
                   {:error, reason} ->
-                    %{"type" => "tool_result", "tool_use_id" => id, "content" => to_string(reason)}
+                    %{
+                      "type" => "tool_result",
+                      "tool_use_id" => id,
+                      "content" => to_string(reason)
+                    }
                 end
               end)
 
@@ -712,7 +789,7 @@ defmodule TheMaestroWeb.SessionChatLive do
                 # Prior user message for context
                 %{
                   "role" => "user",
-                  "content" => (last_user["content"] || [%{"type" => "text", "text" => ""}])
+                  "content" => last_user["content"] || [%{"type" => "text", "text" => ""}]
                 },
                 # Assistant tool_use blocks we received
                 %{"role" => "assistant", "content" => tool_uses},
@@ -731,6 +808,92 @@ defmodule TheMaestroWeb.SessionChatLive do
                         log_unknown_events: true
                       ),
                     do: send(parent, {:ai_stream, new_stream_id, msg})
+
+              {:error, reason} ->
+                send(parent, {:ai_stream, new_stream_id, %{type: :error, error: inspect(reason)}})
+                send(parent, {:ai_stream, new_stream_id, %{type: :done}})
+            end
+
+          :gemini ->
+            # Build Gemini functionResponse-based follow-up
+            last_user =
+              (socket.assigns.messages || [])
+              |> Enum.reverse()
+              |> Enum.find(fn m -> (m["role"] || "") == "user" end) || %{}
+
+            last_user_parts =
+              case last_user do
+                %{"content" => content} when is_list(content) ->
+                  # Convert OpenAI style [{"type"=>"input_text","text"=>..}] or text parts to Gemini
+                  text =
+                    case content do
+                      [%{"type" => "input_text", "text" => t} | _] -> t
+                      [%{"type" => "text", "text" => t} | _] -> t
+                      _ -> ""
+                    end
+
+                  if text == "", do: [], else: [%{"text" => text}]
+
+                _ ->
+                  []
+              end
+
+            # Map outputs (id -> result) and attach names
+            call_lookup = Map.new(socket.assigns.pending_tool_calls || [], &{&1["id"], &1})
+
+            fr_parts =
+              Enum.map(outputs, fn {id, result} ->
+                name = (call_lookup[id] || %{})["name"] || "run_shell_command"
+
+                response =
+                  case result do
+                    {:ok, payload} ->
+                      case Jason.decode(payload) do
+                        {:ok, map} -> map
+                        _ -> %{"output" => payload}
+                      end
+
+                    {:error, reason} ->
+                      %{"error" => to_string(reason)}
+                  end
+
+                %{"functionResponse" => %{"name" => name, "id" => id, "response" => response}}
+              end)
+
+            # Echo assistant functionCall parts for each pending call
+            fc_parts =
+              Enum.map(socket.assigns.pending_tool_calls || [], fn call ->
+                args =
+                  case Jason.decode(call["arguments"] || "{}") do
+                    {:ok, m} -> m
+                    _ -> %{}
+                  end
+
+                %{"functionCall" => %{"name" => call["name"], "id" => call["id"], "args" => args}}
+              end)
+
+            contents =
+              if(last_user_parts == [],
+                do: [],
+                else: [%{"role" => "user", "parts" => last_user_parts}]
+              ) ++
+                [%{"role" => "assistant", "parts" => fc_parts}] ++
+                [%{"role" => "tool", "parts" => fr_parts}]
+
+            case TheMaestro.Providers.Gemini.Streaming.stream_tool_followup(
+                   session_name,
+                   contents,
+                   model: model
+                 ) do
+              {:ok, stream} ->
+                for msg <-
+                      TheMaestro.Streaming.parse_stream(stream, provider,
+                        log_unknown_events: true
+                      ),
+                    do: send(parent, {:ai_stream, new_stream_id, msg})
+
+                # Signal completion for Gemini to trigger finalization
+                send(parent, {:ai_stream, new_stream_id, %{type: :done}})
 
               {:error, reason} ->
                 send(parent, {:ai_stream, new_stream_id, %{type: :error, error: inspect(reason)}})

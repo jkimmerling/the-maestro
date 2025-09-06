@@ -36,8 +36,10 @@ defmodule TheMaestro.Providers.Gemini.OAuth do
   @doc false
   @spec redirect_uri() :: String.t()
   def redirect_uri do
-    # Fallback to standard localhost callback used by gemini-cli
-    System.get_env("GEMINI_OAUTH_REDIRECT_URI") || "http://localhost:1455/oauth2callback"
+    # Use the shared local OAuth callback listener (Bandit) on port 1455
+    # to match our OpenAI/Codex flow and avoid copy-paste of codes.
+    # Keep override via GEMINI_OAUTH_REDIRECT_URI for flexibility.
+    System.get_env("GEMINI_OAUTH_REDIRECT_URI") || "http://localhost:1455/auth/callback"
   end
 
   @impl true

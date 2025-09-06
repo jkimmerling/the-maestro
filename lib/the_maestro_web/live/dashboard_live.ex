@@ -74,6 +74,21 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:sessions, Conversations.list_sessions_with_agents())}
   end
 
+  # Delete an agent from the dashboard Agents grid
+  def handle_event("delete_agent", %{"id" => id}, socket) do
+    agent = Agents.get_agent!(id)
+    {:ok, _} = Agents.delete_agent(agent)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Agent deleted")
+     # refresh agents and dependent selects
+     |> assign(:agents, Agents.list_agents_with_auth())
+     |> assign(:agent_options, build_agent_options())
+     # sessions may have had their agent_id nilified; refresh to reflect updated labels
+     |> assign(:sessions, Conversations.list_sessions_with_agents())}
+  end
+
   def handle_event("open_agent_modal", _params, socket) do
     cs = Agents.change_agent(%Agent{})
 

@@ -179,20 +179,46 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   def build_headers(:gemini, :oauth, opts) do
     session_name = Keyword.get(opts, :session)
 
-    with {:ok, saved} <- fetch_saved(:gemini, :oauth, session_name),
-         :ok <- ensure_not_expired(saved.expires_at),
+    with {:ok, saved0} <- fetch_saved(:gemini, :oauth, session_name),
+         {:ok, saved} <- maybe_refresh_gemini_if_expired(saved0, session_name),
          {:ok, access_token, token_type} <- fetch_token(saved.credentials) do
       {:ok,
        [
          {"authorization", token_type <> " " <> access_token},
-         {"accept", "application/json"}
+         {"accept", "application/json"},
+         {"x-goog-api-client", x_goog_api_client_header()}
        ]}
     else
       _ -> {:ok, []}
     end
   end
 
+  # Fallback must be grouped with all other build_headers/3 clauses
   def build_headers(_invalid, _auth_type, _opts), do: {:error, :invalid_provider}
+
+  defp x_goog_api_client_header do
+    # Mirror gemini-cli value; static string is acceptable for compatibility
+    # gemini-cli sends gl-node/<node-version>
+    "gl-node/20.19.4"
+  end
+
+  # If the saved OAuth token is expired, attempt a refresh and re-fetch.
+  alias TheMaestro.Providers.Gemini.OAuth, as: GeminiOAuth
+
+  defp maybe_refresh_gemini_if_expired(%SavedAuthentication{} = saved, session_name) do
+    if expired?(saved.expires_at) do
+      _ = GeminiOAuth.refresh_tokens(session_name)
+      case fetch_saved(:gemini, :oauth, session_name) do
+        {:ok, saved2} -> {:ok, saved2}
+        _ -> {:ok, saved}
+      end
+    else
+      {:ok, saved}
+    end
+  end
+
+  defp expired?(nil), do: false
+  defp expired?(%DateTime{} = ts), do: DateTime.compare(DateTime.utc_now(), ts) != :lt
 
   defp gemini_saved_auth(opts) do
     case Keyword.get(opts, :session) do

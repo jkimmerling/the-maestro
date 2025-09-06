@@ -205,7 +205,10 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
           "pattern" => %{"type" => "string"},
           "path" => %{"type" => "string"},
           "glob" => %{"type" => "string"},
-          "output_mode" => %{"type" => "string", "enum" => ["content", "files_with_matches", "count"]},
+          "output_mode" => %{
+            "type" => "string",
+            "enum" => ["content", "files_with_matches", "count"]
+          },
           "-B" => %{"type" => "number"},
           "-A" => %{"type" => "number"},
           "-C" => %{"type" => "number"},
@@ -370,7 +373,10 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
               "type" => "object",
               "properties" => %{
                 "content" => %{"type" => "string", "minLength" => 1},
-                "status" => %{"type" => "string", "enum" => ["pending", "in_progress", "completed"]},
+                "status" => %{
+                  "type" => "string",
+                  "enum" => ["pending", "in_progress", "completed"]
+                },
                 "activeForm" => %{"type" => "string", "minLength" => 1}
               },
               "required" => ["content", "status", "activeForm"],
@@ -471,7 +477,13 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
             content
 
           true ->
-            [%{"type" => "text", "text" => to_string(content), "cache_control" => %{"type" => "ephemeral"}}]
+            [
+              %{
+                "type" => "text",
+                "text" => to_string(content),
+                "cache_control" => %{"type" => "ephemeral"}
+              }
+            ]
         end
 
       %{"role" => role, "content" => blocks}
@@ -480,13 +492,13 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
 
   defp maybe_log_request(tag, %Req.Request{} = req, url, body) do
     if System.get_env("HTTP_DEBUG") in ["1", "true", "TRUE"] do
-      headers = sanitize_headers(req.headers || [])
+      headers = sanitize_headers(Enum.into(req.headers, []))
 
-      preview =
-        body
-        |> Map.update("tools", [], fn tools -> Enum.map(tools, &Map.get(&1, "name")) end)
-        |> Map.update("messages", [], fn msgs -> Enum.map(msgs, &Map.take(&1, ["role"])) end)
-        |> Map.update("system", [], fn sys -> length(List.wrap(sys)) end)
+      preview = %{
+        "tools" => Enum.map(body["tools"] || [], &Map.get(&1, "name")),
+        "messages" => Enum.map(body["messages"] || [], &Map.take(&1, ["role"])),
+        "system_count" => body["system"] |> List.wrap() |> length()
+      }
 
       IO.puts("\n📤 Anthropic #{inspect(tag)} request:")
       IO.puts("URL: #{url}")
