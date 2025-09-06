@@ -357,12 +357,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     end
   end
 
-  @spec ensure_not_expired(DateTime.t() | nil) :: :ok | {:error, :expired}
-  defp ensure_not_expired(nil), do: :ok
-
-  defp ensure_not_expired(%DateTime{} = expires_at) do
-    if DateTime.compare(DateTime.utc_now(), expires_at) == :lt, do: :ok, else: {:error, :expired}
-  end
+  # legacy helper removed; use expired?/1
 
   @spec fetch_token(map()) :: {:ok, String.t(), String.t()} | {:error, :missing_token}
   defp fetch_token(%{} = creds) do
