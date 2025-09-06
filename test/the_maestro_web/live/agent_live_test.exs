@@ -6,7 +6,7 @@ defmodule TheMaestroWeb.AgentLiveTest do
 
   defp uniq_name(base), do: base <> "-" <> Integer.to_string(System.unique_integer([:positive]))
   @create_attrs %{name: "some_name"}
-  @update_attrs %{name: "some_updated_name"}
+  # attributes defined inline in each test to avoid warnings-as-errors
   @invalid_attrs %{name: nil}
   defp create_agent(_) do
     agent = agent_fixture()

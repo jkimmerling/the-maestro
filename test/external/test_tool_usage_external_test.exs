@@ -36,7 +36,7 @@ defmodule TheMaestro.External.ToolUsageExternalTest do
               "\n🔧 Linking ChatGPTAgent to OpenAI OAuth authentication (id: #{openai_sa.id})"
             )
 
-            {:ok, updated_agent} = TheMaestro.Agents.update_agent(agent, %{auth_id: openai_sa.id})
+            {:ok, _updated_agent} = TheMaestro.Agents.update_agent(agent, %{auth_id: openai_sa.id})
             openai_sa
           else
             nil
