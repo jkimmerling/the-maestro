@@ -178,7 +178,8 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
 
         :ok
 
-      {:error, reason} -> {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -280,13 +281,18 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
     provider = saved.provider |> to_string()
     auth_id = to_string(saved.id)
 
+    # Oban stores worker as a string. Depending on Oban version it may be
+    # either "Elixir.TheMaestro.Workers.TokenRefreshWorker" or
+    # "TheMaestro.Workers.TokenRefreshWorker". Match both to be safe.
+    worker_names = [Atom.to_string(__MODULE__), inspect(__MODULE__)]
+
     Repo.delete_all(
       from j in Job,
         where:
-          j.worker == ^__MODULE__ and
-            j.queue == ^to_string(__MODULE__.__info__(:attributes)[:queue] || :default) and
+          j.worker in ^worker_names and
             fragment("(args->>?) = ?", "provider", ^provider) and
-            fragment("(args->>?) = ?", "auth_id", ^auth_id) and j.state in ["scheduled", "available"]
+            fragment("(args->>?) = ?", "auth_id", ^auth_id) and
+            j.state in ["scheduled", "available"]
     )
   end
 

@@ -9,29 +9,15 @@ defmodule TheMaestro.Providers.OpenAI.APIKey do
   @behaviour TheMaestro.Providers.Behaviours.APIKeyProvider
 
   require Logger
-  alias TheMaestro.Provider
   alias TheMaestro.Providers.Http.ReqClientFactory
-  alias TheMaestro.SavedAuthentication
+  alias TheMaestro.Providers.Shared.{APIKeyHelper, ConnectionTester}
   alias TheMaestro.Types
 
   @impl true
   @spec create_session(Types.request_opts()) :: {:ok, Types.session_id()} | {:error, term()}
   def create_session(opts) when is_list(opts) do
-    name = Keyword.get(opts, :name)
-    credentials = Keyword.get(opts, :credentials) || %{}
-    api_key = Map.get(credentials, "api_key") || Map.get(credentials, :api_key)
-
-    with :ok <- Provider.validate_session_name(name),
-         :ok <- validate_api_key(api_key),
-         {:ok, _sa} <-
-           SavedAuthentication.upsert_named_session(:openai, :api_key, name, %{
-             credentials: %{api_key: api_key},
-             expires_at: nil
-           }) do
-      {:ok, name}
-    else
-      {:error, _} = err -> err
-    end
+    # Use shared helper while maintaining EXACT same logic
+    APIKeyHelper.create_session(:openai, opts, &validate_api_key/1)
   end
 
   def create_session(_), do: {:error, :invalid_options}
@@ -39,11 +25,8 @@ defmodule TheMaestro.Providers.OpenAI.APIKey do
   @impl true
   @spec delete_session(Types.session_id()) :: :ok | {:error, term()}
   def delete_session(session_id) when is_binary(session_id) do
-    case SavedAuthentication.delete_named_session(:openai, :api_key, session_id) do
-      :ok -> :ok
-      {:error, :not_found} -> :ok
-      {:error, _} = err -> err
-    end
+    # Use shared helper - identical logic across all providers
+    APIKeyHelper.delete_session(:openai, :api_key, session_id)
   end
 
   @impl true
@@ -76,16 +59,9 @@ defmodule TheMaestro.Providers.OpenAI.APIKey do
   @impl true
   @spec test_connection(Req.Request.t()) :: :ok | {:error, term()}
   def test_connection(%Req.Request{} = req) do
-    case Req.request(req, method: :get, url: "/v1/models") do
-      {:ok, %Req.Response{status: 200}} ->
-        :ok
-
-      {:ok, %Req.Response{status: status, body: body}} ->
-        {:error, {:http_error, status, (is_binary(body) && body) || Jason.encode!(body)}}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    # CRITICAL: Keep OpenAI-specific endpoint exactly as is
+    # Only the response handling is shared
+    ConnectionTester.test_connection(req, "/v1/models")
   end
 
   # no-op

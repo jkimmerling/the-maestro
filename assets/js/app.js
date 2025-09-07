@@ -81,3 +81,13 @@ if (process.env.NODE_ENV === "development") {
   })
 }
 
+// Fallback: if OAuth popup posts completion to opener, redirect to dashboard.
+window.addEventListener("message", (e) => {
+  try {
+    if (e && e.data && e.data.source === "themaestro" && e.data.type === "oauth:completed") {
+      window.location.href = "/dashboard"
+    }
+  } catch (_) {
+    // ignore
+  }
+})

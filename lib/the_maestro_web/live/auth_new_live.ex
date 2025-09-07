@@ -9,6 +9,8 @@ defmodule TheMaestroWeb.AuthNewLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    if connected?(socket), do: TheMaestroWeb.Endpoint.subscribe("oauth:events")
+
     {:ok,
      socket
      |> assign(:page_title, "Create New Auth")
@@ -25,7 +27,8 @@ defmodule TheMaestroWeb.AuthNewLive do
      |> assign(:error, nil)
      |> assign(:callback_listening, false)
      |> assign(:callback_port, 1455)
-     |> assign(:callback_deadline, nil)}
+     |> assign(:callback_deadline, nil)
+     |> assign(:subscribed_to_oauth, connected?(socket))}
   end
 
   @impl true
@@ -43,6 +46,15 @@ defmodule TheMaestroWeb.AuthNewLive do
 
   @impl true
   def handle_event("generate_oauth_url", _params, socket) do
+    # Ensure we are subscribed before launching external flow to avoid missing the event
+    socket =
+      if !socket.assigns.subscribed_to_oauth and connected?(socket) do
+        TheMaestroWeb.Endpoint.subscribe("oauth:events")
+        assign(socket, :subscribed_to_oauth, true)
+      else
+        socket
+      end
+
     with :ok <- Provider.validate_session_name(socket.assigns.name),
          {:ok, {url, pkce}} <- oauth_url_for(socket.assigns.provider) do
       url_state = extract_state(url)
@@ -154,6 +166,15 @@ defmodule TheMaestroWeb.AuthNewLive do
           {:noreply, assign(socket, :callback_listening, false)}
         end
     end
+  end
+
+  @impl true
+  def handle_info(%{topic: "oauth:events", event: "completed", payload: payload}, socket) do
+    # Redirect on completion regardless of provider/name to avoid race/delivery timing issues
+    {:noreply,
+     socket
+     |> put_flash(:info, "OAuth completed: #{payload["provider"]}/#{payload["session_name"]}")
+     |> push_navigate(to: ~p"/dashboard")}
   end
 
   defp oauth_url_for(:openai), do: Auth.generate_openai_oauth_url()

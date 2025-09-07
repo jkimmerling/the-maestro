@@ -208,6 +208,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   defp maybe_refresh_gemini_if_expired(%SavedAuthentication{} = saved, session_name) do
     if expired?(saved.expires_at) do
       _ = GeminiOAuth.refresh_tokens(session_name)
+
       case fetch_saved(:gemini, :oauth, session_name) do
         {:ok, saved2} -> {:ok, saved2}
         _ -> {:ok, saved}
@@ -220,6 +221,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   defp maybe_refresh_anthropic_if_expired(%SavedAuthentication{} = saved, session_name) do
     if expired?(saved.expires_at) do
       _ = TheMaestro.Providers.Anthropic.OAuth.refresh_tokens(session_name)
+
       case fetch_saved(:anthropic, :oauth, session_name) do
         {:ok, saved2} -> {:ok, saved2}
         _ -> {:ok, saved}
@@ -232,6 +234,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
   defp maybe_refresh_openai_if_expired(%SavedAuthentication{} = saved, session_name) do
     if expired?(saved.expires_at) do
       _ = TheMaestro.Providers.OpenAI.OAuth.refresh_tokens(session_name)
+
       case fetch_saved(:openai, :oauth, session_name) do
         {:ok, saved2} -> {:ok, saved2}
         _ -> {:ok, saved}
@@ -357,12 +360,7 @@ defmodule TheMaestro.Providers.Http.ReqClientFactory do
     end
   end
 
-  @spec ensure_not_expired(DateTime.t() | nil) :: :ok | {:error, :expired}
-  defp ensure_not_expired(nil), do: :ok
-
-  defp ensure_not_expired(%DateTime{} = expires_at) do
-    if DateTime.compare(DateTime.utc_now(), expires_at) == :lt, do: :ok, else: {:error, :expired}
-  end
+  # removed unused ensure_not_expired/1 helper to eliminate warnings
 
   @spec fetch_token(map()) :: {:ok, String.t(), String.t()} | {:error, :missing_token}
   defp fetch_token(%{} = creds) do
