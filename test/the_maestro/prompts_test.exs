@@ -23,7 +23,8 @@ defmodule TheMaestro.PromptsTest do
 
     test "create_base_system_prompt/1 with valid data creates a base_system_prompt" do
       valid_attrs = %{
-        name: "some name-" <> Integer.to_string(System.unique_integer([:positive])),
+        # Use UUID to avoid collisions with any pre-existing rows in shared DBs
+        name: "some name-" <> Ecto.UUID.generate(),
         prompt_text: "some prompt_text"
       }
 
@@ -42,7 +43,8 @@ defmodule TheMaestro.PromptsTest do
       base_system_prompt = base_system_prompt_fixture()
 
       update_attrs = %{
-        name: "some updated name-" <> Integer.to_string(System.unique_integer([:positive])),
+        # Ensure uniqueness and keep within 50-char name limit
+        name: "some updated name-" <> binary_part(Ecto.UUID.generate(), 0, 20),
         prompt_text: "some updated prompt_text"
       }
 
