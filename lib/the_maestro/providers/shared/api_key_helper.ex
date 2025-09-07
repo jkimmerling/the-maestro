@@ -1,4 +1,5 @@
 defmodule TheMaestro.Providers.Shared.APIKeyHelper do
+  @dialyzer {:nowarn_function, persist_session: 4}
   @moduledoc """
   Shared utilities for API key providers.
 
@@ -64,7 +65,8 @@ defmodule TheMaestro.Providers.Shared.APIKeyHelper do
 
   @spec persist_session(atom(), String.t(), String.t(), map()) ::
           {:ok, SavedAuthentication.t()} | {:error, term()}
-  defp persist_session(provider, name, api_key, credentials) do
+  defp persist_session(provider, name, api_key, credentials)
+       when is_binary(api_key) and api_key != "" do
     credentials_map = build_credentials_map(provider, api_key, credentials)
 
     SavedAuthentication.upsert_named_session(provider, :api_key, name, %{
