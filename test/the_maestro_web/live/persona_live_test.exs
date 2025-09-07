@@ -4,7 +4,7 @@ defmodule TheMaestroWeb.PersonaLiveTest do
   import Phoenix.LiveViewTest
   import TheMaestro.PersonasFixtures
 
-  defp uniq_name(base), do: base <> "-" <> Integer.to_string(System.unique_integer([:positive]))
+  defp uniq_name(base), do: base <> "-" <> binary_part(Ecto.UUID.generate(), 0, 16)
   @invalid_attrs %{name: nil, prompt_text: nil}
   defp create_persona(_) do
     persona = persona_fixture()

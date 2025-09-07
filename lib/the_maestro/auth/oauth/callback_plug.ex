@@ -64,13 +64,31 @@ defmodule TheMaestro.OAuthCallbackPlug do
   defp normalize_pkce(pkce) when is_map(pkce), do: pkce
 
   defp respond(conn, {:ok, _session}) do
-    html = ~s(
-      <html><body style="font-family: system-ui;">
-        <h1>✅ OAuth Success</h1>
-        <p>You can return to the app. This window can be closed.</p>
-        <p><a href="/dashboard">Go to Dashboard</a></p>
-      </body></html>
-    )
+    html = """
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>OAuth Success</title>
+          <script>
+            (function () {
+              try {
+                if (window.opener) {
+                  window.opener.postMessage({ source: 'themaestro', type: 'oauth:completed' }, '*');
+                }
+              } catch (e) { /* ignore cross-origin */ }
+              // Give the opener a moment to handle, then close.
+              setTimeout(function(){ window.close(); }, 200);
+            })();
+          </script>
+          <style>body{font-family: system-ui;}</style>
+        </head>
+        <body>
+          <h1>✅ OAuth Success</h1>
+          <p>You can return to the app. This window can be closed.</p>
+        </body>
+      </html>
+    """
+
     send_resp(conn, 200, html)
   end
 
