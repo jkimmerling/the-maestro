@@ -260,9 +260,9 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
   defp maybe_debug_chunk(chunk) do
     if TheMaestro.DebugLog.enabled?() and TheMaestro.DebugLog.level_at_least?("everything") do
-      # Chunk is iodata or binary; convert to binary to log
       bin = IO.iodata_to_binary(chunk)
-      TheMaestro.DebugLog.dump("[SSE CHUNK]", bin)
+      # Emit raw chunk + pretty, controlled by HTTP_DEBUG_SSE_PRETTY
+      TheMaestro.DebugLog.sse_dump("[SSE CHUNK]", bin)
     end
   end
 end

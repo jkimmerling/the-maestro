@@ -70,16 +70,31 @@ defmodule TheMaestro.Providers.Gemini.CodeAssist do
             {:ok, proj}
 
           %{"currentTier" => _tier} ->
-            # Tier set but project missing; require env project like gemini-cli
-            if is_binary(project_env) and project_env != "" do
-              {:ok, project_env}
-            else
-              {:error, :project_required}
+            # Non-free tier: try to auto-select a project if none set in env
+            cond do
+              is_binary(project_env) and project_env != "" -> {:ok, project_env}
+              true -> auto_select_and_set_project(req)
             end
 
           %{"allowedTiers" => allowed} when is_list(allowed) ->
             tier_id = default_tier_id(allowed)
-            onboard_for_tier(req, tier_id, project_env)
+            # FREE uses managed project; paid tiers need a real project. If env not set,
+            # try automatic discovery to satisfy the required feature (no manual env).
+            if tier_id == "FREE" do
+              onboard_for_tier_poll(req, tier_id, nil)
+            else
+              case (project_env && project_env != "" && project_env) ||
+                     auto_select_and_set_project(req) do
+                {:ok, proj} ->
+                  onboard_for_tier_poll(req, tier_id, proj)
+
+                proj when is_binary(proj) and proj != "" ->
+                  onboard_for_tier_poll(req, tier_id, proj)
+
+                _ ->
+                  {:error, :project_required}
+              end
+            end
 
           _ ->
             {:error, :unexpected_response}
@@ -100,46 +115,56 @@ defmodule TheMaestro.Providers.Gemini.CodeAssist do
     end
   end
 
-  defp onboard_for_tier(req, tier_id, project_env) do
+  defp onboard_for_tier_poll(req, tier_id, project_env) do
+    # Build request payload per gemini-cli behavior
+    base_body = %{
+      "tierId" => tier_id,
+      "metadata" => %{
+        "ideType" => "IDE_UNSPECIFIED",
+        "platform" => "PLATFORM_UNSPECIFIED",
+        "pluginType" => "GEMINI"
+      }
+    }
+
     body =
       if tier_id == "FREE" do
-        %{
-          "tierId" => tier_id,
-          "cloudaicompanionProject" => nil,
-          "metadata" => %{
-            "ideType" => "IDE_UNSPECIFIED",
-            "platform" => "PLATFORM_UNSPECIFIED",
-            "pluginType" => "GEMINI"
-          }
-        }
+        Map.put(base_body, "cloudaicompanionProject", nil)
       else
-        %{
-          "tierId" => tier_id,
-          "cloudaicompanionProject" => project_env,
-          "metadata" => %{
-            "ideType" => "IDE_UNSPECIFIED",
-            "platform" => "PLATFORM_UNSPECIFIED",
-            "pluginType" => "GEMINI",
-            "duetProject" => project_env
-          }
-        }
+        base_body
+        |> Map.put("cloudaicompanionProject", project_env)
+        |> put_in(["metadata", "duetProject"], project_env)
       end
 
-    with {:ok, %Req.Response{status: 200, body: body}} <-
-           Req.request(req,
+    # Poll until the long-running operation completes, like gemini-cli
+    max_attempts = String.to_integer(System.get_env("GEMINI_CA_ONBOARD_ATTEMPTS") || "10")
+    delay_ms = String.to_integer(System.get_env("GEMINI_CA_ONBOARD_DELAY_MS") || "2000")
+
+    Enum.reduce_while(1..max_attempts, {:error, :lro_incomplete}, fn _attempt, _acc ->
+      case Req.request(req,
              method: :post,
              url: @cloud_code_base <> "/v1internal:onboardUser",
              json: body
-           ),
-         {:ok, proj} <- parse_onboard_lro(body) do
-      {:ok, proj}
-    else
-      {:ok, %Req.Response{status: status, body: body}} ->
-        {:error, {:http_error, status, safe_body(body)}}
+           ) do
+        {:ok, %Req.Response{status: 200, body: b}} ->
+          case parse_onboard_lro(b) do
+            {:ok, proj} ->
+              {:halt, {:ok, proj}}
 
-      {:error, reason} ->
-        {:error, {:request_error, reason}}
-    end
+            {:error, :lro_incomplete} ->
+              Process.sleep(delay_ms)
+              {:cont, {:error, :lro_incomplete}}
+
+            {:error, other} ->
+              {:halt, {:error, other}}
+          end
+
+        {:ok, %Req.Response{status: status, body: b}} ->
+          {:halt, {:error, {:http_error, status, safe_body(b)}}}
+
+        {:error, reason} ->
+          {:halt, {:error, {:request_error, reason}}}
+      end
+    end)
   end
 
   defp parse_onboard_lro(body) when is_binary(body),
@@ -171,6 +196,107 @@ defmodule TheMaestro.Providers.Gemini.CodeAssist do
     end
 
     :ok
+  end
+
+  # ===== Automatic project selection for non-free tiers =====
+  # Try to get a preferred project without user env:
+  # 1) Read Code Assist global user setting
+  # 2) Otherwise, list active GCP projects via Cloud Resource Manager and pick the first
+  # 3) Set Code Assist global user setting for future requests
+  # Returns {:ok, project_id} or {:error, :project_required}
+  defp auto_select_and_set_project(req) do
+    with {:ok, proj} <- get_global_user_project(req) do
+      {:ok, proj}
+    else
+      _ ->
+        case list_active_projects(req) do
+          {:ok, [proj | _]} ->
+            _ = set_global_user_project(req, proj)
+            {:ok, proj}
+
+          _ ->
+            {:error, :project_required}
+        end
+    end
+  end
+
+  defp get_global_user_project(req) do
+    case Req.request(req,
+           method: :get,
+           url: @cloud_code_base <> "/v1internal:getCodeAssistGlobalUserSetting"
+         ) do
+      {:ok, %Req.Response{status: 200, body: body}} ->
+        decoded = if is_binary(body), do: Jason.decode!(body), else: body
+
+        case decoded do
+          %{"cloudaicompanionProject" => proj} when is_binary(proj) and proj != "" ->
+            {:ok, proj}
+
+          _ ->
+            {:error, :not_set}
+        end
+
+      _ ->
+        {:error, :not_set}
+    end
+  end
+
+  defp set_global_user_project(req, project_id) when is_binary(project_id) do
+    body = %{"cloudaicompanionProject" => project_id, "freeTierDataCollectionOptin" => false}
+
+    case Req.request(req,
+           method: :post,
+           url: @cloud_code_base <> "/v1internal:setCodeAssistGlobalUserSetting",
+           json: body
+         ) do
+      {:ok, %Req.Response{status: 200}} -> :ok
+      _ -> :ok
+    end
+  end
+
+  defp list_active_projects(req) do
+    base = "https://cloudresourcemanager.googleapis.com/v3/projects"
+
+    collect = fn page_token, acc ->
+      params =
+        [stateFilter: "ACTIVE", pageSize: 200]
+        |> then(fn p -> if page_token, do: [{:pageToken, page_token} | p], else: p end)
+
+      case Req.request(req, method: :get, url: base, params: params) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          decoded = if is_binary(body), do: Jason.decode!(body), else: body
+
+          projects =
+            (decoded["projects"] || [])
+            |> Enum.map(fn p -> p["projectId"] || p["name"] end)
+            |> Enum.filter(&is_binary/1)
+
+          next = decoded["nextPageToken"]
+          {:ok, {next, acc ++ projects}}
+
+        {:ok, %Req.Response{status: _}} ->
+          {:error, acc}
+
+        {:error, _} ->
+          {:error, acc}
+      end
+    end
+
+    # Iterate up to 5 pages defensively
+    result =
+      Enum.reduce_while(1..5, {:ok, {nil, []}}, fn _i, {:ok, {token, acc}} ->
+        case collect.(token, acc) do
+          {:ok, {nil, acc2}} -> {:halt, {:ok, acc2}}
+          {:ok, {next, acc2}} -> {:cont, {:ok, {next, acc2}}}
+          {:error, acc2} -> {:halt, {:ok, acc2}}
+        end
+      end)
+
+    case result do
+      {:ok, []} -> {:error, :none}
+      {:ok, list} -> {:ok, list}
+      _ -> {:error, :none}
+    end
   end
 
   defp safe_body(body) when is_binary(body), do: body

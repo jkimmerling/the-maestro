@@ -14,6 +14,7 @@ defmodule TheMaestro.AgentLoop do
   """
 
   alias TheMaestro.Provider
+  require Logger
 
   @type result :: %{
           final_text: String.t(),
@@ -39,28 +40,55 @@ defmodule TheMaestro.AgentLoop do
       calls = dedup_calls_by_id(calls)
 
       if calls == [] do
-        # No tool call: do a short second prompt to ask it to complete? No, we are done.
+        # No tool call: turn is complete
         {:ok, %{final_text: answer, tools: [], usage: usage || %{}}}
       else
-        # Execute tools and post function_call_output
-        items = build_function_call_outputs(calls, answer, messages)
-
+        # Execute tools, accumulate complete follow-up history, and loop until no more calls
         followup_opts =
           [model: model, session_uuid: session_uuid] ++
             if adapter, do: [streaming_adapter: adapter], else: []
 
-        case TheMaestro.Providers.OpenAI.Streaming.stream_tool_followup(
-               session_name,
-               items,
-               followup_opts
-             ) do
-          {:ok, stream2} ->
-            {_calls2, answer2, usage2} = drain_stream(stream2, :openai)
-            {:ok, %{final_text: answer2, tools: calls, usage: usage2 || %{}}}
+        # Initial follow-up items include: original user message(s), assistant text, calls + outputs
+        history_items = build_function_call_outputs(calls, answer, messages)
+        used_calls = calls
+        last_answer = answer
 
-          {:error, reason} ->
-            {:error, reason}
-        end
+        # bounded loop to avoid accidental infinite cycles
+        max_iters = 5
+
+        {final_answer, all_calls, final_usage} =
+          Enum.reduce_while(
+            1..max_iters,
+            {last_answer, used_calls, usage, history_items},
+            fn _iter, {prev_answer, acc_calls, _prev_usage, acc_items} ->
+              case TheMaestro.Providers.OpenAI.Streaming.stream_tool_followup(
+                     session_name,
+                     acc_items,
+                     followup_opts
+                   ) do
+                {:ok, stream_n} ->
+                  {new_calls, new_answer, usage_n} = drain_stream(stream_n, :openai)
+                  new_calls = dedup_calls_by_id(new_calls)
+
+                  # If no additional calls, we are done
+                  if new_calls == [] do
+                    {:halt, {new_answer || prev_answer, acc_calls, usage_n || %{}}}
+                  else
+                    # Append only the new assistant message + new call/output items to history
+                    new_items = build_function_call_outputs(new_calls, new_answer, [])
+                    next_items = acc_items ++ new_items
+                    next_calls = acc_calls ++ new_calls
+                    {:cont, {new_answer, next_calls, usage_n || %{}, next_items}}
+                  end
+
+                {:error, reason} ->
+                  Logger.error("OpenAI follow-up streaming error: #{inspect(reason)}")
+                  {:halt, {prev_answer, acc_calls, %{}}}
+              end
+            end
+          )
+
+        {:ok, %{final_text: final_answer, tools: all_calls, usage: final_usage || %{}}}
       end
     end
   end
@@ -80,8 +108,8 @@ defmodule TheMaestro.AgentLoop do
       if calls == [] do
         {:ok, %{final_text: answer, tools: [], usage: usage || %{}}}
       else
-        # Build Anthropic follow-up items: tool_use + tool_result path
-        {anth_msgs, _outputs} = build_anthropic_tool_followup(messages, calls)
+        # Build Anthropic follow-up items using shared builder (full history + assistant text + tool_use + tool_result)
+        {anth_msgs, _outputs} = TheMaestro.Followups.Anthropic.build(messages, calls, answer)
 
         case TheMaestro.Providers.Anthropic.Streaming.stream_tool_followup(
                session_name,
@@ -323,100 +351,7 @@ defmodule TheMaestro.AgentLoop do
   end
 
   # ===== Anthropic follow-up builders =====
-  defp build_anthropic_tool_followup(original_messages, calls) do
-    base_cwd = File.cwd!()
-
-    # Assistant tool_use content from pending calls
-    tool_uses =
-      Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-        input =
-          case Jason.decode(args || "") do
-            {:ok, parsed} -> parsed
-            _ -> %{}
-          end
-
-        %{"type" => "tool_use", "id" => id, "name" => name, "input" => input}
-      end)
-
-    # Execute tools and build tool_results
-    outputs =
-      Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-        case String.downcase(name || "") do
-          "bash" ->
-            with {:ok, json} <- Jason.decode(args || "{}"),
-                 cmd when is_binary(cmd) <- Map.get(json, "command") do
-              timeout_ms =
-                case Map.get(json, "timeout") do
-                  t when is_integer(t) -> t
-                  t when is_float(t) -> trunc(t)
-                  _ -> nil
-                end
-
-              shell_args =
-                %{"command" => ["bash", "-lc", cmd]}
-                |> maybe_put_timeout(shell_timeout: timeout_ms)
-
-              case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
-                {:ok, payload} -> {id, {:ok, payload}}
-                {:error, reason} -> {id, {:error, to_string(reason)}}
-              end
-            else
-              _ -> {id, {:error, "invalid bash arguments"}}
-            end
-
-          "shell" ->
-            case Jason.decode(args || "{}") do
-              {:ok, json} ->
-                case TheMaestro.Tools.Shell.run(json, base_cwd: base_cwd) do
-                  {:ok, payload} -> {id, {:ok, payload}}
-                  {:error, reason} -> {id, {:error, to_string(reason)}}
-                end
-
-              _ ->
-                {id, {:error, "invalid shell arguments"}}
-            end
-
-          other ->
-            {id, {:error, "unsupported tool: #{other}"}}
-        end
-      end)
-
-    tool_results =
-      Enum.map(outputs, fn {id, result} ->
-        case result do
-          {:ok, payload} ->
-            %{"type" => "tool_result", "tool_use_id" => id, "content" => payload}
-
-          {:error, reason} ->
-            %{"type" => "tool_result", "tool_use_id" => id, "content" => to_string(reason)}
-        end
-      end)
-
-    # Use the last user message as context
-    last_user =
-      original_messages
-      |> Enum.reverse()
-      |> Enum.find(fn m -> (Map.get(m, "role") || Map.get(m, :role)) == "user" end)
-
-    last_user_blocks =
-      case last_user do
-        %{} ->
-          text = Map.get(last_user, "content") || Map.get(last_user, :content) || ""
-          [%{"type" => "text", "text" => to_string(text)}]
-
-        _ ->
-          [%{"type" => "text", "text" => ""}]
-      end
-
-    anth_messages =
-      [
-        %{"role" => "user", "content" => last_user_blocks},
-        %{"role" => "assistant", "content" => tool_uses},
-        %{"role" => "user", "content" => tool_results}
-      ]
-
-    {anth_messages, outputs}
-  end
+  # extractors moved to TheMaestro.Followups.Anthropic and Tools.Runtime
 
   # ===== Gemini follow-up builder =====
   defp build_gemini_tool_followup(original_messages, calls, opts) do

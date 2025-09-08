@@ -34,6 +34,7 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:thinking?, false)
      |> assign(:tool_calls, [])
      |> assign(:pending_tool_calls, [])
+     |> assign(:followup_history, [])
      |> assign(:summary, compute_summary(current_messages(session.id)))
      |> assign(:editing_latest, false)
      |> assign(:latest_json, nil)}
@@ -180,6 +181,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:stream_id, stream_id)
     |> assign(:stream_task, task)
     |> assign(:pending_canonical, updated)
+    |> assign(:followup_history, [])
     |> assign(:used_provider, provider)
     |> assign(:used_model, model)
     |> assign(:used_auth_type, auth_type)
@@ -543,6 +545,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:stream_task, nil)
     |> assign(:stream_id, nil)
     |> assign(:pending_canonical, nil)
+    |> assign(:followup_history, [])
     |> assign(:thinking?, false)
     |> assign(:used_usage, nil)
     |> assign(:tool_calls, [])
@@ -559,90 +562,9 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     outputs =
       Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-        case String.downcase(name || "") do
-          "bash" ->
-            with {:ok, json} <- Jason.decode(args),
-                 cmd when is_binary(cmd) <- Map.get(json, "command") do
-              timeout_ms =
-                case Map.get(json, "timeout") do
-                  t when is_integer(t) -> t
-                  t when is_float(t) -> trunc(t)
-                  _ -> nil
-                end
-
-              shell_args =
-                %{"command" => ["bash", "-lc", cmd]}
-                |> maybe_put_timeout(timeout_ms)
-
-              case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
-                {:ok, payload} -> {id, {:ok, payload}}
-                {:error, reason} -> {id, {:error, to_string(reason)}}
-              end
-            else
-              _ -> {id, {:error, "invalid bash arguments"}}
-            end
-
-          "shell" ->
-            with {:ok, json} <- Jason.decode(args) do
-              case TheMaestro.Tools.Shell.run(json, base_cwd: base_cwd) do
-                {:ok, payload} -> {id, {:ok, payload}}
-                {:error, reason} -> {id, {:error, to_string(reason)}}
-              end
-            else
-              _ -> {id, {:error, "invalid shell arguments"}}
-            end
-
-          "run_shell_command" ->
-            with {:ok, json} <- Jason.decode(args) do
-              cmd = Map.get(json, "command")
-              dir = Map.get(json, "directory")
-
-              if is_binary(cmd) and byte_size(String.trim(cmd)) > 0 do
-                shell_args = %{"command" => ["bash", "-lc", cmd]}
-
-                shell_args =
-                  if is_binary(dir) and dir != "",
-                    do: Map.put(shell_args, "workdir", dir),
-                    else: shell_args
-
-                case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
-                  {:ok, payload} -> {id, {:ok, payload}}
-                  {:error, reason} -> {id, {:error, to_string(reason)}}
-                end
-              else
-                {id, {:error, "missing command"}}
-              end
-            else
-              _ -> {id, {:error, "invalid run_shell_command arguments"}}
-            end
-
-          "list_directory" ->
-            with {:ok, json} <- Jason.decode(args) do
-              path = Map.get(json, "path") || base_cwd
-              path = Path.expand(path, base_cwd)
-              shell_args = %{"command" => ["bash", "-lc", "ls -la"], "workdir" => path}
-
-              case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
-                {:ok, payload} -> {id, {:ok, payload}}
-                {:error, reason} -> {id, {:error, to_string(reason)}}
-              end
-            else
-              _ -> {id, {:error, "invalid list_directory arguments"}}
-            end
-
-          "apply_patch" ->
-            with {:ok, json} <- Jason.decode(args),
-                 input when is_binary(input) <- Map.get(json, "input") do
-              case TheMaestro.Tools.ApplyPatch.run(input, base_cwd: base_cwd) do
-                {:ok, payload} -> {id, {:ok, payload}}
-                {:error, reason} -> {id, {:error, to_string(reason)}}
-              end
-            else
-              _ -> {id, {:error, "invalid apply_patch arguments"}}
-            end
-
-          other ->
-            {id, {:error, "unsupported tool: #{other}"}}
+        case TheMaestro.Tools.Runtime.exec(name, args, base_cwd) do
+          {:ok, payload} -> {id, {:ok, payload}}
+          {:error, reason} -> {id, {:error, to_string(reason)}}
         end
       end)
 
@@ -713,7 +635,13 @@ defmodule TheMaestroWeb.SessionChatLive do
           ]
       end
 
-    items = user_ctx_items ++ prior_msg ++ fc_items ++ out_items
+    history = socket.assigns.followup_history || []
+
+    # Include the user context only once at the start of a follow-up sequence
+    initial_ctx = if history == [], do: user_ctx_items, else: []
+
+    items_current = initial_ctx ++ prior_msg ++ fc_items ++ out_items
+    items = history ++ items_current
 
     provider = effective_provider(socket, socket.assigns.session)
     model = socket.assigns.used_model
@@ -742,60 +670,18 @@ defmodule TheMaestroWeb.SessionChatLive do
             end
 
           :anthropic ->
-            # Build Anthropic follow-up messages with tool_use + tool_result blocks
+            # Build Anthropic follow-up with full history and prior assistant text
             canon = socket.assigns.pending_canonical || %{"messages" => []}
-            prev_msgs = canon["messages"] || []
+            {:ok, prev_msgs} = TheMaestro.Conversations.Translator.to_provider(canon, :anthropic)
 
-            last_user =
-              prev_msgs
-              |> Enum.reverse()
-              |> Enum.find(
-                %{"role" => "user", "content" => [%{"type" => "text", "text" => ""}]},
-                fn m ->
-                  (m["role"] || "") == "user"
-                end
+            {anth_messages, _} =
+              TheMaestro.Followups.Anthropic.build(
+                prev_msgs,
+                calls,
+                socket.assigns.partial_answer || "",
+                base_cwd: base_cwd,
+                outputs: outputs
               )
-
-            # Assistant tool_use content from pending calls
-            tool_uses =
-              Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-                input =
-                  case Jason.decode(args || "") do
-                    {:ok, parsed} -> parsed
-                    _ -> %{}
-                  end
-
-                %{"type" => "tool_use", "id" => id, "name" => name, "input" => input}
-              end)
-
-            # User tool_result content from executed outputs
-            tool_results =
-              Enum.map(outputs, fn {id, result} ->
-                case result do
-                  {:ok, payload} ->
-                    %{"type" => "tool_result", "tool_use_id" => id, "content" => payload}
-
-                  {:error, reason} ->
-                    %{
-                      "type" => "tool_result",
-                      "tool_use_id" => id,
-                      "content" => to_string(reason)
-                    }
-                end
-              end)
-
-            anth_messages =
-              [
-                # Prior user message for context
-                %{
-                  "role" => "user",
-                  "content" => last_user["content"] || [%{"type" => "text", "text" => ""}]
-                },
-                # Assistant tool_use blocks we received
-                %{"role" => "assistant", "content" => tool_uses},
-                # Our tool results
-                %{"role" => "user", "content" => tool_results}
-              ]
 
             case TheMaestro.Providers.Anthropic.Streaming.stream_tool_followup(
                    session_name,
@@ -918,7 +804,8 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:stream_id, new_stream_id)
      |> assign(:stream_task, task)
      |> assign(:used_usage, nil)
-     |> assign(:thinking?, false)}
+     |> assign(:thinking?, false)
+     |> assign(:followup_history, items)}
   end
 
   defp maybe_put_timeout(map, nil), do: map

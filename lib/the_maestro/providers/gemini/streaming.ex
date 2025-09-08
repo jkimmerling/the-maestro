@@ -50,49 +50,53 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
         auth_type == :oauth ->
           # Personal OAuth flow must mimic gemini-cli and use Cloud Code endpoint
           # https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse
-          {project, session_uuid} =
-            {ensure_project_via_cloud_code(session_id), Ecto.UUID.generate()}
+          session_uuid = Ecto.UUID.generate()
 
-          Logger.debug("Gemini OAuth project resolved: #{inspect(project)}")
+          case TheMaestro.Providers.Gemini.CodeAssist.ensure_project(session_id) do
+            {:ok, project} when is_binary(project) and project != "" ->
+              Logger.debug("Gemini OAuth project resolved: #{inspect(project)}")
+              # Coerce model to a known-valid Cloud Code model
+              m0 = strip_models_prefix(model)
+              m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
 
-          if is_nil(project) or project == "" do
-            {:error, :missing_user_project}
-          else
-            # Coerce model to a known-valid Cloud Code model
-            m0 = strip_models_prefix(model)
-            m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
+              {contents, sys_inst} = split_system_instruction(ensure_gemini_contents(messages))
 
-            {contents, sys_inst} = split_system_instruction(ensure_gemini_contents(messages))
+              request =
+                %{
+                  "contents" => contents,
+                  # Keep minimal generation config; align with our default zero temperature
+                  "generationConfig" => %{
+                    "temperature" => 0,
+                    "topP" => 1
+                  },
+                  "session_id" => session_uuid
+                }
+                |> maybe_put_system_instruction(sys_inst)
+                |> maybe_put_tools(function_declarations())
 
-            request =
-              %{
-                "contents" => contents,
-                # Keep minimal generation config; align with our default zero temperature
-                "generationConfig" => %{
-                  "temperature" => 0,
-                  "topP" => 1
-                },
-                "session_id" => session_uuid
+              payload = %{
+                "model" => m,
+                "project" => project,
+                "user_prompt_id" => session_uuid,
+                "request" => request
               }
-              |> maybe_put_system_instruction(sys_inst)
-              |> maybe_put_tools(function_declarations())
 
-            payload = %{
-              "model" => m,
-              "project" => project,
-              "user_prompt_id" => session_uuid,
-              "request" => request
-            }
+              req = maybe_http_debug(req, payload)
 
-            req = maybe_http_debug(req, payload)
+              StreamingAdapter.stream_request(
+                req,
+                method: :post,
+                url:
+                  "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+                json: payload,
+                timeout: Keyword.get(opts, :timeout, :infinity)
+              )
 
-            StreamingAdapter.stream_request(
-              req,
-              method: :post,
-              url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
-              json: payload,
-              timeout: Keyword.get(opts, :timeout, :infinity)
-            )
+            {:error, :project_required} ->
+              {:error, :project_required}
+
+            _ ->
+              {:error, :missing_user_project}
           end
       end
     end
@@ -113,38 +117,43 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     with {:ok, :oauth} <- detect_auth_type(session_id),
          {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_id) do
       model = Keyword.get(opts, :model) || "gemini-2.5-pro"
-      {project, session_uuid} = {ensure_project_via_cloud_code(session_id), Ecto.UUID.generate()}
+      session_uuid = Ecto.UUID.generate()
 
-      if is_nil(project) or project == "" do
-        {:error, :missing_user_project}
-      else
-        m0 = strip_models_prefix(model)
-        m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
+      case TheMaestro.Providers.Gemini.CodeAssist.ensure_project(session_id) do
+        {:ok, project} when is_binary(project) and project != "" ->
+          m0 = strip_models_prefix(model)
+          m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
 
-        request =
-          %{
-            "contents" => contents,
-            "generationConfig" => %{"temperature" => 0, "topP" => 1},
-            "session_id" => session_uuid
+          request =
+            %{
+              "contents" => contents,
+              "generationConfig" => %{"temperature" => 0, "topP" => 1},
+              "session_id" => session_uuid
+            }
+            |> maybe_put_tools(function_declarations())
+
+          payload = %{
+            "model" => m,
+            "project" => project,
+            "user_prompt_id" => session_uuid,
+            "request" => request
           }
-          |> maybe_put_tools(function_declarations())
 
-        payload = %{
-          "model" => m,
-          "project" => project,
-          "user_prompt_id" => session_uuid,
-          "request" => request
-        }
+          req = maybe_http_debug(req, payload)
 
-        req = maybe_http_debug(req, payload)
+          StreamingAdapter.stream_request(
+            req,
+            method: :post,
+            url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+            json: payload,
+            timeout: Keyword.get(opts, :timeout, :infinity)
+          )
 
-        StreamingAdapter.stream_request(
-          req,
-          method: :post,
-          url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
-          json: payload,
-          timeout: Keyword.get(opts, :timeout, :infinity)
-        )
+        {:error, :project_required} ->
+          {:error, :project_required}
+
+        _ ->
+          {:error, :missing_user_project}
       end
     else
       {:ok, :api_key} -> {:error, :tool_followup_not_supported_for_api_key}
@@ -298,12 +307,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     String.replace_prefix(model, "models/", "")
   end
 
-  defp ensure_project_via_cloud_code(session_id) do
-    case TheMaestro.Providers.Gemini.CodeAssist.ensure_project(session_id) do
-      {:ok, proj} -> proj
-      _ -> nil
-    end
-  end
+  # removed unused ensure_project_via_cloud_code/1 helper after refactor
 
   defp maybe_http_debug(req, payload) do
     if System.get_env("HTTP_DEBUG") in ["1", "true", "TRUE"] do
