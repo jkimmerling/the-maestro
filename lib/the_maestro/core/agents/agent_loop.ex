@@ -14,6 +14,7 @@ defmodule TheMaestro.AgentLoop do
   """
 
   alias TheMaestro.Provider
+  require Logger
 
   @type result :: %{
           final_text: String.t(),
@@ -39,28 +40,55 @@ defmodule TheMaestro.AgentLoop do
       calls = dedup_calls_by_id(calls)
 
       if calls == [] do
-        # No tool call: do a short second prompt to ask it to complete? No, we are done.
+        # No tool call: turn is complete
         {:ok, %{final_text: answer, tools: [], usage: usage || %{}}}
       else
-        # Execute tools and post function_call_output
-        items = build_function_call_outputs(calls, answer, messages)
-
+        # Execute tools, accumulate complete follow-up history, and loop until no more calls
         followup_opts =
           [model: model, session_uuid: session_uuid] ++
             if adapter, do: [streaming_adapter: adapter], else: []
 
-        case TheMaestro.Providers.OpenAI.Streaming.stream_tool_followup(
-               session_name,
-               items,
-               followup_opts
-             ) do
-          {:ok, stream2} ->
-            {_calls2, answer2, usage2} = drain_stream(stream2, :openai)
-            {:ok, %{final_text: answer2, tools: calls, usage: usage2 || %{}}}
+        # Initial follow-up items include: original user message(s), assistant text, calls + outputs
+        history_items = build_function_call_outputs(calls, answer, messages)
+        used_calls = calls
+        last_answer = answer
 
-          {:error, reason} ->
-            {:error, reason}
-        end
+        # bounded loop to avoid accidental infinite cycles
+        max_iters = 5
+
+        {final_answer, all_calls, final_usage} =
+          Enum.reduce_while(
+            1..max_iters,
+            {last_answer, used_calls, usage, history_items},
+            fn _iter, {prev_answer, acc_calls, _prev_usage, acc_items} ->
+              case TheMaestro.Providers.OpenAI.Streaming.stream_tool_followup(
+                     session_name,
+                     acc_items,
+                     followup_opts
+                   ) do
+                {:ok, stream_n} ->
+                  {new_calls, new_answer, usage_n} = drain_stream(stream_n, :openai)
+                  new_calls = dedup_calls_by_id(new_calls)
+
+                  # If no additional calls, we are done
+                  if new_calls == [] do
+                    {:halt, {new_answer || prev_answer, acc_calls, usage_n || %{}}}
+                  else
+                    # Append only the new assistant message + new call/output items to history
+                    new_items = build_function_call_outputs(new_calls, new_answer, [])
+                    next_items = acc_items ++ new_items
+                    next_calls = acc_calls ++ new_calls
+                    {:cont, {new_answer, next_calls, usage_n || %{}, next_items}}
+                  end
+
+                {:error, reason} ->
+                  Logger.error("OpenAI follow-up streaming error: #{inspect(reason)}")
+                  {:halt, {prev_answer, acc_calls, %{}}}
+              end
+            end
+          )
+
+        {:ok, %{final_text: final_answer, tools: all_calls, usage: final_usage || %{}}}
       end
     end
   end

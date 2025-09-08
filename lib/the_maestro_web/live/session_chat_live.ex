@@ -34,6 +34,7 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:thinking?, false)
      |> assign(:tool_calls, [])
      |> assign(:pending_tool_calls, [])
+     |> assign(:followup_history, [])
      |> assign(:summary, compute_summary(current_messages(session.id)))
      |> assign(:editing_latest, false)
      |> assign(:latest_json, nil)}
@@ -180,6 +181,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:stream_id, stream_id)
     |> assign(:stream_task, task)
     |> assign(:pending_canonical, updated)
+    |> assign(:followup_history, [])
     |> assign(:used_provider, provider)
     |> assign(:used_model, model)
     |> assign(:used_auth_type, auth_type)
@@ -543,6 +545,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:stream_task, nil)
     |> assign(:stream_id, nil)
     |> assign(:pending_canonical, nil)
+    |> assign(:followup_history, [])
     |> assign(:thinking?, false)
     |> assign(:used_usage, nil)
     |> assign(:tool_calls, [])
@@ -713,7 +716,13 @@ defmodule TheMaestroWeb.SessionChatLive do
           ]
       end
 
-    items = user_ctx_items ++ prior_msg ++ fc_items ++ out_items
+    history = socket.assigns.followup_history || []
+
+    # Include the user context only once at the start of a follow-up sequence
+    initial_ctx = if history == [], do: user_ctx_items, else: []
+
+    items_current = initial_ctx ++ prior_msg ++ fc_items ++ out_items
+    items = history ++ items_current
 
     provider = effective_provider(socket, socket.assigns.session)
     model = socket.assigns.used_model
@@ -918,7 +927,8 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:stream_id, new_stream_id)
      |> assign(:stream_task, task)
      |> assign(:used_usage, nil)
-     |> assign(:thinking?, false)}
+     |> assign(:thinking?, false)
+     |> assign(:followup_history, items)}
   end
 
   defp maybe_put_timeout(map, nil), do: map
