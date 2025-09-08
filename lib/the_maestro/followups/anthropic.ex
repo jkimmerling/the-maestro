@@ -23,7 +23,14 @@ defmodule TheMaestro.Followups.Anthropic do
     tool_uses = build_tool_uses(calls)
     tool_results = build_tool_results(outputs)
     assistant_blocks = build_assistant_blocks(prior_answer_text, tool_uses)
-    anth_messages = original_messages ++ [%{"role" => "assistant", "content" => assistant_blocks}, %{"role" => "user", "content" => tool_results}]
+
+    anth_messages =
+      original_messages ++
+        [
+          %{"role" => "assistant", "content" => assistant_blocks},
+          %{"role" => "user", "content" => tool_results}
+        ]
+
     {anth_messages, outputs}
   end
 
@@ -40,10 +47,11 @@ defmodule TheMaestro.Followups.Anthropic do
 
   defp build_tool_uses(calls) do
     Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-      input = case Jason.decode(args || "") do
-        {:ok, parsed} -> parsed
-        _ -> %{}
-      end
+      input =
+        case Jason.decode(args || "") do
+          {:ok, parsed} -> parsed
+          _ -> %{}
+        end
 
       %{"type" => "tool_use", "id" => id, "name" => name, "input" => input}
     end)
@@ -52,8 +60,11 @@ defmodule TheMaestro.Followups.Anthropic do
   defp build_tool_results(outputs) do
     Enum.map(outputs, fn {id, result} ->
       case result do
-        {:ok, payload} -> %{"type" => "tool_result", "tool_use_id" => id, "content" => payload}
-        {:error, reason} -> %{"type" => "tool_result", "tool_use_id" => id, "content" => to_string(reason)}
+        {:ok, payload} ->
+          %{"type" => "tool_result", "tool_use_id" => id, "content" => payload}
+
+        {:error, reason} ->
+          %{"type" => "tool_result", "tool_use_id" => id, "content" => to_string(reason)}
       end
     end)
   end

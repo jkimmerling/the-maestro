@@ -38,7 +38,8 @@ defmodule TheMaestro.Tools.Runtime do
           {:error, reason} -> {:error, reason}
         end
 
-      {:error, reason} -> {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -71,7 +72,8 @@ defmodule TheMaestro.Tools.Runtime do
           _ -> {:error, "invalid apply_patch arguments"}
         end
 
-      {:error, reason} -> {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -100,6 +102,7 @@ defmodule TheMaestro.Tools.Runtime do
     case Map.get(args, "file_path") || Map.get(args, :file_path) do
       path when is_binary(path) ->
         trimmed = String.trim(path)
+
         if trimmed == "" do
           {:error, "missing file_path"}
         else
@@ -107,7 +110,8 @@ defmodule TheMaestro.Tools.Runtime do
           under_workspace(abs, base_cwd)
         end
 
-      _ -> {:error, "missing file_path"}
+      _ ->
+        {:error, "missing file_path"}
     end
   end
 
@@ -119,7 +123,9 @@ defmodule TheMaestro.Tools.Runtime do
   end
 
   defp under_workspace(abs, base) do
-    if String.starts_with?(abs, base), do: {:ok, abs}, else: {:error, "requested path outside workspace"}
+    if String.starts_with?(abs, base),
+      do: {:ok, abs},
+      else: {:error, "requested path outside workspace"}
   end
 
   defp normalize_int(nil), do: nil

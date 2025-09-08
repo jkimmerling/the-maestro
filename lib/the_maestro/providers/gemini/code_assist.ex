@@ -79,7 +79,7 @@ defmodule TheMaestro.Providers.Gemini.CodeAssist do
 
           %{"allowedTiers" => allowed} when is_list(allowed) ->
             tier_id = default_tier_id(allowed)
-            onboard_for_tier(req, tier_id, project_env)
+            onboard_for_tier_poll(req, tier_id, project_env)
 
           _ ->
             {:error, :unexpected_response}
@@ -100,46 +100,56 @@ defmodule TheMaestro.Providers.Gemini.CodeAssist do
     end
   end
 
-  defp onboard_for_tier(req, tier_id, project_env) do
+  defp onboard_for_tier_poll(req, tier_id, project_env) do
+    # Build request payload per gemini-cli behavior
+    base_body = %{
+      "tierId" => tier_id,
+      "metadata" => %{
+        "ideType" => "IDE_UNSPECIFIED",
+        "platform" => "PLATFORM_UNSPECIFIED",
+        "pluginType" => "GEMINI"
+      }
+    }
+
     body =
       if tier_id == "FREE" do
-        %{
-          "tierId" => tier_id,
-          "cloudaicompanionProject" => nil,
-          "metadata" => %{
-            "ideType" => "IDE_UNSPECIFIED",
-            "platform" => "PLATFORM_UNSPECIFIED",
-            "pluginType" => "GEMINI"
-          }
-        }
+        Map.put(base_body, "cloudaicompanionProject", nil)
       else
-        %{
-          "tierId" => tier_id,
-          "cloudaicompanionProject" => project_env,
-          "metadata" => %{
-            "ideType" => "IDE_UNSPECIFIED",
-            "platform" => "PLATFORM_UNSPECIFIED",
-            "pluginType" => "GEMINI",
-            "duetProject" => project_env
-          }
-        }
+        base_body
+        |> Map.put("cloudaicompanionProject", project_env)
+        |> put_in(["metadata", "duetProject"], project_env)
       end
 
-    with {:ok, %Req.Response{status: 200, body: body}} <-
-           Req.request(req,
+    # Poll until the long-running operation completes, like gemini-cli
+    max_attempts = String.to_integer(System.get_env("GEMINI_CA_ONBOARD_ATTEMPTS") || "10")
+    delay_ms = String.to_integer(System.get_env("GEMINI_CA_ONBOARD_DELAY_MS") || "2000")
+
+    Enum.reduce_while(1..max_attempts, {:error, :lro_incomplete}, fn attempt, _acc ->
+      case Req.request(req,
              method: :post,
              url: @cloud_code_base <> "/v1internal:onboardUser",
              json: body
-           ),
-         {:ok, proj} <- parse_onboard_lro(body) do
-      {:ok, proj}
-    else
-      {:ok, %Req.Response{status: status, body: body}} ->
-        {:error, {:http_error, status, safe_body(body)}}
+           ) do
+        {:ok, %Req.Response{status: 200, body: b}} ->
+          case parse_onboard_lro(b) do
+            {:ok, proj} ->
+              {:halt, {:ok, proj}}
 
-      {:error, reason} ->
-        {:error, {:request_error, reason}}
-    end
+            {:error, :lro_incomplete} ->
+              Process.sleep(delay_ms)
+              {:cont, {:error, :lro_incomplete}}
+
+            {:error, other} ->
+              {:halt, {:error, other}}
+          end
+
+        {:ok, %Req.Response{status: status, body: b}} ->
+          {:halt, {:error, {:http_error, status, safe_body(b)}}}
+
+        {:error, reason} ->
+          {:halt, {:error, {:request_error, reason}}}
+      end
+    end)
   end
 
   defp parse_onboard_lro(body) when is_binary(body),
