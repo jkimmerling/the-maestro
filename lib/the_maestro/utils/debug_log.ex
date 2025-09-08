@@ -84,6 +84,7 @@ defmodule TheMaestro.DebugLog do
 
   defp try_decode_json(str) do
     trimmed = String.trim(str)
+
     if String.starts_with?(trimmed, ["{", "["]) do
       Jason.decode(str)
     else

@@ -108,8 +108,8 @@ defmodule TheMaestro.AgentLoop do
       if calls == [] do
         {:ok, %{final_text: answer, tools: [], usage: usage || %{}}}
       else
-        # Build Anthropic follow-up items: tool_use + tool_result path
-        {anth_msgs, _outputs} = build_anthropic_tool_followup(messages, calls)
+        # Build Anthropic follow-up items using shared builder (full history + assistant text + tool_use + tool_result)
+        {anth_msgs, _outputs} = TheMaestro.Followups.Anthropic.build(messages, calls, answer)
 
         case TheMaestro.Providers.Anthropic.Streaming.stream_tool_followup(
                session_name,
@@ -351,100 +351,7 @@ defmodule TheMaestro.AgentLoop do
   end
 
   # ===== Anthropic follow-up builders =====
-  defp build_anthropic_tool_followup(original_messages, calls) do
-    base_cwd = File.cwd!()
-
-    # Assistant tool_use content from pending calls
-    tool_uses =
-      Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-        input =
-          case Jason.decode(args || "") do
-            {:ok, parsed} -> parsed
-            _ -> %{}
-          end
-
-        %{"type" => "tool_use", "id" => id, "name" => name, "input" => input}
-      end)
-
-    # Execute tools and build tool_results
-    outputs =
-      Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-        case String.downcase(name || "") do
-          "bash" ->
-            with {:ok, json} <- Jason.decode(args || "{}"),
-                 cmd when is_binary(cmd) <- Map.get(json, "command") do
-              timeout_ms =
-                case Map.get(json, "timeout") do
-                  t when is_integer(t) -> t
-                  t when is_float(t) -> trunc(t)
-                  _ -> nil
-                end
-
-              shell_args =
-                %{"command" => ["bash", "-lc", cmd]}
-                |> maybe_put_timeout(shell_timeout: timeout_ms)
-
-              case TheMaestro.Tools.Shell.run(shell_args, base_cwd: base_cwd) do
-                {:ok, payload} -> {id, {:ok, payload}}
-                {:error, reason} -> {id, {:error, to_string(reason)}}
-              end
-            else
-              _ -> {id, {:error, "invalid bash arguments"}}
-            end
-
-          "shell" ->
-            case Jason.decode(args || "{}") do
-              {:ok, json} ->
-                case TheMaestro.Tools.Shell.run(json, base_cwd: base_cwd) do
-                  {:ok, payload} -> {id, {:ok, payload}}
-                  {:error, reason} -> {id, {:error, to_string(reason)}}
-                end
-
-              _ ->
-                {id, {:error, "invalid shell arguments"}}
-            end
-
-          other ->
-            {id, {:error, "unsupported tool: #{other}"}}
-        end
-      end)
-
-    tool_results =
-      Enum.map(outputs, fn {id, result} ->
-        case result do
-          {:ok, payload} ->
-            %{"type" => "tool_result", "tool_use_id" => id, "content" => payload}
-
-          {:error, reason} ->
-            %{"type" => "tool_result", "tool_use_id" => id, "content" => to_string(reason)}
-        end
-      end)
-
-    # Use the last user message as context
-    last_user =
-      original_messages
-      |> Enum.reverse()
-      |> Enum.find(fn m -> (Map.get(m, "role") || Map.get(m, :role)) == "user" end)
-
-    last_user_blocks =
-      case last_user do
-        %{} ->
-          text = Map.get(last_user, "content") || Map.get(last_user, :content) || ""
-          [%{"type" => "text", "text" => to_string(text)}]
-
-        _ ->
-          [%{"type" => "text", "text" => ""}]
-      end
-
-    anth_messages =
-      [
-        %{"role" => "user", "content" => last_user_blocks},
-        %{"role" => "assistant", "content" => tool_uses},
-        %{"role" => "user", "content" => tool_results}
-      ]
-
-    {anth_messages, outputs}
-  end
+  # extractors moved to TheMaestro.Followups.Anthropic and Tools.Runtime
 
   # ===== Gemini follow-up builder =====
   defp build_gemini_tool_followup(original_messages, calls, opts) do
