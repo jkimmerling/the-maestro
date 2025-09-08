@@ -307,12 +307,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     String.replace_prefix(model, "models/", "")
   end
 
-  defp ensure_project_via_cloud_code(session_id) do
-    case TheMaestro.Providers.Gemini.CodeAssist.ensure_project(session_id) do
-      {:ok, proj} -> proj
-      _ -> nil
-    end
-  end
+  # removed unused ensure_project_via_cloud_code/1 helper after refactor
 
   defp maybe_http_debug(req, payload) do
     if System.get_env("HTTP_DEBUG") in ["1", "true", "TRUE"] do
