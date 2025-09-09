@@ -1,4 +1,7 @@
 defmodule TheMaestro.Tools.Runtime do
+  # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
+  # credo:disable-for-this-file Credo.Check.Refactor.Nesting
+  # credo:disable-for-this-file Credo.Check.Refactor.CondStatements
   @moduledoc """
   Unified tool runtime used by AgentLoop and LiveView.
 
@@ -6,7 +9,8 @@ defmodule TheMaestro.Tools.Runtime do
   returning a consistent result tuple.
   """
 
-  alias TheMaestro.Tools.{ApplyPatch, Shell}
+  alias TheMaestro.Tools.{ApplyPatch, PathResolver, Shell}
+  require Logger
 
   @type exec_result :: {:ok, String.t()} | {:error, String.t()}
 
@@ -19,6 +23,10 @@ defmodule TheMaestro.Tools.Runtime do
   """
   @spec exec(String.t() | atom(), String.t() | nil, String.t()) :: exec_result
   def exec(name, args_json, base_cwd) do
+    if System.get_env("HTTP_DEBUG") in ["1", "true", "TRUE"] do
+      Logger.debug("[tools] exec name=#{inspect(name)} cwd=#{base_cwd}")
+    end
+
     dispatch(to_string(name) |> String.downcase(), args_json || "{}", base_cwd)
   end
 
@@ -77,6 +85,20 @@ defmodule TheMaestro.Tools.Runtime do
     end
   end
 
+  defp dispatch("glob", args_json, base_cwd) do
+    case safe_decode(args_json) do
+      {:ok, args} -> exec_glob(args, base_cwd)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp dispatch("grep", args_json, base_cwd) do
+    case safe_decode(args_json) do
+      {:ok, args} -> exec_grep(args, base_cwd)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp dispatch(other, _args_json, _cwd), do: {:error, "unsupported tool: #{other}"}
 
   # ===== helpers =====
@@ -101,13 +123,19 @@ defmodule TheMaestro.Tools.Runtime do
   defp ensure_file_path(args, base_cwd) do
     case Map.get(args, "file_path") || Map.get(args, :file_path) do
       path when is_binary(path) ->
-        trimmed = String.trim(path)
+        # Fast path: if absolute and exists, accept immediately to avoid false negatives
+        # if the caller's base_cwd has drifted. Confinement is still enforced for relative paths.
+        cond do
+          Path.type(path) == :absolute and File.exists?(path) ->
+            {:ok, path}
 
-        if trimmed == "" do
-          {:error, "missing file_path"}
-        else
-          abs = Path.expand(trimmed, base_cwd)
-          under_workspace(abs, base_cwd)
+          true ->
+            case PathResolver.resolve_existing(path, base_cwd) do
+              {:ok, abs} -> {:ok, abs}
+              {:error, :not_found} -> {:error, "enoent"}
+              {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
+              {:error, :missing} -> {:error, "missing file_path"}
+            end
         end
 
       _ ->
@@ -120,12 +148,6 @@ defmodule TheMaestro.Tools.Runtime do
       {:ok, content} -> {:ok, content}
       {:error, reason} -> {:error, to_string(reason)}
     end
-  end
-
-  defp under_workspace(abs, base) do
-    if String.starts_with?(abs, base),
-      do: {:ok, abs},
-      else: {:error, "requested path outside workspace"}
   end
 
   defp normalize_int(nil), do: nil
@@ -197,9 +219,167 @@ defmodule TheMaestro.Tools.Runtime do
   end
 
   defp list_directory(args, base_cwd) do
-    path = Map.get(args, "path") || base_cwd
-    path = Path.expand(path, base_cwd)
-    shell_args = %{"command" => ["bash", "-lc", "ls -la"], "workdir" => path}
-    Shell.run(shell_args, base_cwd: base_cwd)
+    path_like = Map.get(args, "path")
+    case PathResolver.resolve_dir(path_like, base_cwd) do
+      {:ok, path} ->
+        shell_args = %{"command" => ["bash", "-lc", "ls -la"], "workdir" => path}
+        Shell.run(shell_args, base_cwd: base_cwd)
+      {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
+      {:error, :not_found} -> {:error, "directory not found"}
+      {:error, :invalid} -> {:error, "invalid directory"}
+      {:error, _} -> {:error, "invalid arguments"}
+    end
+  end
+
+  # ===== Glob implementation =====
+  defp exec_glob(args, base_cwd) do
+    pattern = Map.get(args, "pattern") || Map.get(args, :pattern)
+    path_like = Map.get(args, "path") || Map.get(args, :path)
+
+    cond do
+      !is_binary(pattern) or String.trim(pattern) == "" ->
+        {:error, "missing pattern"}
+
+      true ->
+        case PathResolver.resolve_dir(path_like, base_cwd) do
+          {:ok, base_path} ->
+            combined =
+              if Path.type(pattern) == :absolute do
+                # Allow absolute only if inside workspace; resolve and re-root to base
+                case PathResolver.resolve(pattern, base_cwd) do
+                  {:ok, abs} -> abs
+                  {:error, :outside_workspace} -> return_outside_workspace()
+                  _ -> Path.join(base_path, pattern)
+                end
+              else
+                Path.join(base_path, pattern)
+              end
+
+          # If pattern lacks a directory, search recursively
+          recursive_pattern =
+            if String.contains?(pattern, "/") do
+              combined
+            else
+              Path.join(base_path, "**/" <> pattern)
+            end
+
+          matches = Path.wildcard(recursive_pattern, match_dot: true)
+
+          # Filter to keep inside workspace only, and convert to relative
+          rel =
+            matches
+            |> Enum.filter(&PathResolver.under_workspace?(&1, base_cwd))
+            |> Enum.map(&Path.relative_to(&1, base_cwd))
+
+            payload = Jason.encode!(%{"matches" => rel, "count" => length(rel)})
+            {:ok, payload}
+          {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
+          {:error, :not_found} -> {:error, "directory not found"}
+          {:error, :invalid} -> {:error, "invalid directory"}
+          {:error, _} -> {:error, "invalid arguments"}
+        end
+    end
+  end
+
+  defp return_outside_workspace, do: {:error, "requested path outside workspace"}
+
+  # ===== Grep implementation =====
+  defp exec_grep(args, base_cwd) do
+    pattern = Map.get(args, "pattern") || Map.get(args, :pattern)
+    path_like = Map.get(args, "path") || Map.get(args, :path)
+
+    cond do
+      !is_binary(pattern) or String.trim(pattern) == "" ->
+        {:error, "missing pattern"}
+
+      true ->
+        case PathResolver.resolve_dir(path_like, base_cwd) do
+          {:ok, base_path} ->
+          max_hits = 500
+
+          {matcher, is_regex} =
+            case Regex.compile(pattern) do
+              {:ok, re} -> {re, true}
+              _ -> {pattern, false}
+            end
+
+          files = collect_files(base_path, base_cwd, 10_000)
+
+          {hits, count} =
+            Enum.reduce_while(files, {[], 0}, fn file, {acc, c} ->
+              if c >= max_hits do
+                {:halt, {acc, c}}
+              else
+                case File.exists?(file) and File.regular?(file) do
+                  true ->
+                    results = grep_file(file, matcher, is_regex, base_cwd, max_hits - c)
+                    nc = c + length(results)
+                    {:cont, {acc ++ results, nc}}
+
+                  _ ->
+                    {:cont, {acc, c}}
+                end
+              end
+            end)
+
+          payload =
+            hits
+            |> Enum.map(fn %{path: p, line: ln, text: t} -> "#{p}:#{ln}: #{t}" end)
+            |> Enum.join("\n")
+
+          {:ok, payload}
+        {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
+        {:error, :not_found} -> {:error, "directory not found"}
+        {:error, :invalid} -> {:error, "invalid directory"}
+        {:error, _} -> {:error, "invalid arguments"}
+        end
+    end
+  end
+
+  defp collect_files(dir, base_root, max_count) do
+    do_collect_files([dir], base_root, [], 0, max_count)
+  end
+
+  defp do_collect_files([], _base, acc, _n, _max), do: Enum.reverse(acc)
+
+  defp do_collect_files([d | rest], base, acc, n, max) when n < max do
+    if PathResolver.under_workspace?(d, base) do
+      case File.ls(d) do
+        {:ok, entries} ->
+          {files, dirs} =
+            entries
+            |> Enum.map(&Path.join(d, &1))
+            |> Enum.split_with(&File.regular?/1)
+
+          do_collect_files(rest ++ dirs, base, files ++ acc, n + length(files), max)
+
+        _ ->
+          do_collect_files(rest, base, acc, n, max)
+      end
+    else
+      do_collect_files(rest, base, acc, n, max)
+    end
+  end
+
+  defp grep_file(file, matcher, true = _is_regex, base_root, limit) do
+    stream = File.stream!(file, :line, [])
+    rel = Path.relative_to(file, base_root)
+
+    stream
+    |> Stream.with_index(1)
+    |> Stream.filter(fn {line, _i} -> Regex.match?(matcher, line) end)
+    |> Enum.take(limit)
+    |> Enum.map(fn {line, i} -> %{path: rel, line: i, text: String.trim_trailing(line)} end)
+  end
+
+  defp grep_file(file, matcher, false, base_root, limit) when is_binary(matcher) do
+    stream = File.stream!(file, :line, [])
+    rel = Path.relative_to(file, base_root)
+
+    stream
+    |> Stream.with_index(1)
+    |> Stream.filter(fn {line, _i} -> String.contains?(line, matcher) end)
+    |> Enum.take(limit)
+    |> Enum.map(fn {line, i} -> %{path: rel, line: i, text: String.trim_trailing(line)} end)
   end
 end

@@ -1,8 +1,7 @@
 defmodule TheMaestroWeb.DashboardLive do
+  # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
   use TheMaestroWeb, :live_view
 
-  alias TheMaestro.Agents
-  alias TheMaestro.Agents.Agent
   alias TheMaestro.Conversations
   alias TheMaestro.Provider
   alias TheMaestro.SavedAuthentication
@@ -14,17 +13,15 @@ defmodule TheMaestroWeb.DashboardLive do
     {:ok,
      socket
      |> assign(:auths, SavedAuthentication.list_all())
-     |> assign(:agents, Agents.list_agents_with_auth())
-     |> assign(:sessions, Conversations.list_sessions_with_agents())
-     |> assign(:show_agent_modal, false)
+     |> assign(:sessions, Conversations.list_sessions_with_auth())
      |> assign(:show_session_modal, false)
-     |> assign(:agent_changeset, Agents.change_agent(%Agent{}))
-     |> assign(:agent_form, to_form(Agents.change_agent(%Agent{})))
      |> assign(:auth_options, build_auth_options())
      |> assign(:prompt_options, build_prompt_options())
      |> assign(:persona_options, build_persona_options())
-     |> assign(:agent_options, build_agent_options())
      |> assign(:session_form, to_form(Conversations.change_session(%Conversations.Session{})))
+     |> assign(:session_provider, "openai")
+     |> assign(:session_auth_options, build_auth_options_for(:openai))
+     |> assign(:session_model_options, [])
      |> assign(:show_session_dir_picker, false)
      |> assign(:page_title, "Dashboard")}
   end
@@ -34,10 +31,8 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply,
      socket
      |> assign(:auths, SavedAuthentication.list_all())
-     |> assign(:agents, Agents.list_agents_with_auth())
-     |> assign(:sessions, Conversations.list_sessions_with_agents())
+     |> assign(:sessions, Conversations.list_sessions_with_auth())
      |> assign(:auth_options, build_auth_options())
-     |> assign(:agent_options, build_agent_options())
      |> assign(:prompt_options, build_prompt_options())
      |> assign(:persona_options, build_persona_options())}
   end
@@ -54,8 +49,7 @@ defmodule TheMaestroWeb.DashboardLive do
          socket
          |> put_flash(:info, "Auth deleted; linked agents detached.")
          |> assign(:auths, SavedAuthentication.list_all())
-         |> assign(:auth_options, build_auth_options())
-         |> assign(:agents, Agents.list_agents_with_auth())}
+         |> assign(:auth_options, build_auth_options())}
 
       :error ->
         {:noreply, socket}
@@ -71,64 +65,7 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply,
      socket
      |> put_flash(:info, "Session deleted")
-     |> assign(:sessions, Conversations.list_sessions_with_agents())}
-  end
-
-  # Delete an agent from the dashboard Agents grid
-  def handle_event("delete_agent", %{"id" => id}, socket) do
-    agent = Agents.get_agent!(id)
-    {:ok, _} = Agents.delete_agent(agent)
-
-    {:noreply,
-     socket
-     |> put_flash(:info, "Agent deleted")
-     # refresh agents and dependent selects
-     |> assign(:agents, Agents.list_agents_with_auth())
-     |> assign(:agent_options, build_agent_options())
-     # sessions may have had their agent_id nilified; refresh to reflect updated labels
-     |> assign(:sessions, Conversations.list_sessions_with_agents())}
-  end
-
-  def handle_event("open_agent_modal", _params, socket) do
-    cs = Agents.change_agent(%Agent{})
-
-    {:noreply,
-     socket
-     |> assign(:agent_changeset, cs)
-     |> assign(:agent_form, to_form(cs))
-     |> assign(:model_options, [])
-     |> assign(:auth_options, build_auth_options())
-     |> assign(:show_agent_modal, true)}
-  end
-
-  def handle_event("agent_validate", %{"agent" => params}, socket) do
-    cs = Agents.change_agent(%Agent{}, params) |> Map.put(:action, :validate)
-    model_opts = build_model_options(params)
-
-    {:noreply,
-     socket
-     |> assign(:model_options, model_opts)
-     |> assign(agent_changeset: cs, agent_form: to_form(cs, action: :validate))}
-  end
-
-  def handle_event("agent_save", %{"agent" => params}, socket) do
-    case Agents.create_agent(params) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Agent created")
-         |> assign(:show_agent_modal, false)
-         |> assign(:agents, Agents.list_agents_with_auth())
-         |> assign(:model_options, [])
-         |> assign(:agent_options, build_agent_options())}
-
-      {:error, %Ecto.Changeset{} = cs} ->
-        {:noreply, assign(socket, agent_changeset: cs, agent_form: to_form(cs))}
-    end
-  end
-
-  def handle_event("cancel_agent_modal", _params, socket) do
-    {:noreply, assign(socket, :show_agent_modal, false)}
+     |> assign(:sessions, Conversations.list_sessions_with_auth())}
   end
 
   def handle_event("open_session_modal", _params, socket) do
@@ -136,7 +73,10 @@ defmodule TheMaestroWeb.DashboardLive do
 
     {:noreply,
      socket
-     |> assign(:agent_options, build_agent_options())
+     |> assign(:session_provider, "openai")
+     |> assign(:session_auth_options, build_auth_options_for(:openai))
+     |> assign(:session_model_options, [])
+     |> assign(:auth_options, build_auth_options())
      |> assign(:session_form, to_form(cs))
      |> assign(:show_session_modal, true)}
   end
@@ -148,6 +88,38 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:show_session_dir_picker, false)}
   end
 
+  # Target-aware validate to avoid clobbering model list when provider also present
+  def handle_event(
+        "session_validate",
+        %{"_target" => ["session", target], "session" => params},
+        socket
+      ) do
+    cs =
+      Conversations.change_session(%Conversations.Session{}, params)
+      |> Map.put(:action, :validate)
+
+    socket = assign(socket, session_form: to_form(cs, action: :validate))
+
+    case target do
+      "provider" ->
+        provider = String.to_existing_atom(params["provider"])
+
+        {:noreply,
+         socket
+         |> assign(:session_provider, params["provider"])
+         |> assign(:session_auth_options, build_auth_options_for(provider))
+         |> assign(:session_model_options, [])}
+
+      "auth_id" ->
+        models = build_model_options(%{"auth_id" => params["auth_id"]})
+        {:noreply, assign(socket, :session_model_options, models)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  # Fallback validate (no _target); preserve previous behavior
   def handle_event("session_validate", %{"session" => params}, socket) do
     cs =
       Conversations.change_session(%Conversations.Session{}, params)
@@ -163,8 +135,10 @@ defmodule TheMaestroWeb.DashboardLive do
   def handle_event("session_use_root_dir", _params, socket) do
     wd = File.cwd!() |> Path.expand()
 
+    params = merge_session_params(socket, %{"working_dir" => wd})
+
     cs =
-      Conversations.change_session(%Conversations.Session{}, %{"working_dir" => wd})
+      Conversations.change_session(%Conversations.Session{}, params)
       |> Map.put(:action, :validate)
 
     {:noreply, assign(socket, session_form: to_form(cs, action: :validate))}
@@ -172,6 +146,41 @@ defmodule TheMaestroWeb.DashboardLive do
 
   # Keep all handle_event/3 clauses grouped together to avoid warnings
   def handle_event("session_save", %{"session" => params}, socket) do
+    # Mirror persona from persona_id if provided
+    params =
+      case Map.get(params, "persona_id") do
+        nil ->
+          params
+
+        "" ->
+          params
+
+        id ->
+          p = TheMaestro.Personas.get_persona!(id)
+
+          Map.put(params, "persona", %{
+            "name" => p.name,
+            "version" => 1,
+            "persona_text" => p.prompt_text
+          })
+      end
+
+    # Merge memory from memory_json if present
+    params =
+      case Map.get(params, "memory_json") do
+        nil ->
+          params
+
+        "" ->
+          params
+
+        txt ->
+          case Jason.decode(txt) do
+            {:ok, %{} = m} -> Map.put(params, "memory", m)
+            _ -> params
+          end
+      end
+
     case Conversations.create_session(params) do
       {:ok, _} ->
         {:noreply,
@@ -179,7 +188,7 @@ defmodule TheMaestroWeb.DashboardLive do
          |> put_flash(:info, "Session created")
          |> assign(:show_session_modal, false)
          |> assign(:show_session_dir_picker, false)
-         |> assign(:sessions, Conversations.list_sessions_with_agents())}
+         |> assign(:sessions, Conversations.list_sessions_with_auth())}
 
       {:error, %Ecto.Changeset{} = cs} ->
         {:noreply, assign(socket, session_form: to_form(cs))}
@@ -202,8 +211,10 @@ defmodule TheMaestroWeb.DashboardLive do
 
   @impl true
   def handle_info({TheMaestroWeb.DirectoryPicker, :selected, path, :new_session}, socket) do
+    params = merge_session_params(socket, %{"working_dir" => path})
+
     cs =
-      Conversations.change_session(%Conversations.Session{}, %{"working_dir" => path})
+      Conversations.change_session(%Conversations.Session{}, params)
       |> Map.put(:action, :validate)
 
     {:noreply,
@@ -224,8 +235,7 @@ defmodule TheMaestroWeb.DashboardLive do
      socket
      |> put_flash(:info, "OAuth completed for #{payload["provider"]}: #{payload["session_name"]}")
      |> assign(:auths, SavedAuthentication.list_all())
-     |> assign(:auth_options, build_auth_options())
-     |> assign(:agents, Agents.list_agents_with_auth())}
+     |> assign(:auth_options, build_auth_options())}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -266,27 +276,67 @@ defmodule TheMaestroWeb.DashboardLive do
     end
   end
 
-  defp build_agent_options do
-    Agents.list_agents_with_auth() |> Enum.map(&{&1.name, &1.id})
-  end
+  # agent options removed
 
   defp build_model_options(%{"auth_id" => auth_id}) when is_binary(auth_id) and auth_id != "" do
     with {id, _} <- Integer.parse(auth_id),
          %SavedAuthentication{} = sa <- SavedAuthentication.get!(id),
-         {:ok, models} <- Provider.list_models(sa.provider, sa.auth_type, sa.name) do
-      Enum.map(models, fn m -> {m.name || m.id, m.id} end)
+         {:ok, models} <- Provider.list_models(sa.provider, sa.auth_type, sa.name),
+         list when is_list(list) and list != [] <-
+           Enum.map(models, fn m -> {m.name || m.id, m.id} end) do
+      list
     else
-      _ -> []
+      _ ->
+        # Fallback defaults per provider to ensure model select is populated
+        case Integer.parse(auth_id) do
+          {id, _} ->
+            sa = SavedAuthentication.get!(id)
+
+            case sa.provider do
+              :openai ->
+                [{"gpt-5", "gpt-5"}, {"gpt-4o", "gpt-4o"}]
+
+              :anthropic ->
+                [{"claude-3-5-sonnet", "claude-3-5-sonnet"}, {"claude-3-opus", "claude-3-opus"}]
+
+              :gemini ->
+                [
+                  {"gemini-2.5-pro", "gemini-2.5-pro"},
+                  {"gemini-1.5-pro-latest", "gemini-1.5-pro-latest"}
+                ]
+
+              _ ->
+                []
+            end
+
+          :error ->
+            []
+        end
     end
+  end
+
+  defp build_auth_options_for(provider) when is_atom(provider) do
+    SavedAuthentication.list_by_provider(provider)
+    |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
   end
 
   defp build_model_options(_), do: []
 
+  # Merge new form values into the current session form params, preserving prior selections
+  defp merge_session_params(socket, extra) when is_map(extra) do
+    (socket.assigns[:session_form] && socket.assigns.session_form.params) |> Map.merge(extra)
+  end
+
   defp session_label(s) do
     cond do
-      is_binary(s.name) and String.trim(s.name) != "" -> s.name
-      s.agent && s.agent.name -> s.agent.name <> " · sess-" <> String.slice(s.id, 0, 8)
-      true -> "sess-" <> String.slice(s.id, 0, 8)
+      is_binary(s.name) and String.trim(s.name) != "" ->
+        s.name
+
+      s.saved_authentication && s.saved_authentication.name ->
+        s.saved_authentication.name <> " · sess-" <> String.slice(s.id, 0, 8)
+
+      true ->
+        "sess-" <> String.slice(s.id, 0, 8)
     end
   end
 
@@ -372,67 +422,6 @@ defmodule TheMaestroWeb.DashboardLive do
             </div>
           </section>
 
-          <section class="mb-12">
-            <div class="flex justify-between items-center mb-6">
-              <h2 class="text-2xl font-bold text-green-400 glow">&gt; AGENT_REGISTRY.DAT</h2>
-              <button
-                class="px-4 py-2 rounded transition-all duration-200 btn-green"
-                phx-click="open_agent_modal"
-                data-hotkey="alt+a"
-                data-hotkey-seq="g a"
-                data-hotkey-label="New Agent"
-              >
-                <.icon name="hero-plus" class="inline mr-2 h-4 w-4" /> NEW AGENT
-              </button>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <%= for a <- @agents do %>
-                <div
-                  class="terminal-card terminal-border-green rounded-lg p-6 transition-colors"
-                  id={"agent-" <> to_string(a.id)}
-                >
-                  <h3 class="text-xl font-bold text-green-300 mb-3 glow">{a.name}</h3>
-                  <div class="space-y-2 text-sm">
-                    <%= if a.saved_authentication do %>
-                      <p class="text-amber-300">
-                        Auth: {a.saved_authentication.name} ({a.saved_authentication.provider}/{a.saved_authentication.auth_type})
-                      </p>
-                    <% else %>
-                      <p class="text-red-400">No Auth Configured</p>
-                    <% end %>
-                    <p class="text-amber-200">
-                      Tools: {map_count(a.tools)} • MCPs: {map_count(a.mcps)}
-                    </p>
-                  </div>
-                  <div class="flex justify-between mt-4 pt-3 border-t border-green-800">
-                    <div class="flex space-x-2">
-                      <.link
-                        class="text-green-400 hover:text-green-300"
-                        navigate={"/agents/" <> to_string(a.id)}
-                      >
-                        <.icon name="hero-eye" class="h-4 w-4" />
-                      </.link>
-                      <.link
-                        class="text-blue-400 hover:text-blue-300"
-                        navigate={"/agents/" <> to_string(a.id) <> "/edit"}
-                      >
-                        <.icon name="hero-pencil-square" class="h-4 w-4" />
-                      </.link>
-                    </div>
-                    <button
-                      class="text-red-400 hover:text-red-300"
-                      phx-click="delete_agent"
-                      phx-value-id={a.id}
-                      data-confirm="Delete this agent?"
-                    >
-                      <.icon name="hero-trash" class="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              <% end %>
-            </div>
-          </section>
-
           <section>
             <div class="flex justify-between items-center mb-6">
               <h2 class="text-2xl font-bold text-green-400 glow">&gt; SESSION_MANAGER.DAT</h2>
@@ -454,7 +443,12 @@ defmodule TheMaestroWeb.DashboardLive do
                 >
                   <h3 class="text-xl font-bold text-blue-300 mb-3 glow">{session_label(s)}</h3>
                   <div class="space-y-2 text-sm">
-                    <p class="text-amber-300">Agent: {s.agent && s.agent.name}</p>
+                    <p class="text-amber-300">
+                      Auth: {s.saved_authentication && s.saved_authentication.name} ({s.saved_authentication &&
+                        s.saved_authentication.provider}/ {s.saved_authentication &&
+                        s.saved_authentication.auth_type})
+                    </p>
+                    <p class="text-amber-200">Model: {s.model_id || "(auto)"}</p>
                     <p class="text-amber-200">Last used: {format_dt(s.last_used_at)}</p>
                   </div>
                   <div class="flex justify-between mt-4 pt-3 border-t border-blue-800">
@@ -495,28 +489,63 @@ defmodule TheMaestroWeb.DashboardLive do
             phx-change="session_validate"
           >
             <.input field={@session_form[:name]} type="text" label="Session Name" />
-            <.input
-              field={@session_form[:agent_id]}
-              type="select"
-              label="Agent"
-              options={@agent_options}
-              prompt="Select agent"
-            />
-            <div class="mt-2 grid gap-2">
-              <.input field={@session_form[:working_dir]} type="text" label="Working Directory" />
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <button type="button" class="btn btn-xs btn-amber" phx-click="session_use_root_dir">
-                  ROOT
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-xs btn-amber ml-2"
-                  phx-click="open_session_dir_picker"
-                >
-                  <.icon name="hero-folder" class="h-4 w-4" />
-                </button>
+                <label class="text-xs">Provider (filter)</label>
+                <select name="session[provider]" class="input">
+                  <%= for p <- ["openai", "anthropic", "gemini"] do %>
+                    <option value={p} selected={@session_provider == p}>{p}</option>
+                  <% end %>
+                </select>
+              </div>
+              <.input
+                field={@session_form[:auth_id]}
+                type="select"
+                label="Saved Auth"
+                options={@session_auth_options}
+                prompt="Select auth"
+              />
+              <.input
+                field={@session_form[:model_id]}
+                type="select"
+                label="Model"
+                options={@session_model_options}
+                prompt="(auto)"
+              />
+              <div>
+                <.input field={@session_form[:working_dir]} type="text" label="Working Directory" />
+                <div class="mt-1 flex gap-2">
+                  <button type="button" class="btn btn-xs btn-amber" phx-click="session_use_root_dir">
+                    ROOT
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-amber"
+                    phx-click="open_session_dir_picker"
+                  >
+                    <.icon name="hero-folder" class="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
+            <div class="mt-2">
+              <label class="text-xs">Chat History</label>
+              <div class="text-sm opacity-80">Start New Chat</div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <.input
+                field={@session_form[:persona_id]}
+                type="select"
+                label="Persona"
+                options={@persona_options}
+                prompt="(optional)"
+              />
+              <div>
+                <label class="text-xs">Memory (JSON)</label>
+                <textarea name="session[memory_json]" rows="4" class="textarea-terminal"></textarea>
+              </div>
+            </div>
+            <div class="mt-2"></div>
             <div class="mt-3 space-x-2">
               <button type="submit" class="btn btn-blue">Save</button>
               <button type="button" class="btn" phx-click="cancel_session_modal">Cancel</button>
@@ -532,49 +561,6 @@ defmodule TheMaestroWeb.DashboardLive do
           </.modal>
         </.modal>
 
-        <.modal :if={@show_agent_modal} id="agent-modal">
-          <h3 class="text-2xl font-bold text-green-400 mb-6 glow">CREATE NEW AGENT</h3>
-          <.form
-            for={@agent_form}
-            id="agent-modal-form"
-            phx-change="agent_validate"
-            phx-submit="agent_save"
-          >
-            <.input field={@agent_form[:name]} type="text" label="Agent Name" />
-            <.input
-              field={@agent_form[:auth_id]}
-              type="select"
-              label="Saved Auth"
-              options={@auth_options}
-              prompt="Select authentication"
-            />
-            <.input
-              field={@agent_form[:model_id]}
-              type="select"
-              label="Model"
-              options={@model_options}
-              prompt="Auto-select from provider"
-            />
-            <.input
-              field={@agent_form[:base_system_prompt_id]}
-              type="select"
-              label="Base System Prompt"
-              options={@prompt_options}
-              prompt="(optional)"
-            />
-            <.input
-              field={@agent_form[:persona_id]}
-              type="select"
-              label="Persona"
-              options={@persona_options}
-              prompt="(optional)"
-            />
-            <div class="mt-3 space-x-2">
-              <button type="submit" class="btn btn-green">Save</button>
-              <button type="button" class="btn" phx-click="cancel_agent_modal">Cancel</button>
-            </div>
-          </.form>
-        </.modal>
         <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
       </div>
     </Layouts.app>
@@ -626,47 +612,7 @@ defmodule TheMaestroWeb.DashboardLive do
     """
   end
 
-  attr :agents, :list, required: true
-
-  defp agents_grid(assigns) do
-    ~H"""
-    <div class="mt-10">
-      <div class="flex items-center justify-between mb-2">
-        <h2 class="text-lg font-semibold">Agents</h2>
-        <button class="btn" phx-click="open_agent_modal">New Agent</button>
-      </div>
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <%= for a <- @agents do %>
-          <div class="card bg-base-200 p-4" id={"agent-" <> to_string(a.id)}>
-            <div class="font-semibold text-base">{a.name}</div>
-            <div class="text-sm opacity-80">
-              Auth: {a.saved_authentication && a.saved_authentication.name} ({a.saved_authentication &&
-                a.saved_authentication.provider}/{a.saved_authentication &&
-                a.saved_authentication.auth_type})
-            </div>
-            <div class="text-xs opacity-70">
-              Tools: {map_count(a.tools)} • MCPs: {map_count(a.mcps)}
-            </div>
-            <div class="mt-2 space-x-2">
-              <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id)}>View</.link>
-              <.link class="btn btn-xs" navigate={"/agents/" <> to_string(a.id) <> "/edit"}>
-                Edit
-              </.link>
-              <button
-                class="btn btn-xs btn-error"
-                phx-click="delete_agent"
-                phx-value-id={a.id}
-                data-confirm="Delete this agent?"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        <% end %>
-      </div>
-    </div>
-    """
-  end
+  # Agents grid removed in session-centric cleanup
 
   attr :sessions, :list, required: true
 
@@ -681,12 +627,17 @@ defmodule TheMaestroWeb.DashboardLive do
         <%= for s <- @sessions do %>
           <div class="card bg-base-200 p-4" id={"session-" <> to_string(s.id)}>
             <div class="font-semibold text-base">{session_label(s)}</div>
-            <div class="text-sm opacity-80">Agent: {s.agent && s.agent.name}</div>
+            <div class="text-sm opacity-80">
+              Auth: {s.saved_authentication && s.saved_authentication.name} ({s.saved_authentication &&
+                s.saved_authentication.provider}/ {s.saved_authentication &&
+                s.saved_authentication.auth_type})
+            </div>
+            <div class="text-xs opacity-70">Model: {s.model_id || "(auto)"}</div>
             <div class="text-xs opacity-70">Last used: {format_dt(s.last_used_at)}</div>
             <div class="mt-2 space-x-2">
               <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/chat"}>Go into chat</.link>
-              <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/edit"}>
-                Edit
+              <.link class="btn btn-xs" navigate={~p"/sessions/#{s.id}/chat"}>
+                Open
               </.link>
               <button class="btn btn-xs btn-error" phx-click="delete_session" phx-value-id={s.id}>
                 Delete

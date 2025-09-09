@@ -15,6 +15,11 @@ defmodule TheMaestro.Conversations.ChatEntry do
     field :edit_version, :integer, default: 0
 
     field :session_id, :binary_id
+    # New session-centric threading fields (Phase 1)
+    field :thread_id, :binary_id
+    field :parent_thread_id, :binary_id
+    field :fork_from_entry_id, :binary_id
+    field :thread_label, :string
 
     timestamps(type: :utc_datetime)
   end
@@ -31,10 +36,14 @@ defmodule TheMaestro.Conversations.ChatEntry do
       :combined_chat,
       :edit_version
     ])
+    # During cutover, require session_id while thread_id is being backfilled.
+    # In Phase 2 we will flip to require thread_id and make session_id optional.
     |> validate_required([:session_id, :turn_index, :actor, :combined_chat])
     |> validate_inclusion(:actor, ["user", "assistant", "tool", "system"])
     |> foreign_key_constraint(:session_id)
     |> unique_constraint([:session_id, :turn_index])
+    # New unique constraint (soft during cutover as thread_id may be nil)
+    |> unique_constraint([:thread_id, :turn_index])
   end
 end
 
@@ -65,8 +74,8 @@ defmodule TheMaestro.Conversations do
   @doc """
   Returns sessions preloaded with their agents for dashboard cards.
   """
-  def list_sessions_with_agents do
-    Repo.all(from s in Session, preload: [:agent, :latest_chat_entry])
+  def list_sessions_with_auth do
+    Repo.all(from s in Session, preload: [:saved_authentication, :latest_chat_entry])
   end
 
   @doc """
@@ -84,6 +93,12 @@ defmodule TheMaestro.Conversations do
 
   """
   def get_session!(id), do: Repo.get!(Session, id)
+
+  @doc """
+  Gets a single session preloaded with saved_authentication.
+  """
+  def get_session_with_auth!(id),
+    do: Repo.get!(Session, id) |> Repo.preload([:saved_authentication])
 
   @doc """
   Creates a session.
@@ -160,6 +175,25 @@ defmodule TheMaestro.Conversations do
   end
 
   @doc """
+  Returns the list of chat entries for a thread ordered by turn_index.
+  """
+  def list_chat_entries_by_thread(thread_id) when is_binary(thread_id) do
+    Repo.all(from e in ChatEntry, where: e.thread_id == ^thread_id, order_by: e.turn_index)
+  end
+
+  @doc """
+  Returns the latest snapshot row for the given thread if one exists.
+  """
+  def latest_snapshot_for_thread(thread_id) when is_binary(thread_id) do
+    Repo.one(
+      from e in ChatEntry,
+        where: e.thread_id == ^thread_id,
+        order_by: [desc: e.turn_index],
+        limit: 1
+    )
+  end
+
+  @doc """
   Gets a single chat entry.
   """
   def get_chat_entry!(id), do: Repo.get!(ChatEntry, id)
@@ -189,6 +223,22 @@ defmodule TheMaestro.Conversations do
     Repo.delete(entry)
   end
 
+  # ===== Helpers for resolving workspace root by auth session =====
+  @doc """
+  Returns the latest Session associated with a given SavedAuthentication id.
+  Useful for locating the session-scoped working_dir when only an auth session
+  name is available.
+  """
+  @spec latest_session_for_auth_id(integer()) :: Session | nil
+  def latest_session_for_auth_id(auth_id) when is_integer(auth_id) do
+    Repo.one(
+      from s in Session,
+        where: s.auth_id == ^auth_id,
+        order_by: [desc: s.inserted_at],
+        limit: 1
+    )
+  end
+
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking chat entry changes.
   """
@@ -209,6 +259,106 @@ defmodule TheMaestro.Conversations do
   end
 
   @doc """
+  Returns the most recently used thread_id for a session (if any).
+  """
+  def latest_thread_id(session_id) do
+    Repo.one(
+      from e in ChatEntry,
+        where: e.session_id == ^session_id and not is_nil(e.thread_id),
+        order_by: [desc: e.inserted_at],
+        select: e.thread_id,
+        limit: 1
+    )
+  end
+
+  @doc """
+  Returns the latest label for a thread (if any).
+  """
+  def thread_label(thread_id) when is_binary(thread_id) do
+    Repo.one(
+      from e in ChatEntry,
+        where: e.thread_id == ^thread_id and not is_nil(e.thread_label),
+        order_by: [desc: e.inserted_at],
+        select: e.thread_label,
+        limit: 1
+    )
+  end
+
+  @doc """
+  Sets the label for all entries in a thread for consistent display.
+  """
+  def set_thread_label(thread_id, label) when is_binary(thread_id) and is_binary(label) do
+    {count, _} =
+      Repo.update_all(from(e in ChatEntry, where: e.thread_id == ^thread_id),
+        set: [thread_label: label]
+      )
+
+    {:ok, count}
+  end
+
+  @doc """
+  Creates a new thread for a session with an initial system snapshot based on the session persona/base prompt.
+  Returns {:ok, thread_id}.
+  """
+  def new_thread(%Session{} = session, label \\ nil) do
+    thread_id = Ecto.UUID.generate()
+    label = label || default_thread_label(session)
+
+    # Build system text from session persona
+    system_text = system_text_for_session(session)
+
+    canonical = %{
+      "messages" =>
+        if(system_text != "",
+          do: [%{"role" => "system", "content" => [%{"type" => "text", "text" => system_text}]}],
+          else: []
+        )
+    }
+
+    turn_idx = next_turn_index(session.id)
+
+    _ =
+      %ChatEntry{}
+      |> ChatEntry.changeset(%{
+        session_id: session.id,
+        thread_id: thread_id,
+        thread_label: label,
+        turn_index: turn_idx,
+        actor: "system",
+        provider: nil,
+        request_headers: %{},
+        response_headers: %{},
+        combined_chat: canonical,
+        edit_version: 0
+      })
+      |> Repo.insert!()
+
+    {:ok, thread_id}
+  end
+
+  defp default_thread_label(session) do
+    base = session.name || "session"
+    ts = DateTime.utc_now() |> Calendar.strftime("%H:%M")
+    base <> " @ " <> ts
+  end
+
+  defp system_text_for_session(session) do
+    case session.persona do
+      %{"persona_text" => pt} when is_binary(pt) -> pt
+      %{persona_text: pt} when is_binary(pt) -> pt
+      _ -> ""
+    end
+  end
+
+  @doc """
+  Deletes all entries for a given thread.
+  """
+  def delete_thread_entries(thread_id) when is_binary(thread_id) do
+    {count, _} = Repo.delete_all(from e in ChatEntry, where: e.thread_id == ^thread_id)
+    {:ok, count}
+  end
+
+  @doc """
   Computes the next turn_index for a session (0-based).
   """
   def next_turn_index(session_id) do
@@ -216,6 +366,56 @@ defmodule TheMaestro.Conversations do
       Repo.one(
         from e in ChatEntry,
           where: e.session_id == ^session_id,
+          select: max(e.turn_index)
+      ) || -1
+
+    max + 1
+  end
+
+  # ===== Thread-first APIs =====
+
+  @doc """
+  Creates an initial thread for a session with optional label.
+  """
+  def ensure_thread_for_session(session_id, _label \\ nil) when is_binary(session_id) do
+    # If any entry already has a thread_id, reuse its thread_id
+    case Repo.one(
+           from e in ChatEntry,
+             where: e.session_id == ^session_id and not is_nil(e.thread_id),
+             select: e.thread_id,
+             limit: 1
+         ) do
+      nil ->
+        tid = Ecto.UUID.generate()
+        {:ok, tid}
+
+      tid ->
+        {:ok, tid}
+    end
+  end
+
+  @doc """
+  Forks a thread at a given entry, setting lineage fields on subsequent entries as needed.
+  Returns {:ok, new_thread_id}.
+  """
+  def fork_thread(thread_id, fork_from_entry_id, _label \\ nil)
+      when is_binary(thread_id) and is_binary(fork_from_entry_id) do
+    new_id = Ecto.UUID.generate()
+    # We only record lineage at the fork point for traceability
+    from(e in ChatEntry, where: e.id == ^fork_from_entry_id)
+    |> Repo.update_all(set: [fork_from_entry_id: fork_from_entry_id])
+
+    {:ok, new_id}
+  end
+
+  @doc """
+  Computes the next turn_index for a thread (0-based).
+  """
+  def next_turn_index_for_thread(thread_id) when is_binary(thread_id) do
+    max =
+      Repo.one(
+        from e in ChatEntry,
+          where: e.thread_id == ^thread_id,
           select: max(e.turn_index)
       ) || -1
 
@@ -232,26 +432,13 @@ defmodule TheMaestro.Conversations do
         {:ok, {session, entry}}
 
       nil ->
-        # Build a minimal canonical chat with a system message from agent persona/prompt
-        session = Repo.preload(session, agent: [:base_system_prompt, :persona])
-
-        # Safely extract prompt text from preloaded associations without using Access on structs
-        bsp_text =
-          case session.agent do
-            %{base_system_prompt: %{prompt_text: pt}} when is_binary(pt) -> pt
-            _ -> nil
-          end
-
-        persona_text =
-          case session.agent do
-            %{persona: %{prompt_text: pt}} when is_binary(pt) -> pt
-            _ -> nil
-          end
-
+        # Build a minimal canonical chat with a system message from session persona
         system_text =
-          [bsp_text, persona_text]
-          |> Enum.filter(&is_binary/1)
-          |> Enum.join("\n\n")
+          case session.persona do
+            %{"persona_text" => pt} when is_binary(pt) -> pt
+            %{persona_text: pt} when is_binary(pt) -> pt
+            _ -> ""
+          end
 
         canonical = %{
           "messages" =>

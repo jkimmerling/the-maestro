@@ -11,7 +11,7 @@ defmodule TheMaestroWeb.TheMaestroWeb.SessionController do
 
   def new(conn, _params) do
     changeset = Conversations.change_session(%Session{})
-    render(conn, :new, changeset: changeset, agent_options: agent_options())
+    render(conn, :new, changeset: changeset, auth_options: auth_options())
   end
 
   def create(conn, %{"session" => session_params}) do
@@ -34,7 +34,7 @@ defmodule TheMaestroWeb.TheMaestroWeb.SessionController do
   def edit(conn, %{"id" => id}) do
     session = Conversations.get_session!(id)
     changeset = Conversations.change_session(session)
-    render(conn, :edit, session: session, changeset: changeset, agent_options: agent_options())
+    render(conn, :edit, session: session, changeset: changeset, auth_options: auth_options())
   end
 
   def update(conn, %{"id" => id, "session" => session_params}) do
@@ -60,8 +60,8 @@ defmodule TheMaestroWeb.TheMaestroWeb.SessionController do
     |> redirect(to: ~p"/the_maestro_web/sessions")
   end
 
-  defp agent_options do
-    TheMaestro.Agents.list_agents_with_auth()
-    |> Enum.map(fn a -> {a.name, to_string(a.id)} end)
+  defp auth_options do
+    TheMaestro.SavedAuthentication.list_all()
+    |> Enum.map(fn sa -> {"#{sa.name} (#{sa.provider}/#{sa.auth_type})", to_string(sa.id)} end)
   end
 end

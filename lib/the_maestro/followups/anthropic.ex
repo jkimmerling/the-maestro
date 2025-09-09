@@ -73,7 +73,7 @@ defmodule TheMaestro.Followups.Anthropic do
     text_block =
       case String.trim(to_string(prior_answer_text || "")) do
         "" -> []
-        txt -> [%{"type" => "text", "text" => txt, "cache_control" => %{"type" => "ephemeral"}}]
+        txt -> [%{"type" => "text", "text" => txt}]
       end
 
     text_block ++ tool_uses

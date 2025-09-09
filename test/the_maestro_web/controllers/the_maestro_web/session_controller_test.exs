@@ -23,7 +23,6 @@ defmodule TheMaestroWeb.TheMaestroWeb.SessionControllerTest do
 
   describe "create session" do
     test "redirects to show when data is valid", %{conn: conn} do
-      # Create agent first
       short = String.slice(Ecto.UUID.generate(), 0, 6)
 
       {:ok, sa} =
@@ -36,20 +35,9 @@ defmodule TheMaestroWeb.TheMaestroWeb.SessionControllerTest do
         })
         |> TheMaestro.Repo.insert()
 
-      {:ok, agent} =
-        %TheMaestro.Agents.Agent{}
-        |> TheMaestro.Agents.Agent.changeset(%{
-          name: "agent_for_session_ctrl-" <> short,
-          auth_id: sa.id,
-          tools: %{},
-          mcps: %{},
-          memory: %{"k" => "v"}
-        })
-        |> TheMaestro.Repo.insert()
-
       conn =
         post(conn, ~p"/the_maestro_web/sessions",
-          session: Map.put(@create_attrs_base, :agent_id, agent.id)
+          session: Map.put(@create_attrs_base, :auth_id, sa.id)
         )
 
       assert %{id: id} = redirected_params(conn)

@@ -1,11 +1,11 @@
 <.form :let={f} for={@changeset} action={@action}>
   <.input field={f[:name]} type="text" label="Name" />
   <.input
-    field={f[:agent_id]}
+    field={f[:auth_id]}
     type="select"
-    label="Agent"
-    options={@agent_options}
-    prompt="Select an agent"
+    label="Saved Auth"
+    options={@auth_options}
+    prompt="Select an auth"
   />
   <.input field={f[:last_used_at]} type="datetime-local" label="Last used at" />
   <.input

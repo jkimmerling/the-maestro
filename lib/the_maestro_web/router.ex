@@ -32,10 +32,7 @@ defmodule TheMaestroWeb.Router do
     live "/personas/:id", PersonaLive.Show, :show
     live "/personas/:id/edit", PersonaLive.Form, :edit
 
-    live "/agents", AgentLive.Index, :index
-    live "/agents/new", AgentLive.Form, :new
-    live "/agents/:id", AgentLive.Show, :show
-    live "/agents/:id/edit", AgentLive.Form, :edit
+    # Agents routes removed after session-centric cleanup
 
     # Sessions LiveViews
     live "/sessions/:id/chat", SessionChatLive, :chat

@@ -1,7 +1,6 @@
 defmodule TheMaestroWeb.SessionEditLive do
   use TheMaestroWeb, :live_view
 
-  alias TheMaestro.Agents
   alias TheMaestro.Conversations
 
   @impl true
@@ -13,7 +12,7 @@ defmodule TheMaestroWeb.SessionEditLive do
      |> assign(:page_title, "Edit Session")
      |> assign(:session, session)
      |> assign(:form, to_form(Conversations.change_session(session)))
-     |> assign(:agent_options, agent_options())
+     |> assign(:auth_options, auth_options())
      |> assign(:show_dir_picker, false)}
   end
 
@@ -74,9 +73,9 @@ defmodule TheMaestroWeb.SessionEditLive do
     {:noreply, assign(socket, :show_dir_picker, false)}
   end
 
-  defp agent_options do
-    Agents.list_agents_with_auth()
-    |> Enum.map(&{&1.name, &1.id})
+  defp auth_options do
+    TheMaestro.SavedAuthentication.list_all()
+    |> Enum.map(&{"#{&1.name} (#{&1.provider}/#{&1.auth_type})", &1.id})
   end
 
   @impl true
@@ -93,11 +92,11 @@ defmodule TheMaestroWeb.SessionEditLive do
       <.form for={@form} id="session-edit-form" phx-change="validate" phx-submit="save">
         <.input field={@form[:name]} type="text" label="Name" />
         <.input
-          field={@form[:agent_id]}
+          field={@form[:auth_id]}
           type="select"
-          label="Agent"
-          options={@agent_options}
-          prompt="Select an agent"
+          label="Saved Auth"
+          options={@auth_options}
+          prompt="Select an auth"
         />
         <.input field={@form[:last_used_at]} type="datetime-local" label="Last used at" />
         <div class="grid grid-cols-1 gap-2">

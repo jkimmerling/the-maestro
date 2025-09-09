@@ -11,7 +11,7 @@ defmodule TheMaestroWeb.TheMaestroWeb.SessionHTML do
   """
   attr :changeset, Ecto.Changeset, required: true
   attr :action, :string, required: true
-  attr :agent_options, :list, default: []
+  attr :auth_options, :list, default: []
   attr :return_to, :string, default: nil
 
   def session_form(assigns)
