@@ -9,17 +9,13 @@ defmodule TheMaestroWeb.SessionChatLive do
   alias TheMaestro.Conversations
   alias TheMaestro.Conversations.Translator
   alias TheMaestro.Provider
-  alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
   require Logger
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     session =
       Conversations.get_session_with_auth!(id)
-      |> TheMaestro.Repo.preload([
-        :saved_authentication,
-        agent: [:saved_authentication, :base_system_prompt, :persona]
-      ])
+      |> TheMaestro.Repo.preload([:saved_authentication])
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
     TheMaestro.Sessions.Manager.subscribe(session.id)
@@ -444,7 +440,7 @@ defmodule TheMaestroWeb.SessionChatLive do
       TheMaestro.Sessions.Manager.start_stream(
         session.id,
         provider,
-        session.agent.saved_authentication.name,
+        session.saved_authentication.name,
         provider_msgs,
         model
       )
@@ -479,7 +475,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp default_model_for_session(session, :openai) do
-    case (session.saved_authentication || (session.agent && session.agent.saved_authentication)).auth_type do
+    case session.saved_authentication.auth_type do
       :oauth -> "gpt-5"
       _ -> "gpt-4o"
     end
@@ -488,7 +484,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp default_model_for_session(_session, :anthropic), do: "claude-3-5-sonnet"
 
   defp default_model_for_session(session, :gemini) do
-    case (session.saved_authentication || (session.agent && session.agent.saved_authentication)).auth_type do
+    case session.saved_authentication.auth_type do
       :oauth -> "gemini-2.5-pro"
       _ -> "gemini-1.5-pro-latest"
     end
@@ -498,7 +494,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # Try to pick a valid model from the provider's list; fallback to defaults
   defp pick_model_for_session(session, provider) do
-    chosen = session.model_id || (session.agent && session.agent.model_id)
+    chosen = session.model_id
 
     if is_binary(chosen) and chosen != "" do
       chosen
@@ -751,17 +747,17 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # ---- Session helpers (derive provider/auth from SavedAuth) ----
   defp provider_from_session(session) do
-    saved = session.saved_authentication || (session.agent && session.agent.saved_authentication)
+    saved = session.saved_authentication
     saved.provider |> to_string() |> String.to_existing_atom()
   end
 
   defp auth_meta_from_session(session) do
-    saved = session.saved_authentication || (session.agent && session.agent.saved_authentication)
+    saved = session.saved_authentication
     {saved.auth_type, saved.name}
   end
 
   defp default_provider(session) do
-    saved = session.saved_authentication || (session.agent && session.agent.saved_authentication)
+    saved = session.saved_authentication
     (saved && Atom.to_string(saved.provider)) || "openai"
   end
 
@@ -834,7 +830,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   defp effective_provider(socket, session) do
     socket.assigns.used_provider ||
-      session.agent.saved_authentication.provider |> to_string() |> String.to_existing_atom()
+      session.saved_authentication.provider |> to_string() |> String.to_existing_atom()
   end
 
   defp build_req_meta(socket, session, provider) do
@@ -842,8 +838,8 @@ defmodule TheMaestroWeb.SessionChatLive do
       "provider" => Atom.to_string(provider),
       "model" => socket.assigns.used_model || default_model_for_session(session, provider),
       "auth_type" =>
-        to_string(socket.assigns.used_auth_type || session.agent.saved_authentication.auth_type),
-      "auth_name" => socket.assigns.used_auth_name || session.agent.saved_authentication.name,
+        to_string(socket.assigns.used_auth_type || session.saved_authentication.auth_type),
+      "auth_name" => socket.assigns.used_auth_name || session.saved_authentication.name,
       "usage" => socket.assigns.used_usage || %{}
     }
   end
@@ -992,7 +988,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     provider = effective_provider(socket, socket.assigns.session)
     model = socket.assigns.used_model
-    session_name = socket.assigns.session.agent.saved_authentication.name
+    session_name = socket.assigns.session.saved_authentication.name
 
     # Determine provider-specific follow-up payload
     provider_items =

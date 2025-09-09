@@ -74,8 +74,8 @@ defmodule TheMaestro.Conversations do
   @doc """
   Returns sessions preloaded with their agents for dashboard cards.
   """
-  def list_sessions_with_agents do
-    Repo.all(from s in Session, preload: [:agent, :saved_authentication, :latest_chat_entry])
+  def list_sessions_with_auth do
+    Repo.all(from s in Session, preload: [:saved_authentication, :latest_chat_entry])
   end
 
   @doc """
@@ -288,8 +288,7 @@ defmodule TheMaestro.Conversations do
     thread_id = Ecto.UUID.generate()
     label = label || default_thread_label(session)
 
-    # Build system text similar to ensure_seeded_snapshot/1
-    session = Repo.preload(session, agent: [:base_system_prompt, :persona])
+    # Build system text from session persona
     system_text = system_text_for_session(session)
 
     canonical = %{
@@ -300,13 +299,15 @@ defmodule TheMaestro.Conversations do
         )
     }
 
+    turn_idx = next_turn_index(session.id)
+
     _ =
       %ChatEntry{}
       |> ChatEntry.changeset(%{
         session_id: session.id,
         thread_id: thread_id,
         thread_label: label,
-        turn_index: 0,
+        turn_index: turn_idx,
         actor: "system",
         provider: nil,
         request_headers: %{},
@@ -326,28 +327,11 @@ defmodule TheMaestro.Conversations do
   end
 
   defp system_text_for_session(session) do
-    bsp_text =
-      case session.agent do
-        %{base_system_prompt: %{prompt_text: pt}} when is_binary(pt) -> pt
-        _ -> nil
-      end
-
-    persona_text =
-      case session.agent do
-        %{persona: %{prompt_text: pt}} when is_binary(pt) ->
-          pt
-
-        _ ->
-          case session.persona do
-            %{"persona_text" => pt} when is_binary(pt) -> pt
-            %{persona_text: pt} when is_binary(pt) -> pt
-            _ -> nil
-          end
-      end
-
-    [bsp_text, persona_text]
-    |> Enum.filter(&is_binary/1)
-    |> Enum.join("\n\n")
+    case session.persona do
+      %{"persona_text" => pt} when is_binary(pt) -> pt
+      %{persona_text: pt} when is_binary(pt) -> pt
+      _ -> ""
+    end
   end
 
   @doc """
@@ -432,26 +416,13 @@ defmodule TheMaestro.Conversations do
         {:ok, {session, entry}}
 
       nil ->
-        # Build a minimal canonical chat with a system message from agent persona/prompt
-        session = Repo.preload(session, agent: [:base_system_prompt, :persona])
-
-        # Safely extract prompt text from preloaded associations without using Access on structs
-        bsp_text =
-          case session.agent do
-            %{base_system_prompt: %{prompt_text: pt}} when is_binary(pt) -> pt
-            _ -> nil
-          end
-
-        persona_text =
-          case session.agent do
-            %{persona: %{prompt_text: pt}} when is_binary(pt) -> pt
-            _ -> nil
-          end
-
+        # Build a minimal canonical chat with a system message from session persona
         system_text =
-          [bsp_text, persona_text]
-          |> Enum.filter(&is_binary/1)
-          |> Enum.join("\n\n")
+          case session.persona do
+            %{"persona_text" => pt} when is_binary(pt) -> pt
+            %{persona_text: pt} when is_binary(pt) -> pt
+            _ -> ""
+          end
 
         canonical = %{
           "messages" =>

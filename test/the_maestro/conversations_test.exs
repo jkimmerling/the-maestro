@@ -21,7 +21,6 @@ defmodule TheMaestro.ConversationsTest do
     end
 
     test "create_session/1 with valid data creates a session" do
-      # Provide a valid agent_id
       short = String.slice(Ecto.UUID.generate(), 0, 6)
 
       {:ok, sa} =
@@ -34,21 +33,10 @@ defmodule TheMaestro.ConversationsTest do
         })
         |> TheMaestro.Repo.insert()
 
-      {:ok, agent} =
-        %TheMaestro.Agents.Agent{}
-        |> TheMaestro.Agents.Agent.changeset(%{
-          name: "agent_for_session_test-" <> short,
-          auth_id: sa.id,
-          tools: %{},
-          mcps: %{},
-          memory: %{"k" => "v"}
-        })
-        |> TheMaestro.Repo.insert()
-
       valid_attrs = %{
         name: "some name",
         last_used_at: ~U[2025-09-01 15:30:00Z],
-        agent_id: agent.id
+        auth_id: sa.id
       }
 
       assert {:ok, %Session{} = session} = Conversations.create_session(valid_attrs)

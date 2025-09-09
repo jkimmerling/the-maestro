@@ -8,7 +8,7 @@ defmodule TheMaestro.ConversationsFixtures do
   Generate a session.
   """
   def session_fixture(attrs \\ %{}) do
-    # Ensure an Agent exists to satisfy FK
+    # Ensure a Saved Auth exists
     {:ok, sa} =
       %TheMaestro.SavedAuthentication{}
       |> TheMaestro.SavedAuthentication.changeset(%{
@@ -21,23 +21,10 @@ defmodule TheMaestro.ConversationsFixtures do
       })
       |> TheMaestro.Repo.insert()
 
-    short = String.slice(Ecto.UUID.generate(), 0, 6)
-
-    {:ok, agent} =
-      %TheMaestro.Agents.Agent{}
-      |> TheMaestro.Agents.Agent.changeset(%{
-        name: "agent_for_session-" <> short,
-        auth_id: sa.id,
-        tools: %{},
-        mcps: %{},
-        memory: %{}
-      })
-      |> TheMaestro.Repo.insert()
-
     base = %{
       last_used_at: ~U[2025-09-01 15:30:00Z],
       name: "some name",
-      agent_id: agent.id
+      auth_id: sa.id
     }
 
     {:ok, session} =
