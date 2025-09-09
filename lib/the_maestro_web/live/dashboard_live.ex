@@ -137,8 +137,8 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply,
      socket
      |> assign(:agent_options, build_agent_options())
-      |> assign(:session_form, to_form(cs))
-      |> assign(:show_session_modal, true)}
+     |> assign(:session_form, to_form(cs))
+     |> assign(:show_session_modal, true)}
   end
 
   def handle_event("cancel_session_modal", _params, socket) do
@@ -197,6 +197,7 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:show_session_dir_picker, false)
      |> assign(:show_agent_modal, false)}
   end
+
   # moved earlier to keep handle_event clauses grouped
 
   @impl true
@@ -293,18 +294,31 @@ defmodule TheMaestroWeb.DashboardLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} show_header={false} main_class="p-0" container_class="p-0">
-      <div id="dashboard-root" class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden" phx-hook="DashboardHotkeys">
-
+      <div
+        id="dashboard-root"
+        class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden"
+        phx-hook="DashboardHotkeys"
+      >
         <div class="container mx-auto px-6 py-8">
           <div class="flex justify-between items-center mb-8 border-b border-amber-600 pb-4">
-            <h1 class="text-4xl font-bold text-amber-400 glow tracking-wider">&gt;&gt;&gt; DASHBOARD TERMINAL V2.1.4 &lt;&lt;&lt;</h1>
-            <.link navigate={~p"/auths/new"} class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong" data-hotkey="alt+h" data-hotkey-seq="g h" data-hotkey-label="New Auth">
+            <h1 class="text-4xl font-bold text-amber-400 glow tracking-wider">
+              &gt;&gt;&gt; DASHBOARD TERMINAL V2.1.4 &lt;&lt;&lt;
+            </h1>
+            <.link
+              navigate={~p"/auths/new"}
+              class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
+              data-hotkey="alt+h"
+              data-hotkey-seq="g h"
+              data-hotkey-label="New Auth"
+            >
               <.icon name="hero-plus" class="inline mr-2 w-4 h-4" /> NEW AUTH
             </.link>
           </div>
 
           <section class="mb-12">
-            <h2 class="text-2xl font-bold text-green-400 mb-6 glow">&gt; SAVED_AUTHENTICATIONS.DAT</h2>
+            <h2 class="text-2xl font-bold text-green-400 mb-6 glow">
+              &gt; SAVED_AUTHENTICATIONS.DAT
+            </h2>
             <div class="terminal-card terminal-border-amber rounded-lg overflow-hidden">
               <div class="overflow-x-auto">
                 <table class="w-full">
@@ -328,13 +342,24 @@ defmodule TheMaestroWeb.DashboardLive do
                         <td class="px-4 py-3 text-amber-200">{format_dt(sa.inserted_at)}</td>
                         <td class="px-4 py-3">
                           <div class="flex space-x-2">
-                            <.link navigate={~p"/auths/#{sa.id}"} class="text-green-400 hover:text-green-300">
+                            <.link
+                              navigate={~p"/auths/#{sa.id}"}
+                              class="text-green-400 hover:text-green-300"
+                            >
                               <.icon name="hero-eye" class="h-4 w-4" />
                             </.link>
-                            <.link navigate={~p"/auths/#{sa.id}/edit"} class="text-blue-400 hover:text-blue-300">
+                            <.link
+                              navigate={~p"/auths/#{sa.id}/edit"}
+                              class="text-blue-400 hover:text-blue-300"
+                            >
                               <.icon name="hero-pencil-square" class="h-4 w-4" />
                             </.link>
-                            <button phx-click="delete" phx-value-id={sa.id} data-confirm="Delete this auth?" class="text-red-400 hover:text-red-300">
+                            <button
+                              phx-click="delete"
+                              phx-value-id={sa.id}
+                              data-confirm="Delete this auth?"
+                              class="text-red-400 hover:text-red-300"
+                            >
                               <.icon name="hero-trash" class="h-4 w-4" />
                             </button>
                           </div>
@@ -350,32 +375,56 @@ defmodule TheMaestroWeb.DashboardLive do
           <section class="mb-12">
             <div class="flex justify-between items-center mb-6">
               <h2 class="text-2xl font-bold text-green-400 glow">&gt; AGENT_REGISTRY.DAT</h2>
-              <button class="px-4 py-2 rounded transition-all duration-200 btn-green" phx-click="open_agent_modal" data-hotkey="alt+a" data-hotkey-seq="g a" data-hotkey-label="New Agent">
+              <button
+                class="px-4 py-2 rounded transition-all duration-200 btn-green"
+                phx-click="open_agent_modal"
+                data-hotkey="alt+a"
+                data-hotkey-seq="g a"
+                data-hotkey-label="New Agent"
+              >
                 <.icon name="hero-plus" class="inline mr-2 h-4 w-4" /> NEW AGENT
               </button>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <%= for a <- @agents do %>
-                <div class="terminal-card terminal-border-green rounded-lg p-6 transition-colors" id={"agent-" <> to_string(a.id)}>
+                <div
+                  class="terminal-card terminal-border-green rounded-lg p-6 transition-colors"
+                  id={"agent-" <> to_string(a.id)}
+                >
                   <h3 class="text-xl font-bold text-green-300 mb-3 glow">{a.name}</h3>
                   <div class="space-y-2 text-sm">
                     <%= if a.saved_authentication do %>
-                      <p class="text-amber-300">Auth: {a.saved_authentication.name} ({a.saved_authentication.provider}/{a.saved_authentication.auth_type})</p>
+                      <p class="text-amber-300">
+                        Auth: {a.saved_authentication.name} ({a.saved_authentication.provider}/{a.saved_authentication.auth_type})
+                      </p>
                     <% else %>
                       <p class="text-red-400">No Auth Configured</p>
                     <% end %>
-                    <p class="text-amber-200">Tools: {map_count(a.tools)} • MCPs: {map_count(a.mcps)}</p>
+                    <p class="text-amber-200">
+                      Tools: {map_count(a.tools)} • MCPs: {map_count(a.mcps)}
+                    </p>
                   </div>
                   <div class="flex justify-between mt-4 pt-3 border-t border-green-800">
                     <div class="flex space-x-2">
-                      <.link class="text-green-400 hover:text-green-300" navigate={"/agents/" <> to_string(a.id)}>
+                      <.link
+                        class="text-green-400 hover:text-green-300"
+                        navigate={"/agents/" <> to_string(a.id)}
+                      >
                         <.icon name="hero-eye" class="h-4 w-4" />
                       </.link>
-                      <.link class="text-blue-400 hover:text-blue-300" navigate={"/agents/" <> to_string(a.id) <> "/edit"}>
+                      <.link
+                        class="text-blue-400 hover:text-blue-300"
+                        navigate={"/agents/" <> to_string(a.id) <> "/edit"}
+                      >
                         <.icon name="hero-pencil-square" class="h-4 w-4" />
                       </.link>
                     </div>
-                    <button class="text-red-400 hover:text-red-300" phx-click="delete_agent" phx-value-id={a.id} data-confirm="Delete this agent?">
+                    <button
+                      class="text-red-400 hover:text-red-300"
+                      phx-click="delete_agent"
+                      phx-value-id={a.id}
+                      data-confirm="Delete this agent?"
+                    >
                       <.icon name="hero-trash" class="h-4 w-4" />
                     </button>
                   </div>
@@ -387,13 +436,22 @@ defmodule TheMaestroWeb.DashboardLive do
           <section>
             <div class="flex justify-between items-center mb-6">
               <h2 class="text-2xl font-bold text-green-400 glow">&gt; SESSION_MANAGER.DAT</h2>
-              <button class="px-4 py-2 rounded transition-all duration-200 btn-blue" phx-click="open_session_modal" data-hotkey="alt+n" data-hotkey-seq="g n" data-hotkey-label="New Session">
+              <button
+                class="px-4 py-2 rounded transition-all duration-200 btn-blue"
+                phx-click="open_session_modal"
+                data-hotkey="alt+n"
+                data-hotkey-seq="g n"
+                data-hotkey-label="New Session"
+              >
                 <.icon name="hero-plus" class="inline mr-2 h-4 w-4" /> NEW SESSION
               </button>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <%= for s <- @sessions do %>
-                <div class="terminal-card terminal-border-blue rounded-lg p-6 transition-colors" id={"session-" <> to_string(s.id)}>
+                <div
+                  class="terminal-card terminal-border-blue rounded-lg p-6 transition-colors"
+                  id={"session-" <> to_string(s.id)}
+                >
                   <h3 class="text-xl font-bold text-blue-300 mb-3 glow">{session_label(s)}</h3>
                   <div class="space-y-2 text-sm">
                     <p class="text-amber-300">Agent: {s.agent && s.agent.name}</p>
@@ -401,12 +459,24 @@ defmodule TheMaestroWeb.DashboardLive do
                   </div>
                   <div class="flex justify-between mt-4 pt-3 border-t border-blue-800">
                     <div class="flex space-x-2">
-                      <.link class="px-3 py-1 rounded text-xs btn-green" navigate={~p"/sessions/#{s.id}/chat"}>CHAT</.link>
-                      <.link class="text-blue-400 hover:text-blue-300" navigate={~p"/sessions/#{s.id}/edit"}>
+                      <.link
+                        class="px-3 py-1 rounded text-xs btn-green"
+                        navigate={~p"/sessions/#{s.id}/chat"}
+                      >
+                        CHAT
+                      </.link>
+                      <.link
+                        class="text-blue-400 hover:text-blue-300"
+                        navigate={~p"/sessions/#{s.id}/edit"}
+                      >
                         <.icon name="hero-pencil-square" class="h-4 w-4" />
                       </.link>
                     </div>
-                    <button class="text-red-400 hover:text-red-300" phx-click="delete_session" phx-value-id={s.id}>
+                    <button
+                      class="text-red-400 hover:text-red-300"
+                      phx-click="delete_session"
+                      phx-value-id={s.id}
+                    >
                       <.icon name="hero-trash" class="h-4 w-4" />
                     </button>
                   </div>
@@ -418,14 +488,31 @@ defmodule TheMaestroWeb.DashboardLive do
 
         <.modal :if={@show_session_modal} id="session-modal">
           <h3 class="text-2xl font-bold text-blue-400 mb-6 glow">CREATE NEW SESSION</h3>
-          <.form for={@session_form} id="session-modal-form" phx-submit="session_save" phx-change="session_validate">
+          <.form
+            for={@session_form}
+            id="session-modal-form"
+            phx-submit="session_save"
+            phx-change="session_validate"
+          >
             <.input field={@session_form[:name]} type="text" label="Session Name" />
-            <.input field={@session_form[:agent_id]} type="select" label="Agent" options={@agent_options} prompt="Select agent" />
+            <.input
+              field={@session_form[:agent_id]}
+              type="select"
+              label="Agent"
+              options={@agent_options}
+              prompt="Select agent"
+            />
             <div class="mt-2 grid gap-2">
               <.input field={@session_form[:working_dir]} type="text" label="Working Directory" />
               <div>
-                <button type="button" class="btn btn-xs btn-amber" phx-click="session_use_root_dir">ROOT</button>
-                <button type="button" class="btn btn-xs btn-amber ml-2" phx-click="open_session_dir_picker">
+                <button type="button" class="btn btn-xs btn-amber" phx-click="session_use_root_dir">
+                  ROOT
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-amber ml-2"
+                  phx-click="open_session_dir_picker"
+                >
                   <.icon name="hero-folder" class="h-4 w-4" />
                 </button>
               </div>
@@ -436,24 +523,59 @@ defmodule TheMaestroWeb.DashboardLive do
             </div>
           </.form>
           <.modal :if={@show_session_dir_picker} id="dir-picker-session-new">
-            <.live_component module={TheMaestroWeb.DirectoryPicker} id="dirpick-session-new" start_path={@session_form[:working_dir].value || Path.expand(".")} context={:new_session} />
+            <.live_component
+              module={TheMaestroWeb.DirectoryPicker}
+              id="dirpick-session-new"
+              start_path={@session_form[:working_dir].value || Path.expand(".")}
+              context={:new_session}
+            />
           </.modal>
         </.modal>
 
         <.modal :if={@show_agent_modal} id="agent-modal">
           <h3 class="text-2xl font-bold text-green-400 mb-6 glow">CREATE NEW AGENT</h3>
-          <.form for={@agent_form} id="agent-modal-form" phx-change="agent_validate" phx-submit="agent_save">
+          <.form
+            for={@agent_form}
+            id="agent-modal-form"
+            phx-change="agent_validate"
+            phx-submit="agent_save"
+          >
             <.input field={@agent_form[:name]} type="text" label="Agent Name" />
-            <.input field={@agent_form[:auth_id]} type="select" label="Saved Auth" options={@auth_options} prompt="Select authentication" />
-            <.input field={@agent_form[:model_id]} type="select" label="Model" options={@model_options} prompt="Auto-select from provider" />
-            <.input field={@agent_form[:base_system_prompt_id]} type="select" label="Base System Prompt" options={@prompt_options} prompt="(optional)" />
-            <.input field={@agent_form[:persona_id]} type="select" label="Persona" options={@persona_options} prompt="(optional)" />
+            <.input
+              field={@agent_form[:auth_id]}
+              type="select"
+              label="Saved Auth"
+              options={@auth_options}
+              prompt="Select authentication"
+            />
+            <.input
+              field={@agent_form[:model_id]}
+              type="select"
+              label="Model"
+              options={@model_options}
+              prompt="Auto-select from provider"
+            />
+            <.input
+              field={@agent_form[:base_system_prompt_id]}
+              type="select"
+              label="Base System Prompt"
+              options={@prompt_options}
+              prompt="(optional)"
+            />
+            <.input
+              field={@agent_form[:persona_id]}
+              type="select"
+              label="Persona"
+              options={@persona_options}
+              prompt="(optional)"
+            />
             <div class="mt-3 space-x-2">
               <button type="submit" class="btn btn-green">Save</button>
               <button type="button" class="btn" phx-click="cancel_agent_modal">Cancel</button>
             </div>
           </.form>
         </.modal>
+        <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
       </div>
     </Layouts.app>
     """

@@ -8,13 +8,25 @@ defmodule TheMaestroWeb.AgentLive.Show do
       <div class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden">
         <div class="container mx-auto px-6 py-8">
           <div class="flex justify-between items-center mb-6 border-b border-amber-600 pb-4">
-            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">&gt;&gt;&gt; AGENT {@agent.id} &lt;&lt;&lt;</h1>
+            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
+              &gt;&gt;&gt; AGENT {@agent.id} &lt;&lt;&lt;
+            </h1>
             <div class="space-x-2">
-              <.link navigate={~p"/agents"} class="px-3 py-1 rounded btn-amber" data-hotkey-seq="g i" data-hotkey-label="Agents Index">
+              <.link
+                navigate={~p"/agents"}
+                class="px-3 py-1 rounded btn-amber"
+                data-hotkey-seq="g i"
+                data-hotkey-label="Agents Index"
+              >
                 <.icon name="hero-arrow-left" class="inline mr-1 w-4 h-4" /> BACK
               </.link>
-              <.link navigate={~p"/agents/#{@agent}/edit?return_to=show"} class="px-3 py-1 rounded btn-blue" data-hotkey-seq="g e" data-hotkey-label="Edit Agent">
-                <.icon name="hero-pencil-square" class="inline mr-1 w-4 h-4" /> EDIT
+              <.link
+                navigate={~p"/agents/#{@agent}/edit?return_to=show"}
+                class="px-3 py-1 rounded btn-blue"
+                data-hotkey-seq="g e"
+                data-hotkey-label="Edit Agent"
+              >
+                <.icon name="hero-pencil-square" class="inline mr-1 w-4 h-4" /> Edit
               </.link>
             </div>
           </div>
@@ -42,6 +54,7 @@ defmodule TheMaestroWeb.AgentLive.Show do
               <pre class="text-xs text-amber-200">{inspect(@agent.memory || %{}, pretty: true, limit: :infinity)}</pre>
             </div>
           </div>
+          <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
         </div>
       </div>
     </Layouts.app>

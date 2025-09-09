@@ -74,7 +74,6 @@ defmodule TheMaestroWeb.SessionEditLive do
     {:noreply, assign(socket, :show_dir_picker, false)}
   end
 
-
   defp agent_options do
     Agents.list_agents_with_auth()
     |> Enum.map(&{&1.name, &1.id})
@@ -132,6 +131,7 @@ defmodule TheMaestroWeb.SessionEditLive do
           context={:edit}
         />
       </.modal>
+      <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
     </Layouts.app>
     """
   end

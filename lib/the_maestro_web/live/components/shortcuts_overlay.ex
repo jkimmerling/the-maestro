@@ -9,7 +9,10 @@ defmodule TheMaestroWeb.ShortcutsOverlay do
   @impl true
   def update(assigns, socket) do
     # Preserve :id and any other structural assigns; apply provided visibility/items
-    {:ok, assign(socket, assigns) |> assign_new(:visible, fn -> false end) |> assign_new(:items, fn -> [] end)}
+    {:ok,
+     assign(socket, assigns)
+     |> assign_new(:visible, fn -> false end)
+     |> assign_new(:items, fn -> [] end)}
   end
 
   @impl true

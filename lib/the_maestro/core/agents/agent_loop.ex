@@ -497,5 +497,4 @@ defmodule TheMaestro.AgentLoop do
         {:error, "unsupported tool: #{other}"}
     end
   end
-
 end

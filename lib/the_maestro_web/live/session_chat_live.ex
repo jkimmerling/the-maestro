@@ -808,7 +808,6 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:followup_history, items)}
   end
 
-
   defp persist_assistant_turn(_session, final_text, _req_meta, _updated2, _used_usage, _tools)
        when final_text == "",
        do: :ok
@@ -884,13 +883,18 @@ defmodule TheMaestroWeb.SessionChatLive do
     ~H"""
     <Layouts.app flash={@flash} show_header={false} main_class="p-0" container_class="p-0">
       <div class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden">
-
         <div class="container mx-auto px-6 py-8">
           <div class="flex justify-between items-center mb-6 border-b border-amber-600 pb-4">
             <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
               &gt;&gt;&gt; SESSION CHAT: {@session.name || "Session"} &lt;&lt;&lt;
             </h1>
-            <.link navigate={~p"/dashboard"} class="px-4 py-2 rounded transition-all duration-200 btn-amber" data-hotkey="alt+b" data-hotkey-seq="g d" data-hotkey-label="Go to Dashboard">
+            <.link
+              navigate={~p"/dashboard"}
+              class="px-4 py-2 rounded transition-all duration-200 btn-amber"
+              data-hotkey="alt+b"
+              data-hotkey-seq="g d"
+              data-hotkey-label="Go to Dashboard"
+            >
               <.icon name="hero-arrow-left" class="inline mr-2 w-4 h-4" /> BACK
             </.link>
           </div>
@@ -898,7 +902,10 @@ defmodule TheMaestroWeb.SessionChatLive do
           <div class="sticky top-0 z-10 bg-black/90 border-b border-amber-600 -mt-2 mb-4 py-2 px-2 text-xs text-amber-300">
             <%= if s = @summary do %>
               <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <div class="glow">last: {s.provider}, {s.model}, {s.auth_type}{if s.auth_name, do: "(" <> s.auth_name <> ")"}</div>
+                <div class="glow">
+                  last: {s.provider}, {s.model}, {s.auth_type}{if s.auth_name,
+                    do: "(" <> s.auth_name <> ")"}
+                </div>
                 <div>avg latency: {s.avg_latency_ms} ms</div>
               </div>
             <% else %>
@@ -942,7 +949,9 @@ defmodule TheMaestroWeb.SessionChatLive do
                       <div class="mt-1">tools:</div>
                       <ul class="list-disc ml-4">
                         <%= for t <- m["tools"] do %>
-                          <li><code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 120)}</li>
+                          <li>
+                            <code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 120)}
+                          </li>
                         <% end %>
                       </ul>
                     <% end %>
@@ -977,7 +986,9 @@ defmodule TheMaestroWeb.SessionChatLive do
                 <div class="text-xs opacity-80">
                   assistant
                   <%= if @used_provider do %>
-                    ( {Atom.to_string(@used_provider)}, {@used_model}, {to_string(@used_auth_type || "")}
+                    ( {Atom.to_string(@used_provider)}, {@used_model}, {to_string(
+                      @used_auth_type || ""
+                    )}
                     <%= if u = @used_usage do %>
                       , total {compact_int(token_total(u))}
                     <% end %>
@@ -1003,7 +1014,8 @@ defmodule TheMaestroWeb.SessionChatLive do
           </div>
 
           <.form for={%{}} phx-submit="send" class="mt-6">
-            <textarea id="chat-input"
+            <textarea
+              id="chat-input"
               name="message"
               class="textarea-terminal"
               rows="4"
@@ -1012,7 +1024,9 @@ defmodule TheMaestroWeb.SessionChatLive do
               phx-hook="ChatInput"
             ></textarea>
             <div class="mt-2">
-              <button type="submit" class="px-4 py-2 rounded transition-all duration-200 btn-blue">Send</button>
+              <button type="submit" class="px-4 py-2 rounded transition-all duration-200 btn-blue">
+                Send
+              </button>
             </div>
           </.form>
 
@@ -1020,9 +1034,13 @@ defmodule TheMaestroWeb.SessionChatLive do
             <div class="flex items-center justify-between mb-2">
               <h3 class="text-lg font-bold text-green-400 glow">LATEST_SNAPSHOT.JSON</h3>
               <%= if @editing_latest do %>
-                <button class="px-2 py-1 rounded text-xs btn-amber" phx-click="cancel_edit_latest">CANCEL</button>
+                <button class="px-2 py-1 rounded text-xs btn-amber" phx-click="cancel_edit_latest">
+                  CANCEL
+                </button>
               <% else %>
-                <button class="px-2 py-1 rounded text-xs btn-amber" phx-click="start_edit_latest">EDIT</button>
+                <button class="px-2 py-1 rounded text-xs btn-amber" phx-click="start_edit_latest">
+                  EDIT
+                </button>
               <% end %>
             </div>
             <%= if @editing_latest do %>
@@ -1033,7 +1051,9 @@ defmodule TheMaestroWeb.SessionChatLive do
                   rows="10"
                 ><%= @latest_json %></textarea>
                 <div class="mt-2">
-                  <button type="submit" class="px-3 py-1 rounded btn-blue text-sm">Save Snapshot</button>
+                  <button type="submit" class="px-3 py-1 rounded btn-blue text-sm">
+                    Save Snapshot
+                  </button>
                 </div>
               </.form>
             <% else %>
@@ -1044,6 +1064,7 @@ defmodule TheMaestroWeb.SessionChatLive do
           </div>
         </div>
       </div>
+      <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
     </Layouts.app>
     """
   end

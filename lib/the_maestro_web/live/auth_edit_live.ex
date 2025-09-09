@@ -60,8 +60,16 @@ defmodule TheMaestroWeb.AuthEditLive do
       <div class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden">
         <div class="container mx-auto px-6 py-8">
           <div class="flex justify-between items-center mb-6 border-b border-amber-600 pb-4">
-            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">&gt;&gt;&gt; EDIT AUTH &lt;&lt;&lt;</h1>
-            <.link navigate={~p"/auths/#{@sa.id}"} class="px-4 py-2 rounded transition-all duration-200 btn-amber" data-hotkey-seq="g v" data-hotkey-label="View Auth" data-hotkey="alt+b">
+            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
+              &gt;&gt;&gt; EDIT AUTH &lt;&lt;&lt;
+            </h1>
+            <.link
+              navigate={~p"/auths/#{@sa.id}"}
+              class="px-4 py-2 rounded transition-all duration-200 btn-amber"
+              data-hotkey-seq="g v"
+              data-hotkey-label="View Auth"
+              data-hotkey="alt+b"
+            >
               <.icon name="hero-arrow-left" class="inline mr-2 w-4 h-4" /> BACK
             </.link>
           </div>
@@ -95,11 +103,14 @@ defmodule TheMaestroWeb.AuthEditLive do
               <% end %>
 
               <div class="mt-4">
-                <button type="button" phx-click="save" class="px-4 py-2 rounded btn-blue">Save</button>
+                <button type="button" phx-click="save" class="px-4 py-2 rounded btn-blue">
+                  Save
+                </button>
               </div>
             </div>
           </.form>
         </div>
+        <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
       </div>
     </Layouts.app>
     """

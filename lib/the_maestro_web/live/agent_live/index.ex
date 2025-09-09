@@ -10,9 +10,17 @@ defmodule TheMaestroWeb.AgentLive.Index do
       <div class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden">
         <div class="container mx-auto px-6 py-8">
           <div class="flex justify-between items-center mb-6 border-b border-amber-600 pb-4">
-            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">&gt;&gt;&gt; AGENTS INDEX &lt;&lt;&lt;</h1>
-            <.link navigate={~p"/agents/new"} class="px-4 py-2 rounded transition-all duration-200 btn-green" data-hotkey-seq="g a" data-hotkey-label="New Agent" data-hotkey="alt+a">
-              <.icon name="hero-plus" class="inline mr-2 w-4 h-4" /> NEW AGENT
+            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
+              &gt;&gt;&gt; AGENTS INDEX &lt;&lt;&lt;
+            </h1>
+            <.link
+              navigate={~p"/agents/new"}
+              class="px-4 py-2 rounded transition-all duration-200 btn-green"
+              data-hotkey-seq="g a"
+              data-hotkey-label="New Agent"
+              data-hotkey="alt+a"
+            >
+              <.icon name="hero-plus" class="inline mr-2 w-4 h-4" /> New Agent
             </.link>
           </div>
 
@@ -25,24 +33,41 @@ defmodule TheMaestroWeb.AgentLive.Index do
                     <.link navigate={~p"/agents/#{agent}"} class="text-green-400 hover:text-green-300">
                       <.icon name="hero-eye" class="h-4 w-4" />
                     </.link>
-                    <.link navigate={~p"/agents/#{agent}/edit"} class="text-blue-400 hover:text-blue-300">
+                    <.link
+                      navigate={~p"/agents/#{agent}/edit"}
+                      class="text-blue-400 hover:text-blue-300"
+                    >
                       <.icon name="hero-pencil-square" class="h-4 w-4" />
+                      <span class="sr-only">Edit</span>
                     </.link>
-                    <button phx-click={JS.push("delete", value: %{id: agent.id}) |> hide("##{dom_id}")} data-confirm="Are you sure?" class="text-red-400 hover:text-red-300">
+                    <.link
+                      href="#"
+                      phx-click={JS.push("delete", value: %{id: agent.id}) |> hide("##{dom_id}")}
+                      data-confirm="Are you sure?"
+                      class="text-red-400 hover:text-red-300"
+                    >
                       <.icon name="hero-trash" class="h-4 w-4" />
-                    </button>
+                      <span class="sr-only">Delete</span>
+                    </.link>
                   </div>
                 </div>
                 <div class="mt-2 text-sm text-amber-200 space-y-1">
-                  <div><span class="text-amber-300">Tools:</span> {inspect(map_size(agent.tools || %{}))}</div>
-                  <div><span class="text-amber-300">MCPs:</span> {inspect(map_size(agent.mcps || %{}))}</div>
+                  <div>
+                    <span class="text-amber-300">Tools:</span> {inspect(map_size(agent.tools || %{}))}
+                  </div>
+                  <div>
+                    <span class="text-amber-300">MCPs:</span> {inspect(map_size(agent.mcps || %{}))}
+                  </div>
                 </div>
                 <div class="mt-3">
-                  <.link navigate={~p"/agents/#{agent}"} class="px-3 py-1 rounded text-xs btn-amber">OPEN</.link>
+                  <.link navigate={~p"/agents/#{agent}"} class="px-3 py-1 rounded text-xs btn-amber">
+                    OPEN
+                  </.link>
                 </div>
               </div>
             <% end %>
           </div>
+          <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
         </div>
       </div>
     </Layouts.app>
