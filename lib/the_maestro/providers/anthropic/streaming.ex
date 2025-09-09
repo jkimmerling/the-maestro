@@ -44,6 +44,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
           end
 
         url = if auth_type == :oauth, do: "/v1/messages?beta=true", else: "/v1/messages"
+        body = sanitize_cache_control(body, :disable)
         maybe_log_request(:initial, req, url, body)
         StreamingAdapter.stream_request(req, method: :post, url: url, json: body)
       end
@@ -99,6 +100,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
           end
 
         url = if auth_type == :oauth, do: "/v1/messages?beta=true", else: "/v1/messages"
+        body = sanitize_cache_control(body, :disable)
         maybe_log_request(:followup, req, url, body)
         StreamingAdapter.stream_request(req, method: :post, url: url, json: body)
       end
@@ -450,18 +452,17 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
     "user_" <> String.slice(hash, 0, 64) <> "_account_cli_session_" <> Ecto.UUID.generate()
   end
 
-  # Shape system as Claude Code expects: content blocks with ephemeral cache control
+  # Shape system as Claude Code expects: content blocks (no cache_control)
   defp anthropic_system_blocks do
     [
       %{
         "type" => "text",
-        "text" => "You are Claude Code, Anthropic's official CLI for Claude.",
-        "cache_control" => %{"type" => "ephemeral"}
+        "text" => "You are Claude Code, Anthropic's official CLI for Claude."
       }
     ]
   end
 
-  # Convert string-based messages to content blocks with ephemeral cache control for Claude Code OAuth
+  # Convert string-based messages to content blocks for Claude Code OAuth (no cache_control)
   defp transform_messages_for_claude_code(messages) when is_list(messages) do
     Enum.map(messages, fn m ->
       role = Map.get(m, "role") || Map.get(m, :role) || "user"
@@ -470,18 +471,20 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
       blocks =
         cond do
           is_binary(content) ->
-            [%{"type" => "text", "text" => content, "cache_control" => %{"type" => "ephemeral"}}]
+            [%{"type" => "text", "text" => content}]
 
           is_list(content) ->
-            # If already content blocks, pass through
-            content
+            # If already content blocks, strip any cache_control keys defensively
+            Enum.map(content, fn
+              %{"cache_control" => _} = block -> Map.delete(block, "cache_control")
+              other -> other
+            end)
 
           true ->
             [
               %{
                 "type" => "text",
-                "text" => to_string(content),
-                "cache_control" => %{"type" => "ephemeral"}
+                "text" => to_string(content)
               }
             ]
         end
@@ -489,6 +492,41 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
       %{"role" => role, "content" => blocks}
     end)
   end
+
+  # Remove or cap cache_control across system/messages/tools
+  # mode: :disable removes all cache_control; :limit4 keeps the first 4 and strips the rest
+  defp sanitize_cache_control(body, mode \\ :disable) when is_map(body) do
+    {new_body, _kept} = do_sanitize_cache_control(body, mode, 0)
+    new_body
+  end
+
+  defp do_sanitize_cache_control(value, mode, kept) when is_list(value) do
+    Enum.map_reduce(value, kept, fn v, acc -> do_sanitize_cache_control(v, mode, acc) end)
+  end
+
+  defp do_sanitize_cache_control(%{"cache_control" => cc} = map, :disable, kept) when is_map(cc) do
+    {Map.delete(map, "cache_control"), kept}
+  end
+
+  defp do_sanitize_cache_control(%{"cache_control" => cc} = map, :limit4, kept) when is_map(cc) do
+    if kept < 4 do
+      {map, kept + 1}
+    else
+      {Map.delete(map, "cache_control"), kept}
+    end
+  end
+
+  defp do_sanitize_cache_control(%{} = map, mode, kept) do
+    {new_map, kept_after} =
+      Enum.reduce(Map.to_list(map), {%{}, kept}, fn {k, v}, {acc_map, acc_kept} ->
+        {new_v, new_kept} = do_sanitize_cache_control(v, mode, acc_kept)
+        {Map.put(acc_map, k, new_v), new_kept}
+      end)
+
+    {new_map, kept_after}
+  end
+
+  defp do_sanitize_cache_control(other, _mode, kept), do: {other, kept}
 
   defp maybe_log_request(tag, %Req.Request{} = req, url, body) do
     if System.get_env("HTTP_DEBUG") in ["1", "true", "TRUE"] do

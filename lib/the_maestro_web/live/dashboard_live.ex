@@ -18,6 +18,9 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:prompt_options, build_prompt_options())
      |> assign(:persona_options, build_persona_options())
      |> assign(:session_form, to_form(Conversations.change_session(%Conversations.Session{})))
+     |> assign(:session_provider, "openai")
+     |> assign(:session_auth_options, build_auth_options_for(:openai))
+     |> assign(:session_model_options, [])
      |> assign(:show_session_dir_picker, false)
      |> assign(:page_title, "Dashboard")}
   end
@@ -69,6 +72,9 @@ defmodule TheMaestroWeb.DashboardLive do
 
     {:noreply,
      socket
+     |> assign(:session_provider, "openai")
+     |> assign(:session_auth_options, build_auth_options_for(:openai))
+     |> assign(:session_model_options, [])
      |> assign(:auth_options, build_auth_options())
      |> assign(:session_form, to_form(cs))
      |> assign(:show_session_modal, true)}
@@ -81,6 +87,38 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:show_session_dir_picker, false)}
   end
 
+  # Target-aware validate to avoid clobbering model list when provider also present
+  def handle_event(
+        "session_validate",
+        %{"_target" => ["session", target], "session" => params},
+        socket
+      ) do
+    cs =
+      Conversations.change_session(%Conversations.Session{}, params)
+      |> Map.put(:action, :validate)
+
+    socket = assign(socket, session_form: to_form(cs, action: :validate))
+
+    case target do
+      "provider" ->
+        provider = String.to_existing_atom(params["provider"])
+
+        {:noreply,
+         socket
+         |> assign(:session_provider, params["provider"])
+         |> assign(:session_auth_options, build_auth_options_for(provider))
+         |> assign(:session_model_options, [])}
+
+      "auth_id" ->
+        models = build_model_options(%{"auth_id" => params["auth_id"]})
+        {:noreply, assign(socket, :session_model_options, models)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  # Fallback validate (no _target); preserve previous behavior
   def handle_event("session_validate", %{"session" => params}, socket) do
     cs =
       Conversations.change_session(%Conversations.Session{}, params)
@@ -96,8 +134,10 @@ defmodule TheMaestroWeb.DashboardLive do
   def handle_event("session_use_root_dir", _params, socket) do
     wd = File.cwd!() |> Path.expand()
 
+    params = merge_session_params(socket, %{"working_dir" => wd})
+
     cs =
-      Conversations.change_session(%Conversations.Session{}, %{"working_dir" => wd})
+      Conversations.change_session(%Conversations.Session{}, params)
       |> Map.put(:action, :validate)
 
     {:noreply, assign(socket, session_form: to_form(cs, action: :validate))}
@@ -105,6 +145,41 @@ defmodule TheMaestroWeb.DashboardLive do
 
   # Keep all handle_event/3 clauses grouped together to avoid warnings
   def handle_event("session_save", %{"session" => params}, socket) do
+    # Mirror persona from persona_id if provided
+    params =
+      case Map.get(params, "persona_id") do
+        nil ->
+          params
+
+        "" ->
+          params
+
+        id ->
+          p = TheMaestro.Personas.get_persona!(id)
+
+          Map.put(params, "persona", %{
+            "name" => p.name,
+            "version" => 1,
+            "persona_text" => p.prompt_text
+          })
+      end
+
+    # Merge memory from memory_json if present
+    params =
+      case Map.get(params, "memory_json") do
+        nil ->
+          params
+
+        "" ->
+          params
+
+        txt ->
+          case Jason.decode(txt) do
+            {:ok, %{} = m} -> Map.put(params, "memory", m)
+            _ -> params
+          end
+      end
+
     case Conversations.create_session(params) do
       {:ok, _} ->
         {:noreply,
@@ -135,8 +210,10 @@ defmodule TheMaestroWeb.DashboardLive do
 
   @impl true
   def handle_info({TheMaestroWeb.DirectoryPicker, :selected, path, :new_session}, socket) do
+    params = merge_session_params(socket, %{"working_dir" => path})
+
     cs =
-      Conversations.change_session(%Conversations.Session{}, %{"working_dir" => path})
+      Conversations.change_session(%Conversations.Session{}, params)
       |> Map.put(:action, :validate)
 
     {:noreply,
@@ -203,14 +280,51 @@ defmodule TheMaestroWeb.DashboardLive do
   defp build_model_options(%{"auth_id" => auth_id}) when is_binary(auth_id) and auth_id != "" do
     with {id, _} <- Integer.parse(auth_id),
          %SavedAuthentication{} = sa <- SavedAuthentication.get!(id),
-         {:ok, models} <- Provider.list_models(sa.provider, sa.auth_type, sa.name) do
-      Enum.map(models, fn m -> {m.name || m.id, m.id} end)
+         {:ok, models} <- Provider.list_models(sa.provider, sa.auth_type, sa.name),
+         list when is_list(list) and list != [] <-
+           Enum.map(models, fn m -> {m.name || m.id, m.id} end) do
+      list
     else
-      _ -> []
+      _ ->
+        # Fallback defaults per provider to ensure model select is populated
+        case Integer.parse(auth_id) do
+          {id, _} ->
+            sa = SavedAuthentication.get!(id)
+
+            case sa.provider do
+              :openai ->
+                [{"gpt-5", "gpt-5"}, {"gpt-4o", "gpt-4o"}]
+
+              :anthropic ->
+                [{"claude-3-5-sonnet", "claude-3-5-sonnet"}, {"claude-3-opus", "claude-3-opus"}]
+
+              :gemini ->
+                [
+                  {"gemini-2.5-pro", "gemini-2.5-pro"},
+                  {"gemini-1.5-pro-latest", "gemini-1.5-pro-latest"}
+                ]
+
+              _ ->
+                []
+            end
+
+          :error ->
+            []
+        end
     end
   end
 
+  defp build_auth_options_for(provider) when is_atom(provider) do
+    SavedAuthentication.list_by_provider(provider)
+    |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
+  end
+
   defp build_model_options(_), do: []
+
+  # Merge new form values into the current session form params, preserving prior selections
+  defp merge_session_params(socket, extra) when is_map(extra) do
+    (socket.assigns[:session_form] && socket.assigns.session_form.params) |> Map.merge(extra)
+  end
 
   defp session_label(s) do
     cond do
@@ -374,28 +488,63 @@ defmodule TheMaestroWeb.DashboardLive do
             phx-change="session_validate"
           >
             <.input field={@session_form[:name]} type="text" label="Session Name" />
-            <.input
-              field={@session_form[:agent_id]}
-              type="select"
-              label="Agent"
-              options={@agent_options}
-              prompt="Select agent"
-            />
-            <div class="mt-2 grid gap-2">
-              <.input field={@session_form[:working_dir]} type="text" label="Working Directory" />
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <button type="button" class="btn btn-xs btn-amber" phx-click="session_use_root_dir">
-                  ROOT
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-xs btn-amber ml-2"
-                  phx-click="open_session_dir_picker"
-                >
-                  <.icon name="hero-folder" class="h-4 w-4" />
-                </button>
+                <label class="text-xs">Provider (filter)</label>
+                <select name="session[provider]" class="input">
+                  <%= for p <- ["openai", "anthropic", "gemini"] do %>
+                    <option value={p} selected={@session_provider == p}>{p}</option>
+                  <% end %>
+                </select>
+              </div>
+              <.input
+                field={@session_form[:auth_id]}
+                type="select"
+                label="Saved Auth"
+                options={@session_auth_options}
+                prompt="Select auth"
+              />
+              <.input
+                field={@session_form[:model_id]}
+                type="select"
+                label="Model"
+                options={@session_model_options}
+                prompt="(auto)"
+              />
+              <div>
+                <.input field={@session_form[:working_dir]} type="text" label="Working Directory" />
+                <div class="mt-1 flex gap-2">
+                  <button type="button" class="btn btn-xs btn-amber" phx-click="session_use_root_dir">
+                    ROOT
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-amber"
+                    phx-click="open_session_dir_picker"
+                  >
+                    <.icon name="hero-folder" class="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
+            <div class="mt-2">
+              <label class="text-xs">Chat History</label>
+              <div class="text-sm opacity-80">Start New Chat</div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <.input
+                field={@session_form[:persona_id]}
+                type="select"
+                label="Persona"
+                options={@persona_options}
+                prompt="(optional)"
+              />
+              <div>
+                <label class="text-xs">Memory (JSON)</label>
+                <textarea name="session[memory_json]" rows="4" class="textarea-terminal"></textarea>
+              </div>
+            </div>
+            <div class="mt-2"></div>
             <div class="mt-3 space-x-2">
               <button type="submit" class="btn btn-blue">Save</button>
               <button type="button" class="btn" phx-click="cancel_session_modal">Cancel</button>
