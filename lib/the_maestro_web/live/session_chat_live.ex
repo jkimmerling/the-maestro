@@ -50,7 +50,12 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:show_config, false)
      |> assign(:config_form, %{})
      |> assign(:config_models, [])
-     |> assign(:show_clear_confirm, false)}
+     |> assign(:config_persona_options, [])
+     |> assign(:show_clear_confirm, false)
+     |> assign(:show_persona_modal, false)
+     |> assign(:persona_form, %{})
+     |> assign(:show_memory_modal, false)
+     |> assign(:memory_editor_text, nil)}
   end
 
   @impl true
@@ -185,6 +190,7 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:config_form, form0)
      |> assign(:config_models, [])
      |> load_auth_options(form0)
+     |> load_persona_options()
      |> assign(:show_config, true)}
   end
 
@@ -217,7 +223,98 @@ defmodule TheMaestroWeb.SessionChatLive do
         socket
       end
 
+    # If persona_id changed, mirror into persona_json
+    socket =
+      if Map.has_key?(params, "persona_id") do
+        case get_persona_for_form(form) do
+          nil ->
+            socket
+
+          %TheMaestro.Personas.Persona{} = p ->
+            pj =
+              Jason.encode!(%{"name" => p.name, "version" => 1, "persona_text" => p.prompt_text})
+
+            assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
+        end
+      else
+        socket
+      end
+
     {:noreply, socket}
+  end
+
+  # ==== Persona modal ====
+  @impl true
+  def handle_event("open_persona_modal", _params, socket) do
+    {:noreply, socket |> assign(:show_persona_modal, true) |> assign(:persona_form, %{})}
+  end
+
+  @impl true
+  def handle_event("cancel_persona_modal", _params, socket) do
+    {:noreply, assign(socket, :show_persona_modal, false)}
+  end
+
+  @impl true
+  def handle_event("save_persona", %{"name" => name, "prompt_text" => text}, socket) do
+    case TheMaestro.Personas.create_persona(%{name: name, prompt_text: text}) do
+      {:ok, persona} ->
+        pj =
+          Jason.encode!(%{
+            "name" => persona.name,
+            "version" => 1,
+            "persona_text" => persona.prompt_text
+          })
+
+        socket =
+          socket
+          |> load_persona_options()
+          |> assign(
+            :config_form,
+            (socket.assigns.config_form || %{})
+            |> Map.put("persona_id", persona.id)
+            |> Map.put("persona_json", pj)
+          )
+
+        {:noreply,
+         socket |> assign(:show_persona_modal, false) |> put_flash(:info, "Persona created")}
+
+      {:error, changeset} ->
+        {:noreply,
+         put_flash(socket, :error, "Failed to create persona: #{inspect(changeset.errors)}")}
+    end
+  end
+
+  # ==== Memory modal ====
+  @impl true
+  def handle_event("open_memory_modal", _params, socket) do
+    mem =
+      socket.assigns.config_form["memory_json"] ||
+        Jason.encode!(socket.assigns.session.memory || %{})
+
+    {:noreply, socket |> assign(:show_memory_modal, true) |> assign(:memory_editor_text, mem)}
+  end
+
+  @impl true
+  def handle_event("cancel_memory_modal", _params, socket) do
+    {:noreply, assign(socket, :show_memory_modal, false)}
+  end
+
+  @impl true
+  def handle_event("save_memory_modal", %{"memory_json" => txt}, socket) do
+    case Jason.decode(txt) do
+      {:ok, %{} = _map} ->
+        socket =
+          assign(socket, :config_form, Map.put(socket.assigns.config_form, "memory_json", txt))
+
+        {:noreply,
+         socket |> assign(:show_memory_modal, false) |> put_flash(:info, "Memory updated")}
+
+      {:ok, _} ->
+        {:noreply, put_flash(socket, :error, "Memory JSON must be an object")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Invalid JSON: #{inspect(reason)}")}
+    end
   end
 
   @impl true
@@ -286,7 +383,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
           {:noreply,
            socket
-           |> assign(:show_config, false)
+           |> assign(:show_config, true)
            |> put_flash(
              :info,
              if(apply_behavior == "now",
@@ -680,6 +777,34 @@ defmodule TheMaestroWeb.SessionChatLive do
       end)
 
     assign(socket, :config_form, Map.put(form, "auth_options", opts))
+  end
+
+  defp load_persona_options(socket) do
+    opts =
+      TheMaestro.Personas.list_personas()
+      |> Enum.map(fn p ->
+        {p.name, p.id}
+      end)
+
+    socket
+    |> assign(:config_persona_options, opts)
+  end
+
+  defp get_persona_for_form(form) do
+    case form["persona_id"] do
+      nil ->
+        nil
+
+      "" ->
+        nil
+
+      id ->
+        try do
+          TheMaestro.Personas.get_persona!(to_string(id))
+        rescue
+          _ -> nil
+        end
+    end
   end
 
   defp list_models_for_form(form) do
@@ -1323,6 +1448,25 @@ defmodule TheMaestroWeb.SessionChatLive do
                 class="input"
               />
             </div>
+            <div>
+              <label class="text-xs">Persona</label>
+              <div class="flex gap-2 items-center">
+                <select name="persona_id" class="input">
+                  <option value="">(custom JSON)</option>
+                  <%= for {label, id} <- (@config_persona_options || []) do %>
+                    <option
+                      value={id}
+                      selected={to_string(id) == to_string(@config_form["persona_id"])}
+                    >
+                      {label}
+                    </option>
+                  <% end %>
+                </select>
+                <button type="button" class="btn btn-xs" phx-click="open_persona_modal">
+                  Add Persona…
+                </button>
+              </div>
+            </div>
             <div class="md:col-span-2">
               <label class="text-xs">Persona (JSON)</label>
               <textarea name="persona_json" rows="3" class="textarea-terminal"><%= @config_form["persona_json"] || Jason.encode!(@session.persona || %{}) %></textarea>
@@ -1330,6 +1474,11 @@ defmodule TheMaestroWeb.SessionChatLive do
             <div class="md:col-span-2">
               <label class="text-xs">Memory (JSON)</label>
               <textarea name="memory_json" rows="3" class="textarea-terminal"><%= @config_form["memory_json"] || Jason.encode!(@session.memory || %{}) %></textarea>
+              <div class="mt-1">
+                <button type="button" class="btn btn-xs" phx-click="open_memory_modal">
+                  Open Advanced Editor…
+                </button>
+              </div>
             </div>
             <div class="md:col-span-2">
               <label class="text-xs">Tools (JSON)</label>
@@ -1352,6 +1501,37 @@ defmodule TheMaestroWeb.SessionChatLive do
           <div class="mt-4 flex gap-2">
             <button class="btn btn-blue" type="submit">Save</button>
             <button class="btn" type="button" phx-click="close_config">Cancel</button>
+          </div>
+        </.form>
+      </.modal>
+
+      <.modal :if={@show_persona_modal} id="persona-modal">
+        <.form for={%{}} phx-submit="save_persona" id="persona-form">
+          <h3 class="text-lg font-bold mb-2">Add Persona</h3>
+          <div class="grid grid-cols-1 gap-2">
+            <div>
+              <label class="text-xs">Name</label>
+              <input type="text" name="name" class="input" />
+            </div>
+            <div>
+              <label class="text-xs">Prompt Text</label>
+              <textarea name="prompt_text" rows="6" class="textarea-terminal"></textarea>
+            </div>
+          </div>
+          <div class="mt-3 flex gap-2">
+            <button class="btn btn-blue" type="submit">Save</button>
+            <button class="btn" type="button" phx-click="cancel_persona_modal">Cancel</button>
+          </div>
+        </.form>
+      </.modal>
+
+      <.modal :if={@show_memory_modal} id="memory-modal">
+        <.form for={%{}} phx-submit="save_memory_modal" id="memory-form">
+          <h3 class="text-lg font-bold mb-2">Memory — Advanced JSON Editor</h3>
+          <textarea name="memory_json" rows="12" class="textarea-terminal"><%= @memory_editor_text %></textarea>
+          <div class="mt-3 flex gap-2">
+            <button class="btn btn-blue" type="submit">Save</button>
+            <button class="btn" type="button" phx-click="cancel_memory_modal">Cancel</button>
           </div>
         </.form>
       </.modal>
