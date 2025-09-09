@@ -174,9 +174,9 @@ Tasks and Subtasks
   - [x] Validation: SavedAuth enforced; provider derived from SavedAuth where needed (cutover: require auth_id or agent_id, prefer auth_id)
 
 - Phase 3 — Translation Layer
-  - [ ] Extend `TheMaestro.Conversations.Translator` to handle events (function_call, outputs, usage)
-  - [ ] Normalize provider‑specific function calling semantics to canonical
-  - [ ] Add unit tests covering switching scenarios and edge cases
+  - [x] Extend `TheMaestro.Conversations.Translator` to handle events (function_call, outputs, usage)
+  - [x] Normalize provider‑specific function calling semantics to canonical
+  - [x] Add unit tests covering switching scenarios and edge cases
 
 - Phase 4 — Streaming Manager
   - [ ] Add `TheMaestro.Sessions.Manager` (GenServer) + `Task.Supervisor`
