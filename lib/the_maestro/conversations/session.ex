@@ -10,6 +10,18 @@ defmodule TheMaestro.Conversations.Session do
     field :last_used_at, :utc_datetime
     field :working_dir, :string
 
+    # New session-centric fields that consolidate Agent data onto Session
+    field :model_id, :string
+    field :persona, :map, default: %{}
+    field :memory, :map, default: %{}
+    field :tools, :map, default: %{}
+    field :mcps, :map, default: %{}
+
+    # Saved authentication moved from Agent; keep Agent for cutover
+    belongs_to :saved_authentication, TheMaestro.SavedAuthentication,
+      foreign_key: :auth_id,
+      type: :integer
+
     belongs_to :agent, TheMaestro.Agents.Agent, type: :binary_id
     # Associate the latest chat snapshot for quick preload in dashboards
     belongs_to :latest_chat_entry, TheMaestro.Conversations.ChatEntry,
@@ -22,7 +34,20 @@ defmodule TheMaestro.Conversations.Session do
   @doc false
   def changeset(session, attrs) do
     session
-    |> cast(attrs, [:name, :last_used_at, :agent_id, :latest_chat_entry_id, :working_dir])
+    |> cast(attrs, [
+      :name,
+      :last_used_at,
+      :agent_id,
+      :latest_chat_entry_id,
+      :working_dir,
+      :auth_id,
+      :model_id,
+      :persona,
+      :memory,
+      :tools,
+      :mcps
+    ])
+    # Keep requiring agent_id during Phase 1; we will relax in Phase 2 after UI/domain cutover
     |> validate_required([:agent_id])
     |> validate_change(:working_dir, fn :working_dir, v ->
       cond do
@@ -31,6 +56,7 @@ defmodule TheMaestro.Conversations.Session do
         true -> [working_dir: "directory does not exist or is not accessible"]
       end
     end)
+    |> foreign_key_constraint(:auth_id)
     |> foreign_key_constraint(:agent_id)
     |> foreign_key_constraint(:latest_chat_entry_id)
   end

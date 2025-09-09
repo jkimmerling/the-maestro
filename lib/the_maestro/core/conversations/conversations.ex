@@ -15,6 +15,11 @@ defmodule TheMaestro.Conversations.ChatEntry do
     field :edit_version, :integer, default: 0
 
     field :session_id, :binary_id
+    # New session-centric threading fields (Phase 1)
+    field :thread_id, :binary_id
+    field :parent_thread_id, :binary_id
+    field :fork_from_entry_id, :binary_id
+    field :thread_label, :string
 
     timestamps(type: :utc_datetime)
   end
@@ -31,10 +36,14 @@ defmodule TheMaestro.Conversations.ChatEntry do
       :combined_chat,
       :edit_version
     ])
+    # During cutover, require session_id while thread_id is being backfilled.
+    # In Phase 2 we will flip to require thread_id and make session_id optional.
     |> validate_required([:session_id, :turn_index, :actor, :combined_chat])
     |> validate_inclusion(:actor, ["user", "assistant", "tool", "system"])
     |> foreign_key_constraint(:session_id)
     |> unique_constraint([:session_id, :turn_index])
+    # New unique constraint (soft during cutover as thread_id may be nil)
+    |> unique_constraint([:thread_id, :turn_index])
   end
 end
 
