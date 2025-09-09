@@ -189,8 +189,8 @@ Tasks and Subtasks
   - [x] Summary includes token count; provider derived display verified
   - [x] Tests: selectors, render, change/submit (smoke); behavior choice restart covered indirectly
   - [x] New Chat / Clear Chat buttons with confirmation; auto‑naming and inline rename
-  - [ ] Memory modal (dedicated) with Advanced JSON editor (defer)
-  - [ ] Persona modal (dedicated) from dropdown; mirrors to Session jsonb (defer)
+  - [x] Memory modal (dedicated) with Advanced JSON editor; returns to Config modal
+  - [x] Persona modal (dedicated) from dropdown; mirrors to Session jsonb; returns to Config modal with new selection
 
 - Phase 6 — Cleanup & Docs
   - [ ] Remove `Agent` LiveViews, controllers, routes, tests
