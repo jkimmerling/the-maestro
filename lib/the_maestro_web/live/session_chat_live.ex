@@ -15,8 +15,11 @@ defmodule TheMaestroWeb.SessionChatLive do
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     session =
-      Conversations.get_session!(id)
-      |> TheMaestro.Repo.preload(agent: [:saved_authentication, :base_system_prompt, :persona])
+      Conversations.get_session_with_auth!(id)
+      |> TheMaestro.Repo.preload([
+        :saved_authentication,
+        agent: [:saved_authentication, :base_system_prompt, :persona]
+      ])
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
 
@@ -131,11 +134,10 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     # Determine provider/model
     provider =
-      session.agent.saved_authentication.provider |> to_string() |> String.to_existing_atom()
+      provider_from_session(session)
 
     model = pick_model_for_session(session, provider)
-    auth_type = session.agent.saved_authentication.auth_type
-    auth_name = session.agent.saved_authentication.name
+    {auth_type, auth_name} = auth_meta_from_session(session)
     {:ok, provider_msgs} = Translator.to_provider(updated, provider)
 
     # Cancel any prior stream
@@ -203,7 +205,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp default_model_for_session(session, :openai) do
-    case session.agent.saved_authentication.auth_type do
+    case (session.saved_authentication || (session.agent && session.agent.saved_authentication)).auth_type do
       :oauth -> "gpt-5"
       _ -> "gpt-4o"
     end
@@ -212,7 +214,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp default_model_for_session(_session, :anthropic), do: "claude-3-5-sonnet"
 
   defp default_model_for_session(session, :gemini) do
-    case session.agent.saved_authentication.auth_type do
+    case (session.saved_authentication || (session.agent && session.agent.saved_authentication)).auth_type do
       :oauth -> "gemini-2.5-pro"
       _ -> "gemini-1.5-pro-latest"
     end
@@ -222,7 +224,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # Try to pick a valid model from the provider's list; fallback to defaults
   defp pick_model_for_session(session, provider) do
-    chosen = session.agent.model_id
+    chosen = session.model_id || (session.agent && session.agent.model_id)
 
     if is_binary(chosen) and chosen != "" do
       chosen
@@ -233,8 +235,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   defp choose_model_from_provider(session, provider) do
     default = default_model_for_session(session, provider)
-    session_name = session.agent.saved_authentication.name
-    auth_type = session.agent.saved_authentication.auth_type
+    {auth_type, session_name} = auth_meta_from_session(session)
 
     case Provider.list_models(provider, auth_type, session_name) do
       {:ok, models} when is_list(models) and models != [] ->
@@ -483,6 +484,17 @@ defmodule TheMaestroWeb.SessionChatLive do
             false
         end
     end
+  end
+
+  # ---- Session helpers (derive provider/auth from SavedAuth) ----
+  defp provider_from_session(session) do
+    saved = session.saved_authentication || (session.agent && session.agent.saved_authentication)
+    saved.provider |> to_string() |> String.to_existing_atom()
+  end
+
+  defp auth_meta_from_session(session) do
+    saved = session.saved_authentication || (session.agent && session.agent.saved_authentication)
+    {saved.auth_type, saved.name}
   end
 
   defp effective_provider(socket, session) do

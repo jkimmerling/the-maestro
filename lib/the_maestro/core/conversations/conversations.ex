@@ -75,7 +75,7 @@ defmodule TheMaestro.Conversations do
   Returns sessions preloaded with their agents for dashboard cards.
   """
   def list_sessions_with_agents do
-    Repo.all(from s in Session, preload: [:agent, :latest_chat_entry])
+    Repo.all(from s in Session, preload: [:agent, :saved_authentication, :latest_chat_entry])
   end
 
   @doc """
@@ -93,6 +93,12 @@ defmodule TheMaestro.Conversations do
 
   """
   def get_session!(id), do: Repo.get!(Session, id)
+
+  @doc """
+  Gets a single session preloaded with saved_authentication.
+  """
+  def get_session_with_auth!(id),
+    do: Repo.get!(Session, id) |> Repo.preload([:saved_authentication])
 
   @doc """
   Creates a session.
@@ -236,6 +242,42 @@ defmodule TheMaestro.Conversations do
       ) || -1
 
     max + 1
+  end
+
+  # ===== Thread-first APIs =====
+
+  @doc """
+  Creates an initial thread for a session with optional label.
+  """
+  def ensure_thread_for_session(session_id, _label \\ nil) when is_binary(session_id) do
+    # If any entry already has a thread_id, reuse its thread_id
+    case Repo.one(
+           from e in ChatEntry,
+             where: e.session_id == ^session_id and not is_nil(e.thread_id),
+             select: e.thread_id,
+             limit: 1
+         ) do
+      nil ->
+        tid = Ecto.UUID.generate()
+        {:ok, tid}
+
+      tid ->
+        {:ok, tid}
+    end
+  end
+
+  @doc """
+  Forks a thread at a given entry, setting lineage fields on subsequent entries as needed.
+  Returns {:ok, new_thread_id}.
+  """
+  def fork_thread(thread_id, fork_from_entry_id, _label \\ nil)
+      when is_binary(thread_id) and is_binary(fork_from_entry_id) do
+    new_id = Ecto.UUID.generate()
+    # We only record lineage at the fork point for traceability
+    from(e in ChatEntry, where: e.id == ^fork_from_entry_id)
+    |> Repo.update_all(set: [fork_from_entry_id: fork_from_entry_id])
+
+    {:ok, new_id}
   end
 
   @doc """
