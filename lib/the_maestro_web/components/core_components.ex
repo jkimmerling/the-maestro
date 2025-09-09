@@ -61,9 +61,9 @@ defmodule TheMaestroWeb.CoreComponents do
       {@rest}
     >
       <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
+        "terminal-card w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap px-4 py-2 glow flash-pulse",
+        @kind == :info && "terminal-border-green text-green-300",
+        @kind == :error && "terminal-border-red text-red-300"
       ]}>
         <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
         <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
@@ -87,9 +87,23 @@ defmodule TheMaestroWeb.CoreComponents do
   def modal(assigns) do
     ~H"""
     <div id={@id} class="fixed inset-0 z-50" phx-window-keydown="close_modal" phx-key="escape">
-      <div class="absolute inset-0 bg-black/40" />
+      <div
+        id={"#{@id}-bg"}
+        class="absolute inset-0 bg-black/40"
+        phx-click="close_modal"
+        phx-mounted={show("##{@id}-bg")}
+        phx-remove={hide("##{@id}-bg")}
+      />
       <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="bg-base-100 rounded shadow-xl w-full max-w-2xl p-4">
+        <div
+          id={"#{@id}-panel"}
+          class="bg-base-100 rounded shadow-xl w-full max-w-2xl p-4"
+          role="dialog"
+          aria-modal="true"
+          phx-hook="AutoFocusModal"
+          phx-mounted={show("##{@id}-panel")}
+          phx-remove={hide("##{@id}-panel")}
+        >
           {render_slot(@inner_block)}
         </div>
       </div>

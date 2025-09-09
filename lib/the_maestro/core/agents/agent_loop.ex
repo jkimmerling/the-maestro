@@ -498,8 +498,4 @@ defmodule TheMaestro.AgentLoop do
     end
   end
 
-  defp maybe_put_timeout(map, shell_timeout: nil), do: map
-
-  defp maybe_put_timeout(map, shell_timeout: t) when is_integer(t) and t > 0,
-    do: Map.put(map, "timeout_ms", t)
 end

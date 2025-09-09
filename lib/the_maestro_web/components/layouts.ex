@@ -31,11 +31,18 @@ defmodule TheMaestroWeb.Layouts do
     default: nil,
     doc: "the current [scope](https://hexdocs.pm/phoenix/scopes.html)"
 
+  # Theming/structure opts (non-breaking defaults)
+  attr :show_header, :boolean, default: true
+  attr :main_class, :string, default: "px-4 py-20 sm:px-6 lg:px-8"
+  attr :container_class, :string, default: "mx-auto max-w-2xl space-y-4"
+
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
+    <div id="app-root" phx-hook="GlobalHotkeys">
+    <div class="crt-overlay"></div>
+    <header :if={@show_header} class="navbar px-4 sm:px-6 lg:px-8">
       <div class="flex-1">
         <a href="/" class="flex-1 flex w-fit items-center gap-2">
           <img src={~p"/images/logo.svg"} width="36" />
@@ -62,13 +69,19 @@ defmodule TheMaestroWeb.Layouts do
       </div>
     </header>
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
+    <main class={@main_class}>
+      <div class={@container_class}>
         {render_slot(@inner_block)}
       </div>
     </main>
 
     <.flash_group flash={@flash} />
+    <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
+    <button id="shortcuts-hint" phx-hook="ShortcutsHint" aria-label="Show shortcuts"
+            class="fixed bottom-3 right-3 z-50 px-2 py-1 rounded text-xs btn-amber opacity-60 hover:opacity-100">
+      ?
+    </button>
+    </div>
     """
   end
 

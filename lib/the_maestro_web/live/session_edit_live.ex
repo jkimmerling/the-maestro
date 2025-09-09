@@ -56,6 +56,10 @@ defmodule TheMaestroWeb.SessionEditLive do
     {:noreply, assign(socket, :show_dir_picker, true)}
   end
 
+  def handle_event("close_modal", _params, socket) do
+    {:noreply, assign(socket, :show_dir_picker, false)}
+  end
+
   @impl true
   def handle_info({TheMaestroWeb.DirectoryPicker, :selected, path, _ctx}, socket) do
     cs =
@@ -69,6 +73,7 @@ defmodule TheMaestroWeb.SessionEditLive do
   def handle_info({TheMaestroWeb.DirectoryPicker, :cancel, _ctx}, socket) do
     {:noreply, assign(socket, :show_dir_picker, false)}
   end
+
 
   defp agent_options do
     Agents.list_agents_with_auth()

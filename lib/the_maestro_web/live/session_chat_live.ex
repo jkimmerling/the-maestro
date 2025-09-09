@@ -808,8 +808,6 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:followup_history, items)}
   end
 
-  defp maybe_put_timeout(map, nil), do: map
-  defp maybe_put_timeout(map, t) when is_integer(t) and t > 0, do: Map.put(map, "timeout_ms", t)
 
   defp persist_assistant_turn(_session, final_text, _req_meta, _updated2, _used_usage, _tools)
        when final_text == "",
@@ -884,155 +882,167 @@ defmodule TheMaestroWeb.SessionChatLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <div class="mb-2 text-xs opacity-70">
-        <%= if s = @summary do %>
-          <span>last: {s.provider}, {s.model}, {s.auth_type}
-            {if s.auth_name, do: "(" <> s.auth_name <> ")"}</span>
-          <span class="ml-2">avg latency: {s.avg_latency_ms} ms</span>
-        <% end %>
-      </div>
-      <.header>
-        Chat: {@session.name || "Session"}
-        <:actions>
-          <.button navigate={~p"/dashboard"}>Back</.button>
-        </:actions>
-      </.header>
+    <Layouts.app flash={@flash} show_header={false} main_class="p-0" container_class="p-0">
+      <div class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden">
 
-      <div class="space-y-2">
-        <%= for msg <- @messages do %>
-          <div class={"p-2 rounded " <> if msg["role"] == "user", do: "bg-base-200", else: "bg-base-100"}>
-            <div class="text-xs opacity-70">
-              {msg["role"]}
-              <%= if m = msg["_meta"] do %>
-                ( {m["provider"]}, {m["model"]}, {m["auth_type"]}
-                <%= if u = m["usage"] do %>
-                  , total {compact_int(token_total(u))}
-                <% end %>
-                <%= if m["latency_ms"] do %>
-                  , {m["latency_ms"]}ms
-                <% end %>
-                )
-              <% end %>
-            </div>
-            <div class="whitespace-pre-wrap text-sm">
-              <.render_text chat={%{"messages" => [msg]}} />
-            </div>
-            <%= if m = msg["_meta"] do %>
-              <details class="mt-1 opacity-70 text-xs">
-                <summary>details</summary>
-                <div>provider: {m["provider"]}</div>
-                <div>model: {m["model"]}</div>
-                <div>auth: {m["auth_type"]} ({m["auth_name"]})</div>
-                <%= if u = m["usage"] do %>
-                  <div>
-                    tokens: prompt {compact_int(u["prompt_tokens"] || u[:prompt_tokens] || 0)}, completion {compact_int(
-                      u["completion_tokens"] || u[:completion_tokens] || 0
-                    )}, total {compact_int(token_total(u))}
-                  </div>
-                <% end %>
-                <%= if is_list(m["tools"]) and m["tools"] != [] do %>
-                  <div class="mt-1">tools:</div>
-                  <ul class="list-disc ml-4">
-                    <%= for t <- m["tools"] do %>
-                      <li><code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 120)}</li>
+        <div class="container mx-auto px-6 py-8">
+          <div class="flex justify-between items-center mb-6 border-b border-amber-600 pb-4">
+            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
+              &gt;&gt;&gt; SESSION CHAT: {@session.name || "Session"} &lt;&lt;&lt;
+            </h1>
+            <.link navigate={~p"/dashboard"} class="px-4 py-2 rounded transition-all duration-200 btn-amber" data-hotkey="alt+b" data-hotkey-seq="g d" data-hotkey-label="Go to Dashboard">
+              <.icon name="hero-arrow-left" class="inline mr-2 w-4 h-4" /> BACK
+            </.link>
+          </div>
+
+          <div class="sticky top-0 z-10 bg-black/90 border-b border-amber-600 -mt-2 mb-4 py-2 px-2 text-xs text-amber-300">
+            <%= if s = @summary do %>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <div class="glow">last: {s.provider}, {s.model}, {s.auth_type}{if s.auth_name, do: "(" <> s.auth_name <> ")"}</div>
+                <div>avg latency: {s.avg_latency_ms} ms</div>
+              </div>
+            <% else %>
+              <div class="opacity-70">No summary yet</div>
+            <% end %>
+          </div>
+
+          <div class="space-y-3">
+            <%= for msg <- @messages do %>
+              <div class={"terminal-card p-3 " <> if msg["role"] == "user", do: "terminal-border-amber", else: "terminal-border-blue"}>
+                <div class="text-xs opacity-80">
+                  {msg["role"]}
+                  <%= if m = msg["_meta"] do %>
+                    ( {m["provider"]}, {m["model"]}, {m["auth_type"]}
+                    <%= if u = m["usage"] do %>
+                      , total {compact_int(token_total(u))}
                     <% end %>
-                  </ul>
-                <% end %>
-                <%= if m["latency_ms"] do %>
-                  <div>latency: {m["latency_ms"]} ms</div>
-                <% end %>
-              </details>
-            <% end %>
-          </div>
-        <% end %>
-
-        <%= if @streaming? and is_list(@tool_calls) and @tool_calls != [] do %>
-          <div class="p-2 rounded bg-base-100">
-            <div class="text-xs opacity-70">tool activity</div>
-            <ul class="list-disc ml-4 text-sm">
-              <%= for t <- @tool_calls do %>
-                <li><code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 160)}</li>
-              <% end %>
-            </ul>
-          </div>
-        <% end %>
-
-        <%= if @streaming? and @partial_answer == "" and @thinking? do %>
-          <div class="p-2 rounded bg-base-100">
-            <div class="text-xs opacity-70">assistant</div>
-            <div class="opacity-70 italic text-sm">thinking…</div>
-          </div>
-        <% end %>
-
-        <%= if @streaming? and @partial_answer != "" do %>
-          <div class="p-2 rounded bg-base-100">
-            <div class="text-xs opacity-70">
-              assistant
-              <%= if @used_provider do %>
-                ( {Atom.to_string(@used_provider)}, {@used_model}, {to_string(@used_auth_type || "")}
-                <%= if u = @used_usage do %>
-                  , total {compact_int(token_total(u))}
-                <% end %>
-                )
-              <% end %>
-            </div>
-            <div class="whitespace-pre-wrap text-sm">{@partial_answer}</div>
-            <%= if u = @used_usage do %>
-              <details class="mt-1 opacity-70 text-xs">
-                <summary>details</summary>
-                <div>provider: {Atom.to_string(@used_provider)}</div>
-                <div>model: {@used_model}</div>
-                <div>auth: {to_string(@used_auth_type || "")} ({@used_auth_name})</div>
-                <div>
-                  tokens: prompt {compact_int(u[:prompt_tokens] || u["prompt_tokens"] || 0)}, completion {compact_int(
-                    u[:completion_tokens] || u["completion_tokens"] || 0
-                  )}, total {compact_int(token_total(u))}
+                    <%= if m["latency_ms"] do %>
+                      , {m["latency_ms"]}ms
+                    <% end %>
+                    )
+                  <% end %>
                 </div>
-              </details>
+                <div class="whitespace-pre-wrap text-sm text-amber-200">
+                  <.render_text chat={%{"messages" => [msg]}} />
+                </div>
+                <%= if m = msg["_meta"] do %>
+                  <details class="mt-1 opacity-80 text-xs">
+                    <summary>details</summary>
+                    <div>provider: {m["provider"]}</div>
+                    <div>model: {m["model"]}</div>
+                    <div>auth: {m["auth_type"]} ({m["auth_name"]})</div>
+                    <%= if u = m["usage"] do %>
+                      <div>
+                        tokens: prompt {compact_int(u["prompt_tokens"] || u[:prompt_tokens] || 0)}, completion {compact_int(
+                          u["completion_tokens"] || u[:completion_tokens] || 0
+                        )}, total {compact_int(token_total(u))}
+                      </div>
+                    <% end %>
+                    <%= if is_list(m["tools"]) and m["tools"] != [] do %>
+                      <div class="mt-1">tools:</div>
+                      <ul class="list-disc ml-4">
+                        <%= for t <- m["tools"] do %>
+                          <li><code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 120)}</li>
+                        <% end %>
+                      </ul>
+                    <% end %>
+                    <%= if m["latency_ms"] do %>
+                      <div>latency: {m["latency_ms"]} ms</div>
+                    <% end %>
+                  </details>
+                <% end %>
+              </div>
+            <% end %>
+
+            <%= if @streaming? and is_list(@tool_calls) and @tool_calls != [] do %>
+              <div class="terminal-card terminal-border-amber p-3">
+                <div class="text-xs opacity-80">tool activity</div>
+                <ul class="list-disc ml-4 text-sm text-amber-200">
+                  <%= for t <- @tool_calls do %>
+                    <li><code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 160)}</li>
+                  <% end %>
+                </ul>
+              </div>
+            <% end %>
+
+            <%= if @streaming? and @partial_answer == "" and @thinking? do %>
+              <div class="terminal-card terminal-border-blue p-3">
+                <div class="text-xs opacity-80">assistant</div>
+                <div class="opacity-80 italic text-sm text-amber-200">thinking…</div>
+              </div>
+            <% end %>
+
+            <%= if @streaming? and @partial_answer != "" do %>
+              <div class="terminal-card terminal-border-blue p-3">
+                <div class="text-xs opacity-80">
+                  assistant
+                  <%= if @used_provider do %>
+                    ( {Atom.to_string(@used_provider)}, {@used_model}, {to_string(@used_auth_type || "")}
+                    <%= if u = @used_usage do %>
+                      , total {compact_int(token_total(u))}
+                    <% end %>
+                    )
+                  <% end %>
+                </div>
+                <div class="whitespace-pre-wrap text-sm text-amber-200">{@partial_answer}</div>
+                <%= if u = @used_usage do %>
+                  <details class="mt-1 opacity-80 text-xs">
+                    <summary>details</summary>
+                    <div>provider: {Atom.to_string(@used_provider)}</div>
+                    <div>model: {@used_model}</div>
+                    <div>auth: {to_string(@used_auth_type || "")} ({@used_auth_name})</div>
+                    <div>
+                      tokens: prompt {compact_int(u[:prompt_tokens] || u["prompt_tokens"] || 0)}, completion {compact_int(
+                        u[:completion_tokens] || u["completion_tokens"] || 0
+                      )}, total {compact_int(token_total(u))}
+                    </div>
+                  </details>
+                <% end %>
+              </div>
             <% end %>
           </div>
-        <% end %>
-      </div>
 
-      <.form for={%{}} phx-submit="send" class="mt-4">
-        <textarea
-          name="message"
-          class="textarea textarea-bordered w-full"
-          rows="3"
-          value={@message}
-          phx-change="change"
-        ></textarea>
-        <div class="mt-2">
-          <button type="submit" class="btn btn-primary">Send</button>
-        </div>
-      </.form>
-
-      <div class="mt-6">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-md font-semibold">Latest Snapshot</h3>
-          <%= if @editing_latest do %>
-            <button class="btn btn-xs" phx-click="cancel_edit_latest">Cancel</button>
-          <% else %>
-            <button class="btn btn-xs" phx-click="start_edit_latest">Edit</button>
-          <% end %>
-        </div>
-        <%= if @editing_latest do %>
-          <.form for={%{}} phx-submit="save_edit_latest">
-            <textarea
-              name="json"
-              class="textarea textarea-bordered w-full font-mono text-xs"
-              rows="10"
-            ><%= @latest_json %></textarea>
+          <.form for={%{}} phx-submit="send" class="mt-6">
+            <textarea id="chat-input"
+              name="message"
+              class="textarea-terminal"
+              rows="4"
+              value={@message}
+              phx-change="change"
+              phx-hook="ChatInput"
+            ></textarea>
             <div class="mt-2">
-              <button type="submit" class="btn btn-primary btn-sm">Save Snapshot</button>
+              <button type="submit" class="px-4 py-2 rounded transition-all duration-200 btn-blue">Send</button>
             </div>
           </.form>
-        <% else %>
-          <div class="text-xs opacity-70">
-            Editing allows trimming or correcting the current context (full copy). Changes bump edit_version.
+
+          <div class="mt-8">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-lg font-bold text-green-400 glow">LATEST_SNAPSHOT.JSON</h3>
+              <%= if @editing_latest do %>
+                <button class="px-2 py-1 rounded text-xs btn-amber" phx-click="cancel_edit_latest">CANCEL</button>
+              <% else %>
+                <button class="px-2 py-1 rounded text-xs btn-amber" phx-click="start_edit_latest">EDIT</button>
+              <% end %>
+            </div>
+            <%= if @editing_latest do %>
+              <.form for={%{}} phx-submit="save_edit_latest">
+                <textarea
+                  name="json"
+                  class="textarea-terminal font-mono text-xs"
+                  rows="10"
+                ><%= @latest_json %></textarea>
+                <div class="mt-2">
+                  <button type="submit" class="px-3 py-1 rounded btn-blue text-sm">Save Snapshot</button>
+                </div>
+              </.form>
+            <% else %>
+              <div class="text-xs opacity-80 text-amber-300">
+                Editing allows trimming or correcting the current context (full copy). Changes bump edit_version.
+              </div>
+            <% end %>
           </div>
-        <% end %>
+        </div>
       </div>
     </Layouts.app>
     """
