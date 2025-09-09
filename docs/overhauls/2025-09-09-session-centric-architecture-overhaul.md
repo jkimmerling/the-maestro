@@ -162,6 +162,7 @@ Tasks and Subtasks
         - memory := agent.memory (map)
         - tools := agent.tools; mcps := agent.mcps
         - thread_id := new per‑session thread; thread_label := session.name
+  - [x] Backfill implemented via migration `20250909091500_backfill_threads_and_session_fields.exs` (mirrors Agent fields onto Session and assigns a thread per session)
   - [x] Indexes for thread queries; ensure constraints
   - [ ] Drop `sessions.agent_id` once UI and code paths no longer reference it
   - [ ] Archive/remove `agents` table after final sign‑off
