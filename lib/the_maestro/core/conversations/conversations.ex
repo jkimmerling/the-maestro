@@ -182,6 +182,18 @@ defmodule TheMaestro.Conversations do
   end
 
   @doc """
+  Returns the latest snapshot row for the given thread if one exists.
+  """
+  def latest_snapshot_for_thread(thread_id) when is_binary(thread_id) do
+    Repo.one(
+      from e in ChatEntry,
+        where: e.thread_id == ^thread_id,
+        order_by: [desc: e.turn_index],
+        limit: 1
+    )
+  end
+
+  @doc """
   Gets a single chat entry.
   """
   def get_chat_entry!(id), do: Repo.get!(ChatEntry, id)
@@ -228,6 +240,122 @@ defmodule TheMaestro.Conversations do
         order_by: [desc: e.turn_index],
         limit: 1
     )
+  end
+
+  @doc """
+  Returns the most recently used thread_id for a session (if any).
+  """
+  def latest_thread_id(session_id) do
+    Repo.one(
+      from e in ChatEntry,
+        where: e.session_id == ^session_id and not is_nil(e.thread_id),
+        order_by: [desc: e.inserted_at],
+        select: e.thread_id,
+        limit: 1
+    )
+  end
+
+  @doc """
+  Returns the latest label for a thread (if any).
+  """
+  def thread_label(thread_id) when is_binary(thread_id) do
+    Repo.one(
+      from e in ChatEntry,
+        where: e.thread_id == ^thread_id and not is_nil(e.thread_label),
+        order_by: [desc: e.inserted_at],
+        select: e.thread_label,
+        limit: 1
+    )
+  end
+
+  @doc """
+  Sets the label for all entries in a thread for consistent display.
+  """
+  def set_thread_label(thread_id, label) when is_binary(thread_id) and is_binary(label) do
+    {count, _} =
+      Repo.update_all(from(e in ChatEntry, where: e.thread_id == ^thread_id),
+        set: [thread_label: label]
+      )
+
+    {:ok, count}
+  end
+
+  @doc """
+  Creates a new thread for a session with an initial system snapshot based on the session persona/base prompt.
+  Returns {:ok, thread_id}.
+  """
+  def new_thread(%Session{} = session, label \\ nil) do
+    thread_id = Ecto.UUID.generate()
+    label = label || default_thread_label(session)
+
+    # Build system text similar to ensure_seeded_snapshot/1
+    session = Repo.preload(session, agent: [:base_system_prompt, :persona])
+    system_text = system_text_for_session(session)
+
+    canonical = %{
+      "messages" =>
+        if(system_text != "",
+          do: [%{"role" => "system", "content" => [%{"type" => "text", "text" => system_text}]}],
+          else: []
+        )
+    }
+
+    _ =
+      %ChatEntry{}
+      |> ChatEntry.changeset(%{
+        session_id: session.id,
+        thread_id: thread_id,
+        thread_label: label,
+        turn_index: 0,
+        actor: "system",
+        provider: nil,
+        request_headers: %{},
+        response_headers: %{},
+        combined_chat: canonical,
+        edit_version: 0
+      })
+      |> Repo.insert!()
+
+    {:ok, thread_id}
+  end
+
+  defp default_thread_label(session) do
+    base = session.name || "session"
+    ts = DateTime.utc_now() |> Calendar.strftime("%H:%M")
+    base <> " @ " <> ts
+  end
+
+  defp system_text_for_session(session) do
+    bsp_text =
+      case session.agent do
+        %{base_system_prompt: %{prompt_text: pt}} when is_binary(pt) -> pt
+        _ -> nil
+      end
+
+    persona_text =
+      case session.agent do
+        %{persona: %{prompt_text: pt}} when is_binary(pt) ->
+          pt
+
+        _ ->
+          case session.persona do
+            %{"persona_text" => pt} when is_binary(pt) -> pt
+            %{persona_text: pt} when is_binary(pt) -> pt
+            _ -> nil
+          end
+      end
+
+    [bsp_text, persona_text]
+    |> Enum.filter(&is_binary/1)
+    |> Enum.join("\n\n")
+  end
+
+  @doc """
+  Deletes all entries for a given thread.
+  """
+  def delete_thread_entries(thread_id) when is_binary(thread_id) do
+    {count, _} = Repo.delete_all(from e in ChatEntry, where: e.thread_id == ^thread_id)
+    {:ok, count}
   end
 
   @doc """

@@ -24,12 +24,17 @@ defmodule TheMaestroWeb.SessionChatLive do
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
     TheMaestro.Sessions.Manager.subscribe(session.id)
 
+    # Determine current thread (latest) for display
+    tid = Conversations.latest_thread_id(session.id)
+
     {:ok,
      socket
      |> assign(:page_title, "Chat")
      |> assign(:session, session)
+     |> assign(:current_thread_id, tid)
+     |> assign(:current_thread_label, (tid && Conversations.thread_label(tid)) || nil)
      |> assign(:message, "")
-     |> assign(:messages, current_messages(session.id))
+     |> assign(:messages, current_messages_for(session.id, tid))
      |> assign(:streaming?, false)
      |> assign(:partial_answer, "")
      |> assign(:stream_id, nil)
@@ -39,9 +44,13 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:tool_calls, [])
      |> assign(:pending_tool_calls, [])
      |> assign(:followup_history, [])
-     |> assign(:summary, compute_summary(current_messages(session.id)))
+     |> assign(:summary, compute_summary(current_messages_for(session.id, tid)))
      |> assign(:editing_latest, false)
-     |> assign(:latest_json, nil)}
+     |> assign(:latest_json, nil)
+     |> assign(:show_config, false)
+     |> assign(:config_form, %{})
+     |> assign(:config_models, [])
+     |> assign(:show_clear_confirm, false)}
   end
 
   @impl true
@@ -102,6 +111,197 @@ defmodule TheMaestroWeb.SessionChatLive do
 
       _ ->
         {:noreply, put_flash(socket, :error, "Could not save latest snapshot")}
+    end
+  end
+
+  # ==== Toolbar events ====
+  @impl true
+  def handle_event("new_thread", _params, socket) do
+    {:ok, tid} = Conversations.new_thread(socket.assigns.session)
+
+    msgs = current_messages_for(socket.assigns.session.id, tid)
+
+    {:noreply,
+     socket
+     |> assign(:current_thread_id, tid)
+     |> assign(:current_thread_label, Conversations.thread_label(tid))
+     |> assign(:messages, msgs)
+     |> assign(:summary, compute_summary(msgs))
+     |> put_flash(:info, "Started new chat thread")}
+  end
+
+  @impl true
+  def handle_event("confirm_clear_chat", _params, socket) do
+    {:noreply, assign(socket, :show_clear_confirm, true)}
+  end
+
+  @impl true
+  def handle_event("cancel_clear_chat", _params, socket) do
+    {:noreply, assign(socket, :show_clear_confirm, false)}
+  end
+
+  @impl true
+  def handle_event("do_clear_chat", _params, socket) do
+    case socket.assigns.current_thread_id do
+      tid when is_binary(tid) ->
+        {:ok, _} = Conversations.delete_thread_entries(tid)
+
+        {:noreply,
+         socket
+         |> assign(:show_clear_confirm, false)
+         |> assign(:messages, [])
+         |> assign(:summary, nil)
+         |> put_flash(:info, "Cleared current chat thread")}
+
+      _ ->
+        {:noreply, assign(socket, :show_clear_confirm, false)}
+    end
+  end
+
+  @impl true
+  def handle_event("rename_thread", %{"label" => label}, socket) do
+    case socket.assigns.current_thread_id do
+      tid when is_binary(tid) and label != "" ->
+        {:ok, _} = Conversations.set_thread_label(tid, label)
+        {:noreply, assign(socket, :current_thread_label, label)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  # ==== Config modal events ====
+  @impl true
+  def handle_event("open_config", _params, socket) do
+    form0 = %{
+      "provider" => default_provider(socket.assigns.session),
+      "auth_id" => socket.assigns.session.auth_id,
+      "model_id" => socket.assigns.session.model_id,
+      "working_dir" => socket.assigns.session.working_dir
+    }
+
+    {:noreply,
+     socket
+     |> assign(:config_form, form0)
+     |> assign(:config_models, [])
+     |> load_auth_options(form0)
+     |> assign(:show_config, true)}
+  end
+
+  @impl true
+  def handle_event("close_config", _params, socket) do
+    {:noreply, assign(socket, :show_config, false)}
+  end
+
+  @impl true
+  def handle_event("validate_config", params, socket) do
+    form = Map.merge(socket.assigns.config_form || %{}, params)
+    socket = assign(socket, :config_form, form)
+
+    # If provider changed, reload auth options and clear model list
+    socket =
+      if Map.has_key?(params, "provider") do
+        socket
+        |> load_auth_options(form)
+        |> assign(:config_models, [])
+      else
+        socket
+      end
+
+    # If auth_id changed, load models
+    socket =
+      if Map.has_key?(params, "auth_id") do
+        models = list_models_for_form(form)
+        assign(socket, :config_models, models)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("save_config", params, socket) do
+    # Decode JSON fields safely
+    with {:ok, persona} <-
+           safe_decode(
+             params["persona_json"] || Jason.encode!(socket.assigns.session.persona || %{})
+           ),
+         {:ok, memory} <-
+           safe_decode(
+             params["memory_json"] || Jason.encode!(socket.assigns.session.memory || %{})
+           ),
+         {:ok, tools} <-
+           safe_decode(params["tools_json"] || Jason.encode!(socket.assigns.session.tools || %{})),
+         {:ok, mcps} <-
+           safe_decode(params["mcps_json"] || Jason.encode!(socket.assigns.session.mcps || %{})) do
+      attrs = %{
+        "auth_id" => to_int(params["auth_id"]) || socket.assigns.session.auth_id,
+        "model_id" => params["model_id"] || socket.assigns.session.model_id,
+        "working_dir" => params["working_dir"] || socket.assigns.session.working_dir,
+        "persona" => persona,
+        "memory" => memory,
+        "tools" => tools,
+        "mcps" => mcps
+      }
+
+      case Conversations.update_session(socket.assigns.session, attrs) do
+        {:ok, updated} ->
+          socket = assign(socket, :session, updated)
+          apply_behavior = params["apply"] || "now"
+
+          socket =
+            if apply_behavior == "now" and socket.assigns.streaming? do
+              # Cancel existing stream and restart using current pending canonical or latest snapshot
+              _ = TheMaestro.Sessions.Manager.cancel(updated.id)
+              provider = provider_from_session(updated)
+
+              canon =
+                socket.assigns.pending_canonical ||
+                  (Conversations.latest_snapshot(updated.id) ||
+                     %{combined_chat: %{"messages" => []}})
+                  |> Map.get(:combined_chat, %{"messages" => []})
+
+              {:ok, provider_msgs} = Translator.to_provider(canon, provider)
+              model = pick_model_for_session(updated, provider)
+
+              {:ok, stream_id} =
+                TheMaestro.Sessions.Manager.start_stream(
+                  updated.id,
+                  provider,
+                  elem(auth_meta_from_session(updated), 1),
+                  provider_msgs,
+                  model
+                )
+
+              socket
+              |> assign(:stream_id, stream_id)
+              |> assign(:used_provider, provider)
+              |> assign(:used_model, model)
+              |> assign(:used_usage, nil)
+              |> assign(:thinking?, true)
+            else
+              socket
+            end
+
+          {:noreply,
+           socket
+           |> assign(:show_config, false)
+           |> put_flash(
+             :info,
+             if(apply_behavior == "now",
+               do: "Config applied and stream restarted",
+               else: "Config saved; applied next turn"
+             )
+           )}
+
+        {:error, changeset} ->
+          {:noreply,
+           put_flash(socket, :error, "Failed to save config: #{inspect(changeset.errors)}")}
+      end
+    else
+      {:error, {:decode, field, reason}} ->
+        {:noreply, put_flash(socket, :error, "Invalid JSON for #{field}: #{inspect(reason)}")}
     end
   end
 
@@ -320,7 +520,15 @@ defmodule TheMaestroWeb.SessionChatLive do
     {:noreply,
      socket
      |> push_event(%{kind: "ai", type: "usage", usage: usage, at: now_ms()})
-     |> assign(:used_usage, usage)}
+     |> assign(:used_usage, usage)
+     |> assign(
+       :summary,
+       (fn ->
+          msgs = socket.assigns.messages || []
+          # Keep summary updated to reflect latest token totals
+          compute_summary(msgs)
+        end).()
+     )}
   end
 
   def handle_info({:ai_stream, id, %{type: :done}}, %{assigns: %{stream_id: id}} = socket) do
@@ -454,6 +662,50 @@ defmodule TheMaestroWeb.SessionChatLive do
     saved = session.saved_authentication || (session.agent && session.agent.saved_authentication)
     {saved.auth_type, saved.name}
   end
+
+  defp default_provider(session) do
+    saved = session.saved_authentication || (session.agent && session.agent.saved_authentication)
+    (saved && Atom.to_string(saved.provider)) || "openai"
+  end
+
+  defp load_auth_options(socket, form) do
+    provider =
+      (form["provider"] || default_provider(socket.assigns.session)) |> String.to_existing_atom()
+
+    opts =
+      TheMaestro.SavedAuthentication.list_by_provider(provider)
+      |> Enum.map(fn sa ->
+        label = "#{sa.name} (#{Atom.to_string(sa.auth_type)})"
+        {label, sa.id}
+      end)
+
+    assign(socket, :config_form, Map.put(form, "auth_options", opts))
+  end
+
+  defp list_models_for_form(form) do
+    with p when is_binary(p) <- form["provider"],
+         a when a not in [nil, ""] <- form["auth_id"] do
+      provider = String.to_existing_atom(p)
+      auth = TheMaestro.SavedAuthentication.get!(to_int(a))
+      {:ok, models} = TheMaestro.Provider.list_models(provider, auth.auth_type, auth.name)
+      Enum.map(models, & &1.id)
+    else
+      _ -> []
+    end
+  end
+
+  defp safe_decode(json) when is_binary(json) do
+    case Jason.decode(json) do
+      {:ok, %{} = map} -> {:ok, map}
+      {:ok, _} -> {:error, {:decode, :json, :must_be_object}}
+      {:error, reason} -> {:error, {:decode, :json, reason}}
+    end
+  end
+
+  defp to_int(nil), do: nil
+  defp to_int(""), do: nil
+  defp to_int(v) when is_integer(v), do: v
+  defp to_int(v) when is_binary(v), do: String.to_integer(v)
 
   defp effective_provider(socket, session) do
     socket.assigns.used_provider ||
@@ -793,8 +1045,15 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
-  defp current_messages(session_id) do
+  defp current_messages_for(session_id, nil) do
     case Conversations.latest_snapshot(session_id) do
+      %{combined_chat: %{"messages" => msgs}} -> msgs
+      _ -> []
+    end
+  end
+
+  defp current_messages_for(_session_id, thread_id) when is_binary(thread_id) do
+    case Conversations.latest_snapshot_for_thread(thread_id) do
       %{combined_chat: %{"messages" => msgs}} -> msgs
       _ -> []
     end
@@ -810,6 +1069,22 @@ defmodule TheMaestroWeb.SessionChatLive do
             <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
               &gt;&gt;&gt; SESSION CHAT: {@session.name || "Session"} &lt;&lt;&lt;
             </h1>
+            <div class="flex items-center gap-2">
+              <%= if @current_thread_label do %>
+                <form phx-submit="rename_thread" class="flex items-center gap-2">
+                  <input
+                    type="text"
+                    name="label"
+                    value={@current_thread_label}
+                    class="input input-xs"
+                  />
+                  <button class="btn btn-xs" type="submit">Rename</button>
+                </form>
+              <% end %>
+              <button class="btn btn-amber btn-xs" phx-click="new_thread">Start New Chat</button>
+              <button class="btn btn-red btn-xs" phx-click="confirm_clear_chat">Clear Chat</button>
+              <button class="btn btn-blue btn-xs" phx-click="open_config">Config</button>
+            </div>
             <.link
               navigate={~p"/dashboard"}
               class="px-4 py-2 rounded transition-all duration-200 btn-amber"
@@ -829,6 +1104,9 @@ defmodule TheMaestroWeb.SessionChatLive do
                     do: "(" <> s.auth_name <> ")"}
                 </div>
                 <div>avg latency: {s.avg_latency_ms} ms</div>
+                <%= if s[:total_tokens] do %>
+                  <div>last turn tokens: {compact_int(s.total_tokens)}</div>
+                <% end %>
               </div>
             <% else %>
               <div class="opacity-70">No summary yet</div>
@@ -987,6 +1265,96 @@ defmodule TheMaestroWeb.SessionChatLive do
         </div>
       </div>
       <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
+
+      <.modal :if={@show_clear_confirm} id="clear-chat-confirm">
+        <div class="p-4">
+          <h3 class="text-lg font-bold mb-2">Clear Current Chat?</h3>
+          <p class="mb-4">
+            This will permanently delete the current thread history. This cannot be undone.
+          </p>
+          <div class="flex gap-2">
+            <button class="btn btn-red" phx-click="do_clear_chat">Delete</button>
+            <button class="btn" phx-click="cancel_clear_chat">Cancel</button>
+          </div>
+        </div>
+      </.modal>
+
+      <.modal :if={@show_config} id="session-config-modal">
+        <.form
+          for={%{}}
+          phx-change="validate_config"
+          phx-submit="save_config"
+          id="session-config-form"
+        >
+          <h3 class="text-lg font-bold mb-2">Session Config</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs">Provider (filter)</label>
+              <select name="provider" class="input">
+                <%= for p <- ["openai", "anthropic", "gemini"] do %>
+                  <option value={p} selected={@config_form["provider"] == p}>{p}</option>
+                <% end %>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs">Saved Auth</label>
+              <select name="auth_id" class="input">
+                <%= for {label, id} <- (@config_form["auth_options"] || []) do %>
+                  <option value={id} selected={to_string(id) == to_string(@config_form["auth_id"])}>
+                    {label}
+                  </option>
+                <% end %>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs">Model</label>
+              <select name="model_id" class="input">
+                <%= for m <- (@config_models || []) do %>
+                  <option value={m} selected={m == @config_form["model_id"]}>{m}</option>
+                <% end %>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs">Working Dir</label>
+              <input
+                type="text"
+                name="working_dir"
+                value={@config_form["working_dir"] || @session.working_dir}
+                class="input"
+              />
+            </div>
+            <div class="md:col-span-2">
+              <label class="text-xs">Persona (JSON)</label>
+              <textarea name="persona_json" rows="3" class="textarea-terminal"><%= @config_form["persona_json"] || Jason.encode!(@session.persona || %{}) %></textarea>
+            </div>
+            <div class="md:col-span-2">
+              <label class="text-xs">Memory (JSON)</label>
+              <textarea name="memory_json" rows="3" class="textarea-terminal"><%= @config_form["memory_json"] || Jason.encode!(@session.memory || %{}) %></textarea>
+            </div>
+            <div class="md:col-span-2">
+              <label class="text-xs">Tools (JSON)</label>
+              <textarea name="tools_json" rows="3" class="textarea-terminal"><%= @config_form["tools_json"] || Jason.encode!(@session.tools || %{}) %></textarea>
+            </div>
+            <div class="md:col-span-2">
+              <label class="text-xs">MCPs (JSON)</label>
+              <textarea name="mcps_json" rows="3" class="textarea-terminal"><%= @config_form["mcps_json"] || Jason.encode!(@session.mcps || %{}) %></textarea>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="text-xs">When saving while streaming</label>
+            <div class="flex gap-3 text-sm">
+              <label>
+                <input type="radio" name="apply" value="now" checked /> Apply now (restart stream)
+              </label>
+              <label><input type="radio" name="apply" value="defer" /> Apply on next turn</label>
+            </div>
+          </div>
+          <div class="mt-4 flex gap-2">
+            <button class="btn btn-blue" type="submit">Save</button>
+            <button class="btn" type="button" phx-click="close_config">Cancel</button>
+          </div>
+        </.form>
+      </.modal>
     </Layouts.app>
     """
   end
@@ -1059,7 +1427,8 @@ defmodule TheMaestroWeb.SessionChatLive do
         model: m["model"],
         auth_type: m["auth_type"],
         auth_name: m["auth_name"],
-        avg_latency_ms: avg || 0
+        avg_latency_ms: avg || 0,
+        total_tokens: token_total(m["usage"] || %{})
       }
     else
       nil
