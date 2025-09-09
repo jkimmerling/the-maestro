@@ -168,10 +168,10 @@ Tasks and Subtasks
   - [ ] Archive/remove `agents` table after final sign‑off
 
 - Phase 2 — Elixir Contexts & Domain
-  - [ ] Update `TheMaestro.Conversations.Session` schema and changeset (no provider field)
-  - [ ] Update `TheMaestro.Conversations` APIs to operate on `thread_id` for grouping and forking
-  - [ ] Remove `TheMaestro.Agents` context and schemas; replace with session‑centric flows
-  - [ ] Validation: SavedAuth enforced; provider derived from SavedAuth where needed
+  - [x] Update `TheMaestro.Conversations.Session` schema and changeset (no provider field)
+  - [x] Update `TheMaestro.Conversations` APIs to operate on `thread_id` for grouping and forking (added helpers; legacy kept)
+  - [ ] Remove `TheMaestro.Agents` context and schemas; replace with session‑centric flows (defer to Phase 6 cleanup step to avoid breaking UI)
+  - [x] Validation: SavedAuth enforced; provider derived from SavedAuth where needed (cutover: require auth_id or agent_id, prefer auth_id)
 
 - Phase 3 — Translation Layer
   - [ ] Extend `TheMaestro.Conversations.Translator` to handle events (function_call, outputs, usage)
