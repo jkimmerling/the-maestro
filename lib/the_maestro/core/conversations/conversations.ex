@@ -169,6 +169,13 @@ defmodule TheMaestro.Conversations do
   end
 
   @doc """
+  Returns the list of chat entries for a thread ordered by turn_index.
+  """
+  def list_chat_entries_by_thread(thread_id) when is_binary(thread_id) do
+    Repo.all(from e in ChatEntry, where: e.thread_id == ^thread_id, order_by: e.turn_index)
+  end
+
+  @doc """
   Gets a single chat entry.
   """
   def get_chat_entry!(id), do: Repo.get!(ChatEntry, id)
@@ -225,6 +232,20 @@ defmodule TheMaestro.Conversations do
       Repo.one(
         from e in ChatEntry,
           where: e.session_id == ^session_id,
+          select: max(e.turn_index)
+      ) || -1
+
+    max + 1
+  end
+
+  @doc """
+  Computes the next turn_index for a thread (0-based).
+  """
+  def next_turn_index_for_thread(thread_id) when is_binary(thread_id) do
+    max =
+      Repo.one(
+        from e in ChatEntry,
+          where: e.thread_id == ^thread_id,
           select: max(e.turn_index)
       ) || -1
 
