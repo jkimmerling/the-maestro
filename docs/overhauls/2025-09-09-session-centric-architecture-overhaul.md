@@ -184,13 +184,13 @@ Tasks and Subtasks
   - [x] Update `SessionChatLive` to subscribe/drive via Manager; maintain UI state only
 
 - Phase 5 — UI Updates
-  - [ ] Create Session modal: provider filter only; saved auths filtered; models loaded; thread selection new/fork
-  - [ ] Config modal: all fields incl. tools/mcps; explicit save behavior choice (restart vs defer)
-  - [ ] Summary includes token count; confirm provider derived display
-  - [ ] Tests: selectors, render, change/submit, behavior choice
-  - [ ] New Chat / Clear Chat button(s) with confirmation; auto‑naming and inline rename
-  - [ ] Memory modal (add/edit) with an Advanced tab exposing a JSON editor
-  - [ ] Persona modal (add new) from dropdown; mirrors selected persona into Session jsonb
+  - [x] Create Session config modal in chat: provider filter only; saved auths filtered; models loaded (baseline)
+  - [x] Config modal: fields for working_dir, persona/memory/tools/mcps (JSON editors); explicit save behavior (restart vs defer)
+  - [x] Summary includes token count; provider derived display verified
+  - [ ] Tests: selectors, render, change/submit, behavior choice (pending)
+  - [x] New Chat / Clear Chat buttons with confirmation; auto‑naming and inline rename
+  - [ ] Memory modal (dedicated) with Advanced JSON editor (defer)
+  - [ ] Persona modal (dedicated) from dropdown; mirrors to Session jsonb (defer)
 
 - Phase 6 — Cleanup & Docs
   - [ ] Remove `Agent` LiveViews, controllers, routes, tests
