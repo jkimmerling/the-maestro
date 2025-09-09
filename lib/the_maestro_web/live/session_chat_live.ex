@@ -22,6 +22,7 @@ defmodule TheMaestroWeb.SessionChatLive do
       ])
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
+    TheMaestro.Sessions.Manager.subscribe(session.id)
 
     {:ok,
      socket
@@ -140,40 +141,16 @@ defmodule TheMaestroWeb.SessionChatLive do
     {auth_type, auth_name} = auth_meta_from_session(session)
     {:ok, provider_msgs} = Translator.to_provider(updated, provider)
 
-    # Cancel any prior stream
-    if task = socket.assigns.stream_task do
-      Process.exit(task, :kill)
-    end
-
-    stream_id = Ecto.UUID.generate()
-    parent = self()
-
     t0 = System.monotonic_time(:millisecond)
 
-    task =
-      Task.start_link(fn ->
-        case call_provider(
-               provider,
-               session.agent.saved_authentication.name,
-               provider_msgs,
-               model
-             ) do
-          {:ok, stream} ->
-            for msg <-
-                  TheMaestro.Streaming.parse_stream(stream, provider, log_unknown_events: true),
-                do: send(parent, {:ai_stream, stream_id, msg})
-
-            # Gemini streams do not emit an explicit :done message; signal completion.
-            if provider == :gemini do
-              send(parent, {:ai_stream, stream_id, %{type: :done}})
-            end
-
-          {:error, reason} ->
-            send(parent, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
-            send(parent, {:ai_stream, stream_id, %{type: :done}})
-        end
-      end)
-      |> elem(1)
+    {:ok, stream_id} =
+      TheMaestro.Sessions.Manager.start_stream(
+        session.id,
+        provider,
+        session.agent.saved_authentication.name,
+        provider_msgs,
+        model
+      )
 
     socket
     |> assign(:message, "")
@@ -181,7 +158,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:streaming?, true)
     |> assign(:partial_answer, "")
     |> assign(:stream_id, stream_id)
-    |> assign(:stream_task, task)
+    |> assign(:stream_task, nil)
     |> assign(:pending_canonical, updated)
     |> assign(:followup_history, [])
     |> assign(:used_provider, provider)
@@ -247,15 +224,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
-  # Return {:ok, stream}
-  defp call_provider(:openai, session_name, messages, model),
-    do: OpenAI.Streaming.stream_chat(session_name, messages, model: model)
-
-  defp call_provider(:gemini, session_name, messages, model),
-    do: Gemini.Streaming.stream_chat(session_name, messages, model: model)
-
-  defp call_provider(:anthropic, session_name, messages, model),
-    do: Anthropic.Streaming.stream_chat(session_name, messages, model: model)
+  # Provider calls moved to TheMaestro.Sessions.Manager
 
   require Logger
 
@@ -385,30 +354,19 @@ defmodule TheMaestroWeb.SessionChatLive do
         {:ok, provider_msgs} = Translator.to_provider(canon, provider)
 
         # Start a fresh streaming task with a new stream id
-        parent = self()
-        stream_id = Ecto.UUID.generate()
-
-        task =
-          Task.start_link(fn ->
-            case call_provider(provider, socket.assigns.used_auth_name, provider_msgs, model) do
-              {:ok, stream} ->
-                for msg <-
-                      TheMaestro.Streaming.parse_stream(stream, provider,
-                        log_unknown_events: true
-                      ),
-                    do: send(parent, {:ai_stream, stream_id, msg})
-
-              {:error, reason} ->
-                send(parent, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
-                send(parent, {:ai_stream, stream_id, %{type: :done}})
-            end
-          end)
-          |> elem(1)
+        {:ok, stream_id} =
+          TheMaestro.Sessions.Manager.start_stream(
+            socket.assigns.session.id,
+            provider,
+            socket.assigns.used_auth_name,
+            provider_msgs,
+            model
+          )
 
         {:noreply,
          socket
          |> assign(:stream_id, stream_id)
-         |> assign(:stream_task, task)
+         |> assign(:stream_task, nil)
          |> assign(:used_provider, provider)
          |> assign(:used_model, model)
          |> assign(:used_usage, nil)
@@ -659,162 +617,114 @@ defmodule TheMaestroWeb.SessionChatLive do
     model = socket.assigns.used_model
     session_name = socket.assigns.session.agent.saved_authentication.name
 
-    parent = self()
-    new_stream_id = Ecto.UUID.generate()
+    # Determine provider-specific follow-up payload
+    provider_items =
+      case provider do
+        :openai ->
+          items
 
-    task =
-      Task.start_link(fn ->
-        case provider do
-          :openai ->
-            case TheMaestro.Providers.OpenAI.Streaming.stream_tool_followup(session_name, items,
-                   model: model
-                 ) do
-              {:ok, stream} ->
-                for msg <-
-                      TheMaestro.Streaming.parse_stream(stream, provider,
-                        log_unknown_events: true
-                      ),
-                    do: send(parent, {:ai_stream, new_stream_id, msg})
+        :anthropic ->
+          # Build Anthropic follow-up with full history and prior assistant text
+          canon = socket.assigns.pending_canonical || %{"messages" => []}
+          {:ok, prev_msgs} = TheMaestro.Conversations.Translator.to_provider(canon, :anthropic)
 
-              {:error, reason} ->
-                send(parent, {:ai_stream, new_stream_id, %{type: :error, error: inspect(reason)}})
-                send(parent, {:ai_stream, new_stream_id, %{type: :done}})
-            end
-
-          :anthropic ->
-            # Build Anthropic follow-up with full history and prior assistant text
-            canon = socket.assigns.pending_canonical || %{"messages" => []}
-            {:ok, prev_msgs} = TheMaestro.Conversations.Translator.to_provider(canon, :anthropic)
-
-            {anth_messages, _} =
-              TheMaestro.Followups.Anthropic.build(
-                prev_msgs,
-                calls,
-                socket.assigns.partial_answer || "",
-                base_cwd: base_cwd,
-                outputs: outputs
-              )
-
-            case TheMaestro.Providers.Anthropic.Streaming.stream_tool_followup(
-                   session_name,
-                   anth_messages,
-                   model: model
-                 ) do
-              {:ok, stream} ->
-                for msg <-
-                      TheMaestro.Streaming.parse_stream(stream, provider,
-                        log_unknown_events: true
-                      ),
-                    do: send(parent, {:ai_stream, new_stream_id, msg})
-
-              {:error, reason} ->
-                send(parent, {:ai_stream, new_stream_id, %{type: :error, error: inspect(reason)}})
-                send(parent, {:ai_stream, new_stream_id, %{type: :done}})
-            end
-
-          :gemini ->
-            # Build Gemini functionResponse-based follow-up
-            last_user =
-              (socket.assigns.messages || [])
-              |> Enum.reverse()
-              |> Enum.find(fn m -> (m["role"] || "") == "user" end) || %{}
-
-            last_user_parts =
-              case last_user do
-                %{"content" => content} when is_list(content) ->
-                  # Convert OpenAI style [{"type"=>"input_text","text"=>..}] or text parts to Gemini
-                  text =
-                    case content do
-                      [%{"type" => "input_text", "text" => t} | _] -> t
-                      [%{"type" => "text", "text" => t} | _] -> t
-                      _ -> ""
-                    end
-
-                  if text == "", do: [], else: [%{"text" => text}]
-
-                _ ->
-                  []
-              end
-
-            # Map outputs (id -> result) and attach names
-            call_lookup = Map.new(socket.assigns.pending_tool_calls || [], &{&1["id"], &1})
-
-            fr_parts =
-              Enum.map(outputs, fn {id, result} ->
-                name = (call_lookup[id] || %{})["name"] || "run_shell_command"
-
-                response =
-                  case result do
-                    {:ok, payload} ->
-                      case Jason.decode(payload) do
-                        {:ok, map} -> map
-                        _ -> %{"output" => payload}
-                      end
-
-                    {:error, reason} ->
-                      %{"error" => to_string(reason)}
-                  end
-
-                %{"functionResponse" => %{"name" => name, "id" => id, "response" => response}}
-              end)
-
-            # Echo assistant functionCall parts for each pending call
-            fc_parts =
-              Enum.map(socket.assigns.pending_tool_calls || [], fn call ->
-                args =
-                  case Jason.decode(call["arguments"] || "{}") do
-                    {:ok, m} -> m
-                    _ -> %{}
-                  end
-
-                %{"functionCall" => %{"name" => call["name"], "id" => call["id"], "args" => args}}
-              end)
-
-            contents =
-              if(last_user_parts == [],
-                do: [],
-                else: [%{"role" => "user", "parts" => last_user_parts}]
-              ) ++
-                [%{"role" => "assistant", "parts" => fc_parts}] ++
-                [%{"role" => "tool", "parts" => fr_parts}]
-
-            case TheMaestro.Providers.Gemini.Streaming.stream_tool_followup(
-                   session_name,
-                   contents,
-                   model: model
-                 ) do
-              {:ok, stream} ->
-                for msg <-
-                      TheMaestro.Streaming.parse_stream(stream, provider,
-                        log_unknown_events: true
-                      ),
-                    do: send(parent, {:ai_stream, new_stream_id, msg})
-
-                # Signal completion for Gemini to trigger finalization
-                send(parent, {:ai_stream, new_stream_id, %{type: :done}})
-
-              {:error, reason} ->
-                send(parent, {:ai_stream, new_stream_id, %{type: :error, error: inspect(reason)}})
-                send(parent, {:ai_stream, new_stream_id, %{type: :done}})
-            end
-
-          _ ->
-            send(
-              parent,
-              {:ai_stream, new_stream_id,
-               %{type: :error, error: "follow-up only supported for :openai and :anthropic"}}
+          {anth_messages, _} =
+            TheMaestro.Followups.Anthropic.build(
+              prev_msgs,
+              calls,
+              socket.assigns.partial_answer || "",
+              base_cwd: base_cwd,
+              outputs: outputs
             )
 
-            send(parent, {:ai_stream, new_stream_id, %{type: :done}})
-        end
-      end)
-      |> elem(1)
+          anth_messages
+
+        :gemini ->
+          # Build Gemini functionResponse-based follow-up
+          last_user =
+            (socket.assigns.messages || [])
+            |> Enum.reverse()
+            |> Enum.find(fn m -> (m["role"] || "") == "user" end) || %{}
+
+          last_user_parts =
+            case last_user do
+              %{"content" => content} when is_list(content) ->
+                # Convert OpenAI style [{"type"=>"input_text","text"=>..}] or text parts to Gemini
+                text =
+                  case content do
+                    [%{"type" => "input_text", "text" => t} | _] -> t
+                    [%{"type" => "text", "text" => t} | _] -> t
+                    _ -> ""
+                  end
+
+                if text == "", do: [], else: [%{"text" => text}]
+
+              _ ->
+                []
+            end
+
+          # Map outputs (id -> result) and attach names
+          call_lookup = Map.new(socket.assigns.pending_tool_calls || [], &{&1["id"], &1})
+
+          fr_parts =
+            Enum.map(outputs, fn {id, result} ->
+              name = (call_lookup[id] || %{})["name"] || "run_shell_command"
+
+              response =
+                case result do
+                  {:ok, payload} ->
+                    case Jason.decode(payload) do
+                      {:ok, map} -> map
+                      _ -> %{"output" => payload}
+                    end
+
+                  {:error, reason} ->
+                    %{"error" => to_string(reason)}
+                end
+
+              %{"functionResponse" => %{"name" => name, "id" => id, "response" => response}}
+            end)
+
+          # Echo assistant functionCall parts for each pending call
+          fc_parts =
+            Enum.map(socket.assigns.pending_tool_calls || [], fn call ->
+              args =
+                case Jason.decode(call["arguments"] || "{}") do
+                  {:ok, m} -> m
+                  _ -> %{}
+                end
+
+              %{"functionCall" => %{"name" => call["name"], "id" => call["id"], "args" => args}}
+            end)
+
+          contents =
+            if(last_user_parts == [],
+              do: [],
+              else: [%{"role" => "user", "parts" => last_user_parts}]
+            ) ++
+              [%{"role" => "assistant", "parts" => fc_parts}] ++
+              [%{"role" => "tool", "parts" => fr_parts}]
+
+          contents
+
+        _ ->
+          []
+      end
+
+    {:ok, new_stream_id} =
+      TheMaestro.Sessions.Manager.run_followup(
+        socket.assigns.session.id,
+        provider,
+        session_name,
+        provider_items,
+        model
+      )
 
     {:ok,
      socket
      |> assign(:partial_answer, "")
      |> assign(:stream_id, new_stream_id)
-     |> assign(:stream_task, task)
+     |> assign(:stream_task, nil)
      |> assign(:used_usage, nil)
      |> assign(:thinking?, false)
      |> assign(:followup_history, items)}
