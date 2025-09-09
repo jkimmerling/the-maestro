@@ -144,15 +144,17 @@ Risks
 
 Tasks and Subtasks
 - Phase 0 — Research and Design
-  - [ ] Run Archon RAG: provider‑agnostic chat design patterns
-  - [ ] Collect code examples: Phoenix LiveView streaming + background tasks
-  - [ ] Finalize canonical event schema (messages + events)
-  - [ ] Finalize migration plan (rework chat_history + session fields + backfill)
+  - [x] Run Archon RAG: provider‑agnostic chat design patterns
+        Note: Archon MCP not installed locally; performed equivalent research via primary docs — Anthropic streaming events, OpenAI Responses API background/streaming, Gemini function calling; LiveView background task + PubSub patterns.
+  - [x] Collect code examples: Phoenix LiveView streaming + background tasks
+        Links noted in Dev Notes with references.
+  - [x] Finalize canonical event schema (messages + events)
+  - [x] Finalize migration plan (rework chat_history + session fields + backfill)
 
 - Phase 1 — Data Model Migration (DB)
-  - [ ] Rework `chat_history`: add `thread_id`, `parent_thread_id`, `fork_from_entry_id`, `thread_label`; add unique index on (thread_id, turn_index)
-  - [ ] Make `session_id` nullable (compat path); future removal once cutover complete
-  - [ ] Add to `sessions`: auth_id, model_id, persona(map), memory(map), tools(map), mcps(map); keep working_dir; consider `chat_thread_id` (Option A)
+  - [x] Rework `chat_history`: add `thread_id`, `parent_thread_id`, `fork_from_entry_id`, `thread_label`; add unique index on (thread_id, turn_index)
+  - [x] Make `session_id` nullable (compat path); future removal once cutover complete
+  - [x] Add to `sessions`: auth_id, model_id, persona(map), memory(map), tools(map), mcps(map); keep working_dir; consider `chat_thread_id` (Option A)
   - [ ] Backfill from existing Agent:
         - auth_id := agent.auth_id
         - model_id := agent.model_id
@@ -160,7 +162,7 @@ Tasks and Subtasks
         - memory := agent.memory (map)
         - tools := agent.tools; mcps := agent.mcps
         - thread_id := new per‑session thread; thread_label := session.name
-  - [ ] Indexes for thread queries; ensure constraints
+  - [x] Indexes for thread queries; ensure constraints
   - [ ] Drop `sessions.agent_id` once UI and code paths no longer reference it
   - [ ] Archive/remove `agents` table after final sign‑off
 
@@ -202,6 +204,37 @@ Dev Notes
 - Elixir: no index access on lists with `mylist[i]`; use `Enum.at/2` or pattern match.
 - Use `Req` for HTTP; avoid `httpoison`, `tesla`, `httpc`.
 - Concurrency: use `Task.async_stream` with `timeout: :infinity` when enumerating.
+
+2025-09-09 — Dev Notes (James / dev)
+- Research summary (Archon alt due to local absence):
+  - Anthropic Messages streaming events and tool use: confirmed event types `message_start`, `content_block_start`, `content_block_delta`, `tool_use`, `message_delta`, `message_stop`. Tool calls appear as `tool_use` items with `id`, `name`, and structured `input` (JSON).
+  - OpenAI Responses API: background mode and streaming include `response.output_text.delta`, `response.function_call.arguments.delta`, with explicit `response.completed`/`done` semantics and `usage` tokens; aligns with our event schema.
+  - Gemini function calling: uses `functionCall` and `functionResponse` with parallel tool calls and outputs. Streaming delivers parts with `text` and function events; compatible with canonical mapping.
+  - LiveView background updates: prefer GenServer/Task.Supervisor for long‑running tasks, broadcast state via PubSub, and push UI updates with `push_event/3`. Keep sockets thin; persist snapshots in context.
+
+- Canonical Event Schema v1 (finalized):
+  - messages: list of %{role: "system"|"user"|"assistant"|"tool", content: [parts...]}
+    - text part: %{type: "text", text: binary}
+    - function_call part (assistant only): %{type: "function_call", call_id: binary, name: binary, arguments: binary}
+    - function_call_output part: %{type: "function_call_output", call_id: binary, output: binary}
+  - events: list of event maps emitted during streaming for diagnostics and replay
+    - content: %{type: "content", delta: binary}
+    - function_call: %{type: "function_call", calls: [%{id, name, arguments}]}
+    - usage: %{type: "usage", prompt_tokens: N, completion_tokens: N, total_tokens: N}
+    - error: %{type: "error", error: binary}
+    - done: %{type: "done"}
+  - metadata (_meta on assistant message): %{provider, model, auth_type, auth_name, usage, tools, latency_ms?}
+
+- Migrations applied (Phase 1):
+  - Added `chat_history.thread_id`, `parent_thread_id`, `fork_from_entry_id`, `thread_label`; `unique_index(chat_history, [:thread_id, :turn_index])`; `session_id` nullable.
+  - Added to `sessions`: `auth_id`, `model_id`, and jsonb maps `persona`, `memory`, `tools`, `mcps`.
+  - Commit: Session‑centric overhaul Phase 1 (see repo history on 2025‑09‑09).
+
+- Next steps (planned):
+  - Data backfill: generate a `thread_id` per session; mirror Agent fields onto Session; label threads.
+  - Context API: introduce `thread_id`‑based functions alongside existing `session_id` functions; prepare for cutover.
+  - Translator: extend to emit/ingest function call events and usage; add unit tests.
+  - Session Manager: GenServer supervising background streams; PubSub integration; UI to subscribe.
 
 Archon Research Plan (run before implementation)
 - High-level patterns
