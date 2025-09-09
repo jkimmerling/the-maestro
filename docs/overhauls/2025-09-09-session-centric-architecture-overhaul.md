@@ -187,7 +187,7 @@ Tasks and Subtasks
   - [x] Create Session config modal in chat: provider filter only; saved auths filtered; models loaded (baseline)
   - [x] Config modal: fields for working_dir, persona/memory/tools/mcps (JSON editors); explicit save behavior (restart vs defer)
   - [x] Summary includes token count; provider derived display verified
-  - [ ] Tests: selectors, render, change/submit, behavior choice (pending)
+  - [x] Tests: selectors, render, change/submit (smoke); behavior choice restart covered indirectly
   - [x] New Chat / Clear Chat buttons with confirmation; auto‑naming and inline rename
   - [ ] Memory modal (dedicated) with Advanced JSON editor (defer)
   - [ ] Persona modal (dedicated) from dropdown; mirrors to Session jsonb (defer)
