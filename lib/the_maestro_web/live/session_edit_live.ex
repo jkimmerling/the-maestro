@@ -56,6 +56,10 @@ defmodule TheMaestroWeb.SessionEditLive do
     {:noreply, assign(socket, :show_dir_picker, true)}
   end
 
+  def handle_event("close_modal", _params, socket) do
+    {:noreply, assign(socket, :show_dir_picker, false)}
+  end
+
   @impl true
   def handle_info({TheMaestroWeb.DirectoryPicker, :selected, path, _ctx}, socket) do
     cs =
@@ -127,6 +131,7 @@ defmodule TheMaestroWeb.SessionEditLive do
           context={:edit}
         />
       </.modal>
+      <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
     </Layouts.app>
     """
   end

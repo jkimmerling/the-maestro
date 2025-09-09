@@ -37,30 +37,61 @@ defmodule TheMaestroWeb.AuthShowLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <.link navigate={~p"/dashboard"} class="btn btn-ghost mb-4">← Back</.link>
-      <h1 class="text-xl font-semibold mb-2">Auth Details</h1>
+    <Layouts.app flash={@flash} show_header={false} main_class="p-0" container_class="p-0">
+      <div class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden">
+        <div class="container mx-auto px-6 py-8">
+          <div class="flex justify-between items-center mb-6 border-b border-amber-600 pb-4">
+            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
+              &gt;&gt;&gt; AUTH: {@sa.name} &lt;&lt;&lt;
+            </h1>
+            <.link
+              navigate={~p"/dashboard"}
+              class="px-4 py-2 rounded transition-all duration-200 btn-amber"
+              data-hotkey="alt+b"
+              data-hotkey-seq="g d"
+              data-hotkey-label="Go to Dashboard"
+            >
+              <.icon name="hero-arrow-left" class="inline mr-2 w-4 h-4" /> BACK
+            </.link>
+          </div>
 
-      <div class="card bg-base-200 p-4 space-y-2">
-        <div><b>Name:</b> {@sa.name}</div>
-        <div><b>Provider:</b> {@sa.provider}</div>
-        <div><b>Auth Type:</b> {@sa.auth_type}</div>
-        <div><b>Expires:</b> {format_dt(@sa.expires_at)}</div>
-        <div><b>Created:</b> {format_dt(@sa.inserted_at)}</div>
-        <div><b>Updated:</b> {format_dt(@sa.updated_at)}</div>
-        <div class="mt-2">
-          <details>
-            <summary class="cursor-pointer">Credentials (redacted)</summary>
-            <pre class="mt-2 text-xs">{inspect(redact_credentials(@sa.credentials), pretty: true)}</pre>
-          </details>
-        </div>
-        <div class="mt-3 space-x-2">
-          <%= if @sa.auth_type == :oauth do %>
-            <button phx-click="refresh_tokens" class="btn btn-xs">Refresh Tokens</button>
-          <% end %>
-          <.link navigate={~p"/auths/#{@sa.id}/edit"} class="btn btn-xs">Edit</.link>
+          <div class="terminal-card terminal-border-amber p-6 space-y-2">
+            <div><b class="text-amber-300">Name:</b> {@sa.name}</div>
+            <div><b class="text-amber-300">Provider:</b> {@sa.provider}</div>
+            <div><b class="text-amber-300">Auth Type:</b> {@sa.auth_type}</div>
+            <div><b class="text-amber-300">Expires:</b> {format_dt(@sa.expires_at)}</div>
+            <div><b class="text-amber-300">Created:</b> {format_dt(@sa.inserted_at)}</div>
+            <div><b class="text-amber-300">Updated:</b> {format_dt(@sa.updated_at)}</div>
+            <div class="mt-2">
+              <details>
+                <summary class="cursor-pointer glow">Credentials (redacted)</summary>
+                <pre class="mt-2 text-xs text-amber-200">{inspect(redact_credentials(@sa.credentials), pretty: true)}</pre>
+              </details>
+            </div>
+            <div class="mt-3 space-x-2">
+              <%= if @sa.auth_type == :oauth do %>
+                <button
+                  phx-click="refresh_tokens"
+                  class="px-3 py-1 rounded text-xs btn-green"
+                  data-hotkey="alt+r"
+                  data-hotkey-label="Refresh Tokens"
+                >
+                  Refresh Tokens
+                </button>
+              <% end %>
+              <.link
+                navigate={~p"/auths/#{@sa.id}/edit"}
+                class="px-3 py-1 rounded text-xs btn-blue"
+                data-hotkey-seq="g e"
+                data-hotkey-label="Edit Auth"
+              >
+                Edit
+              </.link>
+            </div>
+          </div>
         </div>
       </div>
+      <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
     </Layouts.app>
     """
   end

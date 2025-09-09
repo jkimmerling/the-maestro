@@ -6,46 +6,70 @@ defmodule TheMaestroWeb.AgentLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <.header>
-        Listing Agents
-        <:actions>
-          <.button variant="primary" navigate={~p"/agents/new"}>
-            <.icon name="hero-plus" /> New Agent
-          </.button>
-        </:actions>
-      </.header>
-
-      <.table
-        id="agents"
-        rows={@streams.agents}
-        row_click={fn {_id, agent} -> JS.navigate(~p"/agents/#{agent}") end}
-      >
-        <:col :let={{_id, agent}} label="Name">{agent.name}</:col>
-        <:col :let={{_id, agent}} label="Tools">
-          <pre class="text-xs">{inspect(agent.tools || %{}, pretty: true, limit: :infinity)}</pre>
-        </:col>
-        <:col :let={{_id, agent}} label="Mcps">
-          <pre class="text-xs">{inspect(agent.mcps || %{}, pretty: true, limit: :infinity)}</pre>
-        </:col>
-        <:col :let={{_id, agent}} label="Memory">
-          <pre class="text-xs">{inspect(agent.memory || %{}, pretty: true, limit: :infinity)}</pre>
-        </:col>
-        <:action :let={{_id, agent}}>
-          <div class="sr-only">
-            <.link navigate={~p"/agents/#{agent}"}>Show</.link>
+    <Layouts.app flash={@flash} show_header={false} main_class="p-0" container_class="p-0">
+      <div class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden">
+        <div class="container mx-auto px-6 py-8">
+          <div class="flex justify-between items-center mb-6 border-b border-amber-600 pb-4">
+            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
+              &gt;&gt;&gt; AGENTS INDEX &lt;&lt;&lt;
+            </h1>
+            <.link
+              navigate={~p"/agents/new"}
+              class="px-4 py-2 rounded transition-all duration-200 btn-green"
+              data-hotkey-seq="g a"
+              data-hotkey-label="New Agent"
+              data-hotkey="alt+a"
+            >
+              <.icon name="hero-plus" class="inline mr-2 w-4 h-4" /> New Agent
+            </.link>
           </div>
-          <.link navigate={~p"/agents/#{agent}/edit"}>Edit</.link>
-        </:action>
-        <:action :let={{id, agent}}>
-          <.link
-            phx-click={JS.push("delete", value: %{id: agent.id}) |> hide("##{id}")}
-            data-confirm="Are you sure?"
-          >
-            Delete
-          </.link>
-        </:action>
-      </.table>
+
+          <div id="agents" phx-update="stream" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <%= for {dom_id, agent} <- @streams.agents do %>
+              <div id={dom_id} class="terminal-card terminal-border-green p-4">
+                <div class="flex items-center justify-between">
+                  <div class="text-lg font-bold text-green-300 glow">{agent.name}</div>
+                  <div class="space-x-2">
+                    <.link navigate={~p"/agents/#{agent}"} class="text-green-400 hover:text-green-300">
+                      <.icon name="hero-eye" class="h-4 w-4" />
+                    </.link>
+                    <.link
+                      navigate={~p"/agents/#{agent}/edit"}
+                      class="text-blue-400 hover:text-blue-300"
+                    >
+                      <.icon name="hero-pencil-square" class="h-4 w-4" />
+                      <span class="sr-only">Edit</span>
+                    </.link>
+                    <.link
+                      href="#"
+                      phx-click={JS.push("delete", value: %{id: agent.id}) |> hide("##{dom_id}")}
+                      data-confirm="Are you sure?"
+                      class="text-red-400 hover:text-red-300"
+                    >
+                      <.icon name="hero-trash" class="h-4 w-4" />
+                      <span class="sr-only">Delete</span>
+                    </.link>
+                  </div>
+                </div>
+                <div class="mt-2 text-sm text-amber-200 space-y-1">
+                  <div>
+                    <span class="text-amber-300">Tools:</span> {inspect(map_size(agent.tools || %{}))}
+                  </div>
+                  <div>
+                    <span class="text-amber-300">MCPs:</span> {inspect(map_size(agent.mcps || %{}))}
+                  </div>
+                </div>
+                <div class="mt-3">
+                  <.link navigate={~p"/agents/#{agent}"} class="px-3 py-1 rounded text-xs btn-amber">
+                    OPEN
+                  </.link>
+                </div>
+              </div>
+            <% end %>
+          </div>
+          <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
+        </div>
+      </div>
     </Layouts.app>
     """
   end

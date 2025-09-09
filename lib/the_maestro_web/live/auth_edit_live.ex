@@ -56,48 +56,62 @@ defmodule TheMaestroWeb.AuthEditLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <.link navigate={~p"/auths/#{@sa.id}"} class="btn btn-ghost mb-4">← Back</.link>
-      <h1 class="text-xl font-semibold mb-2">Edit Auth</h1>
+    <Layouts.app flash={@flash} show_header={false} main_class="p-0" container_class="p-0">
+      <div class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden">
+        <div class="container mx-auto px-6 py-8">
+          <div class="flex justify-between items-center mb-6 border-b border-amber-600 pb-4">
+            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
+              &gt;&gt;&gt; EDIT AUTH &lt;&lt;&lt;
+            </h1>
+            <.link
+              navigate={~p"/auths/#{@sa.id}"}
+              class="px-4 py-2 rounded transition-all duration-200 btn-amber"
+              data-hotkey-seq="g v"
+              data-hotkey-label="View Auth"
+              data-hotkey="alt+b"
+            >
+              <.icon name="hero-arrow-left" class="inline mr-2 w-4 h-4" /> BACK
+            </.link>
+          </div>
 
-      <%= if @error do %>
-        <div class="alert alert-error mb-4">
-          <span>{@error}</span>
+          <%= if @error do %>
+            <div class="terminal-card terminal-border-red p-3 mb-4 text-red-300 glow">{@error}</div>
+          <% end %>
+
+          <.form for={%{}} as={:auth} phx-change="change">
+            <div class="terminal-card terminal-border-amber p-6 space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-amber-400 mb-1">Name</label>
+                  <input name="auth[name]" type="text" value={@name} class="input-terminal" />
+                </div>
+                <div>
+                  <label class="block text-amber-400 mb-1">Provider</label>
+                  <input value={@sa.provider} class="input-terminal opacity-70" disabled />
+                </div>
+                <div>
+                  <label class="block text-amber-400 mb-1">Auth Type</label>
+                  <input value={@sa.auth_type} class="input-terminal opacity-70" disabled />
+                </div>
+              </div>
+
+              <%= if @sa.auth_type == :api_key do %>
+                <div>
+                  <label class="block text-amber-400 mb-1">API Key</label>
+                  <input name="auth[api_key]" type="password" value={@api_key} class="input-terminal" />
+                </div>
+              <% end %>
+
+              <div class="mt-4">
+                <button type="button" phx-click="save" class="px-4 py-2 rounded btn-blue">
+                  Save
+                </button>
+              </div>
+            </div>
+          </.form>
         </div>
-      <% end %>
-
-      <.form for={%{}} as={:auth} phx-change="change" class="space-y-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="label">Name</label>
-            <input name="auth[name]" type="text" value={@name} class="input input-bordered w-full" />
-          </div>
-          <div>
-            <label class="label">Provider</label>
-            <input value={@sa.provider} class="input input-bordered w-full" disabled />
-          </div>
-          <div>
-            <label class="label">Auth Type</label>
-            <input value={@sa.auth_type} class="input input-bordered w-full" disabled />
-          </div>
-        </div>
-
-        <%= if @sa.auth_type == :api_key do %>
-          <div>
-            <label class="label">API Key</label>
-            <input
-              name="auth[api_key]"
-              type="password"
-              value={@api_key}
-              class="input input-bordered w-full"
-            />
-          </div>
-        <% end %>
-
-        <div class="mt-4">
-          <button type="button" phx-click="save" class="btn btn-primary">Save</button>
-        </div>
-      </.form>
+        <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
+      </div>
     </Layouts.app>
     """
   end

@@ -217,122 +217,156 @@ defmodule TheMaestroWeb.AuthNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <h1 class="text-xl font-semibold mb-4">Create New Auth</h1>
-      <.link navigate={~p"/dashboard"} class="btn btn-ghost mb-4">← Back</.link>
-
-      <%= if @error do %>
-        <div class="alert alert-error mb-4">
-          <span>{@error}</span>
-        </div>
-      <% end %>
-
-      <.form for={%{}} as={:auth} phx-change="change" class="space-y-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="label">Name</label>
-            <input
-              name="auth[name]"
-              type="text"
-              value={@name}
-              placeholder="e.g. work_openai"
-              class="input input-bordered w-full"
-            />
+    <Layouts.app flash={@flash} show_header={false} main_class="p-0" container_class="p-0">
+      <div class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden">
+        <div class="container mx-auto px-6 py-8">
+          <div class="flex justify-between items-center mb-6 border-b border-amber-600 pb-4">
+            <h1 class="text-3xl md:text-4xl font-bold text-amber-400 glow tracking-wider">
+              &gt;&gt;&gt; CREATE NEW AUTH &lt;&lt;&lt;
+            </h1>
+            <.link
+              navigate={~p"/dashboard"}
+              class="px-4 py-2 rounded transition-all duration-200 btn-amber"
+              data-hotkey-seq="g d"
+              data-hotkey-label="Go to Dashboard"
+              data-hotkey="alt+b"
+            >
+              <.icon name="hero-arrow-left" class="inline mr-2 w-4 h-4" /> BACK
+            </.link>
           </div>
-          <div>
-            <label class="label">Provider</label>
-            <select name="auth[provider]" class="select select-bordered w-full" value={@provider}>
-              <%= for p <- @providers do %>
-                <option value={p} selected={@provider == p}>{p}</option>
-              <% end %>
-            </select>
-          </div>
-          <div>
-            <label class="label">Auth Type</label>
-            <select name="auth[auth_type]" class="select select-bordered w-full" value={@auth_type}>
-              <%= for t <- @auth_types do %>
-                <option value={t} selected={@auth_type == t}>{t}</option>
-              <% end %>
-            </select>
-          </div>
-        </div>
 
-        <%= if @auth_type == :api_key do %>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="sm:col-span-2">
-              <label class="label">API Key</label>
-              <input
-                name="auth[api_key]"
-                type="password"
-                value={@api_key}
-                class="input input-bordered w-full"
-              />
-            </div>
-            <%= if @provider == :gemini do %>
-              <div class="sm:col-span-2">
-                <label class="label">X-Goog-User-Project (optional)</label>
-                <input
-                  name="auth[user_project]"
-                  type="text"
-                  value={@user_project}
-                  class="input input-bordered w-full"
-                  placeholder="billing-project-id"
-                />
+          <%= if @error do %>
+            <div class="terminal-card terminal-border-red p-3 mb-4 text-red-300 glow">{@error}</div>
+          <% end %>
+
+          <.form for={%{}} as={:auth} phx-change="change">
+            <div class="terminal-card terminal-border-amber p-6 space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-amber-400 mb-1">Name</label>
+                  <input
+                    name="auth[name]"
+                    type="text"
+                    value={@name}
+                    placeholder="e.g. work_openai"
+                    class="input-terminal"
+                  />
+                </div>
+                <div>
+                  <label class="block text-amber-400 mb-1">Provider</label>
+                  <select name="auth[provider]" class="select-terminal" value={@provider}>
+                    <%= for p <- @providers do %>
+                      <option value={p} selected={@provider == p}>{p}</option>
+                    <% end %>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-amber-400 mb-1">Auth Type</label>
+                  <select name="auth[auth_type]" class="select-terminal" value={@auth_type}>
+                    <%= for t <- @auth_types do %>
+                      <option value={t} selected={@auth_type == t}>{t}</option>
+                    <% end %>
+                  </select>
+                </div>
               </div>
-            <% end %>
-          </div>
-          <div class="mt-4">
-            <button type="button" phx-click="create_api_key" class="btn btn-primary">Create</button>
-          </div>
-        <% else %>
-          <div class="space-y-3">
-            <div class="flex gap-2 items-end">
-              <button type="button" phx-click="generate_oauth_url" class="btn">
-                Generate OAuth URL
-              </button>
-              <%= if @oauth_url do %>
-                <a href={@oauth_url} target="_blank" class="btn btn-primary">Open OAuth Page</a>
-              <% end %>
-            </div>
-            <%= if @oauth_url && @provider == :openai do %>
-              <p class="text-sm opacity-80">
-                <%= if @callback_listening do %>
-                  Listening on <code>http://localhost:<%= @callback_port || 1455 %>/auth/callback</code>.
-                  <%= if @callback_deadline do %>
-                    Time remaining: {max(
-                      div(@callback_deadline - System.monotonic_time(:millisecond), 1000),
-                      0
-                    )}s
+
+              <%= if @auth_type == :api_key do %>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div class="sm:col-span-2">
+                    <label class="block text-amber-400 mb-1">API Key</label>
+                    <input
+                      name="auth[api_key]"
+                      type="password"
+                      value={@api_key}
+                      class="input-terminal"
+                    />
+                  </div>
+                  <%= if @provider == :gemini do %>
+                    <div class="sm:col-span-2">
+                      <label class="block text-amber-400 mb-1">X-Goog-User-Project (optional)</label>
+                      <input
+                        name="auth[user_project]"
+                        type="text"
+                        value={@user_project}
+                        class="input-terminal"
+                        placeholder="billing-project-id"
+                      />
+                    </div>
                   <% end %>
-                <% else %>
-                  Listener stopped.
-                  <button type="button" class="btn btn-xs" phx-click="restart_listener">
-                    Restart (180s)
+                </div>
+                <div class="mt-4">
+                  <button type="button" phx-click="create_api_key" class="px-4 py-2 rounded btn-green">
+                    Create
                   </button>
-                <% end %>
-                <br /> After authorization, we will auto-complete and return you to the dashboard.
-              </p>
-            <% end %>
-            <%= if @oauth_url && @provider != :openai do %>
-              <div>
-                <label class="label">Authorization Code</label>
-                <input
-                  name="auth[auth_code]"
-                  type="text"
-                  value={@auth_code}
-                  class="input input-bordered w-full"
-                  placeholder="Paste code from provider callback"
-                />
-              </div>
-              <div class="mt-2">
-                <button type="button" phx-click="complete_oauth" class="btn btn-success">
-                  Complete OAuth
-                </button>
-              </div>
-            <% end %>
-          </div>
-        <% end %>
-      </.form>
+                </div>
+              <% else %>
+                <div class="space-y-3">
+                  <div class="flex gap-2 items-end">
+                    <button
+                      type="button"
+                      phx-click="generate_oauth_url"
+                      class="px-3 py-2 rounded btn-amber"
+                    >
+                      Generate OAuth URL
+                    </button>
+                    <%= if @oauth_url do %>
+                      <a href={@oauth_url} target="_blank" class="px-3 py-2 rounded btn-blue">
+                        Open OAuth Page
+                      </a>
+                    <% end %>
+                  </div>
+                  <%= if @oauth_url && @provider == :openai do %>
+                    <p class="text-sm opacity-80 text-amber-300">
+                      <%= if @callback_listening do %>
+                        Listening on <code>http://localhost:<%= @callback_port || 1455 %>/auth/callback</code>.
+                        <%= if @callback_deadline do %>
+                          Time remaining: {max(
+                            div(@callback_deadline - System.monotonic_time(:millisecond), 1000),
+                            0
+                          )}s
+                        <% end %>
+                      <% else %>
+                        Listener stopped.
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-amber"
+                          phx-click="restart_listener"
+                        >
+                          Restart (180s)
+                        </button>
+                      <% end %>
+                      <br />
+                      After authorization, we will auto-complete and return you to the dashboard.
+                    </p>
+                  <% end %>
+                  <%= if @oauth_url && @provider != :openai do %>
+                    <div>
+                      <label class="block text-amber-400 mb-1">Authorization Code</label>
+                      <input
+                        name="auth[auth_code]"
+                        type="text"
+                        value={@auth_code}
+                        class="input-terminal"
+                        placeholder="Paste code from provider callback"
+                      />
+                    </div>
+                    <div class="mt-2">
+                      <button
+                        type="button"
+                        phx-click="complete_oauth"
+                        class="px-3 py-1 rounded btn-green"
+                      >
+                        Complete OAuth
+                      </button>
+                    </div>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </.form>
+        </div>
+        <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
+      </div>
     </Layouts.app>
     """
   end

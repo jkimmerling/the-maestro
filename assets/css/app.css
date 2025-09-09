@@ -26,26 +26,26 @@
   default: false;
   prefersdark: true;
   color-scheme: "dark";
-  --color-base-100: oklch(30.33% 0.016 252.42);
-  --color-base-200: oklch(25.26% 0.014 253.1);
-  --color-base-300: oklch(20.15% 0.012 254.09);
-  --color-base-content: oklch(97.807% 0.029 256.847);
-  --color-primary: oklch(58% 0.233 277.117);
-  --color-primary-content: oklch(96% 0.018 272.314);
-  --color-secondary: oklch(58% 0.233 277.117);
-  --color-secondary-content: oklch(96% 0.018 272.314);
-  --color-accent: oklch(60% 0.25 292.717);
-  --color-accent-content: oklch(96% 0.016 293.756);
-  --color-neutral: oklch(37% 0.044 257.287);
-  --color-neutral-content: oklch(98% 0.003 247.858);
-  --color-info: oklch(58% 0.158 241.966);
-  --color-info-content: oklch(97% 0.013 236.62);
-  --color-success: oklch(60% 0.118 184.704);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
+  --color-base-100: #0b0b0b;
+  --color-base-200: #111111;
+  --color-base-300: #1a1a1a;
+  --color-base-content: #fbbf24; /* amber-400 */
+  --color-primary: #f59e0b; /* amber-500 */
+  --color-primary-content: #0b0b0b;
+  --color-secondary: #22c55e; /* green-500 */
+  --color-secondary-content: #0b0b0b;
+  --color-accent: #3b82f6; /* blue-500 */
+  --color-accent-content: #0b0b0b;
+  --color-neutral: #1f2937; /* gray-800 */
+  --color-neutral-content: #e5e7eb; /* gray-200 */
+  --color-info: #60a5fa; /* blue-400 */
+  --color-info-content: #0b0b0b;
+  --color-success: #22c55e; /* green-500 */
+  --color-success-content: #0b0b0b;
+  --color-warning: #f59e0b; /* amber-500 */
+  --color-warning-content: #0b0b0b;
+  --color-error: #ef4444; /* red-500 */
+  --color-error-content: #0b0b0b;
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
@@ -58,29 +58,65 @@
 
 @plugin "../vendor/daisyui-theme" {
   name: "light";
-  default: true;
+  default: false;
   prefersdark: false;
   color-scheme: "light";
-  --color-base-100: oklch(98% 0 0);
-  --color-base-200: oklch(96% 0.001 286.375);
-  --color-base-300: oklch(92% 0.004 286.32);
-  --color-base-content: oklch(21% 0.006 285.885);
-  --color-primary: oklch(70% 0.213 47.604);
-  --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(55% 0.027 264.364);
-  --color-secondary-content: oklch(98% 0.002 247.839);
-  --color-accent: oklch(0% 0 0);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(44% 0.017 285.786);
-  --color-neutral-content: oklch(98% 0 0);
-  --color-info: oklch(62% 0.214 259.815);
-  --color-info-content: oklch(97% 0.014 254.604);
-  --color-success: oklch(70% 0.14 182.503);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
+  --color-base-100: #f8fafc; /* slate-50 */
+  --color-base-200: #f1f5f9; /* slate-100 */
+  --color-base-300: #e2e8f0; /* slate-200 */
+  --color-base-content: #111827; /* gray-900 */
+  --color-primary: #f59e0b; /* amber-500 */
+  --color-primary-content: #0b0b0b;
+  --color-secondary: #22c55e; /* green-500 */
+  --color-secondary-content: #0b0b0b;
+  --color-accent: #3b82f6; /* blue-500 */
+  --color-accent-content: #0b0b0b;
+  --color-neutral: #e5e7eb; /* gray-200 */
+  --color-neutral-content: #1f2937; /* gray-800 */
+  --color-info: #60a5fa;
+  --color-info-content: #0b0b0b;
+  --color-success: #22c55e;
+  --color-success-content: #0b0b0b;
+  --color-warning: #f59e0b;
+  --color-warning-content: #0b0b0b;
+  --color-error: #ef4444;
+  --color-error-content: #0b0b0b;
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* Terminal theme as default site-wide palette */
+@plugin "../vendor/daisyui-theme" {
+  name: "terminal";
+  default: true;
+  prefersdark: true;
+  color-scheme: "dark";
+  --color-base-100: #000000;
+  --color-base-200: #0a0a0a;
+  --color-base-300: #141414;
+  --color-base-content: #fbbf24; /* amber-400 */
+  --color-primary: #f59e0b; /* amber-500 */
+  --color-primary-content: #0b0b0b;
+  --color-secondary: #22c55e; /* green-500 */
+  --color-secondary-content: #0b0b0b;
+  --color-accent: #3b82f6; /* blue-500 */
+  --color-accent-content: #0b0b0b;
+  --color-neutral: #1f2937; /* gray-800 */
+  --color-neutral-content: #e5e7eb; /* gray-200 */
+  --color-info: #60a5fa;
+  --color-info-content: #0b0b0b;
+  --color-success: #22c55e;
+  --color-success-content: #0b0b0b;
+  --color-warning: #f59e0b;
+  --color-warning-content: #0b0b0b;
+  --color-error: #ef4444;
+  --color-error-content: #0b0b0b;
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
@@ -103,3 +139,49 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+/* Global terminal base – keep feel cohesive site-wide */
+html, body { background-color: var(--color-base-100); color: var(--color-base-content); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+/* ===== Terminal theme helpers (Dashboard) ===== */
+.glow { text-shadow: 0 0 5px currentColor; }
+.glow-strong { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; }
+
+/* Full-screen CRT overlay with scanlines and subtle pulse */
+.crt-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: 0.1; }
+.crt-overlay::before { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent, rgba(245, 158, 11, 0.35), transparent); animation: crtPulse 2s ease-in-out infinite; opacity: 0.2; }
+.crt-overlay::after { content: ""; position: absolute; inset: 0; opacity: 0.3; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.08) 2px, rgba(255,255,255,0.08) 4px); }
+
+@keyframes crtPulse { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.3; } }
+
+/* Pulse for flash toasts */
+@keyframes flashPulse { 0%, 100% { box-shadow: 0 0 6px currentColor; } 50% { box-shadow: 0 0 16px currentColor; } }
+.flash-pulse { animation: flashPulse 1.8s ease-in-out infinite; }
+
+/* Amber neon button variants (opt-in utility) */
+.btn-amber {
+  @apply bg-amber-600/20 border border-amber-500 text-amber-400 hover:bg-amber-600/40;
+}
+.btn-green {
+  @apply bg-green-600/20 border border-green-500 text-green-400 hover:bg-green-600/40;
+}
+.btn-blue {
+  @apply bg-blue-600/20 border border-blue-500 text-blue-400 hover:bg-blue-600/40;
+}
+.btn-red {
+  @apply bg-red-600/20 border border-red-500 text-red-400 hover:bg-red-600/40;
+}
+
+/* Card borders tuned for terminal look */
+.terminal-card { @apply border rounded-lg bg-black/80; }
+.terminal-border-amber { @apply border-amber-600 hover:border-amber-400; }
+.terminal-border-green { @apply border-green-600 hover:border-green-400; }
+.terminal-border-blue { @apply border-blue-600 hover:border-blue-400; }
+.terminal-border-red { @apply border-red-600 hover:border-red-400; }
+
+/* Terminal textarea */
+.textarea-terminal { @apply w-full bg-black border border-amber-600 text-amber-300 px-3 py-2 rounded focus:border-blue-500 focus:outline-none; }
+
+/* Terminal inputs/selects */
+.input-terminal { @apply w-full bg-black border border-amber-600 text-amber-300 px-3 py-2 rounded focus:border-green-500 focus:outline-none; }
+.select-terminal { @apply w-full bg-black border border-amber-600 text-amber-300 px-3 py-2 rounded focus:border-green-500 focus:outline-none; }
