@@ -109,7 +109,10 @@ defmodule TheMaestro.AgentLoop do
         {:ok, %{final_text: answer, tools: [], usage: usage || %{}}}
       else
         # Build Anthropic follow-up items using shared builder (full history + assistant text + tool_use + tool_result)
-        {anth_msgs, _outputs} = TheMaestro.Followups.Anthropic.build(messages, calls, answer)
+        base_cwd = resolve_workspace_root(:anthropic, session_name)
+
+        {anth_msgs, _outputs} =
+          TheMaestro.Followups.Anthropic.build(messages, calls, answer, base_cwd: base_cwd)
 
         case TheMaestro.Providers.Anthropic.Streaming.stream_tool_followup(
                session_name,
@@ -124,6 +127,26 @@ defmodule TheMaestro.AgentLoop do
             {:error, reason}
         end
       end
+    end
+  end
+
+  defp resolve_workspace_root(provider, session_name) do
+    # Prefer OAuth session, then API key. Fallback to File.cwd!/expanded.
+    auth =
+      TheMaestro.SavedAuthentication.get_by_provider_and_name(provider, :oauth, session_name) ||
+        TheMaestro.SavedAuthentication.get_by_provider_and_name(provider, :api_key, session_name)
+
+    case auth do
+      %{id: auth_id} ->
+        case TheMaestro.Conversations.latest_session_for_auth_id(auth_id) do
+          nil -> File.cwd!() |> Path.expand()
+          s ->
+            wd = s.working_dir
+            if is_binary(wd) and wd != "", do: Path.expand(wd), else: File.cwd!() |> Path.expand()
+        end
+
+      _ ->
+        File.cwd!() |> Path.expand()
     end
   end
 

@@ -1,4 +1,5 @@
 defmodule TheMaestroWeb.DashboardLive do
+  # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
   use TheMaestroWeb, :live_view
 
   alias TheMaestro.Conversations

@@ -203,9 +203,18 @@ defmodule TheMaestroWeb.SessionChatLive do
     # If provider changed, reload auth options and clear model list
     socket =
       if Map.has_key?(params, "provider") do
-        socket
-        |> load_auth_options(form)
-        |> assign(:config_models, [])
+        # Reload provider-specific auth options and ensure auth_id selection is valid
+        socket = socket |> load_auth_options(form) |> assign(:config_models, [])
+        new_form = socket.assigns.config_form
+        opts = new_form["auth_options"] || []
+
+        new_auth_id =
+          case opts do
+            [{_label, id} | _] -> id
+            _ -> nil
+          end
+
+        assign(socket, :config_form, Map.put(new_form, "auth_id", new_auth_id))
       else
         socket
       end
@@ -213,7 +222,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     # If auth_id changed, load models
     socket =
       if Map.has_key?(params, "auth_id") do
-        models = list_models_for_form(form)
+        models = list_models_for_form(socket.assigns.config_form)
         assign(socket, :config_models, models)
       else
         socket
@@ -379,7 +388,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
           {:noreply,
            socket
-           |> assign(:show_config, true)
+           |> assign(:show_config, false)
            |> put_flash(
              :info,
              if(apply_behavior == "now",
@@ -440,7 +449,7 @@ defmodule TheMaestroWeb.SessionChatLive do
       TheMaestro.Sessions.Manager.start_stream(
         session.id,
         provider,
-        session.saved_authentication.name,
+        auth_name,
         provider_msgs,
         model
       )
@@ -465,6 +474,16 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:retry_attempts, 0)
   end
 
+  @impl true
+  def handle_event("close_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_config, false)
+     |> assign(:show_persona_modal, false)
+     |> assign(:show_memory_modal, false)
+     |> assign(:show_clear_confirm, false)}
+  end
+
   defp user_msg(text), do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
 
   defp assistant_msg(text),
@@ -475,7 +494,9 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp default_model_for_session(session, :openai) do
-    case session.saved_authentication.auth_type do
+    {auth_type, _} = auth_meta_from_session(session)
+
+    case auth_type do
       :oauth -> "gpt-5"
       _ -> "gpt-4o"
     end
@@ -484,7 +505,9 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp default_model_for_session(_session, :anthropic), do: "claude-3-5-sonnet"
 
   defp default_model_for_session(session, :gemini) do
-    case session.saved_authentication.auth_type do
+    {auth_type, _} = auth_meta_from_session(session)
+
+    case auth_type do
       :oauth -> "gemini-2.5-pro"
       _ -> "gemini-1.5-pro-latest"
     end
@@ -748,12 +771,35 @@ defmodule TheMaestroWeb.SessionChatLive do
   # ---- Session helpers (derive provider/auth from SavedAuth) ----
   defp provider_from_session(session) do
     saved = session.saved_authentication
-    saved.provider |> to_string() |> String.to_existing_atom()
+
+    cond do
+      match?(%Ecto.Association.NotLoaded{}, saved) and session.auth_id ->
+        sa = TheMaestro.SavedAuthentication.get!(session.auth_id)
+        sa.provider |> to_string() |> String.to_existing_atom()
+
+      is_map(saved) ->
+        saved.provider |> to_string() |> String.to_existing_atom()
+
+      true ->
+        # Fallback to openai to avoid crashes; will be corrected on next turn
+        :openai
+    end
   end
 
   defp auth_meta_from_session(session) do
     saved = session.saved_authentication
-    {saved.auth_type, saved.name}
+
+    cond do
+      match?(%Ecto.Association.NotLoaded{}, saved) and session.auth_id ->
+        sa = TheMaestro.SavedAuthentication.get!(session.auth_id)
+        {sa.auth_type, sa.name}
+
+      is_map(saved) ->
+        {saved.auth_type, saved.name}
+
+      true ->
+        {:oauth, "default"}
+    end
   end
 
   defp default_provider(session) do
@@ -808,8 +854,11 @@ defmodule TheMaestroWeb.SessionChatLive do
          a when a not in [nil, ""] <- form["auth_id"] do
       provider = String.to_existing_atom(p)
       auth = TheMaestro.SavedAuthentication.get!(to_int(a))
-      {:ok, models} = TheMaestro.Provider.list_models(provider, auth.auth_type, auth.name)
-      Enum.map(models, & &1.id)
+
+      case TheMaestro.Provider.list_models(provider, auth.auth_type, auth.name) do
+        {:ok, models} -> Enum.map(models, & &1.id)
+        {:error, _} -> []
+      end
     else
       _ -> []
     end
@@ -829,17 +878,17 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp to_int(v) when is_binary(v), do: String.to_integer(v)
 
   defp effective_provider(socket, session) do
-    socket.assigns.used_provider ||
-      session.saved_authentication.provider |> to_string() |> String.to_existing_atom()
+    socket.assigns.used_provider || provider_from_session(session)
   end
 
   defp build_req_meta(socket, session, provider) do
+    {auth_type, auth_name} = auth_meta_from_session(session)
+
     %{
       "provider" => Atom.to_string(provider),
       "model" => socket.assigns.used_model || default_model_for_session(session, provider),
-      "auth_type" =>
-        to_string(socket.assigns.used_auth_type || session.saved_authentication.auth_type),
-      "auth_name" => socket.assigns.used_auth_name || session.saved_authentication.name,
+      "auth_type" => to_string(socket.assigns.used_auth_type || auth_type),
+      "auth_name" => socket.assigns.used_auth_name || auth_name,
       "usage" => socket.assigns.used_usage || %{}
     }
   end
@@ -988,7 +1037,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     provider = effective_provider(socket, socket.assigns.session)
     model = socket.assigns.used_model
-    session_name = socket.assigns.session.saved_authentication.name
+    {_, session_name} = auth_meta_from_session(socket.assigns.session)
 
     # Determine provider-specific follow-up payload
     provider_items =

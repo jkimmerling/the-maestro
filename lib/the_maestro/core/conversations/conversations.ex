@@ -223,6 +223,22 @@ defmodule TheMaestro.Conversations do
     Repo.delete(entry)
   end
 
+  # ===== Helpers for resolving workspace root by auth session =====
+  @doc """
+  Returns the latest Session associated with a given SavedAuthentication id.
+  Useful for locating the session-scoped working_dir when only an auth session
+  name is available.
+  """
+  @spec latest_session_for_auth_id(integer()) :: Session | nil
+  def latest_session_for_auth_id(auth_id) when is_integer(auth_id) do
+    Repo.one(
+      from s in Session,
+        where: s.auth_id == ^auth_id,
+        order_by: [desc: s.inserted_at],
+        limit: 1
+    )
+  end
+
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking chat entry changes.
   """

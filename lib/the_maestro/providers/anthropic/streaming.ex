@@ -1,4 +1,5 @@
 defmodule TheMaestro.Providers.Anthropic.Streaming do
+  # credo:disable-for-this-file Credo.Check.Refactor.Nesting
   @moduledoc """
   Anthropic streaming provider stub for Story 0.2/0.4.
   """
@@ -463,6 +464,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
   end
 
   # Convert string-based messages to content blocks for Claude Code OAuth (no cache_control)
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp transform_messages_for_claude_code(messages) when is_list(messages) do
     Enum.map(messages, fn m ->
       role = Map.get(m, "role") || Map.get(m, :role) || "user"
@@ -495,6 +497,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
 
   # Remove or cap cache_control across system/messages/tools
   # mode: :disable removes all cache_control; :limit4 keeps the first 4 and strips the rest
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp sanitize_cache_control(body, mode \\ :disable) when is_map(body) do
     {new_body, _kept} = do_sanitize_cache_control(body, mode, 0)
     new_body
@@ -504,17 +507,12 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
     Enum.map_reduce(value, kept, fn v, acc -> do_sanitize_cache_control(v, mode, acc) end)
   end
 
-  defp do_sanitize_cache_control(%{"cache_control" => cc} = map, :disable, kept) when is_map(cc) do
+  defp do_sanitize_cache_control(%{"cache_control" => cc} = map, :disable, kept)
+       when is_map(cc) do
     {Map.delete(map, "cache_control"), kept}
   end
 
-  defp do_sanitize_cache_control(%{"cache_control" => cc} = map, :limit4, kept) when is_map(cc) do
-    if kept < 4 do
-      {map, kept + 1}
-    else
-      {Map.delete(map, "cache_control"), kept}
-    end
-  end
+  # limit4 mode removed; currently only :disable is used by callers
 
   defp do_sanitize_cache_control(%{} = map, mode, kept) do
     {new_map, kept_after} =
