@@ -179,9 +179,9 @@ Tasks and Subtasks
   - [x] Add unit tests covering switching scenarios and edge cases
 
 - Phase 4 — Streaming Manager
-  - [ ] Add `TheMaestro.Sessions.Manager` (GenServer) + `Task.Supervisor`
-  - [ ] Publish updates via PubSub; store per‑session state; persist snapshots via context
-  - [ ] Update `SessionChatLive` to subscribe/drive via Manager; maintain UI state only
+  - [x] Add `TheMaestro.Sessions.Manager` (GenServer) + `Task.Supervisor`
+  - [x] Publish updates via PubSub; store per‑session state; persist snapshots via context
+  - [x] Update `SessionChatLive` to subscribe/drive via Manager; maintain UI state only
 
 - Phase 5 — UI Updates
   - [ ] Create Session modal: provider filter only; saved auths filtered; models loaded; thread selection new/fork
@@ -232,10 +232,10 @@ Dev Notes
   - Commit: Session‑centric overhaul Phase 1 (see repo history on 2025‑09‑09).
 
 - Next steps (planned):
-  - Data backfill: generate a `thread_id` per session; mirror Agent fields onto Session; label threads.
-  - Context API: introduce `thread_id`‑based functions alongside existing `session_id` functions; prepare for cutover.
-  - Translator: extend to emit/ingest function call events and usage; add unit tests.
-  - Session Manager: GenServer supervising background streams; PubSub integration; UI to subscribe.
+  - Data backfill: generate a `thread_id` per session; mirror Agent fields onto Session; label threads. (DONE)
+  - Context API: introduce `thread_id`‑based functions alongside existing `session_id` functions; prepare for cutover. (DONE)
+  - Translator: extend to emit/ingest function call events and usage; add unit tests. (DONE)
+  - Session Manager: GenServer supervising background streams; PubSub integration; UI to subscribe. (DONE)
 
 Archon Research Plan (run before implementation)
 - High-level patterns
