@@ -249,7 +249,11 @@ defmodule TheMaestro.AgentLoop do
 
               is_list(Map.get(msg, :function_call)) ->
                 Enum.map(msg.function_call, fn fc ->
-                  %{"id" => fc.id, "name" => fc.function.name, "arguments" => fc.function.arguments}
+                  %{
+                    "id" => fc.id,
+                    "name" => fc.function.name,
+                    "arguments" => fc.function.arguments
+                  }
                 end)
 
               true ->
@@ -295,7 +299,11 @@ defmodule TheMaestro.AgentLoop do
 
               is_list(Map.get(msg, :function_call)) ->
                 Enum.map(msg.function_call, fn fc ->
-                  %{"id" => fc.id, "name" => fc.function.name, "arguments" => fc.function.arguments}
+                  %{
+                    "id" => fc.id,
+                    "name" => fc.function.name,
+                    "arguments" => fc.function.arguments
+                  }
                 end)
 
               true ->

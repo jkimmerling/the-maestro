@@ -1,6 +1,6 @@
 # Struct-First Domain Overhaul (Streaming + Request Meta + Versioned JSON)
 
-Status: In progress — Stages 1–2 complete (Option B – Standard)
+Status: In progress — Stages 1–3 complete (Option B – Standard)
 Owner: Platform / Runtime
 Date: 2025‑09‑10
 
@@ -61,6 +61,7 @@ Persisted JSON (combined_chat):
 Progress Checklist (2025-09-10):
 - [x] 1) Add the domain structs — modules exist with `@enforce_keys`, `new/1` and `new!/1`; added `StreamEvent.content/1`, `usage/1`, `tool_calls/1` helpers
 - [x] 2) Normalize streaming events in one place — `TheMaestro.Streaming.parse_stream/3` now returns `%StreamEvent{}`; added compatibility publishing of `:function_call` for legacy consumers
+- [x] 3) Remove legacy map shape — Sessions.Manager and LiveView now publish/consume only `%StreamEvent{}`. No `function_call` legacy key is emitted; tool calls live under `:tool_calls` with `%Domain.ToolCall{}` items. Added `%StreamEvent{type: :thinking | :finalized}` to cover UI-only messages.
 - [ ] 3) Managers/UI consume `%StreamEvent{}` — update `Sessions.Manager` and LiveView
 - [ ] 4) Persist `CombinedChat` via helper — ensure `to_map/1`/`from_map/1` usage at boundary
 - [ ] 5) Compatibility helpers — thin adapter for any legacy consumers
@@ -88,7 +89,11 @@ Already scaffolded/implemented in this branch:
 ### 2) Normalize streaming events in one place
 
 - Update `TheMaestro.Streaming` (and `OpenAIHandler`) so `parse_stream/3` returns `%StreamEvent{}` instances wrapping the raw provider events (`raw` field`).
-- Status: Completed 2025‑09‑10. `parse_stream/3` maps handler messages to `%StreamEvent{}`; `Sessions.Manager` publishes a compatibility `:function_call` list for downstream modules that still consume the legacy shape.
+- Status: Completed 2025‑09‑10. `parse_stream/3` maps handler messages to `%StreamEvent{}`.
+
+### 3) Remove legacy map shape
+
+- Status: Completed 2025‑09‑10. Removed compatibility layer in `Sessions.Manager`; LiveView and Translators updated to use `%StreamEvent{}` (`:tool_calls`, `:usage` as struct). Finalization and thinking events now use `%StreamEvent{type: :finalized | :thinking}`.
 - Keep provider adapters unchanged; conversion happens after HTTP.
 - Provide a thin compatibility function if any consumer still expects provider maps during the transition.
 

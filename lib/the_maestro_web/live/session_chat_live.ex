@@ -549,7 +549,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   @impl true
   # Show thinking indicator until first text arrives
   def handle_info(
-        {:ai_stream, id, %{type: :content, metadata: %{thinking: true}}},
+        {:ai_stream, id, %TheMaestro.Domain.StreamEvent{type: :thinking}},
         %{assigns: %{stream_id: id}} = socket
       ) do
     {:noreply,
@@ -559,7 +559,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   def handle_info(
-        {:ai_stream, id, %{type: :content, content: chunk}},
+        {:ai_stream, id, %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}},
         %{assigns: %{stream_id: id}} = socket
       ) do
     current = socket.assigns.partial_answer || ""
@@ -574,13 +574,17 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # Capture function/tool calls as they arrive and accumulate them for UI/persistence
   def handle_info(
-        {:ai_stream, id, %{type: :function_call, function_call: calls}},
+        {:ai_stream, id, %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}},
         %{assigns: %{stream_id: id}} = socket
       )
       when is_list(calls) do
     new =
-      Enum.map(calls, fn %{id: cid, function: %{name: name, arguments: args}} ->
-        %{"id" => cid, "name" => name, "arguments" => args || ""}
+      Enum.map(calls, fn
+        %TheMaestro.Domain.ToolCall{id: cid, name: name, arguments: args} ->
+          %{"id" => cid, "name" => name, "arguments" => args || ""}
+
+        %{id: cid, name: name, arguments: args} ->
+          %{"id" => cid, "name" => name, "arguments" => args || ""}
       end)
 
     {:noreply,
@@ -591,7 +595,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   def handle_info(
-        {:ai_stream, id, %{type: :error, error: err}},
+        {:ai_stream, id, %TheMaestro.Domain.StreamEvent{type: :error, error: err}},
         %{assigns: %{stream_id: id}} = socket
       ) do
     Logger.error("stream error: #{inspect(err)}")
@@ -631,9 +635,10 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   @impl true
   def handle_info(
-        {:ai_stream, id, %{type: :usage, usage: usage}},
+        {:ai_stream, id, %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage}},
         %{assigns: %{stream_id: id}} = socket
       ) do
+    usage = if is_struct(usage), do: Map.from_struct(usage), else: usage
     # Accumulate latest usage for this stream to attach on finalize
     {:noreply,
      socket
@@ -650,10 +655,18 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   def handle_info(
-        {:ai_stream, id, %{type: :finalized, content: final_text, meta: req_meta, usage: usage}},
+        {:ai_stream, id,
+         %TheMaestro.Domain.StreamEvent{
+           type: :finalized,
+           content: final_text,
+           usage: usage,
+           raw: raw
+         }},
         %{assigns: %{stream_id: id}} = socket
       ) do
-    meta = Map.put(req_meta || %{}, "usage", usage || %{})
+    usage_map = if is_struct(usage), do: Map.from_struct(usage), else: usage || %{}
+    req_meta = (raw && Map.get(raw, :meta)) || %{}
+    meta = Map.put(req_meta, "usage", usage_map)
     messages = append_assistant_message(socket.assigns.messages || [], final_text || "", meta)
 
     {:noreply,
@@ -672,7 +685,10 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:messages, messages)}
   end
 
-  def handle_info({:ai_stream, id, %{type: :done}}, %{assigns: %{stream_id: id}} = socket) do
+  def handle_info(
+        {:ai_stream, id, %TheMaestro.Domain.StreamEvent{type: :done}},
+        %{assigns: %{stream_id: id}} = socket
+      ) do
     # Manager now owns finalization and tool follow-ups; we only mark UI state
     {:noreply, push_event(socket, %{kind: "ai", type: "done", at: now_ms()})}
   end

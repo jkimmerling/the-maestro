@@ -93,22 +93,24 @@ defmodule TheMaestro.Sessions.Manager do
 
         case result do
           {:ok, stream} ->
-            publish_both(session_id, stream_id, %{type: :thinking, metadata: %{thinking: true}})
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
+              type: :thinking,
+              raw: %{thinking: true}
+            })
 
             for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
               publish_both(session_id, stream_id, msg)
 
               case msg do
-                %{type: :content, content: chunk} when is_binary(chunk) ->
+                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
+                when is_binary(chunk) ->
                   GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
 
-                %{type: :function_call, tool_calls: calls} when is_list(calls) ->
+                %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
+                when is_list(calls) ->
                   GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
 
-                %{type: :function_call, function_call: calls} when is_list(calls) ->
-                  GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
-
-                %{type: :usage, usage: usage} when is_map(usage) ->
+                %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
                   GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
 
                 _ ->
@@ -117,12 +119,16 @@ defmodule TheMaestro.Sessions.Manager do
             end
 
             # Gemini may not emit :done
-            publish_both(session_id, stream_id, %{type: :done})
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
             GenServer.cast(__MODULE__, {:stream_done, session_id, stream_id})
 
           {:error, reason} ->
-            publish_both(session_id, stream_id, %{type: :error, error: inspect(reason)})
-            publish_both(session_id, stream_id, %{type: :done})
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
+              type: :error,
+              error: inspect(reason)
+            })
+
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
         end
       end)
 
@@ -233,8 +239,8 @@ defmodule TheMaestro.Sessions.Manager do
         if acc,
           do: %{
             acc
-            | usage: usage,
-              events: acc.events ++ [%{type: :usage, at: now_ms(), usage: usage}]
+            | usage: usage_to_map(usage),
+              events: acc.events ++ [%{type: :usage, at: now_ms(), usage: usage_to_map(usage)}]
           },
           else: acc
       end)
@@ -286,10 +292,9 @@ defmodule TheMaestro.Sessions.Manager do
     PubSub.broadcast(TheMaestro.PubSub, topic(session_id), message)
   end
 
-  defp publish_both(session_id, stream_id, msg_map) do
-    compat = compat_msg_map(msg_map)
-    publish(session_id, {:ai_stream, stream_id, compat})
-    publish(session_id, {:ai_stream2, session_id, stream_id, compat})
+  defp publish_both(session_id, stream_id, msg) do
+    publish(session_id, {:ai_stream, stream_id, msg})
+    publish(session_id, {:ai_stream2, session_id, stream_id, msg})
   end
 
   defp topic(session_id), do: "session:" <> session_id
@@ -349,11 +354,14 @@ defmodule TheMaestro.Sessions.Manager do
           last_used_at: DateTime.utc_now()
         })
 
-      publish_both(session_id, stream_id, %{
+      alias TheMaestro.Domain.{StreamEvent, Usage}
+      usage_struct = if usage, do: Usage.new!(usage), else: nil
+
+      publish_both(session_id, stream_id, %StreamEvent{
         type: :finalized,
         content: text,
-        usage: usage || %{},
-        meta: req_meta
+        usage: usage_struct,
+        raw: %{meta: req_meta}
       })
     else
       _ -> :ok
@@ -406,16 +414,15 @@ defmodule TheMaestro.Sessions.Manager do
               publish_both(session_id, stream_id, msg)
 
               case msg do
-                %{type: :content, content: chunk} when is_binary(chunk) ->
+                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
+                when is_binary(chunk) ->
                   GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
 
-                %{type: :function_call, tool_calls: calls} when is_list(calls) ->
+                %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
+                when is_list(calls) ->
                   GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
 
-                %{type: :function_call, function_call: calls} when is_list(calls) ->
-                  GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
-
-                %{type: :usage, usage: usage} when is_map(usage) ->
+                %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
                   GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
 
                 _ ->
@@ -423,12 +430,16 @@ defmodule TheMaestro.Sessions.Manager do
               end
             end
 
-            publish_both(session_id, stream_id, %{type: :done})
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
             GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
 
           {:error, reason} ->
-            publish_both(session_id, stream_id, %{type: :error, error: inspect(reason)})
-            publish_both(session_id, stream_id, %{type: :done})
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
+              type: :error,
+              error: inspect(reason)
+            })
+
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
             GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
         end
       end)
@@ -444,28 +455,7 @@ defmodule TheMaestro.Sessions.Manager do
       })
   end
 
-  # Compatibility: ensure published event includes legacy keys for downstream consumers
-  defp compat_msg_map(%{type: :function_call, tool_calls: calls} = m) when is_list(calls) do
-    legacy =
-      Enum.map(calls, fn
-        %TheMaestro.Domain.ToolCall{id: id, name: name, arguments: args} ->
-          %{id: id, function: %{name: name, arguments: args || ""}}
-
-        %{"id" => id, "name" => name, "arguments" => args} ->
-          %{id: id, function: %{name: name, arguments: args || ""}}
-
-        %{id: id, name: name, arguments: args} ->
-          %{id: id, function: %{name: name, arguments: args || ""}}
-
-        other ->
-          other
-      end)
-
-    m
-    |> Map.put(:function_call, legacy)
-  end
-
-  defp compat_msg_map(m), do: m
+  # Legacy compatibility removed: all stream events are %StreamEvent{}
 
   defp do_followup_provider(:openai, session_name, items, model),
     do: OpenAI.Streaming.stream_tool_followup(session_name, items, model: model)
@@ -491,6 +481,10 @@ defmodule TheMaestro.Sessions.Manager do
       end
     end)
   end
+
+  defp usage_to_map(%TheMaestro.Domain.Usage{} = u), do: Map.from_struct(u)
+  defp usage_to_map(%{} = m), do: m
+  defp usage_to_map(nil), do: nil
 
   defp build_openai_items(last_user_text, partial_answer, calls, outputs) do
     user_ctx_items =

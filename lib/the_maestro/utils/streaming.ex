@@ -106,7 +106,13 @@ defmodule TheMaestro.Streaming do
       Logger.error("Stream parsing failed for #{provider}: #{inspect(error)}")
 
       [
-        %StreamEvent{type: :error, content: nil, tool_calls: [], usage: nil, raw: %{error: "Stream parsing failed: #{inspect(error)}"}}
+        %StreamEvent{
+          type: :error,
+          content: nil,
+          tool_calls: [],
+          usage: nil,
+          raw: %{error: "Stream parsing failed: #{inspect(error)}"}
+        }
       ]
   end
 
@@ -167,6 +173,7 @@ defmodule TheMaestro.Streaming do
       content: msg.content,
       tool_calls: to_tool_calls(msg.function_call),
       usage: to_usage(msg.usage),
+      error: msg.error,
       raw: Map.new(msg.metadata || %{})
     }
   end
@@ -176,8 +183,13 @@ defmodule TheMaestro.Streaming do
     %StreamEvent{
       type: normalize_type(t),
       content: Map.get(msg, :content) || Map.get(msg, "content"),
-      tool_calls: to_tool_calls(Map.get(msg, :function_call) || Map.get(msg, "function_call") || Map.get(msg, :tool_calls) || Map.get(msg, "tool_calls")),
+      tool_calls:
+        to_tool_calls(
+          Map.get(msg, :function_call) || Map.get(msg, "function_call") ||
+            Map.get(msg, :tool_calls) || Map.get(msg, "tool_calls")
+        ),
       usage: to_usage(Map.get(msg, :usage) || Map.get(msg, "usage")),
+      error: Map.get(msg, :error) || Map.get(msg, "error"),
       raw: Map.drop(msg, [:type, :content, :function_call, :usage, :tool_calls])
     }
   end
@@ -187,6 +199,7 @@ defmodule TheMaestro.Streaming do
   end
 
   defp normalize_type(t) when t in [:content, :function_call, :usage, :done, :error], do: t
+
   defp normalize_type(t) when is_binary(t) do
     case t do
       "content" -> :content
@@ -197,9 +210,11 @@ defmodule TheMaestro.Streaming do
       _ -> :content
     end
   end
+
   defp normalize_type(_), do: :content
 
   defp to_tool_calls(nil), do: []
+
   defp to_tool_calls(list) when is_list(list) do
     Enum.flat_map(list, fn
       %FunctionCall{id: id, function: %Function{name: name, arguments: args}} ->
@@ -218,6 +233,7 @@ defmodule TheMaestro.Streaming do
         []
     end)
   end
+
   defp to_tool_calls(_), do: []
 
   defp to_usage(nil), do: nil
