@@ -237,7 +237,11 @@ defmodule TheMaestroWeb.SessionChatLive do
 
           %TheMaestro.SuppliedContext.SuppliedContextItem{} = p ->
             pj =
-              Jason.encode!(%{"name" => p.name, "version" => p.version || 1, "persona_text" => p.text})
+              Jason.encode!(%{
+                "name" => p.name,
+                "version" => p.version || 1,
+                "persona_text" => p.text
+              })
 
             assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
         end

@@ -40,8 +40,9 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
 
   require Logger
 
+  alias TheMaestro.Auth
   alias TheMaestro.Auth.OAuthToken
-  alias TheMaestro.SavedAuthentication
+  alias TheMaestro.Auth.SavedAuthentication
 
   # Job data struct for validation and type checking
   defmodule TokenRefreshJobData do
@@ -132,50 +133,28 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
 
   # Generic-first refresh: try provider module by session name, then fallback to HTTP refresh
   defp do_refresh(%TokenRefreshJobData{provider: provider, auth_id: auth_id}) do
-    import Ecto.Query, warn: false
-    alias TheMaestro.Repo
-
     provider_atom = String.to_atom(provider)
 
     saved =
-      case parse_int(auth_id) do
-        {:ok, int_id} ->
-          Repo.one(
-            from sa in SavedAuthentication,
-              where: sa.id == ^int_id
-          )
-
-        _ ->
-          nil
+      try do
+        Auth.get_saved_authentication!(auth_id)
+      rescue
+        _ -> nil
       end
 
     with %SavedAuthentication{name: session_name} <- saved,
          {:ok, _} <- TheMaestro.Provider.refresh_tokens(provider_atom, session_name) do
-      # Re-fetch and schedule the next refresh using updated expiry
-      case Repo.get(SavedAuthentication, saved.id) do
-        %SavedAuthentication{} = updated ->
-          _ = schedule_for_auth(updated)
-          :ok
-
-        _ ->
-          :ok
-      end
+      _ = schedule_for_auth(saved)
+      :ok
     else
       _ -> fallback_http_refresh(provider, auth_id, saved)
     end
   end
 
   defp fallback_http_refresh(provider, auth_id, saved) do
-    import Ecto.Query, warn: false
-    alias TheMaestro.Repo
-
     case refresh_token_for_provider(provider, auth_id) do
       {:ok, %OAuthToken{}} ->
-        case Repo.get(SavedAuthentication, saved && saved.id) do
-          %SavedAuthentication{} = updated -> _ = schedule_for_auth(updated)
-          _ -> :ok
-        end
-
+        if match?(%SavedAuthentication{}, saved), do: _ = schedule_for_auth(saved)
         :ok
 
       {:error, reason} ->
@@ -259,9 +238,8 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
 
   If `expires_at` is nil, schedules a conservative refresh in 45 minutes.
   """
-  @spec schedule_for_auth(TheMaestro.SavedAuthentication.t()) ::
-          {:ok, Oban.Job.t()} | {:error, term()}
-  def schedule_for_auth(%SavedAuthentication{} = saved) do
+  @spec schedule_for_auth(struct()) :: {:ok, Oban.Job.t()} | {:error, term()}
+  def schedule_for_auth(saved) when is_map(saved) do
     provider = saved.provider |> to_string()
     auth_id = to_string(saved.id)
     expires_at = saved.expires_at || DateTime.add(DateTime.utc_now(), 45 * 60, :second)
@@ -272,8 +250,8 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   @doc """
   Cancel any scheduled/available refresh jobs for a SavedAuthentication.
   """
-  @spec cancel_for_auth(TheMaestro.SavedAuthentication.t()) :: {non_neg_integer(), nil | [term()]}
-  def cancel_for_auth(%SavedAuthentication{} = saved) do
+  @spec cancel_for_auth(struct()) :: {non_neg_integer(), nil | [term()]}
+  def cancel_for_auth(saved) when is_map(saved) do
     import Ecto.Query, warn: false
     alias Oban.Job
     alias TheMaestro.Repo
@@ -323,34 +301,19 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   @spec refresh_token_for_provider(String.t(), String.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
   def refresh_token_for_provider("anthropic" = provider, auth_id) do
-    import Ecto.Query, warn: false
-    alias TheMaestro.{Repo, SavedAuthentication}
+    case Auth.get_saved_authentication!(auth_id) do
+      %SavedAuthentication{provider: :anthropic, auth_type: :oauth} = saved_auth ->
+        process_token_refresh(provider, saved_auth)
 
-    with {:ok, int_id} <- parse_int(auth_id),
-         %SavedAuthentication{} = saved_auth <-
-           Repo.one(
-             from sa in SavedAuthentication,
-               where: sa.id == ^int_id and sa.provider == ^:anthropic and sa.auth_type == :oauth,
-               select: sa
-           ) do
-      process_token_refresh(provider, saved_auth)
-    else
-      _ -> {:error, :not_found}
+      _ ->
+        {:error, :not_found}
     end
   end
 
   def refresh_token_for_provider(provider, _auth_id),
     do: {:error, {:unsupported_provider, provider}}
 
-  defp parse_int(val) when is_binary(val) do
-    case Integer.parse(val) do
-      {i, _} -> {:ok, i}
-      :error -> :error
-    end
-  end
-
-  defp parse_int(val) when is_integer(val), do: {:ok, val}
-  defp parse_int(_), do: :error
+  # removed integer parsing; IDs are binary_id strings now
 
   # Process token refresh for a saved authentication record
   defp process_token_refresh(
@@ -414,9 +377,6 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
 
   # Update stored OAuth token in database with new credentials
   defp update_stored_token(saved_auth, new_oauth_token) do
-    import Ecto.Query, warn: false
-    alias TheMaestro.Repo
-
     # Calculate new expiry DateTime from unix timestamp
     new_expires_at =
       if is_integer(new_oauth_token.expiry) and new_oauth_token.expiry > 0 do
@@ -434,13 +394,10 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
       "scope" => new_oauth_token.scope
     }
 
-    changeset =
-      TheMaestro.SavedAuthentication.changeset(saved_auth, %{
-        credentials: new_credentials,
-        expires_at: new_expires_at
-      })
-
-    case Repo.update(changeset) do
+    case Auth.update_saved_authentication(saved_auth, %{
+           credentials: new_credentials,
+           expires_at: new_expires_at
+         }) do
       {:ok, _updated_auth} ->
         Logger.info("Successfully updated OAuth token for provider: #{saved_auth.provider}")
         {:ok, new_oauth_token}
