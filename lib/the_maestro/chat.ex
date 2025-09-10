@@ -195,6 +195,16 @@ defmodule TheMaestro.Chat do
     if p in allowed_strings, do: String.to_existing_atom(p), else: :openai
   end
 
+  # Public wrappers for LV/REST parity
+  @doc "Return provider atom for a session's saved authentication."
+  def provider_for_session(session), do: provider_from_session(session)
+
+  @doc "Return {auth_type, auth_name} for a session's saved authentication."
+  def auth_meta_for_session(session), do: auth_meta_from_session(session)
+
+  @doc "Resolve a valid model for the session+provider (respects session.model_id)."
+  def resolve_model_for_session(session, provider), do: pick_model_for_session(session, provider)
+
   defp user_msg(text), do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
 
   defp provider_from_session(session) do

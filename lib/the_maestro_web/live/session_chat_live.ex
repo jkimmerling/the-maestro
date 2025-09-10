@@ -1,9 +1,4 @@
 defmodule TheMaestroWeb.SessionChatLive do
-  # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
-  # credo:disable-for-this-file Credo.Check.Refactor.Nesting
-  # credo:disable-for-this-file Credo.Check.Readability.PreferCaseTrivialWith
-  # credo:disable-for-this-file Credo.Check.Readability.WithSingleClause
-  # credo:disable-for-this-file Credo.Check.Design.AliasUsage
   use TheMaestroWeb, :live_view
 
   alias TheMaestro.Auth
@@ -201,57 +196,58 @@ defmodule TheMaestroWeb.SessionChatLive do
   def handle_event("validate_config", params, socket) do
     form = Map.merge(socket.assigns.config_form || %{}, params)
     socket = assign(socket, :config_form, form)
-
-    # If provider changed, reload auth options and clear model list
-    socket =
-      if Map.has_key?(params, "provider") do
-        # Reload provider-specific auth options and ensure auth_id selection is valid
-        socket = socket |> load_auth_options(form) |> assign(:config_models, [])
-        new_form = socket.assigns.config_form
-        opts = new_form["auth_options"] || []
-
-        new_auth_id =
-          case opts do
-            [{_label, id} | _] -> id
-            _ -> nil
-          end
-
-        assign(socket, :config_form, Map.put(new_form, "auth_id", new_auth_id))
-      else
-        socket
-      end
-
-    # If auth_id changed, load models
-    socket =
-      if Map.has_key?(params, "auth_id") do
-        models = list_models_for_form(socket.assigns.config_form)
-        assign(socket, :config_models, models)
-      else
-        socket
-      end
-
-    # If persona_id changed, mirror into persona_json
-    socket =
-      if Map.has_key?(params, "persona_id") do
-        case get_persona_for_form(form) do
-          nil ->
-            socket
-
-          %TheMaestro.SuppliedContext.SuppliedContextItem{} = p ->
-            pj =
-              Jason.encode!(%{
-                "name" => p.name,
-                "version" => p.version || 1,
-                "persona_text" => p.text
-              })
-
-            assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
-        end
-      else
-        socket
-      end
-
+    socket = maybe_reload_auth_options(socket, params, form)
+    socket = maybe_reload_models(socket, params)
+    socket = maybe_mirror_persona(socket, params, form)
     {:noreply, socket}
+  end
+
+  defp maybe_reload_auth_options(socket, params, form) do
+    if Map.has_key?(params, "provider") do
+      socket = socket |> load_auth_options(form) |> assign(:config_models, [])
+      new_form = socket.assigns.config_form
+      opts = new_form["auth_options"] || []
+
+      new_auth_id =
+        case opts do
+          [{_l, id} | _] -> id
+          _ -> nil
+        end
+
+      assign(socket, :config_form, Map.put(new_form, "auth_id", new_auth_id))
+    else
+      socket
+    end
+  end
+
+  defp maybe_reload_models(socket, params) do
+    if Map.has_key?(params, "auth_id") do
+      models = list_models_for_form(socket.assigns.config_form)
+      assign(socket, :config_models, models)
+    else
+      socket
+    end
+  end
+
+  defp maybe_mirror_persona(socket, params, form) do
+    if Map.has_key?(params, "persona_id") do
+      case get_persona_for_form(form) do
+        nil ->
+          socket
+
+        %TheMaestro.SuppliedContext.SuppliedContextItem{} = p ->
+          pj =
+            Jason.encode!(%{
+              "name" => p.name,
+              "version" => p.version || 1,
+              "persona_text" => p.text
+            })
+
+          assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
+      end
+    else
+      socket
+    end
   end
 
   # ==== Persona modal ====
@@ -330,86 +326,104 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   @impl true
   def handle_event("save_config", params, socket) do
-    # Decode JSON fields safely
-    with {:ok, persona} <-
-           safe_decode(
-             params["persona_json"] || Jason.encode!(socket.assigns.session.persona || %{})
-           ),
-         {:ok, memory} <-
-           safe_decode(
-             params["memory_json"] || Jason.encode!(socket.assigns.session.memory || %{})
-           ),
-         {:ok, tools} <-
-           safe_decode(params["tools_json"] || Jason.encode!(socket.assigns.session.tools || %{})),
-         {:ok, mcps} <-
-           safe_decode(params["mcps_json"] || Jason.encode!(socket.assigns.session.mcps || %{})) do
-      attrs = %{
-        "auth_id" => params["auth_id"] || socket.assigns.session.auth_id,
-        "model_id" => params["model_id"] || socket.assigns.session.model_id,
-        "working_dir" => params["working_dir"] || socket.assigns.session.working_dir,
-        "persona" => persona,
-        "memory" => memory,
-        "tools" => tools,
-        "mcps" => mcps
-      }
+    case build_session_update_attrs(socket, params) do
+      {:ok, attrs} ->
+        case Conversations.update_session(socket.assigns.session, attrs) do
+          {:ok, updated} ->
+            socket = assign(socket, :session, updated)
+            apply_behavior = params["apply"] || "now"
+            socket = maybe_restart_stream(socket, updated, apply_behavior)
 
-      case Conversations.update_session(socket.assigns.session, attrs) do
-        {:ok, updated} ->
-          socket = assign(socket, :session, updated)
-          apply_behavior = params["apply"] || "now"
+            {:noreply,
+             socket
+             |> assign(:show_config, false)
+             |> put_flash(
+               :info,
+               if(apply_behavior == "now",
+                 do: "Config applied and stream restarted",
+                 else: "Config saved; applied next turn"
+               )
+             )}
 
-          socket =
-            if apply_behavior == "now" and socket.assigns.streaming? do
-              # Cancel existing stream and restart using current pending canonical or latest snapshot
-              _ = TheMaestro.Chat.cancel_turn(updated.id)
-              provider = provider_from_session(updated)
+          {:error, changeset} ->
+            {:noreply,
+             put_flash(socket, :error, "Failed to save config: #{inspect(changeset.errors)}")}
+        end
 
-              canon =
-                socket.assigns.pending_canonical ||
-                  (Conversations.latest_snapshot(updated.id) ||
-                     %{combined_chat: %{"messages" => []}})
-                  |> Map.get(:combined_chat, %{"messages" => []})
-
-              {:ok, provider_msgs} = Translator.to_provider(canon, provider)
-              model = pick_model_for_session(updated, provider)
-
-              {:ok, stream_id} =
-                TheMaestro.Chat.start_stream(
-                  updated.id,
-                  provider,
-                  elem(auth_meta_from_session(updated), 1),
-                  provider_msgs,
-                  model
-                )
-
-              socket
-              |> assign(:stream_id, stream_id)
-              |> assign(:used_provider, provider)
-              |> assign(:used_model, model)
-              |> assign(:used_usage, nil)
-              |> assign(:thinking?, true)
-            else
-              socket
-            end
-
-          {:noreply,
-           socket
-           |> assign(:show_config, false)
-           |> put_flash(
-             :info,
-             if(apply_behavior == "now",
-               do: "Config applied and stream restarted",
-               else: "Config saved; applied next turn"
-             )
-           )}
-
-        {:error, changeset} ->
-          {:noreply,
-           put_flash(socket, :error, "Failed to save config: #{inspect(changeset.errors)}")}
-      end
-    else
       {:error, {:decode, field, reason}} ->
         {:noreply, put_flash(socket, :error, "Invalid JSON for #{field}: #{inspect(reason)}")}
+    end
+  end
+
+  defp build_session_update_attrs(socket, params) do
+    with {:ok, persona} <- decode_persona(socket, params),
+         {:ok, memory} <- decode_memory(socket, params),
+         {:ok, tools} <- decode_tools(socket, params),
+         {:ok, mcps} <- decode_mcps(socket, params) do
+      {:ok,
+       %{
+         "auth_id" => params["auth_id"] || socket.assigns.session.auth_id,
+         "model_id" => params["model_id"] || socket.assigns.session.model_id,
+         "working_dir" => params["working_dir"] || socket.assigns.session.working_dir,
+         "persona" => persona,
+         "memory" => memory,
+         "tools" => tools,
+         "mcps" => mcps
+       }}
+    end
+  end
+
+  # --- JSON decode helpers split out to reduce complexity ---
+  defp decode_persona(socket, params) do
+    default = Jason.encode!(socket.assigns.session.persona || %{})
+    safe_decode(params["persona_json"] || default)
+  end
+
+  defp decode_memory(socket, params) do
+    default = Jason.encode!(socket.assigns.session.memory || %{})
+    safe_decode(params["memory_json"] || default)
+  end
+
+  defp decode_tools(socket, params) do
+    default = Jason.encode!(socket.assigns.session.tools || %{})
+    safe_decode(params["tools_json"] || default)
+  end
+
+  defp decode_mcps(socket, params) do
+    default = Jason.encode!(socket.assigns.session.mcps || %{})
+    safe_decode(params["mcps_json"] || default)
+  end
+
+  defp maybe_restart_stream(socket, updated, apply_behavior) do
+    if apply_behavior == "now" and socket.assigns.streaming? do
+      _ = TheMaestro.Chat.cancel_turn(updated.id)
+      provider = TheMaestro.Chat.provider_for_session(updated)
+
+      canon =
+        socket.assigns.pending_canonical ||
+          (Conversations.latest_snapshot(updated.id) || %{combined_chat: %{"messages" => []}})
+          |> Map.get(:combined_chat, %{"messages" => []})
+
+      {:ok, provider_msgs} = Conversations.Translator.to_provider(canon, provider)
+      model = TheMaestro.Chat.resolve_model_for_session(updated, provider)
+
+      {:ok, stream_id} =
+        TheMaestro.Chat.start_stream(
+          updated.id,
+          provider,
+          elem(TheMaestro.Chat.auth_meta_for_session(updated), 1),
+          provider_msgs,
+          model
+        )
+
+      socket
+      |> assign(:stream_id, stream_id)
+      |> assign(:used_provider, provider)
+      |> assign(:used_model, model)
+      |> assign(:used_usage, nil)
+      |> assign(:thinking?, true)
+    else
+      socket
     end
   end
 
@@ -526,52 +540,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # assistant message helpers moved to orchestrator
 
-  defp default_model_for_session(session, :openai) do
-    {auth_type, _} = auth_meta_from_session(session)
-
-    case auth_type do
-      :oauth -> "gpt-5"
-      _ -> "gpt-4o"
-    end
-  end
-
-  defp default_model_for_session(_session, :anthropic), do: "claude-3-5-sonnet"
-
-  defp default_model_for_session(session, :gemini) do
-    {auth_type, _} = auth_meta_from_session(session)
-
-    case auth_type do
-      :oauth -> "gemini-2.5-pro"
-      _ -> "gemini-1.5-pro-latest"
-    end
-  end
-
-  defp default_model_for_session(_session, _), do: ""
-
-  # Try to pick a valid model from the provider's list; fallback to defaults
-  defp pick_model_for_session(session, provider) do
-    chosen = session.model_id
-
-    if is_binary(chosen) and chosen != "" do
-      chosen
-    else
-      choose_model_from_provider(session, provider)
-    end
-  end
-
-  defp choose_model_from_provider(session, provider) do
-    default = default_model_for_session(session, provider)
-    {auth_type, session_name} = auth_meta_from_session(session)
-
-    case Provider.list_models(provider, auth_type, session_name) do
-      {:ok, models} when is_list(models) and models != [] ->
-        ids = Enum.map(models, & &1.id)
-        if default in ids, do: default, else: hd(ids)
-
-      _ ->
-        default
-    end
-  end
+  # model resolution moved to Chat facade
 
   # Provider calls moved to TheMaestro.Sessions.Manager
 
@@ -718,17 +687,18 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   # Internal: retry the current provider call after a backoff
-  def handle_info({:retry_stream, _attempt} = _msg, socket) do
-    # Only retry if we still have a pending canonical and we are on a supported provider
+  def handle_info({:retry_stream, _attempt}, socket), do: {:noreply, do_retry_stream(socket)}
+
+  defp do_retry_stream(socket) do
     case socket.assigns do
       %{pending_canonical: canon, used_provider: provider}
       when is_map(canon) and not is_nil(provider) ->
         model =
-          socket.assigns.used_model || default_model_for_session(socket.assigns.session, provider)
+          socket.assigns.used_model ||
+            TheMaestro.Chat.resolve_model_for_session(socket.assigns.session, provider)
 
-        {:ok, provider_msgs} = Translator.to_provider(canon, provider)
+        {:ok, provider_msgs} = Conversations.Translator.to_provider(canon, provider)
 
-        # Start a fresh streaming task with a new stream id
         {:ok, stream_id} =
           TheMaestro.Chat.start_stream(
             socket.assigns.session.id,
@@ -738,17 +708,16 @@ defmodule TheMaestroWeb.SessionChatLive do
             model
           )
 
-        {:noreply,
-         socket
-         |> assign(:stream_id, stream_id)
-         |> assign(:stream_task, nil)
-         |> assign(:used_provider, provider)
-         |> assign(:used_model, model)
-         |> assign(:used_usage, nil)
-         |> assign(:thinking?, false)}
+        socket
+        |> assign(:stream_id, stream_id)
+        |> assign(:stream_task, nil)
+        |> assign(:used_provider, provider)
+        |> assign(:used_model, model)
+        |> assign(:used_usage, nil)
+        |> assign(:thinking?, false)
 
       _ ->
-        {:noreply, socket}
+        socket
     end
   end
 
@@ -788,69 +757,25 @@ defmodule TheMaestroWeb.SessionChatLive do
   # Detect Anthropic overloaded errors from error strings
   defp anth_overloaded?(err) when is_binary(err) do
     down = String.downcase(err)
+    if has_overloaded?(down), do: true, else: parse_overload_json(err) == :overloaded
+  end
 
-    cond do
-      String.contains?(down, "overloaded_error") ->
-        true
+  defp has_overloaded?(down) when is_binary(down) do
+    String.contains?(down, "overloaded_error") or String.contains?(down, "\"overloaded\"")
+  end
 
-      String.contains?(down, "\"overloaded\"") ->
-        true
-
-      true ->
-        case :binary.match(err, "{") do
-          {idx, _} ->
-            json = String.slice(err, idx..-1)
-
-            case Jason.decode(json) do
-              {:ok, %{"error" => %{"type" => t}}} when is_binary(t) ->
-                String.contains?(String.downcase(t), "overloaded")
-
-              {:ok, %{"type" => t}} when is_binary(t) ->
-                String.contains?(String.downcase(t), "overloaded")
-
-              _ ->
-                false
-            end
-
-          :nomatch ->
-            false
-        end
+  defp parse_overload_json(err) when is_binary(err) do
+    with {idx, _len} <- :binary.match(err, "{"),
+         {:ok, map} <- Jason.decode(String.slice(err, idx..-1)),
+         t when is_binary(t) <- get_in(map, ["error", "type"]) || map["type"] do
+      if String.contains?(String.downcase(t), "overloaded"), do: :overloaded, else: :no
+    else
+      _ -> :no
     end
   end
 
   # ---- Session helpers (derive provider/auth from SavedAuth) ----
-  defp provider_from_session(session) do
-    saved = session.saved_authentication
-
-    cond do
-      match?(%Ecto.Association.NotLoaded{}, saved) and session.auth_id ->
-        sa = Auth.get_saved_authentication!(session.auth_id)
-        to_provider_atom(sa.provider)
-
-      is_map(saved) ->
-        to_provider_atom(saved.provider)
-
-      true ->
-        # Fallback to openai to avoid crashes; will be corrected on next turn
-        :openai
-    end
-  end
-
-  defp auth_meta_from_session(session) do
-    saved = session.saved_authentication
-
-    cond do
-      match?(%Ecto.Association.NotLoaded{}, saved) and session.auth_id ->
-        sa = Auth.get_saved_authentication!(session.auth_id)
-        {sa.auth_type, sa.name}
-
-      is_map(saved) ->
-        {saved.auth_type, saved.name}
-
-      true ->
-        {:oauth, "default"}
-    end
-  end
+  # provider/auth helpers moved to Chat facade
 
   defp default_provider(session) do
     saved = session.saved_authentication
@@ -913,8 +838,6 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   # Convert a provider string to a known atom safely; default to :openai
-  defp to_provider_atom(p) when is_atom(p), do: p
-
   defp to_provider_atom(p) when is_binary(p) do
     allowed = TheMaestro.Provider.list_providers()
     allowed_strings = Enum.map(allowed, &Atom.to_string/1)

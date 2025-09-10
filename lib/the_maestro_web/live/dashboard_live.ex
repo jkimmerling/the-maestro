@@ -1,5 +1,4 @@
 defmodule TheMaestroWeb.DashboardLive do
-  # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
   use TheMaestroWeb, :live_view
 
   alias TheMaestro.Auth
@@ -10,28 +9,46 @@ defmodule TheMaestroWeb.DashboardLive do
   def mount(_params, _session, socket) do
     if connected?(socket), do: TheMaestroWeb.Endpoint.subscribe("oauth:events")
 
-    {:ok,
-     socket
-     |> assign(:auths, Auth.list_saved_authentications())
-     |> assign(:sessions, Conversations.list_sessions_with_auth())
-     |> assign(:show_session_modal, false)
-     |> assign(:auth_options, build_auth_options())
-     |> assign(:prompt_options, build_prompt_options())
-     |> assign(:persona_options, build_persona_options())
-     |> assign(:session_form, to_form(Conversations.change_session(%Conversations.Session{})))
-     |> assign(:session_provider, "openai")
-     |> assign(:session_auth_options, build_auth_options_for(:openai))
-     |> assign(:session_model_options, [])
-     |> assign(:show_session_dir_picker, false)
-     |> assign(:page_title, "Dashboard")}
+    socket =
+      socket
+      |> assign(:auths, Auth.list_saved_authentications())
+      |> assign(:sessions, Conversations.list_sessions_with_auth())
+      |> assign(:show_session_modal, false)
+      |> assign(:auth_options, build_auth_options())
+      |> assign(:prompt_options, build_prompt_options())
+      |> assign(:persona_options, build_persona_options())
+      |> assign(:session_form, to_form(Conversations.change_session(%Conversations.Session{})))
+      |> assign(:session_provider, "openai")
+      |> assign(:session_auth_options, build_auth_options_for(:openai))
+      |> assign(:session_model_options, [])
+      |> assign(:show_session_dir_picker, false)
+      |> assign(:page_title, "Dashboard")
+      |> assign(:active_streams, %{})
+
+    # When connected, subscribe to all session topics to track active streams
+    socket =
+      if connected?(socket) do
+        Enum.each(socket.assigns.sessions, fn s -> TheMaestro.Chat.subscribe(s.id) end)
+        socket
+      else
+        socket
+      end
+
+    {:ok, socket}
   end
 
   @impl true
   def handle_params(_params, _uri, socket) do
+    sessions = Conversations.list_sessions_with_auth()
+
+    if connected?(socket) do
+      Enum.each(sessions, fn s -> TheMaestro.Chat.subscribe(s.id) end)
+    end
+
     {:noreply,
      socket
      |> assign(:auths, Auth.list_saved_authentications())
-     |> assign(:sessions, Conversations.list_sessions_with_auth())
+     |> assign(:sessions, sessions)
      |> assign(:auth_options, build_auth_options())
      |> assign(:prompt_options, build_prompt_options())
      |> assign(:persona_options, build_persona_options())}
@@ -145,53 +162,55 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   # Keep all handle_event/3 clauses grouped together to avoid warnings
+  defp build_session_params(params) do
+    with {:ok, p2} <- mirror_persona(params),
+         {:ok, p3} <- decode_memory_json(p2) do
+      {:ok, p3}
+    end
+  end
+
+  defp mirror_persona(params) do
+    case Map.get(params, "persona_id") do
+      id when is_binary(id) and id != "" ->
+        p = TheMaestro.SuppliedContext.get_item!(id)
+
+        {:ok,
+         Map.put(params, "persona", %{
+           "name" => p.name,
+           "version" => p.version || 1,
+           "persona_text" => p.text
+         })}
+
+      _ ->
+        {:ok, params}
+    end
+  end
+
+  defp decode_memory_json(params) do
+    case Map.get(params, "memory_json") do
+      txt when is_binary(txt) and txt != "" ->
+        case Jason.decode(txt) do
+          {:ok, %{} = m} -> {:ok, Map.put(params, "memory", m)}
+          _ -> {:ok, params}
+        end
+
+      _ ->
+        {:ok, params}
+    end
+  end
+
   def handle_event("session_save", %{"session" => params}, socket) do
-    # Mirror persona from persona_id if provided
-    params =
-      case Map.get(params, "persona_id") do
-        nil ->
-          params
-
-        "" ->
-          params
-
-        id ->
-          p = TheMaestro.SuppliedContext.get_item!(id)
-
-          Map.put(params, "persona", %{
-            "name" => p.name,
-            "version" => p.version || 1,
-            "persona_text" => p.text
-          })
-      end
-
-    # Merge memory from memory_json if present
-    params =
-      case Map.get(params, "memory_json") do
-        nil ->
-          params
-
-        "" ->
-          params
-
-        txt ->
-          case Jason.decode(txt) do
-            {:ok, %{} = m} -> Map.put(params, "memory", m)
-            _ -> params
-          end
-      end
-
-    case Conversations.create_session(params) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Session created")
-         |> assign(:show_session_modal, false)
-         |> assign(:show_session_dir_picker, false)
-         |> assign(:sessions, Conversations.list_sessions_with_auth())}
-
-      {:error, %Ecto.Changeset{} = cs} ->
-        {:noreply, assign(socket, session_form: to_form(cs))}
+    with {:ok, params2} <- build_session_params(params),
+         {:ok, _} <- Conversations.create_session(params2) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "Session created")
+       |> assign(:show_session_modal, false)
+       |> assign(:show_session_dir_picker, false)
+       |> assign(:sessions, Conversations.list_sessions_with_auth())}
+    else
+      {:error, %Ecto.Changeset{} = cs} -> {:noreply, assign(socket, session_form: to_form(cs))}
+      {:error, _} -> {:noreply, socket}
     end
   end
 
@@ -238,6 +257,16 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:auth_options, build_auth_options())}
   end
 
+  # Stream activity from session topics (published by Sessions.Manager)
+  def handle_info({:ai_stream2, session_id, _stream_id, %{type: type}}, socket) do
+    {:noreply, put_active_stream(socket, session_id, type)}
+  end
+
+  defp put_active_stream(socket, session_id, type) do
+    active? = type in [:thinking, :content, :function_call, :usage]
+    assign(socket, :active_streams, Map.put(socket.assigns.active_streams, session_id, active?))
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   # duplicate clauses removed; see earlier grouped handle_event/3 definitions
@@ -276,35 +305,30 @@ defmodule TheMaestroWeb.DashboardLive do
            Enum.map(models, fn m -> {m.name || m.id, m.id} end) do
       list
     else
-      _ ->
-        # Fallback defaults per provider to ensure model select is populated
-        case Auth.get_saved_authentication!(auth_id) do
-          %{provider: provider} ->
-            case to_provider_atom(provider) do
-              :openai ->
-                [{"gpt-5", "gpt-5"}, {"gpt-4o", "gpt-4o"}]
-
-              :anthropic ->
-                [{"claude-3-5-sonnet", "claude-3-5-sonnet"}, {"claude-3-opus", "claude-3-opus"}]
-
-              :gemini ->
-                [
-                  {"gemini-2.5-pro", "gemini-2.5-pro"},
-                  {"gemini-1.5-pro-latest", "gemini-1.5-pro-latest"}
-                ]
-
-              _ ->
-                []
-            end
-
-          _ ->
-            []
-        end
+      _ -> default_models_for(Auth.get_saved_authentication!(auth_id))
     end
   end
 
   # fallback clause grouped with the primary build_model_options/1
   defp build_model_options(_), do: []
+
+  defp default_models_for(%{provider: provider}) do
+    case to_provider_atom(provider) do
+      :openai ->
+        [{"gpt-5", "gpt-5"}, {"gpt-4o", "gpt-4o"}]
+
+      :anthropic ->
+        [{"claude-3-5-sonnet", "claude-3-5-sonnet"}, {"claude-3-opus", "claude-3-opus"}]
+
+      :gemini ->
+        [{"gemini-2.5-pro", "gemini-2.5-pro"}, {"gemini-1.5-pro-latest", "gemini-1.5-pro-latest"}]
+
+      _ ->
+        []
+    end
+  end
+
+  defp default_models_for(_), do: []
 
   # Convert provider strings/atoms to a safe allowed atom
   defp to_provider_atom(p) when is_atom(p), do: p
@@ -450,7 +474,12 @@ defmodule TheMaestroWeb.DashboardLive do
                   class="terminal-card terminal-border-blue rounded-lg p-6 transition-colors"
                   id={"session-" <> to_string(s.id)}
                 >
-                  <h3 class="text-xl font-bold text-blue-300 mb-3 glow">{session_label(s)}</h3>
+                  <h3 class="text-xl font-bold text-blue-300 mb-1 glow">{session_label(s)}</h3>
+                  <%= if Map.get(@active_streams || %{}, s.id) do %>
+                    <div class="text-xs text-amber-400 glow mb-2" role="status" aria-live="polite">
+                      ACTIVE
+                    </div>
+                  <% end %>
                   <div class="space-y-2 text-sm">
                     <p class="text-amber-300">
                       Auth: {s.saved_authentication && s.saved_authentication.name} ({s.saved_authentication &&
@@ -636,6 +665,9 @@ defmodule TheMaestroWeb.DashboardLive do
         <%= for s <- @sessions do %>
           <div class="card bg-base-200 p-4" id={"session-" <> to_string(s.id)}>
             <div class="font-semibold text-base">{session_label(s)}</div>
+            <%= if Map.get(@active_streams || %{}, to_string(s.id)) do %>
+              <div class="text-xs text-amber-400 glow">ACTIVE</div>
+            <% end %>
             <div class="text-sm opacity-80">
               Auth: {s.saved_authentication && s.saved_authentication.name} ({s.saved_authentication &&
                 s.saved_authentication.provider}/ {s.saved_authentication &&

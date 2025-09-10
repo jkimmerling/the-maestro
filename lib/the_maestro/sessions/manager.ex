@@ -1,7 +1,6 @@
 defmodule TheMaestro.Sessions.Manager do
   # credo:disable-for-this-file Credo.Check.Refactor.Nesting
   # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
-  # credo:disable-for-this-file Credo.Check.Readability.AliasOrder
   @moduledoc """
   Session-scoped streaming manager.
 
@@ -14,12 +13,12 @@ defmodule TheMaestro.Sessions.Manager do
   require Logger
 
   alias Phoenix.PubSub
-  alias TheMaestro.Streaming
   alias TheMaestro.{Auth, Conversations}
   alias TheMaestro.Conversations.Translator
-  alias TheMaestro.Tools.Runtime, as: ToolsRuntime
   alias TheMaestro.Followups.Anthropic, as: AnthFollowups
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
+  alias TheMaestro.Streaming
+  alias TheMaestro.Tools.Runtime, as: ToolsRuntime
 
   @type session_entry :: %{
           task: pid() | nil,
@@ -94,13 +93,10 @@ defmodule TheMaestro.Sessions.Manager do
 
         case result do
           {:ok, stream} ->
-            publish(
-              session_id,
-              {:ai_stream, stream_id, %{type: :thinking, metadata: %{thinking: true}}}
-            )
+            publish_both(session_id, stream_id, %{type: :thinking, metadata: %{thinking: true}})
 
             for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
-              publish(session_id, {:ai_stream, stream_id, msg})
+              publish_both(session_id, stream_id, msg)
 
               case msg do
                 %{type: :content, content: chunk} when is_binary(chunk) ->
@@ -118,12 +114,12 @@ defmodule TheMaestro.Sessions.Manager do
             end
 
             # Gemini may not emit :done
-            publish(session_id, {:ai_stream, stream_id, %{type: :done}})
+            publish_both(session_id, stream_id, %{type: :done})
             GenServer.cast(__MODULE__, {:stream_done, session_id, stream_id})
 
           {:error, reason} ->
-            publish(session_id, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
-            publish(session_id, {:ai_stream, stream_id, %{type: :done}})
+            publish_both(session_id, stream_id, %{type: :error, error: inspect(reason)})
+            publish_both(session_id, stream_id, %{type: :done})
         end
       end)
 
@@ -161,14 +157,14 @@ defmodule TheMaestro.Sessions.Manager do
         case result do
           {:ok, stream} ->
             for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
-              publish(session_id, {:ai_stream, stream_id, msg})
+              publish_both(session_id, stream_id, msg)
             end
 
-            publish(session_id, {:ai_stream, stream_id, %{type: :done}})
+            publish_both(session_id, stream_id, %{type: :done})
 
           {:error, reason} ->
-            publish(session_id, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
-            publish(session_id, {:ai_stream, stream_id, %{type: :done}})
+            publish_both(session_id, stream_id, %{type: :error, error: inspect(reason)})
+            publish_both(session_id, stream_id, %{type: :done})
         end
       end)
 
@@ -277,6 +273,11 @@ defmodule TheMaestro.Sessions.Manager do
     PubSub.broadcast(TheMaestro.PubSub, topic(session_id), message)
   end
 
+  defp publish_both(session_id, stream_id, msg_map) do
+    publish(session_id, {:ai_stream, stream_id, msg_map})
+    publish(session_id, {:ai_stream2, session_id, stream_id, msg_map})
+  end
+
   defp topic(session_id), do: "session:" <> session_id
 
   defp now_ms, do: System.monotonic_time(:millisecond)
@@ -334,11 +335,12 @@ defmodule TheMaestro.Sessions.Manager do
           last_used_at: DateTime.utc_now()
         })
 
-      publish(
-        session_id,
-        {:ai_stream, stream_id,
-         %{type: :finalized, content: text, usage: usage || %{}, meta: req_meta}}
-      )
+      publish_both(session_id, stream_id, %{
+        type: :finalized,
+        content: text,
+        usage: usage || %{},
+        meta: req_meta
+      })
     else
       _ -> :ok
     end
