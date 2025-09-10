@@ -637,6 +637,7 @@ defmodule TheMaestroWeb.DashboardLive do
                 label="Attach Existing Thread"
                 options={@orphan_threads}
                 prompt="(Start New Chat)"
+                value={nil}
               />
               <div>
                 <label class="text-xs">Memory (JSON)</label>
