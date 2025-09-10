@@ -43,6 +43,7 @@ defmodule TheMaestro.Domain.StreamEvent do
   end
 
   defp normalize_type(t) when t in [:content, :function_call, :usage, :done, :error], do: t
+
   defp normalize_type(t) when is_binary(t) do
     case t do
       "content" -> :content
@@ -67,6 +68,7 @@ defmodule TheMaestro.Domain.StreamEvent do
   end
 
   defp wrap_call(%ToolCall{} = c), do: [c]
+
   defp wrap_call(m) when is_map(m) do
     case ToolCall.new(m) do
       {:ok, c} -> [c]

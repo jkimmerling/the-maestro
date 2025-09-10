@@ -30,15 +30,20 @@ defmodule TheMaestro.Domain.Usage do
     keys
     |> Enum.find_value(fn k -> Map.get(m, k) end)
     |> case do
-      nil -> default
-      v when is_integer(v) and v >= 0 -> v
+      nil ->
+        default
+
+      v when is_integer(v) and v >= 0 ->
+        v
+
       v when is_binary(v) ->
         case Integer.parse(v) do
           {i, _} when i >= 0 -> i
           _ -> default
         end
 
-      _ -> default
+      _ ->
+        default
     end
   end
 end
