@@ -261,6 +261,17 @@ defmodule TheMaestro.Sessions.Manager do
     end
   end
 
+  def handle_cast({:stream_done_followup, session_id, stream_id}, st) do
+    case Map.get(st, session_id) do
+      %{stream_id: ^stream_id} ->
+        finalize_and_persist(session_id, stream_id, st)
+        {:noreply, st}
+
+      _ ->
+        {:noreply, st}
+    end
+  end
+
   defp do_call_provider(:openai, session_name, messages, model),
     do: OpenAI.Streaming.stream_chat(session_name, messages, model: model)
 

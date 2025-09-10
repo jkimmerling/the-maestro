@@ -778,8 +778,9 @@ defmodule TheMaestroWeb.SessionChatLive do
   # provider/auth helpers moved to Chat facade
 
   defp default_provider(session) do
-    saved = session.saved_authentication
-    (saved && to_string(saved.provider)) || "openai"
+    session
+    |> TheMaestro.Chat.provider_for_session()
+    |> Atom.to_string()
   end
 
   defp load_auth_options(socket, form) do
