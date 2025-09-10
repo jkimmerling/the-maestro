@@ -182,7 +182,7 @@ Refactor Plan — Phases & Checklists
     - [ ] `lib/the_maestro/personas/persona.ex`
       - Action: remove schema; replaced by `SuppliedContext.SuppliedContextItem` with `type: :persona`.
 
-    - [ ] `lib/the_maestro/workers/token_refresh_worker.ex`
+    - [x] `lib/the_maestro/workers/token_refresh_worker.ex`
       - Action: remove direct Repo/Ecto.Query usage against domain tables; call `TheMaestro.Auth` context
       - `do_refresh/1`: replace Repo lookups with `Auth.get_saved_authentication!/1` (binary_id). Remove `parse_int/1` path.
       - `fallback_http_refresh/3`: replace Repo lookup with `Auth.get_saved_authentication!/1` (binary_id).
