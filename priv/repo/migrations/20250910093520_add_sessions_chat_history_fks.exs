@@ -12,7 +12,6 @@ defmodule TheMaestro.Repo.Migrations.AddSessionsChatHistoryFks do
              from: :binary_id
     end
 
-    create index(:sessions, [:latest_chat_entry_id])
+    # index already exists from baseline creation
   end
 end
-
