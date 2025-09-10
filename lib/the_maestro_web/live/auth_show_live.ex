@@ -1,12 +1,12 @@
 defmodule TheMaestroWeb.AuthShowLive do
   use TheMaestroWeb, :live_view
 
+  alias TheMaestro.Auth
   alias TheMaestro.Provider
-  alias TheMaestro.SavedAuthentication
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    sa = SavedAuthentication.get!(String.to_integer(id))
+    sa = Auth.get_saved_authentication!(id)
     {:ok, assign(socket, :sa, sa) |> assign(:page_title, "Auth Details")}
   end
 
@@ -15,7 +15,7 @@ defmodule TheMaestroWeb.AuthShowLive do
     sa = socket.assigns.sa
 
     case Provider.refresh_tokens(String.to_atom(sa.provider), sa.name) do
-      {:ok, _} -> {:noreply, assign(socket, :sa, SavedAuthentication.get!(sa.id))}
+      {:ok, _} -> {:noreply, assign(socket, :sa, Auth.get_saved_authentication!(sa.id))}
       {:error, reason} -> {:noreply, put_flash(socket, :error, inspect(reason))}
     end
   end

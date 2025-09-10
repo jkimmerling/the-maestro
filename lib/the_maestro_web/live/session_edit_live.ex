@@ -74,7 +74,7 @@ defmodule TheMaestroWeb.SessionEditLive do
   end
 
   defp auth_options do
-    TheMaestro.SavedAuthentication.list_all()
+    TheMaestro.Auth.list_saved_authentications()
     |> Enum.map(&{"#{&1.name} (#{&1.provider}/#{&1.auth_type})", &1.id})
   end
 

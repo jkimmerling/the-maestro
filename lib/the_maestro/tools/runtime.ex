@@ -220,14 +220,23 @@ defmodule TheMaestro.Tools.Runtime do
 
   defp list_directory(args, base_cwd) do
     path_like = Map.get(args, "path")
+
     case PathResolver.resolve_dir(path_like, base_cwd) do
       {:ok, path} ->
         shell_args = %{"command" => ["bash", "-lc", "ls -la"], "workdir" => path}
         Shell.run(shell_args, base_cwd: base_cwd)
-      {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
-      {:error, :not_found} -> {:error, "directory not found"}
-      {:error, :invalid} -> {:error, "invalid directory"}
-      {:error, _} -> {:error, "invalid arguments"}
+
+      {:error, :outside_workspace} ->
+        {:error, "requested path outside workspace"}
+
+      {:error, :not_found} ->
+        {:error, "directory not found"}
+
+      {:error, :invalid} ->
+        {:error, "invalid directory"}
+
+      {:error, _} ->
+        {:error, "invalid arguments"}
     end
   end
 
@@ -255,28 +264,36 @@ defmodule TheMaestro.Tools.Runtime do
                 Path.join(base_path, pattern)
               end
 
-          # If pattern lacks a directory, search recursively
-          recursive_pattern =
-            if String.contains?(pattern, "/") do
-              combined
-            else
-              Path.join(base_path, "**/" <> pattern)
-            end
+            # If pattern lacks a directory, search recursively
+            recursive_pattern =
+              if String.contains?(pattern, "/") do
+                combined
+              else
+                Path.join(base_path, "**/" <> pattern)
+              end
 
-          matches = Path.wildcard(recursive_pattern, match_dot: true)
+            matches = Path.wildcard(recursive_pattern, match_dot: true)
 
-          # Filter to keep inside workspace only, and convert to relative
-          rel =
-            matches
-            |> Enum.filter(&PathResolver.under_workspace?(&1, base_cwd))
-            |> Enum.map(&Path.relative_to(&1, base_cwd))
+            # Filter to keep inside workspace only, and convert to relative
+            rel =
+              matches
+              |> Enum.filter(&PathResolver.under_workspace?(&1, base_cwd))
+              |> Enum.map(&Path.relative_to(&1, base_cwd))
 
             payload = Jason.encode!(%{"matches" => rel, "count" => length(rel)})
             {:ok, payload}
-          {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
-          {:error, :not_found} -> {:error, "directory not found"}
-          {:error, :invalid} -> {:error, "invalid directory"}
-          {:error, _} -> {:error, "invalid arguments"}
+
+          {:error, :outside_workspace} ->
+            {:error, "requested path outside workspace"}
+
+          {:error, :not_found} ->
+            {:error, "directory not found"}
+
+          {:error, :invalid} ->
+            {:error, "invalid directory"}
+
+          {:error, _} ->
+            {:error, "invalid arguments"}
         end
     end
   end
@@ -295,43 +312,51 @@ defmodule TheMaestro.Tools.Runtime do
       true ->
         case PathResolver.resolve_dir(path_like, base_cwd) do
           {:ok, base_path} ->
-          max_hits = 500
+            max_hits = 500
 
-          {matcher, is_regex} =
-            case Regex.compile(pattern) do
-              {:ok, re} -> {re, true}
-              _ -> {pattern, false}
-            end
-
-          files = collect_files(base_path, base_cwd, 10_000)
-
-          {hits, count} =
-            Enum.reduce_while(files, {[], 0}, fn file, {acc, c} ->
-              if c >= max_hits do
-                {:halt, {acc, c}}
-              else
-                case File.exists?(file) and File.regular?(file) do
-                  true ->
-                    results = grep_file(file, matcher, is_regex, base_cwd, max_hits - c)
-                    nc = c + length(results)
-                    {:cont, {acc ++ results, nc}}
-
-                  _ ->
-                    {:cont, {acc, c}}
-                end
+            {matcher, is_regex} =
+              case Regex.compile(pattern) do
+                {:ok, re} -> {re, true}
+                _ -> {pattern, false}
               end
-            end)
 
-          payload =
-            hits
-            |> Enum.map(fn %{path: p, line: ln, text: t} -> "#{p}:#{ln}: #{t}" end)
-            |> Enum.join("\n")
+            files = collect_files(base_path, base_cwd, 10_000)
 
-          {:ok, payload}
-        {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
-        {:error, :not_found} -> {:error, "directory not found"}
-        {:error, :invalid} -> {:error, "invalid directory"}
-        {:error, _} -> {:error, "invalid arguments"}
+            {hits, count} =
+              Enum.reduce_while(files, {[], 0}, fn file, {acc, c} ->
+                if c >= max_hits do
+                  {:halt, {acc, c}}
+                else
+                  case File.exists?(file) and File.regular?(file) do
+                    true ->
+                      results = grep_file(file, matcher, is_regex, base_cwd, max_hits - c)
+                      nc = c + length(results)
+                      {:cont, {acc ++ results, nc}}
+
+                    _ ->
+                      {:cont, {acc, c}}
+                  end
+                end
+              end)
+
+            payload =
+              hits
+              |> Enum.map(fn %{path: p, line: ln, text: t} -> "#{p}:#{ln}: #{t}" end)
+              |> Enum.join("\n")
+
+            {:ok, payload}
+
+          {:error, :outside_workspace} ->
+            {:error, "requested path outside workspace"}
+
+          {:error, :not_found} ->
+            {:error, "directory not found"}
+
+          {:error, :invalid} ->
+            {:error, "invalid directory"}
+
+          {:error, _} ->
+            {:error, "invalid arguments"}
         end
     end
   end

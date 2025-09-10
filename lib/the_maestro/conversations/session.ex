@@ -18,9 +18,9 @@ defmodule TheMaestro.Conversations.Session do
     field :mcps, :map, default: %{}
 
     # Saved authentication
-    belongs_to :saved_authentication, TheMaestro.SavedAuthentication,
+    belongs_to :saved_authentication, TheMaestro.Auth.SavedAuthentication,
       foreign_key: :auth_id,
-      type: :integer
+      type: :binary_id
 
     # Associate the latest chat snapshot for quick preload in dashboards
     belongs_to :latest_chat_entry, TheMaestro.Conversations.ChatEntry,

@@ -139,7 +139,9 @@ defmodule TheMaestro.AgentLoop do
     case auth do
       %{id: auth_id} ->
         case TheMaestro.Conversations.latest_session_for_auth_id(auth_id) do
-          nil -> File.cwd!() |> Path.expand()
+          nil ->
+            File.cwd!() |> Path.expand()
+
           s ->
             wd = s.working_dir
             if is_binary(wd) and wd != "", do: Path.expand(wd), else: File.cwd!() |> Path.expand()

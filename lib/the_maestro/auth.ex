@@ -138,7 +138,9 @@ defmodule TheMaestro.Auth do
   @dialyzer {:nowarn_function, persist_oauth_token: 3}
   @dialyzer {:nowarn_function, save_gemini_session: 2}
   @dialyzer {:nowarn_function, oauth_token_from_map: 1}
+  alias TheMaestro.Auth.SavedAuthentication, as: SASchema
   alias TheMaestro.Providers.Gemini.OAuth, as: GeminiOAuth
+  alias TheMaestro.Repo
   alias TheMaestro.SavedAuthentication
 
   # Embedded struct definitions per Phoenix conventions for simple structs
@@ -772,6 +774,54 @@ defmodule TheMaestro.Auth do
         Logger.error("OpenAI OAuth flow failed: #{inspect(reason)}")
         {:error, reason}
     end
+  end
+
+  # ===== Context functions for SavedAuthentications (binary_id) =====
+  @doc """
+  List all saved authentications ordered for UI display.
+  """
+  def list_saved_authentications do
+    import Ecto.Query
+
+    Repo.all(
+      from sa in SASchema,
+        order_by: [desc: sa.inserted_at, asc: sa.provider, asc: sa.auth_type, asc: sa.name]
+    )
+  end
+
+  @doc """
+  List saved authentications by provider (accepts atom or string provider).
+  """
+  def list_saved_authentications_by_provider(provider) do
+    import Ecto.Query
+    p = if is_atom(provider), do: Atom.to_string(provider), else: provider
+
+    Repo.all(
+      from sa in SASchema, where: sa.provider == ^p, order_by: [asc: sa.auth_type, asc: sa.name]
+    )
+  end
+
+  @doc """
+  Fetch a saved authentication by id (binary_id string).
+  """
+  def get_saved_authentication!(id) when is_binary(id), do: Repo.get!(SASchema, id)
+
+  @doc """
+  Update a saved authentication using the schema changeset.
+  """
+  def update_saved_authentication(%SASchema{} = sa, attrs) when is_map(attrs) do
+    sa
+    |> SASchema.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Create a saved authentication (named session) record.
+  """
+  def create_saved_authentication(attrs) when is_map(attrs) do
+    %SASchema{}
+    |> SASchema.changeset(attrs)
+    |> Repo.insert()
   end
 
   @doc """

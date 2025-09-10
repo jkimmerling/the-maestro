@@ -6,16 +6,16 @@ defmodule TheMaestroWeb.SessionChatLive do
   # credo:disable-for-this-file Credo.Check.Design.AliasUsage
   use TheMaestroWeb, :live_view
 
+  alias TheMaestro.Auth
   alias TheMaestro.Conversations
   alias TheMaestro.Conversations.Translator
   alias TheMaestro.Provider
+  alias TheMaestro.SuppliedContext
   require Logger
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    session =
-      Conversations.get_session_with_auth!(id)
-      |> TheMaestro.Repo.preload([:saved_authentication])
+    session = Conversations.get_session_with_auth!(id)
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
     TheMaestro.Sessions.Manager.subscribe(session.id)
@@ -338,7 +338,7 @@ defmodule TheMaestroWeb.SessionChatLive do
          {:ok, mcps} <-
            safe_decode(params["mcps_json"] || Jason.encode!(socket.assigns.session.mcps || %{})) do
       attrs = %{
-        "auth_id" => to_int(params["auth_id"]) || socket.assigns.session.auth_id,
+        "auth_id" => params["auth_id"] || socket.assigns.session.auth_id,
         "model_id" => params["model_id"] || socket.assigns.session.model_id,
         "working_dir" => params["working_dir"] || socket.assigns.session.working_dir,
         "persona" => persona,
@@ -774,7 +774,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     cond do
       match?(%Ecto.Association.NotLoaded{}, saved) and session.auth_id ->
-        sa = TheMaestro.SavedAuthentication.get!(session.auth_id)
+        sa = Auth.get_saved_authentication!(session.auth_id)
         sa.provider |> to_string() |> String.to_existing_atom()
 
       is_map(saved) ->
@@ -791,7 +791,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     cond do
       match?(%Ecto.Association.NotLoaded{}, saved) and session.auth_id ->
-        sa = TheMaestro.SavedAuthentication.get!(session.auth_id)
+        sa = Auth.get_saved_authentication!(session.auth_id)
         {sa.auth_type, sa.name}
 
       is_map(saved) ->
@@ -812,7 +812,7 @@ defmodule TheMaestroWeb.SessionChatLive do
       (form["provider"] || default_provider(socket.assigns.session)) |> String.to_existing_atom()
 
     opts =
-      TheMaestro.SavedAuthentication.list_by_provider(provider)
+      Auth.list_saved_authentications_by_provider(provider)
       |> Enum.map(fn sa ->
         label = "#{sa.name} (#{Atom.to_string(sa.auth_type)})"
         {label, sa.id}
@@ -823,10 +823,8 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   defp load_persona_options(socket) do
     opts =
-      TheMaestro.Personas.list_personas()
-      |> Enum.map(fn p ->
-        {p.name, p.id}
-      end)
+      SuppliedContext.list_items(:persona)
+      |> Enum.map(fn p -> {p.name, p.id} end)
 
     socket
     |> assign(:config_persona_options, opts)
@@ -853,7 +851,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     with p when is_binary(p) <- form["provider"],
          a when a not in [nil, ""] <- form["auth_id"] do
       provider = String.to_existing_atom(p)
-      auth = TheMaestro.SavedAuthentication.get!(to_int(a))
+      auth = Auth.get_saved_authentication!(a)
 
       case TheMaestro.Provider.list_models(provider, auth.auth_type, auth.name) do
         {:ok, models} -> Enum.map(models, & &1.id)
@@ -872,10 +870,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
-  defp to_int(nil), do: nil
-  defp to_int(""), do: nil
-  defp to_int(v) when is_integer(v), do: v
-  defp to_int(v) when is_binary(v), do: String.to_integer(v)
+  # IDs are binary_id strings now; no integer casting
 
   defp effective_provider(socket, session) do
     socket.assigns.used_provider || provider_from_session(session)

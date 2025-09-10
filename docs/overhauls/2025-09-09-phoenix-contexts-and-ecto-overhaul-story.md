@@ -125,9 +125,14 @@ Refactor Plan — Phases & Checklists
   - [x] PK strategy: standardize to `binary_id` for ALL tables (confirmed)
 
 - Phase 1 — Generate Contexts & Schemas (new baseline)
-  - [ ] Run generators listed above with `--binary-id` to create contexts, schemas, and migrations
+  - [x] Run generators listed above with `--binary-id` to create contexts, schemas, and migrations
+        Progress (2025-09-10):
+        - Generated SuppliedContext + SuppliedContextItem (context + schema + migration).
+        - Generated Auth.SavedAuthentication (schema + migration); added Auth context functions.
+        - Generated Conversations.ChatEntry (schema + migration) and extracted to its own file.
+        - Added Sessions baseline migration. Will reconcile with existing schema during cutover.
   - [ ] Move/merge any existing schema logic into generated schema files
-  - [ ] Extract `ChatEntry` schema from `core/conversations/conversations.ex` into `lib/the_maestro/conversations/chat_entry.ex`
+  - [x] Extract `ChatEntry` schema from `core/conversations/conversations.ex` into `lib/the_maestro/conversations/chat_entry.ex`
   - [ ] Ensure changesets live with schemas and business logic lives in contexts only
 
 - Phase 2a — Legacy Code Refactor (File-by-file checklist)
@@ -150,12 +155,12 @@ Refactor Plan — Phases & Checklists
 
     - [ ] `lib/the_maestro/core/conversations/conversations.ex`
       - Action: split schema and relocate context to generator layout; keep context-only Repo usage
-      - Extract `TheMaestro.Conversations.ChatEntry` schema into `lib/the_maestro/conversations/chat_entry.ex` (generated).
+      - [x] Extract `TheMaestro.Conversations.ChatEntry` schema into `lib/the_maestro/conversations/chat_entry.ex` (generated).
       - Create/ensure `lib/the_maestro/conversations.ex` contains only context functions (CRUD + queries) for `Session` and `ChatEntry`.
       - Update functions expecting integer auth IDs (e.g., `latest_session_for_auth_id/1`) to accept binary_id (uuid) if retained; consider renaming to `latest_session_for_auth/1` with map argument.
       - After migration, delete `lib/the_maestro/core/conversations/conversations.ex`.
 
-    - [ ] `lib/the_maestro/conversations/session.ex`
+    - [x] `lib/the_maestro/conversations/session.ex`
       - Action: align schema with generator output and baseline fields (`auth_id` as binary_id ref, `model_id`, `persona` map, `memory` map, `tools` map, `mcps` map, `latest_chat_entry_id`, `working_dir`).
       - Ensure changeset matches new validations (no provider field; enforce presence as required by new flows).
 
@@ -202,7 +207,7 @@ Refactor Plan — Phases & Checklists
         - Line ~815: `TheMaestro.SavedAuthentication.list_by_provider(provider)` → `Auth.list_saved_authentications_by_provider(provider)`
         - Line ~856: `TheMaestro.SavedAuthentication.get!(to_int(a))` → `Auth.get_saved_authentication!(a)` (binary_id string)
 
-    - [ ] `lib/the_maestro_web/live/dashboard_live.ex`
+    - [x] `lib/the_maestro_web/live/dashboard_live.ex`
       - Replace SavedAuthentication calls from schema module with `TheMaestro.Auth` context:
         - `SavedAuthentication.list_all()` → `Auth.list_saved_authentications()`
         - `SavedAuthentication.list_by_provider(provider)` → `Auth.list_saved_authentications_by_provider(provider)`
@@ -212,18 +217,18 @@ Refactor Plan — Phases & Checklists
         - `build_persona_options/0` → `SuppliedContext.list_items(:persona) |> Enum.map(&{&1.name, &1.id})`
       - Keep model listing via `Provider.list_models/3` unchanged.
 
-    - [ ] `lib/the_maestro_web/live/auth_edit_live.ex`
+    - [x] `lib/the_maestro_web/live/auth_edit_live.ex`
       - Replace `TheMaestro.SavedAuthentication.get!/1` and `SavedAuthentication.update/2` with `TheMaestro.Auth.get_saved_authentication!/1` and `Auth.update_saved_authentication/2`.
       - Remove integer parsing (`String.to_integer/1`); IDs are binary_id strings.
 
-    - [ ] `lib/the_maestro_web/live/auth_show_live.ex`
+    - [x] `lib/the_maestro_web/live/auth_show_live.ex`
       - Replace `TheMaestro.SavedAuthentication.get!/1` usages with `TheMaestro.Auth.get_saved_authentication!/1`.
       - Remove integer parsing of IDs.
 
-    - [ ] `lib/the_maestro_web/live/session_edit_live.ex`
+    - [x] `lib/the_maestro_web/live/session_edit_live.ex`
       - Update `auth_options/0` to use `TheMaestro.Auth.list_saved_authentications/0` and map ids as strings (binary_id).
 
-    - [ ] `lib/the_maestro_web/controllers/the_maestro_web/session_controller.ex`
+    - [x] `lib/the_maestro_web/controllers/the_maestro_web/session_controller.ex`
       - Update private `auth_options/0` to use `TheMaestro.Auth.list_saved_authentications/0` and binary_id strings.
 
     - [ ] `lib/the_maestro_web/live/base_system_prompt_live/index.ex`
@@ -316,13 +321,13 @@ Detailed Tasks with Subtasks
   - [ ] Replace all callers with `Auth.*` functions (workers, live views, services)
 
 - Context: Conversations
-  - [ ] Ensure `Session` schema lives under `lib/the_maestro/conversations/session.ex`
-  - [ ] Extract `ChatEntry` schema into `lib/the_maestro/conversations/chat_entry.ex`
+  - [x] Ensure `Session` schema lives under `lib/the_maestro/conversations/session.ex`
+  - [x] Extract `ChatEntry` schema into `lib/the_maestro/conversations/chat_entry.ex`
   - [ ] Ensure all queries (list/get/create/update/delete, plus thread helpers) live in `TheMaestro.Conversations`
   - [ ] Replace preloads done via `Repo.preload` in LiveViews with `Conversations` API
 
 - Context: SuppliedContext (replaces Prompts + Personas)
-  - [ ] Generate `TheMaestro.SuppliedContext` + `SuppliedContextItem` schema (see commands)
+  - [x] Generate `TheMaestro.SuppliedContext` + `SuppliedContextItem` schema (see commands)
   - [ ] Replace usage of `Prompts` and `Personas` with `SuppliedContext` API filtered by `type`
   - [ ] Remove/retire old contexts and schemas for Prompts/Personas after cutover
 

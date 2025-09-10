@@ -1,12 +1,12 @@
 defmodule TheMaestroWeb.AuthEditLive do
   use TheMaestroWeb, :live_view
 
+  alias TheMaestro.Auth
   alias TheMaestro.Provider
-  alias TheMaestro.SavedAuthentication
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    sa = SavedAuthentication.get!(String.to_integer(id))
+    sa = Auth.get_saved_authentication!(id)
     api_key = Map.get(sa.credentials, "api_key", "")
 
     {:ok,
@@ -50,7 +50,7 @@ defmodule TheMaestroWeb.AuthEditLive do
         attrs
       end
 
-    SavedAuthentication.update(sa, attrs)
+    Auth.update_saved_authentication(sa, attrs)
   end
 
   @impl true
