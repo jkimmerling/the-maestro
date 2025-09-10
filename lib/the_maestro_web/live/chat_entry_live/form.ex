@@ -17,6 +17,7 @@ defmodule TheMaestroWeb.ChatEntryLive.Form do
         <.input field={@form[:turn_index]} type="number" label="Turn index" />
         <.input field={@form[:actor]} type="text" label="Actor" />
         <.input field={@form[:provider]} type="text" label="Provider" />
+        <textarea name="chat_entry[combined_chat]" class="textarea-terminal" rows="2"></textarea>
         <.input field={@form[:edit_version]} type="number" label="Edit version" />
         <.input field={@form[:thread_id]} type="text" label="Thread" />
         <.input field={@form[:parent_thread_id]} type="text" label="Parent thread" />

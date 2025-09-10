@@ -24,9 +24,9 @@ defmodule TheMaestroWeb.ChatEntryLive.Index do
         <:col :let={{_id, chat_entry}} label="Turn index">{chat_entry.turn_index}</:col>
         <:col :let={{_id, chat_entry}} label="Actor">{chat_entry.actor}</:col>
         <:col :let={{_id, chat_entry}} label="Provider">{chat_entry.provider}</:col>
-        <:col :let={{_id, chat_entry}} label="Request headers">{chat_entry.request_headers}</:col>
-        <:col :let={{_id, chat_entry}} label="Response headers">{chat_entry.response_headers}</:col>
-        <:col :let={{_id, chat_entry}} label="Combined chat">{chat_entry.combined_chat}</:col>
+        <:col :let={{_id, chat_entry}} label="Request headers">{"map"}</:col>
+        <:col :let={{_id, chat_entry}} label="Response headers">{"map"}</:col>
+        <:col :let={{_id, chat_entry}} label="Combined chat">{"map"}</:col>
         <:col :let={{_id, chat_entry}} label="Edit version">{chat_entry.edit_version}</:col>
         <:col :let={{_id, chat_entry}} label="Thread">{chat_entry.thread_id}</:col>
         <:col :let={{_id, chat_entry}} label="Parent thread">{chat_entry.parent_thread_id}</:col>
@@ -41,7 +41,7 @@ defmodule TheMaestroWeb.ChatEntryLive.Index do
         </:action>
         <:action :let={{id, chat_entry}}>
           <.form for={%{}} phx-submit="attach">
-            <input type="hidden" name="id" value={chat_entry.id} />
+            <input type="hidden" name="_id" value={chat_entry.id} />
             <select name="session_id" class="select select-xs">
               <option value="">Attach to session…</option>
               <%= for {label, sid} <- @session_options do %>
@@ -79,7 +79,7 @@ defmodule TheMaestroWeb.ChatEntryLive.Index do
     {:noreply, stream_delete(socket, :chat_history, chat_entry)}
   end
 
-  def handle_event("attach", %{"id" => id, "session_id" => session_id}, socket) do
+  def handle_event("attach", %{"_id" => id, "session_id" => session_id}, socket) do
     entry = Conversations.get_chat_entry!(id)
 
     case entry.thread_id do

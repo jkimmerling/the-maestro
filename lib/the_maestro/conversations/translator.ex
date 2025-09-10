@@ -119,6 +119,19 @@ defmodule TheMaestro.Conversations.Translator do
     ]
   end
 
+  # Legacy support: function_call key (pre-struct migration)
+  defp openai_evt(%{type: :function_call, function_call: calls}) when is_list(calls) do
+    [
+      %{
+        type: "function_call",
+        calls:
+          for %{id: id, function: %{name: name, arguments: args}} <- calls do
+            %{"id" => id, "name" => name, "arguments" => args || ""}
+          end
+      }
+    ]
+  end
+
   defp openai_evt(%{type: :usage, usage: usage}) do
     usage_map = if is_struct(usage), do: Map.from_struct(usage), else: usage
     [%{type: "usage", usage: usage_map}]
