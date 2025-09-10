@@ -3,8 +3,9 @@ defmodule TheMaestro.Repo.Migrations.DropDomainTables do
 
   def change do
     # Drop domain tables if they already exist (do not touch Oban tables)
-    drop_if_exists table(:chat_history)
+    # Drop child references first to avoid FK constraint errors
     drop_if_exists table(:sessions)
+    drop_if_exists table(:chat_history)
     drop_if_exists table(:saved_authentications)
     drop_if_exists table(:personas)
     drop_if_exists table(:base_system_prompts)
