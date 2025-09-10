@@ -142,6 +142,7 @@ defmodule TheMaestro.Auth do
   alias TheMaestro.Providers.Gemini.OAuth, as: GeminiOAuth
   alias TheMaestro.Repo
   alias TheMaestro.SavedAuthentication
+  alias TheMaestro.Workers.TokenRefreshWorker
 
   # Embedded struct definitions per Phoenix conventions for simple structs
   defmodule AnthropicOAuthConfig do
@@ -822,6 +823,68 @@ defmodule TheMaestro.Auth do
     %SASchema{}
     |> SASchema.changeset(attrs)
     |> Repo.insert()
+  end
+
+  # ===== Named session helpers (compat with former TheMaestro.SavedAuthentication API) =====
+  @doc """
+  Get a saved authentication by provider, auth_type, and session name.
+  Accepts `provider` as atom or string; `auth_type` as atom.
+  """
+  def get_by_provider_and_name(provider, auth_type, name) do
+    import Ecto.Query
+    p = if is_atom(provider), do: Atom.to_string(provider), else: provider
+
+    Repo.one(
+      from sa in SASchema,
+        where: sa.provider == ^p and sa.auth_type == ^auth_type and sa.name == ^name
+    )
+  end
+
+  def get_named_session(provider, auth_type, name),
+    do: get_by_provider_and_name(provider, auth_type, name)
+
+  @doc """
+  Upsert a named session.
+  On conflict, replaces credentials, expires_at, updated_at.
+  """
+  def upsert_named_session(provider, auth_type, name, attrs) when is_map(attrs) do
+    p = if is_atom(provider), do: Atom.to_string(provider), else: provider
+
+    full =
+      attrs |> Map.put(:provider, p) |> Map.put(:auth_type, auth_type) |> Map.put(:name, name)
+
+    %SASchema{}
+    |> SASchema.changeset(full)
+    |> Repo.insert(
+      on_conflict: {:replace, [:credentials, :expires_at, :updated_at]},
+      conflict_target: [:provider, :auth_type, :name]
+    )
+  end
+
+  @doc """
+  Delete a named session; cancels refresh jobs for OAuth sessions.
+  """
+  def delete_named_session(provider, auth_type, name) do
+    case get_by_provider_and_name(provider, auth_type, name) do
+      nil ->
+        {:error, :not_found}
+
+      %SASchema{} = sa ->
+        if auth_type == :oauth do
+          _ = TokenRefreshWorker.cancel_for_auth(sa)
+        end
+
+        Repo.delete(sa)
+        |> case do
+          {:ok, _} -> :ok
+          other -> other
+        end
+    end
+  end
+
+  def get_by_provider(provider, auth_type) do
+    name = "default_#{provider}_#{auth_type}"
+    get_by_provider_and_name(provider, auth_type, name)
   end
 
   @doc """
