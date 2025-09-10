@@ -60,6 +60,52 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   @impl true
+  def handle_params(%{"id" => id}, _uri, %{assigns: %{session: %{id: current_id}}} = socket)
+      when is_binary(id) and id != current_id do
+    # Unsubscribe from old session topic and rehydrate assigns for new session
+    _ = TheMaestro.Chat.unsubscribe(current_id)
+
+    session = Conversations.get_session_with_auth!(id)
+    {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
+    :ok = TheMaestro.Chat.subscribe(session.id)
+
+    tid = Conversations.latest_thread_id(session.id)
+    msgs = current_messages_for(session.id, tid)
+
+    {:noreply,
+     socket
+     |> assign(:page_title, "Chat")
+     |> assign(:session, session)
+     |> assign(:current_thread_id, tid)
+     |> assign(:current_thread_label, (tid && Conversations.thread_label(tid)) || nil)
+     |> assign(:message, "")
+     |> assign(:messages, msgs)
+     |> assign(:streaming?, false)
+     |> assign(:partial_answer, "")
+     |> assign(:stream_id, nil)
+     |> assign(:stream_task, nil)
+     |> assign(:pending_canonical, nil)
+     |> assign(:thinking?, false)
+     |> assign(:tool_calls, [])
+     |> assign(:pending_tool_calls, [])
+     |> assign(:followup_history, [])
+     |> assign(:summary, compute_summary(msgs))
+     |> assign(:editing_latest, false)
+     |> assign(:latest_json, nil)
+     |> assign(:show_config, false)
+     |> assign(:config_form, %{})
+     |> assign(:config_models, [])
+     |> assign(:config_persona_options, [])
+     |> assign(:show_clear_confirm, false)
+     |> assign(:show_persona_modal, false)
+     |> assign(:persona_form, %{})
+     |> assign(:show_memory_modal, false)
+     |> assign(:memory_editor_text, nil)}
+  end
+
+  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+
+  @impl true
   def handle_event("send", _params, socket) do
     msg = String.trim(socket.assigns.message || "")
 
