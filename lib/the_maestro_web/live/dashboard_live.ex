@@ -2,9 +2,9 @@ defmodule TheMaestroWeb.DashboardLive do
   # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
   use TheMaestroWeb, :live_view
 
+  alias TheMaestro.Auth
   alias TheMaestro.Conversations
   alias TheMaestro.Provider
-  alias TheMaestro.SavedAuthentication
 
   @impl true
   def mount(_params, _session, socket) do
@@ -12,7 +12,7 @@ defmodule TheMaestroWeb.DashboardLive do
 
     {:ok,
      socket
-     |> assign(:auths, SavedAuthentication.list_all())
+     |> assign(:auths, Auth.list_saved_authentications())
      |> assign(:sessions, Conversations.list_sessions_with_auth())
      |> assign(:show_session_modal, false)
      |> assign(:auth_options, build_auth_options())
@@ -30,7 +30,7 @@ defmodule TheMaestroWeb.DashboardLive do
   def handle_params(_params, _uri, socket) do
     {:noreply,
      socket
-     |> assign(:auths, SavedAuthentication.list_all())
+     |> assign(:auths, Auth.list_saved_authentications())
      |> assign(:sessions, Conversations.list_sessions_with_auth())
      |> assign(:auth_options, build_auth_options())
      |> assign(:prompt_options, build_prompt_options())
@@ -39,16 +39,16 @@ defmodule TheMaestroWeb.DashboardLive do
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    case Integer.parse(id) do
-      {int, _} ->
-        sa = SavedAuthentication.get!(int)
+    case id do
+      id when is_binary(id) ->
+        sa = Auth.get_saved_authentication!(id)
         # Allow deletion; DB FK now nilifies agent.auth_id
         _ = Provider.delete_session(sa.provider, sa.auth_type, sa.name)
 
         {:noreply,
          socket
          |> put_flash(:info, "Auth deleted; linked agents detached.")
-         |> assign(:auths, SavedAuthentication.list_all())
+         |> assign(:auths, Auth.list_saved_authentications())
          |> assign(:auth_options, build_auth_options())}
 
       :error ->
@@ -102,7 +102,7 @@ defmodule TheMaestroWeb.DashboardLive do
 
     case target do
       "provider" ->
-        provider = String.to_existing_atom(params["provider"])
+        provider = to_provider_atom(params["provider"])
 
         {:noreply,
          socket
@@ -156,12 +156,12 @@ defmodule TheMaestroWeb.DashboardLive do
           params
 
         id ->
-          p = TheMaestro.Personas.get_persona!(id)
+          p = TheMaestro.SuppliedContext.get_item!(id)
 
           Map.put(params, "persona", %{
             "name" => p.name,
-            "version" => 1,
-            "persona_text" => p.prompt_text
+            "version" => p.version || 1,
+            "persona_text" => p.text
           })
       end
 
@@ -234,7 +234,7 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply,
      socket
      |> put_flash(:info, "OAuth completed for #{payload["provider"]}: #{payload["session_name"]}")
-     |> assign(:auths, SavedAuthentication.list_all())
+     |> assign(:auths, Auth.list_saved_authentications())
      |> assign(:auth_options, build_auth_options())}
   end
 
@@ -251,48 +251,36 @@ defmodule TheMaestroWeb.DashboardLive do
   defp provider_label(p) when is_atom(p), do: Atom.to_string(p)
   defp provider_label(p) when is_binary(p), do: p
 
-  defp map_count(nil), do: 0
-  defp map_count(%{} = m), do: map_size(m)
-  defp map_count(_), do: 0
+  # map_count helpers removed; not used
 
   defp build_auth_options do
-    SavedAuthentication.list_all()
+    Auth.list_saved_authentications()
     |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
   end
 
   defp build_prompt_options do
-    if Code.ensure_loaded?(TheMaestro.Prompts) do
-      TheMaestro.Prompts.list_base_system_prompts() |> Enum.map(&{&1.name, &1.id})
-    else
-      []
-    end
+    TheMaestro.SuppliedContext.list_items(:system_prompt) |> Enum.map(&{&1.name, &1.id})
   end
 
   defp build_persona_options do
-    if Code.ensure_loaded?(TheMaestro.Personas) do
-      TheMaestro.Personas.list_personas() |> Enum.map(&{&1.name, &1.id})
-    else
-      []
-    end
+    TheMaestro.SuppliedContext.list_items(:persona) |> Enum.map(&{&1.name, &1.id})
   end
 
   # agent options removed
 
   defp build_model_options(%{"auth_id" => auth_id}) when is_binary(auth_id) and auth_id != "" do
-    with {id, _} <- Integer.parse(auth_id),
-         %SavedAuthentication{} = sa <- SavedAuthentication.get!(id),
-         {:ok, models} <- Provider.list_models(sa.provider, sa.auth_type, sa.name),
+    with %{} = sa <- Auth.get_saved_authentication!(auth_id),
+         provider <- to_provider_atom(sa.provider),
+         {:ok, models} <- Provider.list_models(provider, sa.auth_type, sa.name),
          list when is_list(list) and list != [] <-
            Enum.map(models, fn m -> {m.name || m.id, m.id} end) do
       list
     else
       _ ->
         # Fallback defaults per provider to ensure model select is populated
-        case Integer.parse(auth_id) do
-          {id, _} ->
-            sa = SavedAuthentication.get!(id)
-
-            case sa.provider do
+        case Auth.get_saved_authentication!(auth_id) do
+          %{provider: provider} ->
+            case to_provider_atom(provider) do
               :openai ->
                 [{"gpt-5", "gpt-5"}, {"gpt-4o", "gpt-4o"}]
 
@@ -309,18 +297,26 @@ defmodule TheMaestroWeb.DashboardLive do
                 []
             end
 
-          :error ->
+          _ ->
             []
         end
     end
   end
+  # fallback clause grouped with the primary build_model_options/1
+  defp build_model_options(_), do: []
 
-  defp build_auth_options_for(provider) when is_atom(provider) do
-    SavedAuthentication.list_by_provider(provider)
-    |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
+  # Convert provider strings/atoms to a safe allowed atom
+  defp to_provider_atom(p) when is_atom(p), do: p
+  defp to_provider_atom(p) when is_binary(p) do
+    allowed = TheMaestro.Provider.list_providers()
+    allowed_str = Enum.map(allowed, &Atom.to_string/1)
+    if p in allowed_str, do: String.to_existing_atom(p), else: :openai
   end
 
-  defp build_model_options(_), do: []
+  defp build_auth_options_for(provider) when is_atom(provider) do
+    Auth.list_saved_authentications_by_provider(provider)
+    |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
+  end
 
   # Merge new form values into the current session form params, preserving prior selections
   defp merge_session_params(socket, extra) when is_map(extra) do
@@ -354,15 +350,26 @@ defmodule TheMaestroWeb.DashboardLive do
             <h1 class="text-4xl font-bold text-amber-400 glow tracking-wider">
               &gt;&gt;&gt; DASHBOARD TERMINAL V2.1.4 &lt;&lt;&lt;
             </h1>
-            <.link
-              navigate={~p"/auths/new"}
-              class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
-              data-hotkey="alt+h"
-              data-hotkey-seq="g h"
-              data-hotkey-label="New Auth"
-            >
-              <.icon name="hero-plus" class="inline mr-2 w-4 h-4" /> NEW AUTH
-            </.link>
+            <div class="flex gap-2">
+              <.link
+                navigate={~p"/supplied_context"}
+                class="px-6 py-2 rounded transition-all duration-200 btn-green hover:glow-strong"
+                data-hotkey="alt+c"
+                data-hotkey-seq="g c"
+                data-hotkey-label="Context Library"
+              >
+                <.icon name="hero-archive-box" class="inline mr-2 w-4 h-4" /> CONTEXT LIBRARY
+              </.link>
+              <.link
+                navigate={~p"/auths/new"}
+                class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
+                data-hotkey="alt+h"
+                data-hotkey-seq="g h"
+                data-hotkey-label="New Auth"
+              >
+                <.icon name="hero-plus" class="inline mr-2 w-4 h-4" /> NEW AUTH
+              </.link>
+            </div>
           </div>
 
           <section class="mb-12">

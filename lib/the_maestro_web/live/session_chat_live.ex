@@ -6,16 +6,16 @@ defmodule TheMaestroWeb.SessionChatLive do
   # credo:disable-for-this-file Credo.Check.Design.AliasUsage
   use TheMaestroWeb, :live_view
 
+  alias TheMaestro.Auth
   alias TheMaestro.Conversations
   alias TheMaestro.Conversations.Translator
   alias TheMaestro.Provider
+  alias TheMaestro.SuppliedContext
   require Logger
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    session =
-      Conversations.get_session_with_auth!(id)
-      |> TheMaestro.Repo.preload([:saved_authentication])
+    session = Conversations.get_session_with_auth!(id)
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
     TheMaestro.Sessions.Manager.subscribe(session.id)
@@ -235,9 +235,13 @@ defmodule TheMaestroWeb.SessionChatLive do
           nil ->
             socket
 
-          %TheMaestro.Personas.Persona{} = p ->
+          %TheMaestro.SuppliedContext.SuppliedContextItem{} = p ->
             pj =
-              Jason.encode!(%{"name" => p.name, "version" => 1, "persona_text" => p.prompt_text})
+              Jason.encode!(%{
+                "name" => p.name,
+                "version" => p.version || 1,
+                "persona_text" => p.text
+              })
 
             assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
         end
@@ -261,13 +265,13 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   @impl true
   def handle_event("save_persona", %{"name" => name, "prompt_text" => text}, socket) do
-    case TheMaestro.Personas.create_persona(%{name: name, prompt_text: text}) do
+    case SuppliedContext.create_item(%{type: :persona, name: name, text: text, version: 1}) do
       {:ok, persona} ->
         pj =
           Jason.encode!(%{
             "name" => persona.name,
-            "version" => 1,
-            "persona_text" => persona.prompt_text
+            "version" => persona.version || 1,
+            "persona_text" => persona.text
           })
 
         socket =
@@ -338,7 +342,7 @@ defmodule TheMaestroWeb.SessionChatLive do
          {:ok, mcps} <-
            safe_decode(params["mcps_json"] || Jason.encode!(socket.assigns.session.mcps || %{})) do
       attrs = %{
-        "auth_id" => to_int(params["auth_id"]) || socket.assigns.session.auth_id,
+        "auth_id" => params["auth_id"] || socket.assigns.session.auth_id,
         "model_id" => params["model_id"] || socket.assigns.session.model_id,
         "working_dir" => params["working_dir"] || socket.assigns.session.working_dir,
         "persona" => persona,
@@ -472,16 +476,6 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:used_t0_ms, t0)
     |> assign(:event_buffer, [])
     |> assign(:retry_attempts, 0)
-  end
-
-  @impl true
-  def handle_event("close_modal", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_config, false)
-     |> assign(:show_persona_modal, false)
-     |> assign(:show_memory_modal, false)
-     |> assign(:show_clear_confirm, false)}
   end
 
   defp user_msg(text), do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
@@ -774,11 +768,11 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     cond do
       match?(%Ecto.Association.NotLoaded{}, saved) and session.auth_id ->
-        sa = TheMaestro.SavedAuthentication.get!(session.auth_id)
-        sa.provider |> to_string() |> String.to_existing_atom()
+        sa = Auth.get_saved_authentication!(session.auth_id)
+        to_provider_atom(sa.provider)
 
       is_map(saved) ->
-        saved.provider |> to_string() |> String.to_existing_atom()
+        to_provider_atom(saved.provider)
 
       true ->
         # Fallback to openai to avoid crashes; will be corrected on next turn
@@ -791,7 +785,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     cond do
       match?(%Ecto.Association.NotLoaded{}, saved) and session.auth_id ->
-        sa = TheMaestro.SavedAuthentication.get!(session.auth_id)
+        sa = Auth.get_saved_authentication!(session.auth_id)
         {sa.auth_type, sa.name}
 
       is_map(saved) ->
@@ -804,15 +798,15 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   defp default_provider(session) do
     saved = session.saved_authentication
-    (saved && Atom.to_string(saved.provider)) || "openai"
+    (saved && to_string(saved.provider)) || "openai"
   end
 
   defp load_auth_options(socket, form) do
-    provider =
-      (form["provider"] || default_provider(socket.assigns.session)) |> String.to_existing_atom()
+    provider_value = form["provider"] || default_provider(socket.assigns.session)
 
+    # Accept provider as string for Auth context (it normalizes input)
     opts =
-      TheMaestro.SavedAuthentication.list_by_provider(provider)
+      Auth.list_saved_authentications_by_provider(provider_value)
       |> Enum.map(fn sa ->
         label = "#{sa.name} (#{Atom.to_string(sa.auth_type)})"
         {label, sa.id}
@@ -823,10 +817,8 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   defp load_persona_options(socket) do
     opts =
-      TheMaestro.Personas.list_personas()
-      |> Enum.map(fn p ->
-        {p.name, p.id}
-      end)
+      SuppliedContext.list_items(:persona)
+      |> Enum.map(fn p -> {p.name, p.id} end)
 
     socket
     |> assign(:config_persona_options, opts)
@@ -842,7 +834,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
       id ->
         try do
-          TheMaestro.Personas.get_persona!(to_string(id))
+          SuppliedContext.get_item!(to_string(id))
         rescue
           _ -> nil
         end
@@ -852,8 +844,8 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp list_models_for_form(form) do
     with p when is_binary(p) <- form["provider"],
          a when a not in [nil, ""] <- form["auth_id"] do
-      provider = String.to_existing_atom(p)
-      auth = TheMaestro.SavedAuthentication.get!(to_int(a))
+      provider = to_provider_atom(p)
+      auth = Auth.get_saved_authentication!(a)
 
       case TheMaestro.Provider.list_models(provider, auth.auth_type, auth.name) do
         {:ok, models} -> Enum.map(models, & &1.id)
@@ -861,6 +853,20 @@ defmodule TheMaestroWeb.SessionChatLive do
       end
     else
       _ -> []
+    end
+  end
+
+  # Convert a provider string to a known atom safely; default to :openai
+  defp to_provider_atom(p) when is_atom(p), do: p
+
+  defp to_provider_atom(p) when is_binary(p) do
+    allowed = TheMaestro.Provider.list_providers()
+    allowed_strings = Enum.map(allowed, &Atom.to_string/1)
+
+    if p in allowed_strings do
+      String.to_existing_atom(p)
+    else
+      :openai
     end
   end
 
@@ -872,10 +878,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
-  defp to_int(nil), do: nil
-  defp to_int(""), do: nil
-  defp to_int(v) when is_integer(v), do: v
-  defp to_int(v) when is_binary(v), do: String.to_integer(v)
+  # IDs are binary_id strings now; no integer casting
 
   defp effective_provider(socket, session) do
     socket.assigns.used_provider || provider_from_session(session)

@@ -75,36 +75,6 @@ defmodule TheMaestroWeb.DirectoryPicker do
 
   def handle_event("dp_nav", _params, socket), do: {:noreply, socket}
 
-  defp clamp(n, minv, maxv) when is_integer(n) and is_integer(minv) and is_integer(maxv) do
-    n |> max(minv) |> min(maxv)
-  end
-
-  defp move_cursor(socket, :home) do
-    {len, _cur} = entries_len_cur(socket)
-    assign(socket, :cursor, if(len == 0, do: -1, else: 0))
-  end
-
-  defp move_cursor(socket, :end) do
-    {len, _cur} = entries_len_cur(socket)
-    assign(socket, :cursor, if(len == 0, do: -1, else: len - 1))
-  end
-
-  defp move_cursor(socket, {:jump, j}) when is_integer(j), do: move_cursor_delta(socket, j)
-  defp move_cursor(socket, delta) when is_integer(delta), do: move_cursor_delta(socket, delta)
-
-  defp move_cursor_delta(socket, delta) do
-    {len, cur} = entries_len_cur(socket)
-    new_index = if len == 0, do: -1, else: clamp(cur + delta, 0, len - 1)
-    assign(socket, :cursor, new_index)
-  end
-
-  defp entries_len_cur(socket) do
-    entries = socket.assigns[:entries] || []
-    len = length(entries)
-    cur = socket.assigns[:cursor] || if(len == 0, do: -1, else: 0)
-    {len, cur}
-  end
-
   def handle_event("enter_selected", _params, socket) do
     entries = socket.assigns[:entries] || []
     cur = socket.assigns[:cursor] || -1
@@ -114,6 +84,8 @@ defmodule TheMaestroWeb.DirectoryPicker do
       _ -> {:noreply, socket}
     end
   end
+
+  # cursor helpers moved below to keep handle_event/3 clauses contiguous
 
   def handle_event("filter", %{"q" => q}, socket) do
     dirs = socket.assigns[:all_entries] || []
@@ -145,6 +117,37 @@ defmodule TheMaestroWeb.DirectoryPicker do
     else
       Enum.filter(dirs, fn {name, _} -> String.contains?(String.downcase(name), qq) end)
     end
+  end
+
+  # ===== Helpers (moved here to keep handle_event/3 clauses contiguous) =====
+  defp clamp(n, minv, maxv) when is_integer(n) and is_integer(minv) and is_integer(maxv) do
+    n |> max(minv) |> min(maxv)
+  end
+
+  defp move_cursor(socket, :home) do
+    {len, _cur} = entries_len_cur(socket)
+    assign(socket, :cursor, if(len == 0, do: -1, else: 0))
+  end
+
+  defp move_cursor(socket, :end) do
+    {len, _cur} = entries_len_cur(socket)
+    assign(socket, :cursor, if(len == 0, do: -1, else: len - 1))
+  end
+
+  defp move_cursor(socket, {:jump, j}) when is_integer(j), do: move_cursor_delta(socket, j)
+  defp move_cursor(socket, delta) when is_integer(delta), do: move_cursor_delta(socket, delta)
+
+  defp move_cursor_delta(socket, delta) do
+    {len, cur} = entries_len_cur(socket)
+    new_index = if len == 0, do: -1, else: clamp(cur + delta, 0, len - 1)
+    assign(socket, :cursor, new_index)
+  end
+
+  defp entries_len_cur(socket) do
+    entries = socket.assigns[:entries] || []
+    len = length(entries)
+    cur = socket.assigns[:cursor] || if(len == 0, do: -1, else: 0)
+    {len, cur}
   end
 
   @impl true

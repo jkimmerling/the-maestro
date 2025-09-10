@@ -138,8 +138,11 @@ defmodule TheMaestro.Auth do
   @dialyzer {:nowarn_function, persist_oauth_token: 3}
   @dialyzer {:nowarn_function, save_gemini_session: 2}
   @dialyzer {:nowarn_function, oauth_token_from_map: 1}
+  alias TheMaestro.Auth.SavedAuthentication, as: SASchema
   alias TheMaestro.Providers.Gemini.OAuth, as: GeminiOAuth
+  alias TheMaestro.Repo
   alias TheMaestro.SavedAuthentication
+  alias TheMaestro.Workers.TokenRefreshWorker
 
   # Embedded struct definitions per Phoenix conventions for simple structs
   defmodule AnthropicOAuthConfig do
@@ -772,6 +775,116 @@ defmodule TheMaestro.Auth do
         Logger.error("OpenAI OAuth flow failed: #{inspect(reason)}")
         {:error, reason}
     end
+  end
+
+  # ===== Context functions for SavedAuthentications (binary_id) =====
+  @doc """
+  List all saved authentications ordered for UI display.
+  """
+  def list_saved_authentications do
+    import Ecto.Query
+
+    Repo.all(
+      from sa in SASchema,
+        order_by: [desc: sa.inserted_at, asc: sa.provider, asc: sa.auth_type, asc: sa.name]
+    )
+  end
+
+  @doc """
+  List saved authentications by provider (accepts atom or string provider).
+  """
+  def list_saved_authentications_by_provider(provider) do
+    import Ecto.Query
+    p = if is_atom(provider), do: Atom.to_string(provider), else: provider
+
+    Repo.all(
+      from sa in SASchema, where: sa.provider == ^p, order_by: [asc: sa.auth_type, asc: sa.name]
+    )
+  end
+
+  @doc """
+  Fetch a saved authentication by id (binary_id string).
+  """
+  def get_saved_authentication!(id) when is_binary(id), do: Repo.get!(SASchema, id)
+
+  @doc """
+  Update a saved authentication using the schema changeset.
+  """
+  def update_saved_authentication(%SASchema{} = sa, attrs) when is_map(attrs) do
+    sa
+    |> SASchema.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Create a saved authentication (named session) record.
+  """
+  def create_saved_authentication(attrs) when is_map(attrs) do
+    %SASchema{}
+    |> SASchema.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  # ===== Named session helpers (compat with former TheMaestro.SavedAuthentication API) =====
+  @doc """
+  Get a saved authentication by provider, auth_type, and session name.
+  Accepts `provider` as atom or string; `auth_type` as atom.
+  """
+  def get_by_provider_and_name(provider, auth_type, name) do
+    import Ecto.Query
+    p = if is_atom(provider), do: Atom.to_string(provider), else: provider
+
+    Repo.one(
+      from sa in SASchema,
+        where: sa.provider == ^p and sa.auth_type == ^auth_type and sa.name == ^name
+    )
+  end
+
+  def get_named_session(provider, auth_type, name),
+    do: get_by_provider_and_name(provider, auth_type, name)
+
+  @doc """
+  Upsert a named session.
+  On conflict, replaces credentials, expires_at, updated_at.
+  """
+  def upsert_named_session(provider, auth_type, name, attrs) when is_map(attrs) do
+    p = if is_atom(provider), do: Atom.to_string(provider), else: provider
+
+    full =
+      attrs |> Map.put(:provider, p) |> Map.put(:auth_type, auth_type) |> Map.put(:name, name)
+
+    %SASchema{}
+    |> SASchema.changeset(full)
+    |> Repo.insert(
+      on_conflict: {:replace, [:credentials, :expires_at, :updated_at]},
+      conflict_target: [:provider, :auth_type, :name]
+    )
+  end
+
+  @doc """
+  Delete a named session; cancels refresh jobs for OAuth sessions.
+  """
+  def delete_named_session(provider, auth_type, name) do
+    case get_by_provider_and_name(provider, auth_type, name) do
+      nil ->
+        {:error, :not_found}
+
+      %SASchema{} = sa ->
+        if auth_type == :oauth do
+          _ = TokenRefreshWorker.cancel_for_auth(sa)
+        end
+
+        Repo.delete(sa)
+        |> case do
+          {:ok, _} -> :ok
+          other -> other
+        end
+    end
+  end
+
+  def get_by_provider(provider, auth_type) do
+    name = "default_#{provider}_#{auth_type}"
+    get_by_provider_and_name(provider, auth_type, name)
   end
 
   @doc """

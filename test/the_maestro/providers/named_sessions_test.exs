@@ -102,19 +102,23 @@ defmodule TheMaestro.Providers.NamedSessionsTest do
       start_count = Repo.aggregate(TheMaestro.SavedAuthentication, :count)
 
       # Attempt invalid name (contains space) via raw SQL to bypass changeset
+      {:ok, uuid_bin} = Ecto.UUID.dump(Ecto.UUID.generate())
+
       {:error, %Postgrex.Error{postgres: %{constraint: "name_format"}}} =
         SQL.query(
           Repo,
-          "INSERT INTO saved_authentications (provider, auth_type, name, credentials, inserted_at, updated_at) VALUES ($1,$2,$3,$4, NOW(), NOW())",
-          ["openai", "api_key", "invalid name", %{}]
+          "INSERT INTO saved_authentications (id, provider, auth_type, name, credentials, inserted_at, updated_at) VALUES ($1,$2,$3,$4,$5, NOW(), NOW())",
+          [uuid_bin, "openai", "api_key", "invalid name", %{}]
         )
 
       # Attempt invalid name (too short)
+      {:ok, uuid_bin2} = Ecto.UUID.dump(Ecto.UUID.generate())
+
       {:error, %Postgrex.Error{postgres: %{constraint: "name_length"}}} =
         SQL.query(
           Repo,
-          "INSERT INTO saved_authentications (provider, auth_type, name, credentials, inserted_at, updated_at) VALUES ($1,$2,$3,$4, NOW(), NOW())",
-          ["openai", "api_key", "aa", %{}]
+          "INSERT INTO saved_authentications (id, provider, auth_type, name, credentials, inserted_at, updated_at) VALUES ($1,$2,$3,$4,$5, NOW(), NOW())",
+          [uuid_bin2, "openai", "api_key", "aa", %{}]
         )
 
       # Ensure count has not changed (implicit transaction rollback per statement)

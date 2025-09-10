@@ -61,7 +61,7 @@ defmodule TheMaestroWeb.TheMaestroWeb.SessionController do
   end
 
   defp auth_options do
-    TheMaestro.SavedAuthentication.list_all()
+    TheMaestro.Auth.list_saved_authentications()
     |> Enum.map(fn sa -> {"#{sa.name} (#{sa.provider}/#{sa.auth_type})", to_string(sa.id)} end)
   end
 end

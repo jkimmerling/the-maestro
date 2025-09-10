@@ -10,16 +10,15 @@ defmodule TheMaestro.ConversationsFixtures do
   def session_fixture(attrs \\ %{}) do
     # Ensure a Saved Auth exists
     {:ok, sa} =
-      %TheMaestro.SavedAuthentication{}
-      |> TheMaestro.SavedAuthentication.changeset(%{
-        provider: :openai,
+      TheMaestro.Auth.create_saved_authentication(%{
+        provider: "openai",
         auth_type: :api_key,
         name:
           "test_openai_api_key_session_fixture-" <>
             Integer.to_string(System.unique_integer([:positive])),
-        credentials: %{"api_key" => "sk-test"}
+        credentials: %{"api_key" => "sk-test"},
+        expires_at: DateTime.utc_now()
       })
-      |> TheMaestro.Repo.insert()
 
     base = %{
       last_used_at: ~U[2025-09-01 15:30:00Z],
