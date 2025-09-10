@@ -261,11 +261,7 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   defp build_prompt_options do
-    if Code.ensure_loaded?(TheMaestro.Prompts) do
-      TheMaestro.Prompts.list_base_system_prompts() |> Enum.map(&{&1.name, &1.id})
-    else
-      []
-    end
+    TheMaestro.SuppliedContext.list_items(:system_prompt) |> Enum.map(&{&1.name, &1.id})
   end
 
   defp build_persona_options do
