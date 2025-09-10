@@ -435,6 +435,15 @@ defmodule TheMaestroWeb.DashboardLive do
                 <.icon name="hero-archive-box" class="inline mr-2 w-4 h-4" /> CONTEXT LIBRARY
               </.link>
               <.link
+                navigate={~p"/chat_history"}
+                class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
+                data-hotkey="alt+h"
+                data-hotkey-seq="g h"
+                data-hotkey-label="Chat Histories"
+              >
+                <.icon name="hero-clock" class="inline mr-2 w-4 h-4" /> CHAT HISTORIES
+              </.link>
+              <.link
                 navigate={~p"/auths/new"}
                 class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
                 data-hotkey="alt+h"

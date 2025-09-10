@@ -18,7 +18,11 @@ defmodule TheMaestroWeb.ChatEntryLiveIndexTest do
 
     {:ok, view, _html} = live(conn, ~p"/chat_history")
 
-    assert render_submit(element(view, "#chat_history form[phx-submit=attach]"), %{id: entry.id, session_id: session.id}) =~ "Attached to session"
+    assert render_submit(element(view, "#chat_history form[phx-submit=attach]"), %{
+             id: entry.id,
+             session_id: session.id
+           }) =~ "Attached to session"
+
     assert Conversations.get_chat_entry!(entry.id).session_id == session.id
   end
 end

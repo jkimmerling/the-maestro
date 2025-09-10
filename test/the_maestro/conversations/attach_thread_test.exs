@@ -8,6 +8,7 @@ defmodule TheMaestro.Conversations.AttachThreadTest do
     session = session_fixture(%{working_dir: "."})
 
     tid = Ecto.UUID.generate()
+
     {:ok, a} =
       Conversations.create_chat_entry(%{
         session_id: nil,

@@ -34,6 +34,23 @@ defmodule TheMaestroWeb.ChatEntryLive.Show do
         <:item title="Thread label">{@chat_entry.thread_label}</:item>
         <:item title="Session">{@chat_entry.session_id}</:item>
       </.list>
+
+      <div class="mt-6 p-4 rounded border border-amber-600/40">
+        <h3 class="text-sm font-semibold mb-2">Reattach to a Session</h3>
+        <p class="text-xs opacity-70 mb-3">
+          Attach this {if @chat_entry.thread_id, do: "thread", else: "entry"} to an existing session.
+        </p>
+        <.form for={%{}} id="attach-form" phx-submit="attach">
+          <input type="hidden" name="_id" value={@chat_entry.id} />
+          <select name="session_id" class="select select-sm">
+            <option value="">Select a session…</option>
+            <%= for {label, sid} <- @session_options do %>
+              <option value={sid}>{label}</option>
+            <% end %>
+          </select>
+          <button class="btn btn-sm ml-2" type="submit">Attach</button>
+        </.form>
+      </div>
     </Layouts.app>
     """
   end
@@ -43,6 +60,33 @@ defmodule TheMaestroWeb.ChatEntryLive.Show do
     {:ok,
      socket
      |> assign(:page_title, "Show Chat entry")
-     |> assign(:chat_entry, Conversations.get_chat_entry!(id))}
+     |> assign(:chat_entry, Conversations.get_chat_entry!(id))
+     |> assign(:session_options, session_options())}
+  end
+
+  @impl true
+  def handle_event("attach", %{"_id" => id, "session_id" => sid}, socket) do
+    entry = socket.assigns.chat_entry
+
+    case entry.thread_id do
+      tid when is_binary(tid) and tid != "" -> Conversations.attach_thread_to_session(tid, sid)
+      _ -> Conversations.attach_entry_to_session(id, sid)
+    end
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Attached to session")
+     |> push_navigate(to: ~p"/chat_history/#{entry}")}
+  end
+
+  defp session_options do
+    TheMaestro.Conversations.list_sessions_with_auth()
+    |> Enum.map(fn s ->
+      label =
+        s.name || (s.saved_authentication && s.saved_authentication.name) ||
+          "sess-" <> String.slice(s.id, 0, 8)
+
+      {label, s.id}
+    end)
   end
 end

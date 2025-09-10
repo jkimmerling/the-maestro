@@ -18,6 +18,8 @@ defmodule TheMaestroWeb.ChatEntryLive.Form do
         <.input field={@form[:actor]} type="text" label="Actor" />
         <.input field={@form[:provider]} type="text" label="Provider" />
         <textarea name="chat_entry[combined_chat]" class="textarea-terminal" rows="2"></textarea>
+        <textarea name="chat_entry[request_headers]" class="textarea-terminal" rows="2"></textarea>
+        <textarea name="chat_entry[response_headers]" class="textarea-terminal" rows="2"></textarea>
         <.input field={@form[:edit_version]} type="number" label="Edit version" />
         <.input field={@form[:thread_id]} type="text" label="Thread" />
         <.input field={@form[:parent_thread_id]} type="text" label="Parent thread" />
@@ -78,7 +80,7 @@ defmodule TheMaestroWeb.ChatEntryLive.Form do
         {:noreply,
          socket
          |> put_flash(:info, "Chat entry updated successfully")
-         |> push_navigate(to: return_path(socket.assigns.return_to, chat_entry))}
+         |> push_redirect(to: return_path(socket.assigns.return_to, chat_entry))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
@@ -91,7 +93,7 @@ defmodule TheMaestroWeb.ChatEntryLive.Form do
         {:noreply,
          socket
          |> put_flash(:info, "Chat entry created successfully")
-         |> push_navigate(to: return_path(socket.assigns.return_to, chat_entry))}
+         |> push_redirect(to: return_path(socket.assigns.return_to, chat_entry))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}

@@ -5,10 +5,10 @@ defmodule TheMaestroWeb.ChatEntryLiveTest do
   alias TheMaestro.Conversations
 
   @create_attrs %{
-    session_id: "7488a646-e31f-11e4-aace-600308960662",
+    session_id: nil,
     provider: "some provider",
     turn_index: 42,
-    actor: "some actor",
+    actor: "system",
     request_headers: %{},
     response_headers: %{},
     combined_chat: %{},
@@ -19,10 +19,10 @@ defmodule TheMaestroWeb.ChatEntryLiveTest do
     thread_label: "some thread_label"
   }
   @update_attrs %{
-    session_id: "7488a646-e31f-11e4-aace-600308960668",
+    session_id: nil,
     provider: "some updated provider",
     turn_index: 43,
-    actor: "some updated actor",
+    actor: "assistant",
     request_headers: %{},
     response_headers: %{},
     combined_chat: %{},
@@ -68,7 +68,6 @@ defmodule TheMaestroWeb.ChatEntryLiveTest do
       assert html =~ chat_entry.actor
     end
 
-    @tag :skip
     test "saves new chat_entry", %{conn: conn} do
       {:ok, index_live, _html} = live(conn, ~p"/chat_history")
 
@@ -92,10 +91,9 @@ defmodule TheMaestroWeb.ChatEntryLiveTest do
 
       html = render(index_live)
       assert html =~ "Chat entry created successfully"
-      assert html =~ "some actor"
+      assert html =~ "system"
     end
 
-    @tag :skip
     test "updates chat_entry in listing", %{conn: conn, chat_entry: chat_entry} do
       {:ok, index_live, _html} = live(conn, ~p"/chat_history")
 
@@ -119,7 +117,7 @@ defmodule TheMaestroWeb.ChatEntryLiveTest do
 
       html = render(index_live)
       assert html =~ "Chat entry updated successfully"
-      assert html =~ "some updated actor"
+      assert html =~ "assistant"
     end
 
     test "deletes chat_entry in listing", %{conn: conn, chat_entry: chat_entry} do
@@ -140,7 +138,6 @@ defmodule TheMaestroWeb.ChatEntryLiveTest do
       assert html =~ chat_entry.actor
     end
 
-    @tag :skip
     test "updates chat_entry and returns to show", %{conn: conn, chat_entry: chat_entry} do
       {:ok, show_live, _html} = live(conn, ~p"/chat_history/#{chat_entry}")
 
@@ -164,7 +161,7 @@ defmodule TheMaestroWeb.ChatEntryLiveTest do
 
       html = render(show_live)
       assert html =~ "Chat entry updated successfully"
-      assert html =~ "some updated actor"
+      assert html =~ "assistant"
     end
   end
 end
