@@ -25,8 +25,8 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Show do
         <:item title="Name">{@supplied_context_item.name}</:item>
         <:item title="Text">{@supplied_context_item.text}</:item>
         <:item title="Version">{@supplied_context_item.version}</:item>
-        <:item title="Tags">{@supplied_context_item.tags}</:item>
-        <:item title="Metadata">{@supplied_context_item.metadata}</:item>
+        <:item title="Tags">{inspect(@supplied_context_item.tags)}</:item>
+        <:item title="Metadata">{inspect(@supplied_context_item.metadata)}</:item>
       </.list>
     </Layouts.app>
     """

@@ -25,8 +25,8 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Index do
         <:col :let={{_id, supplied_context_item}} label="Name">{supplied_context_item.name}</:col>
         <:col :let={{_id, supplied_context_item}} label="Text">{supplied_context_item.text}</:col>
         <:col :let={{_id, supplied_context_item}} label="Version">{supplied_context_item.version}</:col>
-        <:col :let={{_id, supplied_context_item}} label="Tags">{supplied_context_item.tags}</:col>
-        <:col :let={{_id, supplied_context_item}} label="Metadata">{supplied_context_item.metadata}</:col>
+        <:col :let={{_id, supplied_context_item}} label="Tags">{inspect(supplied_context_item.tags)}</:col>
+        <:col :let={{_id, supplied_context_item}} label="Metadata">{inspect(supplied_context_item.metadata)}</:col>
         <:action :let={{_id, supplied_context_item}}>
           <div class="sr-only">
             <.link navigate={~p"/supplied_context/#{supplied_context_item}"}>Show</.link>
