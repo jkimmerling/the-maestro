@@ -66,16 +66,31 @@ Persisted JSON (combined_chat):
   - Default/compute derived fields (e.g., `Usage.total_tokens`).
   - For `StreamEvent`, provide helpers: `content/1`, `usage/1`, `tool_calls/1`.
 
+Already scaffolded in this branch (no behavior wired yet):
+- `lib/the_maestro/domain/provider_meta.ex`
+- `lib/the_maestro/domain/request_meta.ex`
+- `lib/the_maestro/domain/usage.ex`
+- `lib/the_maestro/domain/tool_call.ex`
+- `lib/the_maestro/domain/stream_event.ex`
+- `lib/the_maestro/domain/combined_chat.ex`
+
 ### 2) Normalize streaming events in one place
 
 - Update `TheMaestro.Streaming` (and `OpenAIHandler`) so `parse_stream/3` returns `%StreamEvent{}` instances wrapping the raw provider events (`raw` field).
 - Keep provider adapters unchanged; conversion happens after HTTP.
 - Provide a thin compatibility function if any consumer still expects provider maps during the transition.
 
+Recommended changes (when you wire it):
+- `lib/the_maestro/streaming/*.ex`: have `parse_stream/3` return `%TheMaestro.Domain.StreamEvent{}`. Keep `raw: map` for diagnostics.
+- `lib/the_maestro/streaming/openai_handler.ex` (or equivalent): centralize event→struct mapping.
+
 ### 3) Sessions.Manager publishes structs
 
 - In `TheMaestro.Sessions.Manager`, after calling `Streaming.parse_stream/3`, publish `%StreamEvent{}` tuples on the PubSub channel (`{:ai_stream, stream_id, %StreamEvent{...}}`).
 - Remove per‑message ad‑hoc map handling in favor of matching on `%StreamEvent{}`.
+
+Where to change:
+- `lib/the_maestro/sessions/manager.ex`: publish `{:ai_stream, stream_id, %StreamEvent{}}` and adjust consumers accordingly.
 
 ### 4) SessionChatLive consumes structs
 
@@ -83,7 +98,10 @@ Persisted JSON (combined_chat):
   - Append content via `event.content`.
   - Accumulate `event.tool_calls` and `event.usage`.
   - React to `event.type == :done` to finalize.
-  - Build `RequestMeta` (from `ProviderMeta` + selected model) once, store in assigns.
+- Build `RequestMeta` (from `ProviderMeta` + selected model) once, store in assigns.
+
+Where to change:
+- `lib/the_maestro_web/live/session_chat_live.ex`: replace direct map access with `%StreamEvent{}` fields, build `%RequestMeta{}` where we currently build `req_meta` maps before persistence.
 
 ### 5) CombinedChat value object
 
@@ -92,6 +110,13 @@ Persisted JSON (combined_chat):
   - A) `embedded_schema` + `changeset/2` used explicitly when persisting/loading ChatEntry.
   - B) Plain struct with `from_map/1`/`to_map/1`; call these in `Conversations` when saving/reading `combined_chat`.
 - Do not change the DB schema; still store as JSONB.
+
+Where to change:
+- `lib/the_maestro/conversations.ex`: call `CombinedChat.to_map/1` on write and `CombinedChat.from_map/1` on read around `ChatEntry.combined_chat`.
+- `lib/the_maestro/conversations/chat_entry.ex`: optionally add an `Ecto.Type` later if you want automatic casting.
+
+Optional feature flag (safe rollout):
+- Add `config :the_maestro, :struct_events, true` (default true in dev/test). Gate `StreamEvent` publishing to allow a quick revert if needed.
 
 ### 6) Tests and contracts
 
@@ -193,6 +218,12 @@ end
 - `mix dialyzer` – add basic specs for constructors and stream conversions.
 - OAuth contract tests – per provider, assert exact headers/body strings for request builders.
 
+Suggested test additions:
+- `test/the_maestro/domain/provider_meta_test.exs` – validates normalization rules and allowlist fallback.
+- `test/the_maestro/domain/stream_event_test.exs` – maps provider messages→`%StreamEvent{}` including tool_calls and usage.
+- `test/the_maestro/streaming/contract_openai_oauth_test.exs` (and anth/gemini) – assert headers and exact JSON body against fixtures.
+- `test/the_maestro/conversations/combined_chat_value_object_test.exs` – round‑trip `from_map/1`↔`to_map/1`.
+
 ## Rollout Checklist
 
 1) Land domain structs and conversion in Streaming; keep a runtime config flag to toggle struct events.
@@ -201,6 +232,10 @@ end
 4) Update tests; add golden OAuth fixtures.
 5) Run full pre‑commit gates; verify UI streaming and model selection paths.
 6) Enable in staging; monitor logs (usage summations, tool call counts) vs baseline.
+
+Operational tips:
+- Log one summary line per assistant turn from `%RequestMeta{}` – provider/model/auth/total_tokens – for easy regression detection.
+- If any consumer outside LiveView subscribes to `"session:" <> id`, add a temporary compatibility layer translating `%StreamEvent{}` to the previous map shape.
 
 ## Notes on Backward Compatibility
 
@@ -212,3 +247,10 @@ end
 - It doesn’t standardize every provider payload. That’s deliberate—providers differ. We normalize only the parts we actually rely on (events/meta/usage).
 - It doesn’t add pagination, search, or analytics; those remain orthogonal enhancements.
 
+## Practical Pointers (what I would do next)
+
+- Wire `%StreamEvent{}` first (lowest risk, highest payoff), behind a config flag. Commit small.
+- Migrate `SessionChatLive` to `%RequestMeta{}` next; keep persistence maps until all callers use the struct.
+- Introduce `CombinedChat` last; start with manual `from_map/1`/`to_map/1` calls in `Conversations` to avoid any type surprises.
+- Add golden request fixtures for OAuth adapters before touching any streaming code; they are your net.
+- Keep all struct constructors side‑effect‑free and fast; prefer fail‑fast `new!/1` in the core paths and `new/1` for user input flows.
