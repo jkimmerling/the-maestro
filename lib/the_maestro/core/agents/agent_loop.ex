@@ -92,7 +92,6 @@ defmodule TheMaestro.AgentLoop do
       end
     end
   end
-
   @spec run_turn(:anthropic, String.t(), String.t(), [map()], keyword()) ::
           {:ok, result} | {:error, term()}
   def run_turn(:anthropic, session_name, model, messages, opts) when is_list(messages) do
@@ -127,28 +126,6 @@ defmodule TheMaestro.AgentLoop do
             {:error, reason}
         end
       end
-    end
-  end
-
-  defp resolve_workspace_root(provider, session_name) do
-    # Prefer OAuth session, then API key. Fallback to File.cwd!/expanded.
-    auth =
-      TheMaestro.Auth.get_by_provider_and_name(provider, :oauth, session_name) ||
-        TheMaestro.Auth.get_by_provider_and_name(provider, :api_key, session_name)
-
-    case auth do
-      %{id: auth_id} ->
-        case TheMaestro.Conversations.latest_session_for_auth_id(to_string(auth_id)) do
-          nil ->
-            File.cwd!() |> Path.expand()
-
-          s ->
-            wd = s.working_dir
-            if is_binary(wd) and wd != "", do: Path.expand(wd), else: File.cwd!() |> Path.expand()
-        end
-
-      _ ->
-        File.cwd!() |> Path.expand()
     end
   end
 
@@ -207,6 +184,27 @@ defmodule TheMaestro.AgentLoop do
     end
   end
 
+  defp resolve_workspace_root(provider, session_name) do
+    # Prefer OAuth session, then API key. Fallback to File.cwd!/expanded.
+    auth =
+      TheMaestro.Auth.get_by_provider_and_name(provider, :oauth, session_name) ||
+        TheMaestro.Auth.get_by_provider_and_name(provider, :api_key, session_name)
+
+    case auth do
+      %{id: auth_id} ->
+        case TheMaestro.Conversations.latest_session_for_auth_id(to_string(auth_id)) do
+          nil ->
+            File.cwd!() |> Path.expand()
+
+          s ->
+            wd = s.working_dir
+            if is_binary(wd) and wd != "", do: Path.expand(wd), else: File.cwd!() |> Path.expand()
+        end
+
+      _ ->
+        File.cwd!() |> Path.expand()
+    end
+  end
   defp drain_stream(stream, _provider) do
     # Parse SSE events directly to avoid UI pipeline dependencies
     sse = TheMaestro.Providers.Http.StreamingAdapter.parse_sse_events(stream)

@@ -11,7 +11,6 @@ defmodule TheMaestro.Sessions.Manager do
   require Logger
 
   alias Phoenix.PubSub
-  alias TheMaestro.Conversations.Translator
   alias TheMaestro.Streaming
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
 
@@ -56,13 +55,12 @@ defmodule TheMaestro.Sessions.Manager do
 
   @impl true
   def handle_call(
-        {:start_stream, session_id, provider, session_name, provider_messages, model, opts},
+        {:start_stream, session_id, provider, session_name, provider_messages, model, _opts},
         _from,
         st
       ) do
     st = cancel_if_running(st, session_id)
     stream_id = Ecto.UUID.generate()
-    parent = self()
 
     {:ok, task} =
       Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->

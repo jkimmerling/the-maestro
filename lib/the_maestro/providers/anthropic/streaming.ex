@@ -498,7 +498,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
   # Remove or cap cache_control across system/messages/tools
   # mode: :disable removes all cache_control; :limit4 keeps the first 4 and strips the rest
   # credo:disable-for-next-line Credo.Check.Refactor.Nesting
-  defp sanitize_cache_control(body, mode \\ :disable) when is_map(body) do
+  defp sanitize_cache_control(body, mode) when is_map(body) do
     {new_body, _kept} = do_sanitize_cache_control(body, mode, 0)
     new_body
   end

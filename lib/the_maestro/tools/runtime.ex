@@ -322,7 +322,7 @@ defmodule TheMaestro.Tools.Runtime do
 
             files = collect_files(base_path, base_cwd, 10_000)
 
-            {hits, count} =
+            {hits, _count} =
               Enum.reduce_while(files, {[], 0}, fn file, {acc, c} ->
                 if c >= max_hits do
                   {:halt, {acc, c}}

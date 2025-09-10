@@ -478,16 +478,6 @@ defmodule TheMaestroWeb.SessionChatLive do
     |> assign(:retry_attempts, 0)
   end
 
-  @impl true
-  def handle_event("close_modal", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_config, false)
-     |> assign(:show_persona_modal, false)
-     |> assign(:show_memory_modal, false)
-     |> assign(:show_clear_confirm, false)}
-  end
-
   defp user_msg(text), do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
 
   defp assistant_msg(text),

@@ -197,13 +197,6 @@ use Ecto.Schema
   @spec get!(binary()) :: t()
   def get!(id) when is_binary(id), do: TheMaestro.Auth.get_saved_authentication!(id) |> compat()
 
-  @doc """
-  Updates a saved authentication record.
-
-  Only `name`, `credentials`, and `expires_at` are expected to change post‑creation.
-  Provider and auth_type are treated as immutable for existing records.
-  """
-
   # update is handled via TheMaestro.Auth.update_saved_authentication/2; legacy update/2 removed
 
   @doc """

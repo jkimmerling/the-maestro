@@ -251,9 +251,7 @@ defmodule TheMaestroWeb.DashboardLive do
   defp provider_label(p) when is_atom(p), do: Atom.to_string(p)
   defp provider_label(p) when is_binary(p), do: p
 
-  defp map_count(nil), do: 0
-  defp map_count(%{} = m), do: map_size(m)
-  defp map_count(_), do: 0
+  # map_count helpers removed; not used
 
   defp build_auth_options do
     Auth.list_saved_authentications()
@@ -303,13 +301,12 @@ defmodule TheMaestroWeb.DashboardLive do
         end
     end
   end
-
+  # fallback clause grouped with the primary build_model_options/1
+  defp build_model_options(_), do: []
   defp build_auth_options_for(provider) when is_atom(provider) do
     Auth.list_saved_authentications_by_provider(provider)
     |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
   end
-
-  defp build_model_options(_), do: []
 
   # Merge new form values into the current session form params, preserving prior selections
   defp merge_session_params(socket, extra) when is_map(extra) do
