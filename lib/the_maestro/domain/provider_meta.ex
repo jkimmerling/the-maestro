@@ -25,9 +25,12 @@ defmodule TheMaestro.Domain.ProviderMeta do
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
   def new(params) when is_map(params) do
-    with {:ok, provider} <- normalize_provider(Map.get(params, :provider) || Map.get(params, "provider")),
-         {:ok, auth_type} <- normalize_auth_type(Map.get(params, :auth_type) || Map.get(params, "auth_type")),
-         {:ok, auth_name} <- normalize_auth_name(Map.get(params, :auth_name) || Map.get(params, "auth_name")) do
+    with {:ok, provider} <-
+           normalize_provider(Map.get(params, :provider) || Map.get(params, "provider")),
+         {:ok, auth_type} <-
+           normalize_auth_type(Map.get(params, :auth_type) || Map.get(params, "auth_type")),
+         {:ok, auth_name} <-
+           normalize_auth_name(Map.get(params, :auth_name) || Map.get(params, "auth_name")) do
       {:ok,
        %__MODULE__{
          provider: provider,
@@ -59,7 +62,8 @@ defmodule TheMaestro.Domain.ProviderMeta do
     if p in allowed_str, do: {:ok, String.to_existing_atom(p)}, else: {:ok, :openai}
   end
 
-  @spec normalize_auth_type(auth_type() | String.t() | nil) :: {:ok, auth_type()} | {:error, term()}
+  @spec normalize_auth_type(auth_type() | String.t() | nil) ::
+          {:ok, auth_type()} | {:error, term()}
   defp normalize_auth_type(:oauth), do: {:ok, :oauth}
   defp normalize_auth_type(:api_key), do: {:ok, :api_key}
   defp normalize_auth_type("oauth"), do: {:ok, :oauth}

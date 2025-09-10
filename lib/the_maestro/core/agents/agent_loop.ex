@@ -92,6 +92,7 @@ defmodule TheMaestro.AgentLoop do
       end
     end
   end
+
   @spec run_turn(:anthropic, String.t(), String.t(), [map()], keyword()) ::
           {:ok, result} | {:error, term()}
   def run_turn(:anthropic, session_name, model, messages, opts) when is_list(messages) do
@@ -205,6 +206,7 @@ defmodule TheMaestro.AgentLoop do
         File.cwd!() |> Path.expand()
     end
   end
+
   defp drain_stream(stream, _provider) do
     # Parse SSE events directly to avoid UI pipeline dependencies
     sse = TheMaestro.Providers.Http.StreamingAdapter.parse_sse_events(stream)
