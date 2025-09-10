@@ -294,9 +294,15 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:auth_options, build_auth_options())}
   end
 
-  # Stream activity from session topics (published by Sessions.Manager)
-  def handle_info({:ai_stream2, session_id, _stream_id, %{type: type}}, socket) do
-    {:noreply, put_active_stream(socket, session_id, type)}
+  def handle_info(
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           event: %TheMaestro.Domain.StreamEvent{type: type}
+         }},
+        socket
+      ) do
+    {:noreply, put_active_stream(socket, sid, type)}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -305,8 +311,6 @@ defmodule TheMaestroWeb.DashboardLive do
     active? = type in [:thinking, :content, :function_call, :usage]
     assign(socket, :active_streams, Map.put(socket.assigns.active_streams, session_id, active?))
   end
-
-  # duplicate clauses removed; see earlier grouped handle_event/3 definitions
 
   defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S %Z")

@@ -1,13 +1,7 @@
 defmodule TheMaestro.Sessions.Manager do
   # credo:disable-for-this-file Credo.Check.Refactor.Nesting
   # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
-  @moduledoc """
-  Session-scoped streaming manager.
-
-  - Supervises provider streaming tasks under `TheMaestro.Sessions.TaskSup`
-  - Publishes streaming events on `"session:" <> session_id` via `TheMaestro.PubSub`
-  - Provides APIs to start/cancel streams and run tool follow-ups
-  """
+  @moduledoc "Session-scoped streaming manager."
 
   use GenServer
   require Logger
@@ -18,6 +12,7 @@ defmodule TheMaestro.Sessions.Manager do
   alias TheMaestro.Followups.Anthropic, as: AnthFollowups
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
   alias TheMaestro.Streaming
+  alias TheMaestro.Domain.{StreamEnvelope, StreamEvent}
   alias TheMaestro.Tools.Runtime, as: ToolsRuntime
 
   @type session_entry :: %{
@@ -33,8 +28,6 @@ defmodule TheMaestro.Sessions.Manager do
         }
 
   @type state :: %{optional(String.t()) => session_entry()}
-
-  # Public API
 
   def start_link(opts \\ []),
     do: GenServer.start_link(__MODULE__, %{}, Keyword.put_new(opts, :name, __MODULE__))
@@ -65,7 +58,6 @@ defmodule TheMaestro.Sessions.Manager do
     GenServer.call(__MODULE__, {:cancel, session_id})
   end
 
-  # GenServer
   @impl true
   def init(_), do: {:ok, %{}}
 
@@ -169,11 +161,15 @@ defmodule TheMaestro.Sessions.Manager do
               publish_both(session_id, stream_id, msg)
             end
 
-            publish_both(session_id, stream_id, %{type: :done})
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
 
           {:error, reason} ->
-            publish_both(session_id, stream_id, %{type: :error, error: inspect(reason)})
-            publish_both(session_id, stream_id, %{type: :done})
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
+              type: :error,
+              error: inspect(reason)
+            })
+
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
         end
       end)
 
@@ -185,7 +181,6 @@ defmodule TheMaestro.Sessions.Manager do
     {:reply, :ok, st}
   end
 
-  # Accumulation
   @impl true
   def handle_cast({:acc_content, session_id, _stream_id, chunk}, st) do
     st =
@@ -292,16 +287,29 @@ defmodule TheMaestro.Sessions.Manager do
     PubSub.broadcast(TheMaestro.PubSub, topic(session_id), message)
   end
 
+  @spec publish_both(String.t(), String.t(), map() | TheMaestro.Domain.StreamEvent.t()) :: :ok
   defp publish_both(session_id, stream_id, msg) do
-    publish(session_id, {:ai_stream, stream_id, msg})
-    publish(session_id, {:ai_stream2, session_id, stream_id, msg})
+    ev = to_stream_event(msg)
+
+    envelope = %StreamEnvelope{
+      session_id: session_id,
+      stream_id: stream_id,
+      event: ev,
+      at_ms: now_ms()
+    }
+
+    # Typed envelope (single, canonical shape)
+    publish(session_id, {:session_stream, envelope})
+    :ok
   end
+
+  @spec to_stream_event(map() | StreamEvent.t()) :: StreamEvent.t()
+  defp to_stream_event(%StreamEvent{} = ev), do: ev
+  defp to_stream_event(%{} = m), do: StreamEvent.new!(m)
 
   defp topic(session_id), do: "session:" <> session_id
 
   defp now_ms, do: System.monotonic_time(:millisecond)
-
-  # ----- Finalization & follow-ups -----
 
   defp finalize_and_persist(session_id, stream_id, st) do
     with %{acc: %{text: text, usage: usage, meta: meta, events: events}} <-
@@ -454,8 +462,6 @@ defmodule TheMaestro.Sessions.Manager do
         meta: acc.meta
       })
   end
-
-  # Legacy compatibility removed: all stream events are %StreamEvent{}
 
   defp do_followup_provider(:openai, session_name, items, model),
     do: OpenAI.Streaming.stream_tool_followup(session_name, items, model: model)

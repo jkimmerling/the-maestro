@@ -18,8 +18,6 @@ defmodule TheMaestro.Provider do
   @typedoc "Chat messages"
   @type messages :: [map()]
 
-  # Public API
-
   @spec create_session(Types.provider(), Types.auth_type(), Types.request_opts()) ::
           {:ok, session_id()} | {:error, term()}
   def create_session(provider, auth_type, opts \\ []) do

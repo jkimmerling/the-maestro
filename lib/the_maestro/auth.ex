@@ -253,8 +253,6 @@ defmodule TheMaestro.Auth do
     ]
   end
 
-  # Public API functions
-
   @doc """
   Generate Gemini OAuth 2.0 authorization URL with PKCE parameters.
 
@@ -302,7 +300,6 @@ defmodule TheMaestro.Auth do
       "prompt" => "consent"
     }
 
-    # Note: v2 endpoint is the modern form; story examples use /oauth2/auth.
     base =
       System.get_env("GEMINI_AUTHORIZATION_ENDPOINT") ||
         "https://accounts.google.com/o/oauth2/v2/auth"

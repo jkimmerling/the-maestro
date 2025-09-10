@@ -103,11 +103,11 @@ Recommended changes (when you wire it):
 
 ### 3) Sessions.Manager publishes structs
 
-- In `TheMaestro.Sessions.Manager`, after calling `Streaming.parse_stream/3`, publish `%StreamEvent{}` tuples on the PubSub channel (`{:ai_stream, stream_id, %StreamEvent{...}}`).
+- In `TheMaestro.Sessions.Manager`, after calling `Streaming.parse_stream/3`, publish an envelope on the PubSub channel: `{:session_stream, %TheMaestro.Domain.StreamEnvelope{session_id, stream_id, event: %StreamEvent{...}, at_ms}}`.
 - Remove per‑message ad‑hoc map handling in favor of matching on `%StreamEvent{}`.
 
 Where to change:
-- `lib/the_maestro/sessions/manager.ex`: publish `{:ai_stream, stream_id, %StreamEvent{}}` and adjust consumers accordingly.
+- `lib/the_maestro/sessions/manager.ex`: publish only `{:session_stream, %StreamEnvelope{...}}` and adjust consumers accordingly.
 
 ### 4) SessionChatLive consumes structs
 
