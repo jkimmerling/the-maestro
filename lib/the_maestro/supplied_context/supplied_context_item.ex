@@ -20,5 +20,9 @@ defmodule TheMaestro.SuppliedContext.SuppliedContextItem do
     supplied_context_item
     |> cast(attrs, [:type, :name, :text, :version, :tags, :metadata])
     |> validate_required([:type, :name, :text, :version])
+    |> unique_constraint(:name,
+      name: "supplied_context_items_type_name_index",
+      message: "already exists for this type"
+    )
   end
 end

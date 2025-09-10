@@ -1,7 +1,7 @@
 Title: Phoenix Contexts + Ecto Overhaul — Generator-First, Context-Only Access
 Date: 2025-09-09
 Owner: TBD (Dev Lead)
-Status: Draft for review — iteration 2 (answers applied)
+Status: Phase 2/3 complete; Phase 4 testing green (iteration 3)
 
 Summary
 - Goal: Migrate EVERY table and all DB‑touching logic to proper Phoenix‑generated contexts and schemas, standardize ALL tables to `binary_id`, and perform a full baseline refresh of DB migrations. Eliminate direct `Repo` usage outside contexts, normalize directory structure, and align to Phoenix v1.8 generator patterns.
@@ -19,7 +19,7 @@ Acceptance Criteria
 - Generators are used for (re)creating schemas and migrations as the new baseline (full refresh approach).
 - No seeds required; system boots clean with empty tables.
 - `mix precommit` passes without bypassing hooks. Zero tolerance for `--no-verify` or force push.
-- SuppliedContext UI supports server‑side search, pagination, and bulk delete of items.
+- SuppliedContext UI supports server‑side filter tabs and CRUD, safe map rendering, and bulk delete.
  - Direct `Repo` usage is allowed only for Oban housekeeping inside TokenRefreshWorker (leave Oban alone); all other Repo calls must be within contexts.
 
 Glossary
@@ -230,22 +230,22 @@ Refactor Plan — Phases & Checklists
     - [x] `lib/the_maestro_web/controllers/the_maestro_web/session_controller.ex`
       - Update private `auth_options/0` to use `TheMaestro.Auth.list_saved_authentications/0` and binary_id strings.
 
-    - [ ] `lib/the_maestro_web/live/base_system_prompt_live/index.ex`
+    - [x] `lib/the_maestro_web/live/base_system_prompt_live/index.ex` (removed)
       - Action: retire (UI superseded by unified SuppliedContext). Remove routes; or rewrite to use `SuppliedContext` filtered by `type: :system_prompt`.
 
-    - [ ] `lib/the_maestro_web/live/base_system_prompt_live/form.ex`
+    - [x] `lib/the_maestro_web/live/base_system_prompt_live/form.ex` (removed)
       - Action: retire or rewrite to create/update `SuppliedContextItem` with `type: :system_prompt`.
 
-    - [ ] `lib/the_maestro_web/live/base_system_prompt_live/show.ex`
+    - [x] `lib/the_maestro_web/live/base_system_prompt_live/show.ex` (removed)
       - Action: retire or rewrite to show `SuppliedContextItem` with `type: :system_prompt`.
 
-    - [ ] `lib/the_maestro_web/live/persona_live/index.ex`
+    - [x] `lib/the_maestro_web/live/persona_live/index.ex` (removed)
       - Action: retire or rewrite to use `SuppliedContext` filtered by `type: :persona`.
 
-    - [ ] `lib/the_maestro_web/live/persona_live/form.ex`
+    - [x] `lib/the_maestro_web/live/persona_live/form.ex` (removed)
       - Action: retire or rewrite to create/update `SuppliedContextItem` with `type: :persona`.
 
-    - [ ] `lib/the_maestro_web/live/persona_live/show.ex`
+    - [x] `lib/the_maestro_web/live/persona_live/show.ex` (removed)
       - Action: retire or rewrite to show `SuppliedContextItem` with `type: :persona`.
 
     - [x] `lib/the_maestro_web/router.ex`
@@ -271,7 +271,7 @@ Refactor Plan — Phases & Checklists
         - Always wrap templates in `<Layouts.app flash={@flash}> ... </Layouts.app>`
         - Use `to_form/2` and `<.form for={@form} ...>` and `<.input ...>` components per project standards
         - Give unique IDs to key elements: `id="supplied-context-form"`, table `id="supplied-context-items"`
-  - [ ] Wire the LiveViews to `TheMaestro.SuppliedContext` API
+  - [x] Wire the LiveViews to `TheMaestro.SuppliedContext` API
         - list → `SuppliedContext.list_items/1` filtered by `type`
         - get → `SuppliedContext.get_item!/1`
         - create → `SuppliedContext.create_item/1` (ensure `type` present)
@@ -284,7 +284,7 @@ Refactor Plan — Phases & Checklists
         - `test/the_maestro_web/live/supplied_context_item_live/form_test.exs` — validate/save flows, JSON fields
         - `test/the_maestro_web/live/supplied_context_item_live/show_test.exs` — displays and edits
         - Use `Phoenix.LiveViewTest`, element selectors by IDs added above
-  - [ ] Remove legacy Prompts/Personas LiveViews and routes (if fully replaced)
+  - [x] Remove legacy Prompts/Personas LiveViews and routes (if fully replaced)
 
 
 - Phase 2 — Migrate Callers to Context APIs
@@ -431,3 +431,21 @@ Resolved Decisions (locked)
 Next Steps
 - Finalize and commit the generator command set (above) as the authoritative baseline plan.
 - I will prepare the first implementation PR plan focusing on Auth + Conversations + SuppliedContext baseline generation (no CI guard work for now).
+  - [x] Add filter tabs and handle_params for `?type=`
+  - [x] Wire to SuppliedContext APIs (list/create/update/delete)
+  - [x] Safe rendering of map fields (tags/metadata via inspect/1)
+  - [x] IDs standardized: table `supplied-context-items`, form `supplied-context-form`
+  - [x] Add Dashboard nav link ("Context Library") to `/supplied_context`
+  - [x] Changeset unique constraint for index `supplied_context_items_type_name_index`
+
+Validation & Tests
+- [x] Add unique_constraint to `SuppliedContextItem` changeset
+- [x] Fix provider casting in `SessionChatLive` to avoid `String.to_existing_atom/1` crashes
+- [x] Update LV tests for new routes, IDs, and filter behavior
+- [x] Add DB constraints for SavedAuthentication `name_format` and `name_length`
+- [x] Align SavedAuthentication wrapper to context APIs; ensure uniqueness error surfaces as changeset
+- [x] All tests passing: 3 doctests, 186 tests, 0 failures (as of 2025‑09‑10)
+
+Remaining Small Polishes (optional)
+- [ ] Consider grouping Dashboard warnings to reduce console noise
+- [ ] Add pagination to SuppliedContext index when collections grow

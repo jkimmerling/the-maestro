@@ -16,5 +16,14 @@ defmodule TheMaestro.Repo.Migrations.CreateSavedAuthentications do
     create unique_index(:saved_authentications, [:provider, :auth_type, :name],
              name: :saved_authentications_provider_auth_type_name_index
            )
+
+    # Database-level constraints to validate session name format and length
+    create constraint(:saved_authentications, :name_format,
+             check: "name ~ '^[A-Za-z0-9_-]+$'"
+           )
+
+    create constraint(:saved_authentications, :name_length,
+             check: "char_length(name) >= 3 AND char_length(name) <= 50"
+           )
   end
 end

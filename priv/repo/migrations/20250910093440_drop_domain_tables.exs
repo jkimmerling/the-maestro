@@ -5,7 +5,9 @@ defmodule TheMaestro.Repo.Migrations.DropDomainTables do
     # Drop domain tables if they already exist (do not touch Oban tables)
     # Relax/drop FKs before dropping tables to avoid dependency errors
     execute "ALTER TABLE IF EXISTS sessions DROP CONSTRAINT IF EXISTS sessions_latest_chat_entry_id_fkey"
+
     execute "ALTER TABLE IF EXISTS chat_history DROP CONSTRAINT IF EXISTS chat_history_session_id_fkey"
+
     execute "ALTER TABLE IF EXISTS tool_runs DROP CONSTRAINT IF EXISTS tool_runs_session_id_fkey"
 
     # Drop child tables first, then parents

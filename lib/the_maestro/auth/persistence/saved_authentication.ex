@@ -30,11 +30,13 @@ defmodule TheMaestro.SavedAuthentication do
       }
   """
 
-  use Ecto.Schema
+use Ecto.Schema
   import Ecto.Changeset
+  import Ecto.Query
+  alias TheMaestro.Repo
 
-  @type t :: %__MODULE__{
-          id: integer() | nil,
+@type t :: %__MODULE__{
+        id: Ecto.UUID.t() | nil,
           provider: atom(),
           auth_type: :api_key | :oauth,
           name: String.t(),
@@ -47,14 +49,16 @@ defmodule TheMaestro.SavedAuthentication do
   @typedoc "Attributes for changesets - ALL keys must be atoms"
   @type attrs :: %{optional(atom()) => any()}
 
-  schema "saved_authentications" do
+@primary_key {:id, :binary_id, autogenerate: true}
+@foreign_key_type :binary_id
+schema "saved_authentications" do
     field :provider, TheMaestro.EctoTypes.Provider
     field :auth_type, Ecto.Enum, values: [:api_key, :oauth]
     field :name, :string
     field :credentials, :map
     field :expires_at, :utc_datetime
 
-    timestamps()
+  timestamps(type: :utc_datetime)
   end
 
   @doc """
@@ -152,8 +156,12 @@ defmodule TheMaestro.SavedAuthentication do
   Returns the SavedAuthentication struct or nil if not found.
   """
   @spec get_by_provider_and_name(atom() | String.t(), atom(), String.t()) :: t() | nil
-  def get_by_provider_and_name(provider, auth_type, name),
-    do: TheMaestro.Auth.get_by_provider_and_name(provider, auth_type, name)
+  def get_by_provider_and_name(provider, auth_type, name) do
+    Repo.one(
+      from sa in __MODULE__,
+        where: sa.provider == ^provider and sa.auth_type == ^auth_type and sa.name == ^name
+    )
+  end
 
   @doc """
   Lists all saved authentications for a given provider.
@@ -167,8 +175,9 @@ defmodule TheMaestro.SavedAuthentication do
   Returns a list of SavedAuthentication structs.
   """
   @spec list_by_provider(atom()) :: [t()]
-  def list_by_provider(provider),
-    do: TheMaestro.Auth.list_saved_authentications_by_provider(provider)
+  def list_by_provider(provider) do
+    Repo.all(from sa in __MODULE__, where: sa.provider == ^provider, order_by: [asc: sa.auth_type, asc: sa.name])
+  end
 
   @doc """
   Lists all saved authentications across all providers.
@@ -177,14 +186,19 @@ defmodule TheMaestro.SavedAuthentication do
   for stable display in UIs.
   """
   @spec list_all() :: [t()]
-  def list_all, do: TheMaestro.Auth.list_saved_authentications()
+  def list_all do
+    Repo.all(
+      from sa in __MODULE__,
+        order_by: [desc: sa.inserted_at, asc: sa.provider, asc: sa.auth_type, asc: sa.name]
+    )
+  end
 
   @doc """
   Fetches a single saved authentication by id.
   Raises if not found.
   """
   @spec get!(binary()) :: t()
-  def get!(id) when is_binary(id), do: TheMaestro.Auth.get_saved_authentication!(id)
+  def get!(id) when is_binary(id), do: Repo.get!(__MODULE__, id)
 
   @doc """
   Updates a saved authentication record.
@@ -216,7 +230,14 @@ defmodule TheMaestro.SavedAuthentication do
     alias TheMaestro.Workers.TokenRefreshWorker
     normalized = auth_type |> normalize_credentials_for_auth(atomize_keys(attrs))
 
-    case TheMaestro.Auth.upsert_named_session(provider, auth_type, name, normalized) do
+    p = if is_atom(provider), do: Atom.to_string(provider), else: provider
+    full =
+      normalized
+      |> Map.put(:provider, p)
+      |> Map.put(:auth_type, auth_type)
+      |> Map.put(:name, name)
+
+    case TheMaestro.Auth.create_saved_authentication(full) do
       {:ok, saved} ->
         if auth_type == :oauth, do: _ = TokenRefreshWorker.schedule_for_auth(saved)
         {:ok, saved}
@@ -250,7 +271,7 @@ defmodule TheMaestro.SavedAuthentication do
     case TheMaestro.Auth.upsert_named_session(provider, auth_type, name, normalized) do
       {:ok, saved} ->
         if auth_type == :oauth, do: _ = TokenRefreshWorker.schedule_for_auth(saved)
-        {:ok, saved}
+        {:ok, get!(saved.id)}
 
       other ->
         other
@@ -305,15 +326,22 @@ defmodule TheMaestro.SavedAuthentication do
   Returns the SavedAuthentication struct or nil if not found.
   """
   @spec get_by_provider(atom(), atom()) :: t() | nil
-  def get_by_provider(provider, auth_type),
-    do: TheMaestro.Auth.get_by_provider(provider, auth_type)
+  def get_by_provider(provider, auth_type) do
+    default_name = "default_" <> Atom.to_string(provider) <> "_" <> Atom.to_string(auth_type)
+
+    Repo.one(
+      from sa in __MODULE__,
+        where:
+          sa.provider == ^provider and sa.auth_type == ^auth_type and sa.name == ^default_name
+    )
+  end
 
   @doc """
   Gets a named session (alias of get_by_provider_and_name/3).
   """
   @spec get_named_session(atom(), atom(), String.t()) :: t() | nil
   def get_named_session(provider, auth_type, name),
-    do: TheMaestro.Auth.get_named_session(provider, auth_type, name)
+    do: get_by_provider_and_name(provider, auth_type, name)
 
   # ===== Internal helpers =====
 

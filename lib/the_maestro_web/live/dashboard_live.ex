@@ -343,15 +343,26 @@ defmodule TheMaestroWeb.DashboardLive do
             <h1 class="text-4xl font-bold text-amber-400 glow tracking-wider">
               &gt;&gt;&gt; DASHBOARD TERMINAL V2.1.4 &lt;&lt;&lt;
             </h1>
-            <.link
-              navigate={~p"/auths/new"}
-              class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
-              data-hotkey="alt+h"
-              data-hotkey-seq="g h"
-              data-hotkey-label="New Auth"
-            >
-              <.icon name="hero-plus" class="inline mr-2 w-4 h-4" /> NEW AUTH
-            </.link>
+            <div class="flex gap-2">
+              <.link
+                navigate={~p"/supplied_context"}
+                class="px-6 py-2 rounded transition-all duration-200 btn-green hover:glow-strong"
+                data-hotkey="alt+c"
+                data-hotkey-seq="g c"
+                data-hotkey-label="Context Library"
+              >
+                <.icon name="hero-archive-box" class="inline mr-2 w-4 h-4" /> CONTEXT LIBRARY
+              </.link>
+              <.link
+                navigate={~p"/auths/new"}
+                class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
+                data-hotkey="alt+h"
+                data-hotkey-seq="g h"
+                data-hotkey-label="New Auth"
+              >
+                <.icon name="hero-plus" class="inline mr-2 w-4 h-4" /> NEW AUTH
+              </.link>
+            </div>
           </div>
 
           <section class="mb-12">

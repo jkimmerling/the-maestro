@@ -3,7 +3,8 @@ defmodule TheMaestro.Repo.Migrations.AddSessionsChatHistoryFks do
 
   def change do
     alter table(:chat_history) do
-      modify :session_id, references(:sessions, on_delete: :nothing, type: :binary_id), from: :binary_id
+      modify :session_id, references(:sessions, on_delete: :nothing, type: :binary_id),
+        from: :binary_id
     end
 
     alter table(:sessions) do

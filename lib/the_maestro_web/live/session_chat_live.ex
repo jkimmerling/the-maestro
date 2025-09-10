@@ -779,10 +779,10 @@ defmodule TheMaestroWeb.SessionChatLive do
     cond do
       match?(%Ecto.Association.NotLoaded{}, saved) and session.auth_id ->
         sa = Auth.get_saved_authentication!(session.auth_id)
-        sa.provider |> to_string() |> String.to_existing_atom()
+        to_provider_atom(sa.provider)
 
       is_map(saved) ->
-        saved.provider |> to_string() |> String.to_existing_atom()
+        to_provider_atom(saved.provider)
 
       true ->
         # Fallback to openai to avoid crashes; will be corrected on next turn
@@ -808,15 +808,15 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   defp default_provider(session) do
     saved = session.saved_authentication
-    (saved && Atom.to_string(saved.provider)) || "openai"
+    (saved && to_string(saved.provider)) || "openai"
   end
 
   defp load_auth_options(socket, form) do
-    provider =
-      (form["provider"] || default_provider(socket.assigns.session)) |> String.to_existing_atom()
+    provider_value = form["provider"] || default_provider(socket.assigns.session)
 
+    # Accept provider as string for Auth context (it normalizes input)
     opts =
-      Auth.list_saved_authentications_by_provider(provider)
+      Auth.list_saved_authentications_by_provider(provider_value)
       |> Enum.map(fn sa ->
         label = "#{sa.name} (#{Atom.to_string(sa.auth_type)})"
         {label, sa.id}
@@ -854,7 +854,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp list_models_for_form(form) do
     with p when is_binary(p) <- form["provider"],
          a when a not in [nil, ""] <- form["auth_id"] do
-      provider = String.to_existing_atom(p)
+      provider = to_provider_atom(p)
       auth = Auth.get_saved_authentication!(a)
 
       case TheMaestro.Provider.list_models(provider, auth.auth_type, auth.name) do
@@ -863,6 +863,19 @@ defmodule TheMaestroWeb.SessionChatLive do
       end
     else
       _ -> []
+    end
+  end
+
+  # Convert a provider string to a known atom safely; default to :openai
+  defp to_provider_atom(p) when is_atom(p), do: p
+  defp to_provider_atom(p) when is_binary(p) do
+    allowed = TheMaestro.Provider.list_providers()
+    allowed_strings = Enum.map(allowed, &Atom.to_string/1)
+
+    if p in allowed_strings do
+      String.to_existing_atom(p)
+    else
+      :openai
     end
   end
 

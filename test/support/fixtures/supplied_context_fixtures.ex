@@ -12,7 +12,8 @@ defmodule TheMaestro.SuppliedContextFixtures do
       attrs
       |> Enum.into(%{
         metadata: %{},
-        name: "some name",
+        # ensure uniqueness across tests to avoid unique index violations
+        name: Map.get(attrs, :name, "some name-" <> Integer.to_string(:erlang.unique_integer([:positive, :monotonic]))),
         tags: %{},
         text: "some text",
         type: :persona,

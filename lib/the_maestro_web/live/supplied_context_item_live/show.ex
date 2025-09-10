@@ -14,7 +14,10 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Show do
           <.button navigate={~p"/supplied_context"}>
             <.icon name="hero-arrow-left" />
           </.button>
-          <.button variant="primary" navigate={~p"/supplied_context/#{@supplied_context_item}/edit?return_to=show"}>
+          <.button
+            variant="primary"
+            navigate={~p"/supplied_context/#{@supplied_context_item}/edit?return_to=show"}
+          >
             <.icon name="hero-pencil-square" /> Edit supplied_context_item
           </.button>
         </:actions>

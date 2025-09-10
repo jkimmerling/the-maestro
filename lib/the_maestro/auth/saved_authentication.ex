@@ -20,6 +20,10 @@ defmodule TheMaestro.Auth.SavedAuthentication do
     |> cast(attrs, [:provider, :auth_type, :name, :credentials, :expires_at])
     |> validate_required([:provider, :auth_type, :name, :credentials])
     |> validate_oauth_expiry()
+    |> unique_constraint([:provider, :auth_type, :name],
+      name: "saved_authentications_provider_auth_type_name_index",
+      message: "Authentication already exists for this provider, auth type, and name"
+    )
   end
 
   defp validate_oauth_expiry(%Ecto.Changeset{} = changeset) do
