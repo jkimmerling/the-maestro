@@ -235,9 +235,9 @@ defmodule TheMaestroWeb.SessionChatLive do
           nil ->
             socket
 
-          %TheMaestro.Personas.Persona{} = p ->
+          %TheMaestro.SuppliedContext.SuppliedContextItem{} = p ->
             pj =
-              Jason.encode!(%{"name" => p.name, "version" => 1, "persona_text" => p.prompt_text})
+              Jason.encode!(%{"name" => p.name, "version" => p.version || 1, "persona_text" => p.text})
 
             assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
         end
@@ -261,13 +261,13 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   @impl true
   def handle_event("save_persona", %{"name" => name, "prompt_text" => text}, socket) do
-    case TheMaestro.Personas.create_persona(%{name: name, prompt_text: text}) do
+    case SuppliedContext.create_item(%{type: :persona, name: name, text: text, version: 1}) do
       {:ok, persona} ->
         pj =
           Jason.encode!(%{
             "name" => persona.name,
-            "version" => 1,
-            "persona_text" => persona.prompt_text
+            "version" => persona.version || 1,
+            "persona_text" => persona.text
           })
 
         socket =
@@ -840,7 +840,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
       id ->
         try do
-          TheMaestro.Personas.get_persona!(to_string(id))
+          SuppliedContext.get_item!(to_string(id))
         rescue
           _ -> nil
         end

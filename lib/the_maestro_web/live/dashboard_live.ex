@@ -156,12 +156,12 @@ defmodule TheMaestroWeb.DashboardLive do
           params
 
         id ->
-          p = TheMaestro.Personas.get_persona!(id)
+          p = TheMaestro.SuppliedContext.get_item!(id)
 
           Map.put(params, "persona", %{
             "name" => p.name,
-            "version" => 1,
-            "persona_text" => p.prompt_text
+            "version" => p.version || 1,
+            "persona_text" => p.text
           })
       end
 

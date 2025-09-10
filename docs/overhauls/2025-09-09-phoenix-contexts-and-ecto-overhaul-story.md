@@ -115,7 +115,6 @@ Eliminate Direct Repo Usage (inventory‑driven)
 Refactor Plan — Phases & Checklists
 
 - Phase 0 — Research & Setup
-  - [ ] Create branch from `dev`: `git checkout -b dev/phoenix-contexts-overhaul`
   - [x] Archon RAG (before coding):
         archon:perform_rag_query(query="Phoenix contexts and Ecto best practices", match_count=4)
         archon:perform_rag_query(query="Elixir Ecto context boundaries and Repo usage", match_count=4)
