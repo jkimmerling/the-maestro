@@ -50,6 +50,15 @@ defmodule TheMaestroWeb.ChatEntryLive.Show do
           </select>
           <button class="btn btn-sm ml-2" type="submit">Attach</button>
         </.form>
+        <%= if @chat_entry.thread_id && @chat_entry.session_id do %>
+          <button
+            class="btn btn-sm ml-2 btn-error"
+            phx-click="detach_thread"
+            phx-value-tid={@chat_entry.thread_id}
+          >
+            Detach Thread
+          </button>
+        <% end %>
       </div>
     </Layouts.app>
     """
@@ -77,6 +86,16 @@ defmodule TheMaestroWeb.ChatEntryLive.Show do
      socket
      |> put_flash(:info, "Attached to session")
      |> push_navigate(to: ~p"/chat_history/#{entry}")}
+  end
+
+  def handle_event("detach_thread", %{"tid" => tid}, socket) do
+    _ = TheMaestro.Conversations.detach_thread(tid)
+    entry = %{socket.assigns.chat_entry | session_id: nil}
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Thread detached from session")
+     |> assign(:chat_entry, entry)}
   end
 
   defp session_options do

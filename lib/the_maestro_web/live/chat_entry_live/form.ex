@@ -80,7 +80,7 @@ defmodule TheMaestroWeb.ChatEntryLive.Form do
         {:noreply,
          socket
          |> put_flash(:info, "Chat entry updated successfully")
-         |> push_redirect(to: return_path(socket.assigns.return_to, chat_entry))}
+         |> push_navigate(to: return_path(socket.assigns.return_to, chat_entry))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
@@ -93,7 +93,7 @@ defmodule TheMaestroWeb.ChatEntryLive.Form do
         {:noreply,
          socket
          |> put_flash(:info, "Chat entry created successfully")
-         |> push_redirect(to: return_path(socket.assigns.return_to, chat_entry))}
+         |> push_navigate(to: return_path(socket.assigns.return_to, chat_entry))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}

@@ -744,6 +744,13 @@ defmodule TheMaestroWeb.DashboardLive do
         <button class="btn" phx-click="open_session_modal">New Session</button>
       </div>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="card bg-base-200 p-4">
+          <div class="font-semibold text-base">Chat Histories</div>
+          <div class="text-xs opacity-70">Browse orphaned chats and reattach to sessions.</div>
+          <div class="mt-2 space-x-2">
+            <.link class="btn btn-xs" navigate={~p"/chat_history"}>Open Chat Histories</.link>
+          </div>
+        </div>
         <%= for s <- @sessions do %>
           <div class="card bg-base-200 p-4" id={"session-" <> to_string(s.id)}>
             <div class="font-semibold text-base">{session_label(s)}</div>

@@ -224,6 +224,18 @@ defmodule TheMaestro.Conversations do
   end
 
   @doc """
+  Detaches a thread from any session (sets session_id = nil for all entries).
+  """
+  def detach_thread(thread_id) when is_binary(thread_id) do
+    {count, _} =
+      Repo.update_all(from(e in ChatEntry, where: e.thread_id == ^thread_id),
+        set: [session_id: nil]
+      )
+
+    {:ok, count}
+  end
+
+  @doc """
   Returns lightweight session options for selects: [{label, id}].
   """
   def list_sessions_brief do
