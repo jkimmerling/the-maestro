@@ -377,7 +377,17 @@ use Ecto.Schema
   defp compat(%TheMaestro.Auth.SavedAuthentication{} = rec) do
     provider = rec.provider
     provider = if is_binary(provider), do: String.to_atom(provider), else: provider
-    %{rec | provider: provider}
+
+    %__MODULE__{
+      id: rec.id,
+      provider: provider,
+      auth_type: rec.auth_type,
+      name: rec.name,
+      credentials: rec.credentials,
+      expires_at: rec.expires_at,
+      inserted_at: rec.inserted_at,
+      updated_at: rec.updated_at
+    }
   end
   defp compat(%__MODULE__{} = rec), do: rec
 end
