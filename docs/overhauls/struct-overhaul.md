@@ -266,3 +266,8 @@ Operational tips:
 - Introduce `CombinedChat` last; start with manual `from_map/1`/`to_map/1` calls in `Conversations` to avoid any type surprises.
 - Add golden request fixtures for OAuth adapters before touching any streaming code; they are your net.
 - Keep all struct constructors side‑effect‑free and fast; prefer fail‑fast `new!/1` in the core paths and `new/1` for user input flows.
+
+## Research Notes (2025‑09‑10)
+
+- Structs pattern-match like maps in Elixir, enabling a safe transition from map-shaped events to `%StreamEvent{}` with shims for legacy consumers.
+- For JSONB persistence, prefer `embedded_schema` when you need validations at the boundary. Use a custom `Ecto.Type` to automate cast/load if you want DB field integration; otherwise a plain struct with `to_map/1` and `from_map/1` is sufficient.
