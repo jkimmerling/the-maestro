@@ -125,6 +125,7 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:session_auth_options, build_auth_options_for(:openai))
      |> assign(:session_model_options, [])
      |> assign(:auth_options, build_auth_options())
+     |> assign(:orphan_threads, orphan_thread_options())
      |> assign(:session_form, to_form(cs))
      |> assign(:show_session_modal, true)}
   end
@@ -232,7 +233,16 @@ defmodule TheMaestroWeb.DashboardLive do
 
   def handle_event("session_save", %{"session" => params}, socket) do
     with {:ok, params2} <- build_session_params(params),
-         {:ok, _} <- Conversations.create_session(params2) do
+         {:ok, session} <- Conversations.create_session(params2) do
+      case Map.get(params, "attach_thread_id") do
+        tid when is_binary(tid) and tid != "" ->
+          _ = Conversations.attach_thread_to_session(tid, session.id)
+          :ok
+
+        _ ->
+          :ok
+      end
+
       {:noreply,
        socket
        |> put_flash(:info, "Session created")
@@ -324,6 +334,13 @@ defmodule TheMaestroWeb.DashboardLive do
 
   defp build_persona_options do
     TheMaestro.SuppliedContext.list_items(:persona) |> Enum.map(&{&1.name, &1.id})
+  end
+
+  defp orphan_thread_options do
+    Conversations.list_orphan_threads()
+    |> Enum.map(fn %{thread_id: tid, label: label} ->
+      {label || "thread-" <> String.slice(tid, 0, 8), tid}
+    end)
   end
 
   # agent options removed
@@ -599,7 +616,7 @@ defmodule TheMaestroWeb.DashboardLive do
             </div>
             <div class="mt-2">
               <label class="text-xs">Chat History</label>
-              <div class="text-sm opacity-80">Start New Chat</div>
+              <div class="text-sm opacity-80">Start New Chat or attach an existing thread</div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <.input
@@ -608,6 +625,13 @@ defmodule TheMaestroWeb.DashboardLive do
                 label="Persona"
                 options={@persona_options}
                 prompt="(optional)"
+              />
+              <.input
+                name="session[attach_thread_id]"
+                type="select"
+                label="Attach Existing Thread"
+                options={@orphan_threads}
+                prompt="(Start New Chat)"
               />
               <div>
                 <label class="text-xs">Memory (JSON)</label>

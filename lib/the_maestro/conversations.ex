@@ -180,6 +180,61 @@ defmodule TheMaestro.Conversations do
   end
 
   @doc """
+  Lists orphan chat history entries (those not attached to a session).
+  Intended for the Chat Histories admin view.
+  """
+  def list_chat_history do
+    Repo.all(from e in ChatEntry, where: is_nil(e.session_id), order_by: [desc: e.inserted_at])
+  end
+
+  @doc """
+  Returns a list of orphan thread ids and labels for selection in UIs.
+  """
+  def list_orphan_threads do
+    Repo.all(
+      from e in ChatEntry,
+        where: is_nil(e.session_id) and not is_nil(e.thread_id),
+        group_by: [e.thread_id],
+        order_by: [desc: max(e.inserted_at)],
+        select: %{thread_id: e.thread_id, label: max(e.thread_label)}
+    )
+  end
+
+  @doc """
+  Attaches all entries in a thread to the given session.
+  """
+  def attach_thread_to_session(thread_id, session_id)
+      when is_binary(thread_id) and is_binary(session_id) do
+    {count, _} =
+      Repo.update_all(
+        from(e in ChatEntry, where: e.thread_id == ^thread_id),
+        set: [session_id: session_id]
+      )
+
+    {:ok, count}
+  end
+
+  @doc """
+  Attaches a single chat entry to a session (used if no thread_id present).
+  """
+  def attach_entry_to_session(entry_id, session_id)
+      when is_binary(entry_id) and is_binary(session_id) do
+    entry = get_chat_entry!(entry_id)
+    update_chat_entry(entry, %{session_id: session_id})
+  end
+
+  @doc """
+  Returns lightweight session options for selects: [{label, id}].
+  """
+  def list_sessions_brief do
+    Repo.all(from s in Session, order_by: [desc: s.inserted_at])
+    |> Enum.map(fn s ->
+      {s.name || (s.saved_authentication && s.saved_authentication.name) ||
+         "sess-" <> String.slice(s.id, 0, 8), s.id}
+    end)
+  end
+
+  @doc """
   Updates a chat entry.
   """
   def update_chat_entry(%ChatEntry{} = entry, attrs) do
