@@ -293,9 +293,9 @@ Refactor Plan — Phases & Checklists
   - [ ] Delete lingering `alias TheMaestro.Repo` usage outside contexts
 
 - Phase 3 — Baseline Refresh Execution
-  - [ ] Archive old domain migrations into `priv/repo/_archive/`
-  - [ ] Add one‑time migration to drop domain tables only (not Oban)
-  - [ ] Run new generator migrations (no `ecto.drop`)
+  - [x] Archive old domain migrations into `priv/repo/_archive/`
+  - [x] Add one‑time migration to drop domain tables only (not Oban)
+  - [x] Run new generator migrations (no `ecto.drop`) — dev
   - [ ] No seeds required
   - [ ] Ensure `mix ecto.migrate` is clean on dev/staging; coordinate maintenance window for prod
 
