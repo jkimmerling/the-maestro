@@ -342,7 +342,7 @@ defmodule TheMaestro.Sessions.Manager do
       }
 
       updated2 =
-        (latest.combined_chat || %{"messages" => []})
+        latest.combined_chat
         |> append_assistant(text, req_meta)
         |> Map.put("events", events || [])
 

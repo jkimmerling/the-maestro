@@ -163,6 +163,7 @@ defmodule TheMaestro.Conversations do
         order_by: [desc: e.turn_index],
         limit: 1
     )
+    |> normalize_combined_chat_entry()
   end
 
   @doc """
@@ -174,6 +175,8 @@ defmodule TheMaestro.Conversations do
   Creates a chat entry.
   """
   def create_chat_entry(attrs) do
+    attrs = normalize_combined_chat_attr(attrs)
+
     %ChatEntry{}
     |> ChatEntry.changeset(attrs)
     |> Repo.insert()
@@ -250,6 +253,8 @@ defmodule TheMaestro.Conversations do
   Updates a chat entry.
   """
   def update_chat_entry(%ChatEntry{} = entry, attrs) do
+    attrs = normalize_combined_chat_attr(attrs)
+
     entry
     |> ChatEntry.changeset(attrs)
     |> Repo.update()
@@ -295,6 +300,7 @@ defmodule TheMaestro.Conversations do
         order_by: [desc: e.turn_index],
         limit: 1
     )
+    |> normalize_combined_chat_entry()
   end
 
   @doc """
@@ -353,6 +359,9 @@ defmodule TheMaestro.Conversations do
           else: []
         )
     }
+
+    alias TheMaestro.Domain.CombinedChat
+    canonical = CombinedChat.new(canonical) |> CombinedChat.to_map()
 
     turn_idx = next_turn_index(session.id)
 
@@ -489,6 +498,9 @@ defmodule TheMaestro.Conversations do
             )
         }
 
+        alias TheMaestro.Domain.CombinedChat
+        canonical = CombinedChat.new(canonical) |> CombinedChat.to_map()
+
         idx = 0
 
         {:ok, entry} =
@@ -505,5 +517,30 @@ defmodule TheMaestro.Conversations do
 
         {:ok, {session, entry}}
     end
+  end
+
+  # ===== Internal normalization helpers =====
+
+  defp normalize_combined_chat_attr(%{"combined_chat" => cc} = attrs) when is_map(cc) do
+    alias TheMaestro.Domain.CombinedChat
+    Map.put(attrs, "combined_chat", CombinedChat.new(cc) |> CombinedChat.to_map())
+  end
+
+  defp normalize_combined_chat_attr(%{combined_chat: cc} = attrs) when is_map(cc) do
+    alias TheMaestro.Domain.CombinedChat
+    Map.put(attrs, :combined_chat, CombinedChat.new(cc) |> CombinedChat.to_map())
+  end
+
+  defp normalize_combined_chat_attr(attrs), do: attrs
+
+  defp normalize_combined_chat_entry(nil), do: nil
+
+  defp normalize_combined_chat_entry(%ChatEntry{} = e) do
+    cc = e.combined_chat || %{}
+
+    alias TheMaestro.Domain.CombinedChat
+    norm = CombinedChat.from_map(cc) |> CombinedChat.to_map()
+
+    %ChatEntry{e | combined_chat: norm}
   end
 end

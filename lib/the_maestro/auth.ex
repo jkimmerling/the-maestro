@@ -854,7 +854,8 @@ defmodule TheMaestro.Auth do
     |> SASchema.changeset(full)
     |> Repo.insert(
       on_conflict: {:replace, [:credentials, :expires_at, :updated_at]},
-      conflict_target: [:provider, :auth_type, :name]
+      conflict_target: [:provider, :auth_type, :name],
+      returning: true
     )
   end
 
