@@ -183,7 +183,6 @@ defmodule TheMaestro.Chat do
   end
 
   # ----- Helpers -----
-  # Note: use fully-qualified calls to Translator to avoid alias warnings in test builds
 
   defp topic(session_id), do: "session:" <> session_id
 

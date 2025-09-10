@@ -509,4 +509,39 @@ defmodule TheMaestroWeb.CoreComponents do
   def translate_errors(errors, field) when is_list(errors) do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
   end
+
+  @doc """
+  Collapsible JSON viewer for maps/lists.
+
+  - Renders a <details>/<summary> with a pretty-printed JSON payload
+  - Uses a scrollable <pre> with phx-no-curly-interpolation to safely render braces
+  """
+  attr :data, :any, required: true
+  attr :summary, :string, default: nil
+  attr :max_height, :string, default: "max-h-64"
+
+  def json_viewer(assigns) do
+    data = assigns.data || %{}
+
+    str =
+      cond do
+        is_map(data) or is_list(data) -> Jason.encode!(data, pretty: true)
+        is_binary(data) -> data
+        true -> to_string(data)
+      end
+
+    assigns = assign(assigns, :str, str)
+
+    ~H"""
+    <details class="group">
+      <summary class="cursor-pointer text-xs text-amber-400 hover:underline">
+        {@summary || "JSON"}
+      </summary>
+      <pre
+        phx-no-curly-interpolation
+        class={["mt-2 p-2 bg-base-200 rounded text-xs overflow-auto", @max_height]}
+      ><%= @str %></pre>
+    </details>
+    """
+  end
 end

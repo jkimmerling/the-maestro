@@ -10,7 +10,7 @@ defmodule TheMaestroWeb.DashboardLiveActiveTest do
     %{session: s}
   end
 
-  test "ACTIVE badge toggles with :ai_stream2 events", %{conn: conn, session: s} do
+  test "ACTIVE badge toggles with session_stream envelope", %{conn: conn, session: s} do
     {:ok, view, _html} = live(conn, ~p"/dashboard")
 
     # Simulate a running stream
@@ -19,7 +19,13 @@ defmodule TheMaestroWeb.DashboardLiveActiveTest do
     Phoenix.PubSub.broadcast(
       TheMaestro.PubSub,
       "session:" <> s.id,
-      {:ai_stream2, s.id, sid, %{type: :thinking}}
+      {:session_stream,
+       %TheMaestro.Domain.StreamEnvelope{
+         session_id: s.id,
+         stream_id: sid,
+         event: %TheMaestro.Domain.StreamEvent{type: :thinking},
+         at_ms: System.monotonic_time(:millisecond)
+       }}
     )
 
     assert view |> element("#session-#{s.id}") |> render() =~ "ACTIVE"
@@ -28,7 +34,13 @@ defmodule TheMaestroWeb.DashboardLiveActiveTest do
     Phoenix.PubSub.broadcast(
       TheMaestro.PubSub,
       "session:" <> s.id,
-      {:ai_stream2, s.id, sid, %{type: :finalized}}
+      {:session_stream,
+       %TheMaestro.Domain.StreamEnvelope{
+         session_id: s.id,
+         stream_id: sid,
+         event: %TheMaestro.Domain.StreamEvent{type: :finalized},
+         at_ms: System.monotonic_time(:millisecond)
+       }}
     )
 
     refute view |> element("#session-#{s.id}") |> render() =~ "ACTIVE"

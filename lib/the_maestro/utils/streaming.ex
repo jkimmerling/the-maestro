@@ -54,18 +54,14 @@ defmodule TheMaestro.Streaming do
   """
 
   require Logger
+  alias TheMaestro.Domain.{StreamEvent, ToolCall, Usage}
+  alias TheMaestro.Streaming.{Function, FunctionCall, Message}
 
   @type provider :: :openai | :anthropic | :gemini
   @type message_type :: :content | :function_call | :usage | :error | :done
 
-  @type stream_message :: %{
-          type: message_type(),
-          content: String.t() | nil,
-          function_call: map() | nil,
-          usage: map() | nil,
-          error: String.t() | nil,
-          metadata: map()
-        }
+  @typedoc "Canonical domain stream event"
+  @type stream_message :: StreamEvent.t()
 
   @doc """
   Parse a streaming response from the specified provider.
@@ -101,19 +97,21 @@ defmodule TheMaestro.Streaming do
 
     stream
     |> parse_sse_stream(opts)
+    # Provider handlers emit %TheMaestro.Streaming.Message{} structs
     |> Stream.flat_map(&handler.handle_event(&1, opts))
+    # Map to domain-level %StreamEvent{} envelope
+    |> Stream.map(&to_domain_event/1)
   rescue
     error ->
       Logger.error("Stream parsing failed for #{provider}: #{inspect(error)}")
 
       [
-        %{
+        %StreamEvent{
           type: :error,
-          error: "Stream parsing failed: #{inspect(error)}",
           content: nil,
-          function_call: nil,
+          tool_calls: [],
           usage: nil,
-          metadata: %{}
+          raw: %{error: "Stream parsing failed: #{inspect(error)}"}
         }
       ]
   end
@@ -167,6 +165,80 @@ defmodule TheMaestro.Streaming do
   defp get_handler(provider) do
     raise ArgumentError, "Unsupported provider: #{inspect(provider)}"
   end
+
+  # Convert normalized streaming message to domain event
+  defp to_domain_event(%Message{} = msg) do
+    %StreamEvent{
+      type: normalize_type(msg.type),
+      content: msg.content,
+      tool_calls: to_tool_calls(msg.function_call),
+      usage: to_usage(msg.usage),
+      error: msg.error,
+      raw: Map.new(msg.metadata || %{})
+    }
+  end
+
+  defp to_domain_event(%{type: t} = msg) when is_map(msg) do
+    # Fallback for legacy map-based messages
+    %StreamEvent{
+      type: normalize_type(t),
+      content: Map.get(msg, :content) || Map.get(msg, "content"),
+      tool_calls:
+        to_tool_calls(
+          Map.get(msg, :function_call) || Map.get(msg, "function_call") ||
+            Map.get(msg, :tool_calls) || Map.get(msg, "tool_calls")
+        ),
+      usage: to_usage(Map.get(msg, :usage) || Map.get(msg, "usage")),
+      error: Map.get(msg, :error) || Map.get(msg, "error"),
+      raw: Map.drop(msg, [:type, :content, :function_call, :usage, :tool_calls])
+    }
+  end
+
+  defp to_domain_event(other) do
+    %TheMaestro.Domain.StreamEvent{type: :error, raw: %{unknown: other}}
+  end
+
+  defp normalize_type(t) when t in [:content, :function_call, :usage, :done, :error], do: t
+
+  defp normalize_type(t) when is_binary(t) do
+    case t do
+      "content" -> :content
+      "function_call" -> :function_call
+      "usage" -> :usage
+      "done" -> :done
+      "error" -> :error
+      _ -> :content
+    end
+  end
+
+  defp normalize_type(_), do: :content
+
+  defp to_tool_calls(nil), do: []
+
+  defp to_tool_calls(list) when is_list(list) do
+    Enum.flat_map(list, fn
+      %FunctionCall{id: id, function: %Function{name: name, arguments: args}} ->
+        [%ToolCall{id: id, name: name, arguments: args || ""}]
+
+      %ToolCall{} = c ->
+        [c]
+
+      %{"id" => id, "name" => name, "arguments" => args} ->
+        [%ToolCall{id: id, name: name, arguments: to_string(args || "")}]
+
+      %{id: id, name: name, arguments: args} ->
+        [%ToolCall{id: id, name: name, arguments: to_string(args || "")}]
+
+      _ ->
+        []
+    end)
+  end
+
+  defp to_tool_calls(_), do: []
+
+  defp to_usage(nil), do: nil
+  defp to_usage(%Usage{} = u), do: u
+  defp to_usage(%{} = u), do: Usage.new!(u)
 
   # Parse SSE buffer into events
   @doc """

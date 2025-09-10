@@ -98,6 +98,27 @@ defmodule TheMaestro.Conversations.Translator do
   defp gemini_part_to_text(_), do: %{"type" => "text", "text" => ""}
 
   # ==== Provider event normalizers ====
+  defp openai_evt(%{type: :function_call, tool_calls: calls}) when is_list(calls) do
+    [
+      %{
+        type: "function_call",
+        calls:
+          for c <- calls do
+            case c do
+              %TheMaestro.Domain.ToolCall{id: id, name: name, arguments: args} ->
+                %{"id" => id, "name" => name, "arguments" => args || ""}
+
+              %{id: id, name: name, arguments: args} ->
+                %{"id" => id, "name" => name, "arguments" => args || ""}
+
+              %{id: id, function: %{name: name, arguments: args}} ->
+                %{"id" => id, "name" => name, "arguments" => args || ""}
+            end
+          end
+      }
+    ]
+  end
+
   defp openai_evt(%{type: :function_call, function_call: calls}) when is_list(calls) do
     [
       %{
@@ -110,8 +131,9 @@ defmodule TheMaestro.Conversations.Translator do
     ]
   end
 
-  defp openai_evt(%{type: :usage, usage: usage}) when is_map(usage) do
-    [%{type: "usage", usage: usage}]
+  defp openai_evt(%{type: :usage, usage: usage}) do
+    usage_map = if is_struct(usage), do: Map.from_struct(usage), else: usage
+    [%{type: "usage", usage: usage_map}]
   end
 
   defp openai_evt(%{type: :content, content: delta}) when is_binary(delta),

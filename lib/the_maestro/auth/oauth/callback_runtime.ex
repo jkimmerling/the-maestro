@@ -16,7 +16,6 @@ defmodule TheMaestro.OAuthCallbackRuntime do
   @name __MODULE__
   @default_timeout_ms 180_000
 
-  # Public API
   def start_link(_args) do
     GenServer.start_link(__MODULE__, %{}, name: @name)
   end
@@ -46,7 +45,6 @@ defmodule TheMaestro.OAuthCallbackRuntime do
     GenServer.call(@name, :current_port)
   end
 
-  # GenServer callbacks
   @impl true
   def init(_), do: {:ok, %{server_pid: nil, timer_ref: nil, port: port_from_env()}}
 

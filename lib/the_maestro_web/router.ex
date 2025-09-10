@@ -18,6 +18,10 @@ defmodule TheMaestroWeb.Router do
     pipe_through :browser
     live "/", DashboardLive, :index
     live "/dashboard", DashboardLive, :index
+    live "/chat_history", ChatEntryLive.Index, :index
+    live "/chat_history/new", ChatEntryLive.Form, :new
+    live "/chat_history/:id", ChatEntryLive.Show, :show
+    live "/chat_history/:id/edit", ChatEntryLive.Form, :edit
     live "/auths/new", AuthNewLive, :new
     live "/auths/:id", AuthShowLive, :show
     live "/auths/:id/edit", AuthEditLive, :edit

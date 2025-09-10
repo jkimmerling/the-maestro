@@ -3,8 +3,6 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   alias TheMaestro.Auth
   alias TheMaestro.Conversations
-  alias TheMaestro.Conversations.Translator
-  alias TheMaestro.Provider
   alias TheMaestro.SuppliedContext
   require Logger
 
@@ -200,54 +198,6 @@ defmodule TheMaestroWeb.SessionChatLive do
     socket = maybe_reload_models(socket, params)
     socket = maybe_mirror_persona(socket, params, form)
     {:noreply, socket}
-  end
-
-  defp maybe_reload_auth_options(socket, params, form) do
-    if Map.has_key?(params, "provider") do
-      socket = socket |> load_auth_options(form) |> assign(:config_models, [])
-      new_form = socket.assigns.config_form
-      opts = new_form["auth_options"] || []
-
-      new_auth_id =
-        case opts do
-          [{_l, id} | _] -> id
-          _ -> nil
-        end
-
-      assign(socket, :config_form, Map.put(new_form, "auth_id", new_auth_id))
-    else
-      socket
-    end
-  end
-
-  defp maybe_reload_models(socket, params) do
-    if Map.has_key?(params, "auth_id") do
-      models = list_models_for_form(socket.assigns.config_form)
-      assign(socket, :config_models, models)
-    else
-      socket
-    end
-  end
-
-  defp maybe_mirror_persona(socket, params, form) do
-    if Map.has_key?(params, "persona_id") do
-      case get_persona_for_form(form) do
-        nil ->
-          socket
-
-        %TheMaestro.SuppliedContext.SuppliedContextItem{} = p ->
-          pj =
-            Jason.encode!(%{
-              "name" => p.name,
-              "version" => p.version || 1,
-              "persona_text" => p.text
-            })
-
-          assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
-      end
-    else
-      socket
-    end
   end
 
   # ==== Persona modal ====
@@ -547,10 +497,14 @@ defmodule TheMaestroWeb.SessionChatLive do
   require Logger
 
   @impl true
-  # Show thinking indicator until first text arrives
   def handle_info(
-        {:ai_stream, id, %{type: :content, metadata: %{thinking: true}}},
-        %{assigns: %{stream_id: id}} = socket
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           stream_id: id,
+           event: %TheMaestro.Domain.StreamEvent{type: :thinking}
+         }},
+        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       ) do
     {:noreply,
      socket
@@ -558,9 +512,15 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(thinking?: true)}
   end
 
+  @impl true
   def handle_info(
-        {:ai_stream, id, %{type: :content, content: chunk}},
-        %{assigns: %{stream_id: id}} = socket
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           stream_id: id,
+           event: %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
+         }},
+        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       ) do
     current = socket.assigns.partial_answer || ""
     delta = dedup_delta(current, chunk)
@@ -572,15 +532,23 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(partial_answer: new_partial, thinking?: false)}
   end
 
-  # Capture function/tool calls as they arrive and accumulate them for UI/persistence
   def handle_info(
-        {:ai_stream, id, %{type: :function_call, function_call: calls}},
-        %{assigns: %{stream_id: id}} = socket
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           stream_id: id,
+           event: %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
+         }},
+        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       )
       when is_list(calls) do
     new =
-      Enum.map(calls, fn %{id: cid, function: %{name: name, arguments: args}} ->
-        %{"id" => cid, "name" => name, "arguments" => args || ""}
+      Enum.map(calls, fn
+        %TheMaestro.Domain.ToolCall{id: cid, name: name, arguments: args} ->
+          %{"id" => cid, "name" => name, "arguments" => args || ""}
+
+        %{id: cid, name: name, arguments: args} ->
+          %{"id" => cid, "name" => name, "arguments" => args || ""}
       end)
 
     {:noreply,
@@ -591,8 +559,13 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   def handle_info(
-        {:ai_stream, id, %{type: :error, error: err}},
-        %{assigns: %{stream_id: id}} = socket
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           stream_id: id,
+           event: %TheMaestro.Domain.StreamEvent{type: :error, error: err}
+         }},
+        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       ) do
     Logger.error("stream error: #{inspect(err)}")
 
@@ -631,10 +604,16 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   @impl true
   def handle_info(
-        {:ai_stream, id, %{type: :usage, usage: usage}},
-        %{assigns: %{stream_id: id}} = socket
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           stream_id: id,
+           event: %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage}
+         }},
+        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       ) do
-    # Accumulate latest usage for this stream to attach on finalize
+    usage = if is_struct(usage), do: Map.from_struct(usage), else: usage
+
     {:noreply,
      socket
      |> push_event(%{kind: "ai", type: "usage", usage: usage, at: now_ms()})
@@ -650,10 +629,22 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   def handle_info(
-        {:ai_stream, id, %{type: :finalized, content: final_text, meta: req_meta, usage: usage}},
-        %{assigns: %{stream_id: id}} = socket
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           stream_id: id,
+           event: %TheMaestro.Domain.StreamEvent{
+             type: :finalized,
+             content: final_text,
+             usage: usage,
+             raw: raw
+           }
+         }},
+        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       ) do
-    meta = Map.put(req_meta || %{}, "usage", usage || %{})
+    usage_map = if is_struct(usage), do: Map.from_struct(usage), else: usage || %{}
+    req_meta = (raw && Map.get(raw, :meta)) || %{}
+    meta = Map.put(req_meta, "usage", usage_map)
     messages = append_assistant_message(socket.assigns.messages || [], final_text || "", meta)
 
     {:noreply,
@@ -672,22 +663,64 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:messages, messages)}
   end
 
-  def handle_info({:ai_stream, id, %{type: :done}}, %{assigns: %{stream_id: id}} = socket) do
+  def handle_info(
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           stream_id: id,
+           event: %TheMaestro.Domain.StreamEvent{type: :done}
+         }},
+        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
+      ) do
     # Manager now owns finalization and tool follow-ups; we only mark UI state
     {:noreply, push_event(socket, %{kind: "ai", type: "done", at: now_ms()})}
   end
 
-  # Ignore stale stream messages (ids that do not match current stream)
   def handle_info(
-        {:ai_stream, other_id, _msg},
-        %{assigns: %{stream_id: id}} = socket
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{session_id: sid, stream_id: other_id}},
+        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       )
       when other_id != id do
     {:noreply, socket}
   end
 
+  def handle_info({:session_stream, %TheMaestro.Domain.StreamEnvelope{}}, socket),
+    do: {:noreply, socket}
+
   # Internal: retry the current provider call after a backoff
   def handle_info({:retry_stream, _attempt}, socket), do: {:noreply, do_retry_stream(socket)}
+
+  # Internal tool signals (defensive: accept with or without ref wrapper)
+  def handle_info({:__shell_done__, {out, status}}, socket) do
+    {:noreply,
+     push_event(socket, %{
+       kind: "internal",
+       type: "shell_done",
+       exit_code: status,
+       out: out,
+       at: now_ms()
+     })}
+  end
+
+  def handle_info({ref, {:__shell_done__, {out, status}}}, socket) when is_reference(ref) do
+    {:noreply,
+     push_event(socket, %{
+       kind: "internal",
+       type: "shell_done",
+       exit_code: status,
+       out: out,
+       at: now_ms()
+     })}
+  end
+
+  # ===== Event logging helpers =====
+  defp now_ms, do: System.system_time(:millisecond)
+
+  defp push_event(%{assigns: assigns} = socket, ev) when is_map(ev) do
+    buf = assigns[:event_buffer] || []
+    assign(socket, :event_buffer, buf ++ [ev])
+  end
 
   defp do_retry_stream(socket) do
     case socket.assigns do
@@ -721,39 +754,6 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
-  # Internal tool signals (defensive: accept with or without ref wrapper)
-  def handle_info({:__shell_done__, {out, status}}, socket) do
-    {:noreply,
-     push_event(socket, %{
-       kind: "internal",
-       type: "shell_done",
-       exit_code: status,
-       out: out,
-       at: now_ms()
-     })}
-  end
-
-  def handle_info({ref, {:__shell_done__, {out, status}}}, socket) when is_reference(ref) do
-    {:noreply,
-     push_event(socket, %{
-       kind: "internal",
-       type: "shell_done",
-       exit_code: status,
-       out: out,
-       at: now_ms()
-     })}
-  end
-
-  # (moved catch-all to bottom to avoid shadowing specialized clauses)
-
-  # ===== Event logging helpers =====
-  defp now_ms, do: System.system_time(:millisecond)
-
-  defp push_event(%{assigns: assigns} = socket, ev) when is_map(ev) do
-    buf = assigns[:event_buffer] || []
-    assign(socket, :event_buffer, buf ++ [ev])
-  end
-
   # Detect Anthropic overloaded errors from error strings
   defp anth_overloaded?(err) when is_binary(err) do
     down = String.downcase(err)
@@ -778,8 +778,9 @@ defmodule TheMaestroWeb.SessionChatLive do
   # provider/auth helpers moved to Chat facade
 
   defp default_provider(session) do
-    saved = session.saved_authentication
-    (saved && to_string(saved.provider)) || "openai"
+    session
+    |> TheMaestro.Chat.provider_for_session()
+    |> Atom.to_string()
   end
 
   defp load_auth_options(socket, form) do
@@ -857,14 +858,54 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
-  # IDs are binary_id strings now; no integer casting
+  # ==== Config helpers (kept at bottom to keep handle_event/handle_info clauses contiguous) ====
+  defp maybe_reload_auth_options(socket, params, form) do
+    if Map.has_key?(params, "provider") do
+      socket = socket |> load_auth_options(form) |> assign(:config_models, [])
+      new_form = socket.assigns.config_form
+      opts = new_form["auth_options"] || []
 
-  # request meta helpers moved to orchestrator
+      new_auth_id =
+        case opts do
+          [{_l, id} | _] -> id
+          _ -> nil
+        end
 
-  # moved to orchestrator; no-op stub removed
-  # (old in-LV follow-up logic removed; handled by orchestrator)
+      assign(socket, :config_form, Map.put(new_form, "auth_id", new_auth_id))
+    else
+      socket
+    end
+  end
 
-  # moved to orchestrator
+  defp maybe_reload_models(socket, params) do
+    if Map.has_key?(params, "auth_id") do
+      models = list_models_for_form(socket.assigns.config_form)
+      assign(socket, :config_models, models)
+    else
+      socket
+    end
+  end
+
+  defp maybe_mirror_persona(socket, params, form) do
+    if Map.has_key?(params, "persona_id") do
+      case get_persona_for_form(form) do
+        nil ->
+          socket
+
+        %TheMaestro.SuppliedContext.SuppliedContextItem{} = p ->
+          pj =
+            Jason.encode!(%{
+              "name" => p.name,
+              "version" => p.version || 1,
+              "persona_text" => p.text
+            })
+
+          assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
+      end
+    else
+      socket
+    end
+  end
 
   defp append_assistant_message(messages, final_text, meta) do
     messages ++

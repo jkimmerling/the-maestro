@@ -13,14 +13,16 @@ defmodule TheMaestro.Domain.StreamEvent do
             content: nil,
             tool_calls: [],
             usage: nil,
+            error: nil,
             raw: %{}
 
-  @type type :: :content | :function_call | :usage | :done | :error
+  @type type :: :content | :function_call | :usage | :done | :error | :thinking | :finalized
   @type t :: %__MODULE__{
           type: type(),
           content: String.t() | nil,
           tool_calls: [ToolCall.t()],
           usage: Usage.t() | nil,
+          error: String.t() | nil,
           raw: map()
         }
 
@@ -42,7 +44,27 @@ defmodule TheMaestro.Domain.StreamEvent do
     ev
   end
 
-  defp normalize_type(t) when t in [:content, :function_call, :usage, :done, :error], do: t
+  @doc """
+  Convenience accessor for `content`.
+  """
+  @spec content(t()) :: String.t() | nil
+  def content(%__MODULE__{content: c}), do: c
+
+  @doc """
+  Convenience accessor for `usage`.
+  """
+  @spec usage(t()) :: Usage.t() | nil
+  def usage(%__MODULE__{usage: u}), do: u
+
+  @doc """
+  Convenience accessor for `tool_calls`.
+  """
+  @spec tool_calls(t()) :: [ToolCall.t()]
+  def tool_calls(%__MODULE__{tool_calls: tc}), do: tc || []
+
+  defp normalize_type(t)
+       when t in [:content, :function_call, :usage, :done, :error, :thinking, :finalized],
+       do: t
 
   defp normalize_type(t) when is_binary(t) do
     case t do
@@ -51,6 +73,8 @@ defmodule TheMaestro.Domain.StreamEvent do
       "usage" -> :usage
       "done" -> :done
       "error" -> :error
+      "thinking" -> :thinking
+      "finalized" -> :finalized
       _ -> :content
     end
   end

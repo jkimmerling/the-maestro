@@ -24,6 +24,8 @@ defmodule TheMaestroWeb.DashboardLive do
       |> assign(:show_session_dir_picker, false)
       |> assign(:page_title, "Dashboard")
       |> assign(:active_streams, %{})
+      |> assign(:show_delete_session_modal, false)
+      |> assign(:delete_session_id, nil)
 
     # When connected, subscribe to all session topics to track active streams
     socket =
@@ -73,15 +75,44 @@ defmodule TheMaestroWeb.DashboardLive do
     end
   end
 
-  # Delete a chat session from the dashboard Sessions grid
+  # Begin delete flow with confirmation modal
   def handle_event("delete_session", %{"id" => id}, socket) do
-    # Session IDs are UUID strings; fetch and delete
+    {:noreply,
+     socket
+     |> assign(:show_delete_session_modal, true)
+     |> assign(:delete_session_id, id)}
+  end
+
+  def handle_event("cancel_delete_session", _params, socket) do
+    {:noreply,
+     socket |> assign(:show_delete_session_modal, false) |> assign(:delete_session_id, nil)}
+  end
+
+  # Delete the session only; preserve chat history (session_id will be nilified by FK)
+  def handle_event("confirm_delete_session_only", _params, socket) do
+    id = socket.assigns.delete_session_id
     session = Conversations.get_session!(id)
-    {:ok, _} = Conversations.delete_session(session)
+    _ = Conversations.delete_session_only(session)
 
     {:noreply,
      socket
-     |> put_flash(:info, "Session deleted")
+     |> put_flash(:info, "Session deleted; chat history preserved.")
+     |> assign(:show_delete_session_modal, false)
+     |> assign(:delete_session_id, nil)
+     |> assign(:sessions, Conversations.list_sessions_with_auth())}
+  end
+
+  # Delete the session and its associated chat history rows
+  def handle_event("confirm_delete_session_and_chat", _params, socket) do
+    id = socket.assigns.delete_session_id
+    session = Conversations.get_session!(id)
+    _ = Conversations.delete_session_and_chat(session)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Session and chat history deleted.")
+     |> assign(:show_delete_session_modal, false)
+     |> assign(:delete_session_id, nil)
      |> assign(:sessions, Conversations.list_sessions_with_auth())}
   end
 
@@ -94,6 +125,7 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:session_auth_options, build_auth_options_for(:openai))
      |> assign(:session_model_options, [])
      |> assign(:auth_options, build_auth_options())
+     |> assign(:orphan_threads, orphan_thread_options())
      |> assign(:session_form, to_form(cs))
      |> assign(:show_session_modal, true)}
   end
@@ -161,6 +193,40 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply, assign(socket, session_form: to_form(cs, action: :validate))}
   end
 
+  def handle_event("session_save", %{"session" => params}, socket) do
+    with {:ok, params2} <- build_session_params(params),
+         {:ok, session} <- Conversations.create_session(params2) do
+      case Map.get(params, "attach_thread_id") do
+        tid when is_binary(tid) and tid != "" ->
+          _ = Conversations.attach_thread_to_session(tid, session.id)
+          :ok
+
+        _ ->
+          :ok
+      end
+
+      {:noreply,
+       socket
+       |> put_flash(:info, "Session created")
+       |> assign(:show_session_modal, false)
+       |> assign(:show_session_dir_picker, false)
+       |> assign(:sessions, Conversations.list_sessions_with_auth())}
+    else
+      {:error, %Ecto.Changeset{} = cs} -> {:noreply, assign(socket, session_form: to_form(cs))}
+      {:error, _} -> {:noreply, socket}
+    end
+  end
+
+  # Keep all handle_event/3 clauses grouped together to avoid warnings
+  @impl true
+  def handle_event("close_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_session_modal, false)
+     |> assign(:show_session_dir_picker, false)
+     |> assign(:show_agent_modal, false)}
+  end
+
   # Keep all handle_event/3 clauses grouped together to avoid warnings
   defp build_session_params(params) do
     with {:ok, p2} <- mirror_persona(params),
@@ -199,35 +265,6 @@ defmodule TheMaestroWeb.DashboardLive do
     end
   end
 
-  def handle_event("session_save", %{"session" => params}, socket) do
-    with {:ok, params2} <- build_session_params(params),
-         {:ok, _} <- Conversations.create_session(params2) do
-      {:noreply,
-       socket
-       |> put_flash(:info, "Session created")
-       |> assign(:show_session_modal, false)
-       |> assign(:show_session_dir_picker, false)
-       |> assign(:sessions, Conversations.list_sessions_with_auth())}
-    else
-      {:error, %Ecto.Changeset{} = cs} -> {:noreply, assign(socket, session_form: to_form(cs))}
-      {:error, _} -> {:noreply, socket}
-    end
-  end
-
-  # moved earlier to keep handle_event clauses grouped
-
-  # Keep all handle_event/3 clauses grouped together to avoid warnings
-  @impl true
-  def handle_event("close_modal", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_session_modal, false)
-     |> assign(:show_session_dir_picker, false)
-     |> assign(:show_agent_modal, false)}
-  end
-
-  # moved earlier to keep handle_event clauses grouped
-
   @impl true
   def handle_info({TheMaestroWeb.DirectoryPicker, :selected, path, :new_session}, socket) do
     params = merge_session_params(socket, %{"working_dir" => path})
@@ -257,19 +294,23 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:auth_options, build_auth_options())}
   end
 
-  # Stream activity from session topics (published by Sessions.Manager)
-  def handle_info({:ai_stream2, session_id, _stream_id, %{type: type}}, socket) do
-    {:noreply, put_active_stream(socket, session_id, type)}
+  def handle_info(
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           event: %TheMaestro.Domain.StreamEvent{type: type}
+         }},
+        socket
+      ) do
+    {:noreply, put_active_stream(socket, sid, type)}
   end
+
+  def handle_info(_msg, socket), do: {:noreply, socket}
 
   defp put_active_stream(socket, session_id, type) do
     active? = type in [:thinking, :content, :function_call, :usage]
     assign(socket, :active_streams, Map.put(socket.assigns.active_streams, session_id, active?))
   end
-
-  def handle_info(_msg, socket), do: {:noreply, socket}
-
-  # duplicate clauses removed; see earlier grouped handle_event/3 definitions
 
   defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S %Z")
@@ -293,6 +334,13 @@ defmodule TheMaestroWeb.DashboardLive do
 
   defp build_persona_options do
     TheMaestro.SuppliedContext.list_items(:persona) |> Enum.map(&{&1.name, &1.id})
+  end
+
+  defp orphan_thread_options do
+    Conversations.list_orphan_threads()
+    |> Enum.map(fn %{thread_id: tid, label: label} ->
+      {label || "thread-" <> String.slice(tid, 0, 8), tid}
+    end)
   end
 
   # agent options removed
@@ -385,6 +433,15 @@ defmodule TheMaestroWeb.DashboardLive do
                 data-hotkey-label="Context Library"
               >
                 <.icon name="hero-archive-box" class="inline mr-2 w-4 h-4" /> CONTEXT LIBRARY
+              </.link>
+              <.link
+                navigate={~p"/chat_history"}
+                class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
+                data-hotkey="alt+h"
+                data-hotkey-seq="g h"
+                data-hotkey-label="Chat Histories"
+              >
+                <.icon name="hero-clock" class="inline mr-2 w-4 h-4" /> CHAT HISTORIES
               </.link>
               <.link
                 navigate={~p"/auths/new"}
@@ -568,7 +625,7 @@ defmodule TheMaestroWeb.DashboardLive do
             </div>
             <div class="mt-2">
               <label class="text-xs">Chat History</label>
-              <div class="text-sm opacity-80">Start New Chat</div>
+              <div class="text-sm opacity-80">Start New Chat or attach an existing thread</div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <.input
@@ -577,6 +634,14 @@ defmodule TheMaestroWeb.DashboardLive do
                 label="Persona"
                 options={@persona_options}
                 prompt="(optional)"
+              />
+              <.input
+                name="session[attach_thread_id]"
+                type="select"
+                label="Attach Existing Thread"
+                options={@orphan_threads}
+                prompt="(Start New Chat)"
+                value={nil}
               />
               <div>
                 <label class="text-xs">Memory (JSON)</label>
@@ -597,6 +662,24 @@ defmodule TheMaestroWeb.DashboardLive do
               context={:new_session}
             />
           </.modal>
+        </.modal>
+
+        <.modal :if={@show_delete_session_modal} id="confirm-delete-session">
+          <div class="space-y-3">
+            <h3 class="text-lg font-semibold">Delete Session</h3>
+            <p class="text-sm opacity-80">
+              Choose what to delete. By default, chat history is preserved for RAG/learning.
+            </p>
+            <div class="flex flex-col sm:flex-row sm:space-x-2 space-y-2 sm:space-y-0">
+              <button phx-click="confirm_delete_session_only" class="btn btn-warning flex-1">
+                Delete Session Only (Keep Chat)
+              </button>
+              <button phx-click="confirm_delete_session_and_chat" class="btn btn-error flex-1">
+                Delete Session AND Chat History
+              </button>
+              <button phx-click="cancel_delete_session" class="btn flex-1">Cancel</button>
+            </div>
+          </div>
         </.modal>
 
         <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
@@ -662,6 +745,13 @@ defmodule TheMaestroWeb.DashboardLive do
         <button class="btn" phx-click="open_session_modal">New Session</button>
       </div>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="card bg-base-200 p-4">
+          <div class="font-semibold text-base">Chat Histories</div>
+          <div class="text-xs opacity-70">Browse orphaned chats and reattach to sessions.</div>
+          <div class="mt-2 space-x-2">
+            <.link class="btn btn-xs" navigate={~p"/chat_history"}>Open Chat Histories</.link>
+          </div>
+        </div>
         <%= for s <- @sessions do %>
           <div class="card bg-base-200 p-4" id={"session-" <> to_string(s.id)}>
             <div class="font-semibold text-base">{session_label(s)}</div>
