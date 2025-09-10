@@ -1,6 +1,6 @@
 # Struct-First Domain Overhaul (Streaming + Request Meta + Versioned JSON)
 
-Status: In progress — Stage 1 complete (Option B – Standard)
+Status: In progress — Stages 1–2 complete (Option B – Standard)
 Owner: Platform / Runtime
 Date: 2025‑09‑10
 
@@ -60,7 +60,7 @@ Persisted JSON (combined_chat):
 
 Progress Checklist (2025-09-10):
 - [x] 1) Add the domain structs — modules exist with `@enforce_keys`, `new/1` and `new!/1`; added `StreamEvent.content/1`, `usage/1`, `tool_calls/1` helpers
-- [ ] 2) Normalize streaming events in one place — return `%StreamEvent{}` from `TheMaestro.Streaming.parse_stream/3`
+- [x] 2) Normalize streaming events in one place — `TheMaestro.Streaming.parse_stream/3` now returns `%StreamEvent{}`; added compatibility publishing of `:function_call` for legacy consumers
 - [ ] 3) Managers/UI consume `%StreamEvent{}` — update `Sessions.Manager` and LiveView
 - [ ] 4) Persist `CombinedChat` via helper — ensure `to_map/1`/`from_map/1` usage at boundary
 - [ ] 5) Compatibility helpers — thin adapter for any legacy consumers
@@ -87,7 +87,8 @@ Already scaffolded/implemented in this branch:
 
 ### 2) Normalize streaming events in one place
 
-- Update `TheMaestro.Streaming` (and `OpenAIHandler`) so `parse_stream/3` returns `%StreamEvent{}` instances wrapping the raw provider events (`raw` field).
+- Update `TheMaestro.Streaming` (and `OpenAIHandler`) so `parse_stream/3` returns `%StreamEvent{}` instances wrapping the raw provider events (`raw` field`).
+- Status: Completed 2025‑09‑10. `parse_stream/3` maps handler messages to `%StreamEvent{}`; `Sessions.Manager` publishes a compatibility `:function_call` list for downstream modules that still consume the legacy shape.
 - Keep provider adapters unchanged; conversion happens after HTTP.
 - Provide a thin compatibility function if any consumer still expects provider maps during the transition.
 

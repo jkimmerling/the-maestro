@@ -102,6 +102,9 @@ defmodule TheMaestro.Sessions.Manager do
                 %{type: :content, content: chunk} when is_binary(chunk) ->
                   GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
 
+                %{type: :function_call, tool_calls: calls} when is_list(calls) ->
+                  GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
+
                 %{type: :function_call, function_call: calls} when is_list(calls) ->
                   GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
 
@@ -197,8 +200,18 @@ defmodule TheMaestro.Sessions.Manager do
       update_in(st, [session_id, :acc], fn acc ->
         if acc do
           new =
-            Enum.map(calls, fn %{id: cid, function: %{name: name, arguments: args}} ->
-              %{"id" => cid, "name" => name, "arguments" => args || ""}
+            Enum.map(calls, fn
+              %{id: cid, function: %{name: name, arguments: args}} ->
+                %{"id" => cid, "name" => name, "arguments" => args || ""}
+
+              %TheMaestro.Domain.ToolCall{id: cid, name: name, arguments: args} ->
+                %{"id" => cid, "name" => name, "arguments" => args || ""}
+
+              %{id: cid, name: name, arguments: args} ->
+                %{"id" => cid, "name" => name, "arguments" => args || ""}
+
+              %{"id" => cid, "name" => name, "arguments" => args} ->
+                %{"id" => cid, "name" => name, "arguments" => args || ""}
             end)
 
           %{
@@ -274,8 +287,9 @@ defmodule TheMaestro.Sessions.Manager do
   end
 
   defp publish_both(session_id, stream_id, msg_map) do
-    publish(session_id, {:ai_stream, stream_id, msg_map})
-    publish(session_id, {:ai_stream2, session_id, stream_id, msg_map})
+    compat = compat_msg_map(msg_map)
+    publish(session_id, {:ai_stream, stream_id, compat})
+    publish(session_id, {:ai_stream2, session_id, stream_id, compat})
   end
 
   defp topic(session_id), do: "session:" <> session_id
@@ -389,11 +403,14 @@ defmodule TheMaestro.Sessions.Manager do
         case result do
           {:ok, stream} ->
             for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
-              publish(session_id, {:ai_stream, stream_id, msg})
+              publish_both(session_id, stream_id, msg)
 
               case msg do
                 %{type: :content, content: chunk} when is_binary(chunk) ->
                   GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+
+                %{type: :function_call, tool_calls: calls} when is_list(calls) ->
+                  GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
 
                 %{type: :function_call, function_call: calls} when is_list(calls) ->
                   GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
@@ -406,12 +423,12 @@ defmodule TheMaestro.Sessions.Manager do
               end
             end
 
-            publish(session_id, {:ai_stream, stream_id, %{type: :done}})
+            publish_both(session_id, stream_id, %{type: :done})
             GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
 
           {:error, reason} ->
-            publish(session_id, {:ai_stream, stream_id, %{type: :error, error: inspect(reason)}})
-            publish(session_id, {:ai_stream, stream_id, %{type: :done}})
+            publish_both(session_id, stream_id, %{type: :error, error: inspect(reason)})
+            publish_both(session_id, stream_id, %{type: :done})
             GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
         end
       end)
@@ -426,6 +443,29 @@ defmodule TheMaestro.Sessions.Manager do
         meta: acc.meta
       })
   end
+
+  # Compatibility: ensure published event includes legacy keys for downstream consumers
+  defp compat_msg_map(%{type: :function_call, tool_calls: calls} = m) when is_list(calls) do
+    legacy =
+      Enum.map(calls, fn
+        %TheMaestro.Domain.ToolCall{id: id, name: name, arguments: args} ->
+          %{id: id, function: %{name: name, arguments: args || ""}}
+
+        %{"id" => id, "name" => name, "arguments" => args} ->
+          %{id: id, function: %{name: name, arguments: args || ""}}
+
+        %{id: id, name: name, arguments: args} ->
+          %{id: id, function: %{name: name, arguments: args || ""}}
+
+        other ->
+          other
+      end)
+
+    m
+    |> Map.put(:function_call, legacy)
+  end
+
+  defp compat_msg_map(m), do: m
 
   defp do_followup_provider(:openai, session_name, items, model),
     do: OpenAI.Streaming.stream_tool_followup(session_name, items, model: model)

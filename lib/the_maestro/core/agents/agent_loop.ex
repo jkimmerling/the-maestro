@@ -234,10 +234,27 @@ defmodule TheMaestro.AgentLoop do
       case msg.type do
         :function_call ->
           new_calls =
-            (msg.function_call || [])
-            |> Enum.map(fn fc ->
-              %{"id" => fc.id, "name" => fc.function.name, "arguments" => fc.function.arguments}
-            end)
+            cond do
+              is_list(Map.get(msg, :tool_calls)) ->
+                Enum.map(msg.tool_calls, fn
+                  %TheMaestro.Domain.ToolCall{id: id, name: name, arguments: args} ->
+                    %{"id" => id, "name" => name, "arguments" => args}
+
+                  %{id: id, name: name, arguments: args} ->
+                    %{"id" => id, "name" => name, "arguments" => args}
+
+                  %{"id" => id, "name" => name, "arguments" => args} ->
+                    %{"id" => id, "name" => name, "arguments" => args}
+                end)
+
+              is_list(Map.get(msg, :function_call)) ->
+                Enum.map(msg.function_call, fn fc ->
+                  %{"id" => fc.id, "name" => fc.function.name, "arguments" => fc.function.arguments}
+                end)
+
+              true ->
+                []
+            end
 
           {calls ++ new_calls, text, usage}
 
@@ -263,10 +280,27 @@ defmodule TheMaestro.AgentLoop do
       case msg.type do
         :function_call ->
           new_calls =
-            (msg.function_call || [])
-            |> Enum.map(fn fc ->
-              %{"id" => fc.id, "name" => fc.function.name, "arguments" => fc.function.arguments}
-            end)
+            cond do
+              is_list(Map.get(msg, :tool_calls)) ->
+                Enum.map(msg.tool_calls, fn
+                  %TheMaestro.Domain.ToolCall{id: id, name: name, arguments: args} ->
+                    %{"id" => id, "name" => name, "arguments" => args}
+
+                  %{id: id, name: name, arguments: args} ->
+                    %{"id" => id, "name" => name, "arguments" => args}
+
+                  %{"id" => id, "name" => name, "arguments" => args} ->
+                    %{"id" => id, "name" => name, "arguments" => args}
+                end)
+
+              is_list(Map.get(msg, :function_call)) ->
+                Enum.map(msg.function_call, fn fc ->
+                  %{"id" => fc.id, "name" => fc.function.name, "arguments" => fc.function.arguments}
+                end)
+
+              true ->
+                []
+            end
 
           {calls ++ new_calls, text, usage}
 
