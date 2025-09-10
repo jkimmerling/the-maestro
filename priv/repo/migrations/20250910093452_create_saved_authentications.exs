@@ -18,9 +18,7 @@ defmodule TheMaestro.Repo.Migrations.CreateSavedAuthentications do
            )
 
     # Database-level constraints to validate session name format and length
-    create constraint(:saved_authentications, :name_format,
-             check: "name ~ '^[A-Za-z0-9_-]+$'"
-           )
+    create constraint(:saved_authentications, :name_format, check: "name ~ '^[A-Za-z0-9_-]+$'")
 
     create constraint(:saved_authentications, :name_length,
              check: "char_length(name) >= 3 AND char_length(name) <= 50"

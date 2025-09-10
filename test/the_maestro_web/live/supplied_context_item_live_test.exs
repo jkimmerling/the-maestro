@@ -90,7 +90,10 @@ defmodule TheMaestroWeb.SuppliedContextItemLiveTest do
 
       assert {:ok, form_live, _html} =
                index_live
-               |> element("#supplied-context-items tr[id$='-#{supplied_context_item.id}'] a", "Edit")
+               |> element(
+                 "#supplied-context-items tr[id$='-#{supplied_context_item.id}'] a",
+                 "Edit"
+               )
                |> render_click()
                |> follow_redirect(conn, ~p"/supplied_context/#{supplied_context_item}/edit")
 
@@ -118,10 +121,16 @@ defmodule TheMaestroWeb.SuppliedContextItemLiveTest do
       {:ok, index_live, _html} = live(conn, ~p"/supplied_context")
 
       assert index_live
-             |> element("#supplied-context-items tr[id$='-#{supplied_context_item.id}'] a", "Delete")
+             |> element(
+               "#supplied-context-items tr[id$='-#{supplied_context_item.id}'] a",
+               "Delete"
+             )
              |> render_click()
 
-      refute has_element?(index_live, "#supplied-context-items tr[id$='-#{supplied_context_item.id}']")
+      refute has_element?(
+               index_live,
+               "#supplied-context-items tr[id$='-#{supplied_context_item.id}']"
+             )
     end
   end
 

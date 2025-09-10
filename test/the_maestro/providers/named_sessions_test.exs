@@ -103,6 +103,7 @@ defmodule TheMaestro.Providers.NamedSessionsTest do
 
       # Attempt invalid name (contains space) via raw SQL to bypass changeset
       {:ok, uuid_bin} = Ecto.UUID.dump(Ecto.UUID.generate())
+
       {:error, %Postgrex.Error{postgres: %{constraint: "name_format"}}} =
         SQL.query(
           Repo,
@@ -112,6 +113,7 @@ defmodule TheMaestro.Providers.NamedSessionsTest do
 
       # Attempt invalid name (too short)
       {:ok, uuid_bin2} = Ecto.UUID.dump(Ecto.UUID.generate())
+
       {:error, %Postgrex.Error{postgres: %{constraint: "name_length"}}} =
         SQL.query(
           Repo,

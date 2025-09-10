@@ -868,6 +868,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # Convert a provider string to a known atom safely; default to :openai
   defp to_provider_atom(p) when is_atom(p), do: p
+
   defp to_provider_atom(p) when is_binary(p) do
     allowed = TheMaestro.Provider.list_providers()
     allowed_strings = Enum.map(allowed, &Atom.to_string/1)

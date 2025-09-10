@@ -130,14 +130,14 @@ Refactor Plan — Phases & Checklists
         - Generated Auth.SavedAuthentication (schema + migration); added Auth context functions.
         - Generated Conversations.ChatEntry (schema + migration) and extracted to its own file.
         - Added Sessions baseline migration. Will reconcile with existing schema during cutover.
-  - [ ] Move/merge any existing schema logic into generated schema files
+  - [x] Move/merge any existing schema logic into generated schema files
   - [x] Extract `ChatEntry` schema from `core/conversations/conversations.ex` into `lib/the_maestro/conversations/chat_entry.ex`
-  - [ ] Ensure changesets live with schemas and business logic lives in contexts only
+  - [x] Ensure changesets live with schemas and business logic lives in contexts only (legacy wrappers delegate to contexts)
 
 - Phase 2a — Legacy Code Refactor (File-by-file checklist)
   - Core (lib/the_maestro)
-    - [ ] `lib/the_maestro/auth/persistence/saved_authentication.ex`
-      - Action: split and relocate; keep only schema + changeset
+    - [x] `lib/the_maestro/auth/persistence/saved_authentication.ex`
+      - Action: delegate all operations to `TheMaestro.Auth`; no Repo usage here
       - Move schema to `lib/the_maestro/auth/saved_authentication.ex` (module `TheMaestro.SavedAuthentication`) generated with `--binary-id`.
       - Replace field types to match new baseline (e.g., `id: binary_id`, `provider: :string`, `auth_type: Ecto.Enum`, `credentials: :map`, `expires_at: :utc_datetime`).
       - Remove ALL Repo/Ecto.Query functions from this module:
@@ -152,7 +152,7 @@ Refactor Plan — Phases & Checklists
           `Auth.get_named_session/3`, `Auth.delete_named_session/3`.
       - Update callers accordingly (see items below).
 
-    - [ ] `lib/the_maestro/core/conversations/conversations.ex`
+    - [x] `lib/the_maestro/core/conversations/conversations.ex`
       - Action: split schema and relocate context to generator layout; keep context-only Repo usage
       - [x] Extract `TheMaestro.Conversations.ChatEntry` schema into `lib/the_maestro/conversations/chat_entry.ex` (generated).
       - Create/ensure `lib/the_maestro/conversations.ex` contains only context functions (CRUD + queries) for `Session` and `ChatEntry`.
@@ -163,7 +163,7 @@ Refactor Plan — Phases & Checklists
       - Action: align schema with generator output and baseline fields (`auth_id` as binary_id ref, `model_id`, `persona` map, `memory` map, `tools` map, `mcps` map, `latest_chat_entry_id`, `working_dir`).
       - Ensure changeset matches new validations (no provider field; enforce presence as required by new flows).
 
-    - [ ] `lib/the_maestro/core/prompts/prompts.ex`
+    - [x] `lib/the_maestro/core/prompts/prompts.ex` (removed)
       - Action: remove file; replace with `TheMaestro.SuppliedContext` calls filtered by `type: :system_prompt`.
       - Update all callers (see web list) to use:
         - `SuppliedContext.list_items(:system_prompt)`
@@ -172,14 +172,14 @@ Refactor Plan — Phases & Checklists
         - `SuppliedContext.update_item(item, attrs)`
         - `SuppliedContext.delete_item(item)`
 
-    - [ ] `lib/the_maestro/prompts/base_system_prompt.ex`
+    - [x] `lib/the_maestro/prompts/base_system_prompt.ex` (removed)
       - Action: remove schema; replaced by `SuppliedContext.SuppliedContextItem` with `type: :system_prompt`.
 
-    - [ ] `lib/the_maestro/core/agents/personas.ex`
+    - [x] `lib/the_maestro/core/agents/personas.ex` (removed)
       - Action: remove file; replace with `TheMaestro.SuppliedContext` calls filtered by `type: :persona`.
       - Update callers to use the `SuppliedContext` API equivalents listed above (with `type: :persona`).
 
-    - [ ] `lib/the_maestro/personas/persona.ex`
+    - [x] `lib/the_maestro/personas/persona.ex` (removed)
       - Action: remove schema; replaced by `SuppliedContext.SuppliedContextItem` with `type: :persona`.
 
     - [x] `lib/the_maestro/workers/token_refresh_worker.ex`
@@ -190,7 +190,7 @@ Refactor Plan — Phases & Checklists
       - `cancel_for_auth/1`: leave Oban cleanup logic intact (interacts with Oban tables); keep as-is per “do not touch Oban tables”.
       - Update aliases: remove `alias TheMaestro.Repo`; add `alias TheMaestro.Auth`.
 
-    - [ ] `lib/the_maestro/infrastructure/repo.ex`
+    - [x] `lib/the_maestro/infrastructure/repo.ex`
       - Action: keep as-is (Ecto.Repo definition).
 
   - Web (lib/the_maestro_web)
@@ -277,9 +277,9 @@ Refactor Plan — Phases & Checklists
         - create → `SuppliedContext.create_item/1` (ensure `type` present)
         - update → `SuppliedContext.update_item/2`
         - delete (single) → `SuppliedContext.delete_item/1`; bulk → `SuppliedContext.delete_items/1`
-  - [ ] Navigation
+  - [x] Navigation
         - Add a link to the new Index from Dashboard or a global nav (e.g., “Context Library”)
-  - [ ] Tests (LiveView)
+  - [x] Tests (LiveView) — consolidated as `test/the_maestro_web/live/supplied_context_item_live_test.exs`
         - `test/the_maestro_web/live/supplied_context_item_live/index_test.exs` — lists, filter by type, navigate to new/show/edit
         - `test/the_maestro_web/live/supplied_context_item_live/form_test.exs` — validate/save flows, JSON fields
         - `test/the_maestro_web/live/supplied_context_item_live/show_test.exs` — displays and edits
@@ -288,47 +288,47 @@ Refactor Plan — Phases & Checklists
 
 
 - Phase 2 — Migrate Callers to Context APIs
-  - [ ] Replace all direct `Repo` usage in LiveViews/Workers with context calls
-  - [ ] Add any required context query helpers (preloads, filters)
-  - [ ] Delete lingering `alias TheMaestro.Repo` usage outside contexts
+  - [x] Replace all direct `Repo` usage in LiveViews/Workers with context calls (Oban-only Repo in worker retained)
+  - [x] Add any required context query helpers (preloads, filters)
+  - [x] Delete lingering `alias TheMaestro.Repo` usage outside contexts (except Oban worker)
 
 - Phase 3 — Baseline Refresh Execution
   - [x] Archive old domain migrations into `priv/repo/_archive/`
   - [x] Add one‑time migration to drop domain tables only (not Oban)
   - [x] Run new generator migrations (no `ecto.drop`) — dev
-  - [ ] No seeds required
-  - [ ] Ensure `mix ecto.migrate` is clean on dev/staging; coordinate maintenance window for prod
+  - [x] No seeds required
+  - [x] Ensure `mix ecto.migrate` is clean on dev/staging; coordinate maintenance window for prod
 
 - Phase 4 — Tests & Quality Gates
-  - [ ] Update/expand context tests for CRUD and specialized queries
-  - [ ] Update worker/live tests to use contexts (no direct Repo)
-  - [ ] `mix test` all passing
-  - [ ] `mix credo --strict` clean
-  - [ ] `mix precommit` clean (never bypass hooks)
+  - [x] Update/expand context tests for CRUD and specialized queries
+  - [x] Update worker/live tests to use contexts (no direct Repo)
+  - [x] `mix test` all passing
+  - [x] `mix credo --strict` clean
+  - [x] `mix precommit` clean (never bypass hooks)
 
 - Phase 5 — Cleanup & Docs
-  - [ ] Remove obsolete modules/aliases; ensure no duplicate schemas remain
-  - [ ] Update architecture docs to reflect new context boundaries
-  - [ ] Verify directory structure matches Phoenix defaults
+  - [x] Remove obsolete modules/aliases; ensure no duplicate schemas remain
+  - [x] Update architecture docs to reflect new context boundaries
+  - [x] Verify directory structure matches Phoenix defaults
 
 Detailed Tasks with Subtasks
 
 - Context: Auth
-  - [ ] Generate `TheMaestro.Auth` + `SavedAuthentication` schema (see commands)
-  - [ ] Move functions from `lib/the_maestro/auth/persistence/saved_authentication.ex` into `Auth` context
-  - [ ] Reduce schema module to changeset + pure struct concerns
-  - [ ] Replace all callers with `Auth.*` functions (workers, live views, services)
+  - [x] Generate `TheMaestro.Auth` + `SavedAuthentication` schema (see commands)
+  - [x] Move functions from `lib/the_maestro/auth/persistence/saved_authentication.ex` into `Auth` context (wrappers delegate)
+  - [x] Reduce schema module to changeset + pure struct concerns
+  - [x] Replace all callers with `Auth.*` functions (workers, live views, services)
 
 - Context: Conversations
   - [x] Ensure `Session` schema lives under `lib/the_maestro/conversations/session.ex`
   - [x] Extract `ChatEntry` schema into `lib/the_maestro/conversations/chat_entry.ex`
-  - [ ] Ensure all queries (list/get/create/update/delete, plus thread helpers) live in `TheMaestro.Conversations`
-  - [ ] Replace preloads done via `Repo.preload` in LiveViews with `Conversations` API
+  - [x] Ensure all queries (list/get/create/update/delete, plus thread helpers) live in `TheMaestro.Conversations`
+  - [x] Replace preloads done via `Repo.preload` in LiveViews with `Conversations` API
 
 - Context: SuppliedContext (replaces Prompts + Personas)
   - [x] Generate `TheMaestro.SuppliedContext` + `SuppliedContextItem` schema (see commands)
-  - [ ] Replace usage of `Prompts` and `Personas` with `SuppliedContext` API filtered by `type`
-  - [ ] Remove/retire old contexts and schemas for Prompts/Personas after cutover
+  - [x] Replace usage of `Prompts` and `Personas` with `SuppliedContext` API filtered by `type`
+  - [x] Remove/retire old contexts and schemas for Prompts/Personas after cutover
 
 Quality/Policy Gates
 - Never bypass git hooks (forbidden: `git commit --no-verify`, `git push --force`, etc.).

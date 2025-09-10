@@ -32,11 +32,9 @@ defmodule TheMaestro.SavedAuthentication do
 
 use Ecto.Schema
   import Ecto.Changeset
-  import Ecto.Query
-  alias TheMaestro.Repo
 
-@type t :: %__MODULE__{
-        id: Ecto.UUID.t() | nil,
+  @type t :: %__MODULE__{
+          id: Ecto.UUID.t() | nil,
           provider: atom(),
           auth_type: :api_key | :oauth,
           name: String.t(),
@@ -49,16 +47,16 @@ use Ecto.Schema
   @typedoc "Attributes for changesets - ALL keys must be atoms"
   @type attrs :: %{optional(atom()) => any()}
 
-@primary_key {:id, :binary_id, autogenerate: true}
-@foreign_key_type :binary_id
-schema "saved_authentications" do
+  @primary_key {:id, :binary_id, autogenerate: true}
+  @foreign_key_type :binary_id
+  schema "saved_authentications" do
     field :provider, TheMaestro.EctoTypes.Provider
     field :auth_type, Ecto.Enum, values: [:api_key, :oauth]
     field :name, :string
     field :credentials, :map
     field :expires_at, :utc_datetime
 
-  timestamps(type: :utc_datetime)
+    timestamps(type: :utc_datetime)
   end
 
   @doc """
@@ -157,10 +155,10 @@ schema "saved_authentications" do
   """
   @spec get_by_provider_and_name(atom() | String.t(), atom(), String.t()) :: t() | nil
   def get_by_provider_and_name(provider, auth_type, name) do
-    Repo.one(
-      from sa in __MODULE__,
-        where: sa.provider == ^provider and sa.auth_type == ^auth_type and sa.name == ^name
-    )
+    case TheMaestro.Auth.get_by_provider_and_name(provider, auth_type, name) do
+      nil -> nil
+      rec -> compat(rec)
+    end
   end
 
   @doc """
@@ -176,7 +174,8 @@ schema "saved_authentications" do
   """
   @spec list_by_provider(atom()) :: [t()]
   def list_by_provider(provider) do
-    Repo.all(from sa in __MODULE__, where: sa.provider == ^provider, order_by: [asc: sa.auth_type, asc: sa.name])
+    TheMaestro.Auth.list_saved_authentications_by_provider(provider)
+    |> Enum.map(&compat/1)
   end
 
   @doc """
@@ -187,10 +186,8 @@ schema "saved_authentications" do
   """
   @spec list_all() :: [t()]
   def list_all do
-    Repo.all(
-      from sa in __MODULE__,
-        order_by: [desc: sa.inserted_at, asc: sa.provider, asc: sa.auth_type, asc: sa.name]
-    )
+    TheMaestro.Auth.list_saved_authentications()
+    |> Enum.map(&compat/1)
   end
 
   @doc """
@@ -198,7 +195,7 @@ schema "saved_authentications" do
   Raises if not found.
   """
   @spec get!(binary()) :: t()
-  def get!(id) when is_binary(id), do: Repo.get!(__MODULE__, id)
+  def get!(id) when is_binary(id), do: TheMaestro.Auth.get_saved_authentication!(id) |> compat()
 
   @doc """
   Updates a saved authentication record.
@@ -231,6 +228,7 @@ schema "saved_authentications" do
     normalized = auth_type |> normalize_credentials_for_auth(atomize_keys(attrs))
 
     p = if is_atom(provider), do: Atom.to_string(provider), else: provider
+
     full =
       normalized
       |> Map.put(:provider, p)
@@ -328,12 +326,11 @@ schema "saved_authentications" do
   @spec get_by_provider(atom(), atom()) :: t() | nil
   def get_by_provider(provider, auth_type) do
     default_name = "default_" <> Atom.to_string(provider) <> "_" <> Atom.to_string(auth_type)
-
-    Repo.one(
-      from sa in __MODULE__,
-        where:
-          sa.provider == ^provider and sa.auth_type == ^auth_type and sa.name == ^default_name
-    )
+    TheMaestro.Auth.get_by_provider_and_name(provider, auth_type, default_name)
+    |> case do
+      nil -> nil
+      rec -> compat(rec)
+    end
   end
 
   @doc """
@@ -383,4 +380,11 @@ schema "saved_authentications" do
   defp put_if_present(map, _k, nil), do: map
   defp put_if_present(map, k, v), do: Map.put(map, k, v)
   # provider_to_db no longer needed; provider normalization handled in Auth context
+  defp compat(nil), do: nil
+  defp compat(%TheMaestro.Auth.SavedAuthentication{} = rec) do
+    provider = rec.provider
+    provider = if is_binary(provider), do: String.to_atom(provider), else: provider
+    %{rec | provider: provider}
+  end
+  defp compat(%__MODULE__{} = rec), do: rec
 end
