@@ -193,6 +193,40 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply, assign(socket, session_form: to_form(cs, action: :validate))}
   end
 
+  def handle_event("session_save", %{"session" => params}, socket) do
+    with {:ok, params2} <- build_session_params(params),
+         {:ok, session} <- Conversations.create_session(params2) do
+      case Map.get(params, "attach_thread_id") do
+        tid when is_binary(tid) and tid != "" ->
+          _ = Conversations.attach_thread_to_session(tid, session.id)
+          :ok
+
+        _ ->
+          :ok
+      end
+
+      {:noreply,
+       socket
+       |> put_flash(:info, "Session created")
+       |> assign(:show_session_modal, false)
+       |> assign(:show_session_dir_picker, false)
+       |> assign(:sessions, Conversations.list_sessions_with_auth())}
+    else
+      {:error, %Ecto.Changeset{} = cs} -> {:noreply, assign(socket, session_form: to_form(cs))}
+      {:error, _} -> {:noreply, socket}
+    end
+  end
+
+  # Keep all handle_event/3 clauses grouped together to avoid warnings
+  @impl true
+  def handle_event("close_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_session_modal, false)
+     |> assign(:show_session_dir_picker, false)
+     |> assign(:show_agent_modal, false)}
+  end
+
   # Keep all handle_event/3 clauses grouped together to avoid warnings
   defp build_session_params(params) do
     with {:ok, p2} <- mirror_persona(params),
@@ -231,44 +265,6 @@ defmodule TheMaestroWeb.DashboardLive do
     end
   end
 
-  def handle_event("session_save", %{"session" => params}, socket) do
-    with {:ok, params2} <- build_session_params(params),
-         {:ok, session} <- Conversations.create_session(params2) do
-      case Map.get(params, "attach_thread_id") do
-        tid when is_binary(tid) and tid != "" ->
-          _ = Conversations.attach_thread_to_session(tid, session.id)
-          :ok
-
-        _ ->
-          :ok
-      end
-
-      {:noreply,
-       socket
-       |> put_flash(:info, "Session created")
-       |> assign(:show_session_modal, false)
-       |> assign(:show_session_dir_picker, false)
-       |> assign(:sessions, Conversations.list_sessions_with_auth())}
-    else
-      {:error, %Ecto.Changeset{} = cs} -> {:noreply, assign(socket, session_form: to_form(cs))}
-      {:error, _} -> {:noreply, socket}
-    end
-  end
-
-  # moved earlier to keep handle_event clauses grouped
-
-  # Keep all handle_event/3 clauses grouped together to avoid warnings
-  @impl true
-  def handle_event("close_modal", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_session_modal, false)
-     |> assign(:show_session_dir_picker, false)
-     |> assign(:show_agent_modal, false)}
-  end
-
-  # moved earlier to keep handle_event clauses grouped
-
   @impl true
   def handle_info({TheMaestroWeb.DirectoryPicker, :selected, path, :new_session}, socket) do
     params = merge_session_params(socket, %{"working_dir" => path})
@@ -303,12 +299,12 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply, put_active_stream(socket, session_id, type)}
   end
 
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
   defp put_active_stream(socket, session_id, type) do
     active? = type in [:thinking, :content, :function_call, :usage]
     assign(socket, :active_streams, Map.put(socket.assigns.active_streams, session_id, active?))
   end
-
-  def handle_info(_msg, socket), do: {:noreply, socket}
 
   # duplicate clauses removed; see earlier grouped handle_event/3 definitions
 

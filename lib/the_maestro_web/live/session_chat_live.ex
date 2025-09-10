@@ -3,8 +3,6 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   alias TheMaestro.Auth
   alias TheMaestro.Conversations
-  alias TheMaestro.Conversations.Translator
-  alias TheMaestro.Provider
   alias TheMaestro.SuppliedContext
   require Logger
 
@@ -200,54 +198,6 @@ defmodule TheMaestroWeb.SessionChatLive do
     socket = maybe_reload_models(socket, params)
     socket = maybe_mirror_persona(socket, params, form)
     {:noreply, socket}
-  end
-
-  defp maybe_reload_auth_options(socket, params, form) do
-    if Map.has_key?(params, "provider") do
-      socket = socket |> load_auth_options(form) |> assign(:config_models, [])
-      new_form = socket.assigns.config_form
-      opts = new_form["auth_options"] || []
-
-      new_auth_id =
-        case opts do
-          [{_l, id} | _] -> id
-          _ -> nil
-        end
-
-      assign(socket, :config_form, Map.put(new_form, "auth_id", new_auth_id))
-    else
-      socket
-    end
-  end
-
-  defp maybe_reload_models(socket, params) do
-    if Map.has_key?(params, "auth_id") do
-      models = list_models_for_form(socket.assigns.config_form)
-      assign(socket, :config_models, models)
-    else
-      socket
-    end
-  end
-
-  defp maybe_mirror_persona(socket, params, form) do
-    if Map.has_key?(params, "persona_id") do
-      case get_persona_for_form(form) do
-        nil ->
-          socket
-
-        %TheMaestro.SuppliedContext.SuppliedContextItem{} = p ->
-          pj =
-            Jason.encode!(%{
-              "name" => p.name,
-              "version" => p.version || 1,
-              "persona_text" => p.text
-            })
-
-          assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
-      end
-    else
-      socket
-    end
   end
 
   # ==== Persona modal ====
@@ -705,38 +655,6 @@ defmodule TheMaestroWeb.SessionChatLive do
   # Internal: retry the current provider call after a backoff
   def handle_info({:retry_stream, _attempt}, socket), do: {:noreply, do_retry_stream(socket)}
 
-  defp do_retry_stream(socket) do
-    case socket.assigns do
-      %{pending_canonical: canon, used_provider: provider}
-      when is_map(canon) and not is_nil(provider) ->
-        model =
-          socket.assigns.used_model ||
-            TheMaestro.Chat.resolve_model_for_session(socket.assigns.session, provider)
-
-        {:ok, provider_msgs} = Conversations.Translator.to_provider(canon, provider)
-
-        {:ok, stream_id} =
-          TheMaestro.Chat.start_stream(
-            socket.assigns.session.id,
-            provider,
-            socket.assigns.used_auth_name,
-            provider_msgs,
-            model
-          )
-
-        socket
-        |> assign(:stream_id, stream_id)
-        |> assign(:stream_task, nil)
-        |> assign(:used_provider, provider)
-        |> assign(:used_model, model)
-        |> assign(:used_usage, nil)
-        |> assign(:thinking?, false)
-
-      _ ->
-        socket
-    end
-  end
-
   # Internal tool signals (defensive: accept with or without ref wrapper)
   def handle_info({:__shell_done__, {out, status}}, socket) do
     {:noreply,
@@ -768,6 +686,38 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp push_event(%{assigns: assigns} = socket, ev) when is_map(ev) do
     buf = assigns[:event_buffer] || []
     assign(socket, :event_buffer, buf ++ [ev])
+  end
+
+  defp do_retry_stream(socket) do
+    case socket.assigns do
+      %{pending_canonical: canon, used_provider: provider}
+      when is_map(canon) and not is_nil(provider) ->
+        model =
+          socket.assigns.used_model ||
+            TheMaestro.Chat.resolve_model_for_session(socket.assigns.session, provider)
+
+        {:ok, provider_msgs} = Conversations.Translator.to_provider(canon, provider)
+
+        {:ok, stream_id} =
+          TheMaestro.Chat.start_stream(
+            socket.assigns.session.id,
+            provider,
+            socket.assigns.used_auth_name,
+            provider_msgs,
+            model
+          )
+
+        socket
+        |> assign(:stream_id, stream_id)
+        |> assign(:stream_task, nil)
+        |> assign(:used_provider, provider)
+        |> assign(:used_model, model)
+        |> assign(:used_usage, nil)
+        |> assign(:thinking?, false)
+
+      _ ->
+        socket
+    end
   end
 
   # Detect Anthropic overloaded errors from error strings
@@ -870,6 +820,55 @@ defmodule TheMaestroWeb.SessionChatLive do
       {:ok, %{} = map} -> {:ok, map}
       {:ok, _} -> {:error, {:decode, :json, :must_be_object}}
       {:error, reason} -> {:error, {:decode, :json, reason}}
+    end
+  end
+
+  # ==== Config helpers (kept at bottom to keep handle_event/handle_info clauses contiguous) ====
+  defp maybe_reload_auth_options(socket, params, form) do
+    if Map.has_key?(params, "provider") do
+      socket = socket |> load_auth_options(form) |> assign(:config_models, [])
+      new_form = socket.assigns.config_form
+      opts = new_form["auth_options"] || []
+
+      new_auth_id =
+        case opts do
+          [{_l, id} | _] -> id
+          _ -> nil
+        end
+
+      assign(socket, :config_form, Map.put(new_form, "auth_id", new_auth_id))
+    else
+      socket
+    end
+  end
+
+  defp maybe_reload_models(socket, params) do
+    if Map.has_key?(params, "auth_id") do
+      models = list_models_for_form(socket.assigns.config_form)
+      assign(socket, :config_models, models)
+    else
+      socket
+    end
+  end
+
+  defp maybe_mirror_persona(socket, params, form) do
+    if Map.has_key?(params, "persona_id") do
+      case get_persona_for_form(form) do
+        nil ->
+          socket
+
+        %TheMaestro.SuppliedContext.SuppliedContextItem{} = p ->
+          pj =
+            Jason.encode!(%{
+              "name" => p.name,
+              "version" => p.version || 1,
+              "persona_text" => p.text
+            })
+
+          assign(socket, :config_form, Map.put(socket.assigns.config_form, "persona_json", pj))
+      end
+    else
+      socket
     end
   end
 
