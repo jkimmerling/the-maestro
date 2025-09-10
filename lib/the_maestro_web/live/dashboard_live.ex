@@ -102,7 +102,7 @@ defmodule TheMaestroWeb.DashboardLive do
 
     case target do
       "provider" ->
-        provider = String.to_existing_atom(params["provider"])
+        provider = to_provider_atom(params["provider"])
 
         {:noreply,
          socket
@@ -270,7 +270,8 @@ defmodule TheMaestroWeb.DashboardLive do
 
   defp build_model_options(%{"auth_id" => auth_id}) when is_binary(auth_id) and auth_id != "" do
     with %{} = sa <- Auth.get_saved_authentication!(auth_id),
-         {:ok, models} <- Provider.list_models(sa.provider, sa.auth_type, sa.name),
+         provider <- to_provider_atom(sa.provider),
+         {:ok, models} <- Provider.list_models(provider, sa.auth_type, sa.name),
          list when is_list(list) and list != [] <-
            Enum.map(models, fn m -> {m.name || m.id, m.id} end) do
       list
@@ -279,7 +280,7 @@ defmodule TheMaestroWeb.DashboardLive do
         # Fallback defaults per provider to ensure model select is populated
         case Auth.get_saved_authentication!(auth_id) do
           %{provider: provider} ->
-            case provider do
+            case to_provider_atom(provider) do
               :openai ->
                 [{"gpt-5", "gpt-5"}, {"gpt-4o", "gpt-4o"}]
 
@@ -303,6 +304,15 @@ defmodule TheMaestroWeb.DashboardLive do
   end
   # fallback clause grouped with the primary build_model_options/1
   defp build_model_options(_), do: []
+
+  # Convert provider strings/atoms to a safe allowed atom
+  defp to_provider_atom(p) when is_atom(p), do: p
+  defp to_provider_atom(p) when is_binary(p) do
+    allowed = TheMaestro.Provider.list_providers()
+    allowed_str = Enum.map(allowed, &Atom.to_string/1)
+    if p in allowed_str, do: String.to_existing_atom(p), else: :openai
+  end
+
   defp build_auth_options_for(provider) when is_atom(provider) do
     Auth.list_saved_authentications_by_provider(provider)
     |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
