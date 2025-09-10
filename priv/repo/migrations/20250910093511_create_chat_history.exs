@@ -15,7 +15,7 @@ defmodule TheMaestro.Repo.Migrations.CreateChatHistory do
       add :parent_thread_id, :uuid
       add :fork_from_entry_id, :uuid
       add :thread_label, :string
-      add :session_id, references(:sessions, on_delete: :nothing, type: :binary_id)
+      add :session_id, :binary_id
 
       timestamps(type: :utc_datetime)
     end

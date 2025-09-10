@@ -16,8 +16,7 @@ defmodule TheMaestro.Repo.Migrations.CreateSessionsBaseline do
 
       add :auth_id, references(:saved_authentications, on_delete: :nothing, type: :binary_id)
 
-      add :latest_chat_entry_id,
-          references(:chat_history, on_delete: :nilify_all, type: :binary_id)
+      add :latest_chat_entry_id, :binary_id
 
       timestamps(type: :utc_datetime)
     end
