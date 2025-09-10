@@ -104,6 +104,27 @@ defmodule TheMaestro.Conversations do
   end
 
   @doc """
+  Deletes only the session row, preserving chat history. Requires DB FK to nilify.
+  """
+  def delete_session_only(%Session{} = session) do
+    Repo.delete(session)
+  end
+
+  @doc """
+  Deletes a session and its chat history.
+  """
+  def delete_session_and_chat(%Session{} = session) do
+    Repo.transaction(fn ->
+      # Delete all chat entries that reference this session
+      from(e in ChatEntry, where: e.session_id == ^session.id)
+      |> Repo.delete_all()
+
+      {:ok, _} = Repo.delete(session)
+      :ok
+    end)
+  end
+
+  @doc """
   Returns an `%Ecto.Changeset{}` for tracking session changes.
 
   ## Examples

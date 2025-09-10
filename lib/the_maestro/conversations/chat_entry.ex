@@ -38,7 +38,8 @@ defmodule TheMaestro.Conversations.ChatEntry do
       :fork_from_entry_id,
       :thread_label
     ])
-    |> validate_required([:session_id, :turn_index, :actor, :combined_chat])
+    # session_id is no longer required (chat history can outlive a session)
+    |> validate_required([:turn_index, :actor, :combined_chat])
     |> validate_inclusion(:actor, ["user", "assistant", "tool", "system"])
     |> foreign_key_constraint(:session_id)
     |> unique_constraint([:session_id, :turn_index])

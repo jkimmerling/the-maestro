@@ -24,6 +24,8 @@ defmodule TheMaestroWeb.DashboardLive do
       |> assign(:show_session_dir_picker, false)
       |> assign(:page_title, "Dashboard")
       |> assign(:active_streams, %{})
+      |> assign(:show_delete_session_modal, false)
+      |> assign(:delete_session_id, nil)
 
     # When connected, subscribe to all session topics to track active streams
     socket =
@@ -73,15 +75,44 @@ defmodule TheMaestroWeb.DashboardLive do
     end
   end
 
-  # Delete a chat session from the dashboard Sessions grid
+  # Begin delete flow with confirmation modal
   def handle_event("delete_session", %{"id" => id}, socket) do
-    # Session IDs are UUID strings; fetch and delete
+    {:noreply,
+     socket
+     |> assign(:show_delete_session_modal, true)
+     |> assign(:delete_session_id, id)}
+  end
+
+  def handle_event("cancel_delete_session", _params, socket) do
+    {:noreply,
+     socket |> assign(:show_delete_session_modal, false) |> assign(:delete_session_id, nil)}
+  end
+
+  # Delete the session only; preserve chat history (session_id will be nilified by FK)
+  def handle_event("confirm_delete_session_only", _params, socket) do
+    id = socket.assigns.delete_session_id
     session = Conversations.get_session!(id)
-    {:ok, _} = Conversations.delete_session(session)
+    _ = Conversations.delete_session_only(session)
 
     {:noreply,
      socket
-     |> put_flash(:info, "Session deleted")
+     |> put_flash(:info, "Session deleted; chat history preserved.")
+     |> assign(:show_delete_session_modal, false)
+     |> assign(:delete_session_id, nil)
+     |> assign(:sessions, Conversations.list_sessions_with_auth())}
+  end
+
+  # Delete the session and its associated chat history rows
+  def handle_event("confirm_delete_session_and_chat", _params, socket) do
+    id = socket.assigns.delete_session_id
+    session = Conversations.get_session!(id)
+    _ = Conversations.delete_session_and_chat(session)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Session and chat history deleted.")
+     |> assign(:show_delete_session_modal, false)
+     |> assign(:delete_session_id, nil)
      |> assign(:sessions, Conversations.list_sessions_with_auth())}
   end
 
@@ -597,6 +628,24 @@ defmodule TheMaestroWeb.DashboardLive do
               context={:new_session}
             />
           </.modal>
+        </.modal>
+
+        <.modal :if={@show_delete_session_modal} id="confirm-delete-session">
+          <div class="space-y-3">
+            <h3 class="text-lg font-semibold">Delete Session</h3>
+            <p class="text-sm opacity-80">
+              Choose what to delete. By default, chat history is preserved for RAG/learning.
+            </p>
+            <div class="flex flex-col sm:flex-row sm:space-x-2 space-y-2 sm:space-y-0">
+              <button phx-click="confirm_delete_session_only" class="btn btn-warning flex-1">
+                Delete Session Only (Keep Chat)
+              </button>
+              <button phx-click="confirm_delete_session_and_chat" class="btn btn-error flex-1">
+                Delete Session AND Chat History
+              </button>
+              <button phx-click="cancel_delete_session" class="btn flex-1">Cancel</button>
+            </div>
+          </div>
         </.modal>
 
         <.live_component module={TheMaestroWeb.ShortcutsOverlay} id="shortcuts-overlay" />
