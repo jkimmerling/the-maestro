@@ -194,7 +194,7 @@ Refactor Plan — Phases & Checklists
       - Action: keep as-is (Ecto.Repo definition).
 
   - Web (lib/the_maestro_web)
-    - [ ] `lib/the_maestro_web/live/session_chat_live.ex`
+    - [x] `lib/the_maestro_web/live/session_chat_live.ex`
       - Remove direct `TheMaestro.Repo.preload([:saved_authentication])` in `mount/3`; `Conversations.get_session_with_auth!/1` already preloads.
       - Replace all `TheMaestro.Personas.*` usage with `TheMaestro.SuppliedContext` calls:
         - create persona → `SuppliedContext.create_item(%{type: :persona, name: ..., text: ...})`
