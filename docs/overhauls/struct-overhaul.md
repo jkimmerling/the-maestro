@@ -1,6 +1,6 @@
 # Struct-First Domain Overhaul (Streaming + Request Meta + Versioned JSON)
 
-Status: Proposal ready to implement (Option B – Standard)
+Status: In progress — Stage 1 complete (Option B – Standard)
 Owner: Platform / Runtime
 Date: 2025‑09‑10
 
@@ -58,6 +58,15 @@ Persisted JSON (combined_chat):
 
 ## Implementation Plan
 
+Progress Checklist (2025-09-10):
+- [x] 1) Add the domain structs — modules exist with `@enforce_keys`, `new/1` and `new!/1`; added `StreamEvent.content/1`, `usage/1`, `tool_calls/1` helpers
+- [ ] 2) Normalize streaming events in one place — return `%StreamEvent{}` from `TheMaestro.Streaming.parse_stream/3`
+- [ ] 3) Managers/UI consume `%StreamEvent{}` — update `Sessions.Manager` and LiveView
+- [ ] 4) Persist `CombinedChat` via helper — ensure `to_map/1`/`from_map/1` usage at boundary
+- [ ] 5) Compatibility helpers — thin adapter for any legacy consumers
+- [ ] 6) Tests and contracts — unit + golden request fixtures
+- [ ] 7) Rollout and flagging — optional `:struct_events` flag, logging
+
 ### 1) Add the domain structs
 
 - Create modules listed above with `@enforce_keys` for required fields and `new!/1` constructors that:
@@ -66,7 +75,9 @@ Persisted JSON (combined_chat):
   - Default/compute derived fields (e.g., `Usage.total_tokens`).
   - For `StreamEvent`, provide helpers: `content/1`, `usage/1`, `tool_calls/1`.
 
-Already scaffolded in this branch (no behavior wired yet):
+Status: Completed 2025‑09‑10. Structs created and constructors implemented; `StreamEvent` helpers added.
+
+Already scaffolded/implemented in this branch:
 - `lib/the_maestro/domain/provider_meta.ex`
 - `lib/the_maestro/domain/request_meta.ex`
 - `lib/the_maestro/domain/usage.ex`

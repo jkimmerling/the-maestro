@@ -42,6 +42,24 @@ defmodule TheMaestro.Domain.StreamEvent do
     ev
   end
 
+  @doc """
+  Convenience accessor for `content`.
+  """
+  @spec content(t()) :: String.t() | nil
+  def content(%__MODULE__{content: c}), do: c
+
+  @doc """
+  Convenience accessor for `usage`.
+  """
+  @spec usage(t()) :: Usage.t() | nil
+  def usage(%__MODULE__{usage: u}), do: u
+
+  @doc """
+  Convenience accessor for `tool_calls`.
+  """
+  @spec tool_calls(t()) :: [ToolCall.t()]
+  def tool_calls(%__MODULE__{tool_calls: tc}), do: tc || []
+
   defp normalize_type(t) when t in [:content, :function_call, :usage, :done, :error], do: t
 
   defp normalize_type(t) when is_binary(t) do
