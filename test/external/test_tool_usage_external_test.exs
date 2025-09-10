@@ -1,4 +1,6 @@
 defmodule TheMaestro.External.ToolUsageExternalTest do
+  @compile {:no_warn_undefined, TheMaestro.Agents}
+  @compile {:no_warn_undefined, TheMaestro.Agents.Agent}
   require Logger
   use ExUnit.Case, async: false
 

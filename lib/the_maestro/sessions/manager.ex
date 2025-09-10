@@ -182,7 +182,7 @@ defmodule TheMaestro.Sessions.Manager do
 
   # Accumulation
   @impl true
-  def handle_cast({:acc_content, session_id, stream_id, chunk}, st) do
+  def handle_cast({:acc_content, session_id, _stream_id, chunk}, st) do
     st =
       update_in(st, [session_id, :acc], fn acc ->
         if acc do
@@ -423,12 +423,6 @@ defmodule TheMaestro.Sessions.Manager do
         events: acc.events,
         meta: acc.meta
       })
-  end
-
-  @impl true
-  def handle_cast({:stream_done_followup, session_id, stream_id}, st) do
-    finalize_and_persist(session_id, stream_id, st)
-    {:noreply, st}
   end
 
   defp do_followup_provider(:openai, session_name, items, model),

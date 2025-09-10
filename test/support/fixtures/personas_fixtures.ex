@@ -1,4 +1,5 @@
 defmodule TheMaestro.PersonasFixtures do
+  @compile {:no_warn_undefined, TheMaestro.Personas}
   @moduledoc """
   This module defines test helpers for creating
   entities via the `TheMaestro.Personas` context.

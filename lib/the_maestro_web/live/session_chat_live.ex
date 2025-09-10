@@ -59,51 +59,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     {:noreply, assign(socket, :message, msg)}
   end
 
-  @impl true
-  def handle_params(%{"id" => id}, _uri, %{assigns: %{session: %{id: current_id}}} = socket)
-      when is_binary(id) and id != current_id do
-    # Unsubscribe from old session topic and rehydrate assigns for new session
-    _ = TheMaestro.Chat.unsubscribe(current_id)
-
-    session = Conversations.get_session_with_auth!(id)
-    {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
-    :ok = TheMaestro.Chat.subscribe(session.id)
-
-    tid = Conversations.latest_thread_id(session.id)
-    msgs = current_messages_for(session.id, tid)
-
-    {:noreply,
-     socket
-     |> assign(:page_title, "Chat")
-     |> assign(:session, session)
-     |> assign(:current_thread_id, tid)
-     |> assign(:current_thread_label, (tid && Conversations.thread_label(tid)) || nil)
-     |> assign(:message, "")
-     |> assign(:messages, msgs)
-     |> assign(:streaming?, false)
-     |> assign(:partial_answer, "")
-     |> assign(:stream_id, nil)
-     |> assign(:stream_task, nil)
-     |> assign(:pending_canonical, nil)
-     |> assign(:thinking?, false)
-     |> assign(:tool_calls, [])
-     |> assign(:pending_tool_calls, [])
-     |> assign(:followup_history, [])
-     |> assign(:summary, compute_summary(msgs))
-     |> assign(:editing_latest, false)
-     |> assign(:latest_json, nil)
-     |> assign(:show_config, false)
-     |> assign(:config_form, %{})
-     |> assign(:config_models, [])
-     |> assign(:config_persona_options, [])
-     |> assign(:show_clear_confirm, false)
-     |> assign(:show_persona_modal, false)
-     |> assign(:persona_form, %{})
-     |> assign(:show_memory_modal, false)
-     |> assign(:memory_editor_text, nil)}
-  end
-
-  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+  # handle_params moved after handle_event clauses to avoid grouping warnings
 
   @impl true
   def handle_event("send", _params, socket) do
@@ -457,6 +413,50 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
+  @impl true
+  def handle_params(%{"id" => id}, _uri, %{assigns: %{session: %{id: current_id}}} = socket)
+      when is_binary(id) and id != current_id do
+    _ = TheMaestro.Chat.unsubscribe(current_id)
+    session = Conversations.get_session_with_auth!(id)
+    {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
+    :ok = TheMaestro.Chat.subscribe(session.id)
+
+    tid = Conversations.latest_thread_id(session.id)
+    msgs = current_messages_for(session.id, tid)
+
+    {:noreply,
+     socket
+     |> assign(:page_title, "Chat")
+     |> assign(:session, session)
+     |> assign(:current_thread_id, tid)
+     |> assign(:current_thread_label, (tid && Conversations.thread_label(tid)) || nil)
+     |> assign(:message, "")
+     |> assign(:messages, msgs)
+     |> assign(:streaming?, false)
+     |> assign(:partial_answer, "")
+     |> assign(:stream_id, nil)
+     |> assign(:stream_task, nil)
+     |> assign(:pending_canonical, nil)
+     |> assign(:thinking?, false)
+     |> assign(:tool_calls, [])
+     |> assign(:pending_tool_calls, [])
+     |> assign(:followup_history, [])
+     |> assign(:summary, compute_summary(msgs))
+     |> assign(:editing_latest, false)
+     |> assign(:latest_json, nil)
+     |> assign(:show_config, false)
+     |> assign(:config_form, %{})
+     |> assign(:config_models, [])
+     |> assign(:config_persona_options, [])
+     |> assign(:show_clear_confirm, false)
+     |> assign(:show_persona_modal, false)
+     |> assign(:persona_form, %{})
+     |> assign(:show_memory_modal, false)
+     |> assign(:memory_editor_text, nil)}
+  end
+
+  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+
   # ===== Streaming turn handling =====
   defp start_streaming_turn(socket, user_text) do
     session = socket.assigns.session
@@ -538,12 +538,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   defp user_msg(text), do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
 
-  defp assistant_msg(text),
-    do: %{"role" => "assistant", "content" => [%{"type" => "text", "text" => text}]}
-
-  defp assistant_msg_with_meta(text, meta) when is_map(meta) do
-    assistant_msg(text) |> Map.put("_meta", meta)
-  end
+  # assistant message helpers moved to orchestrator
 
   defp default_model_for_session(session, :openai) do
     {auth_type, _} = auth_meta_from_session(session)
@@ -697,6 +692,29 @@ defmodule TheMaestroWeb.SessionChatLive do
           compute_summary(msgs)
         end).()
      )}
+  end
+
+  def handle_info(
+        {:ai_stream, id, %{type: :finalized, content: final_text, meta: req_meta, usage: usage}},
+        %{assigns: %{stream_id: id}} = socket
+      ) do
+    meta = Map.put(req_meta || %{}, "usage", usage || %{})
+    messages = append_assistant_message(socket.assigns.messages || [], final_text || "", meta)
+
+    {:noreply,
+     socket
+     |> assign(:streaming?, false)
+     |> assign(:partial_answer, "")
+     |> assign(:stream_task, nil)
+     |> assign(:stream_id, nil)
+     |> assign(:pending_canonical, nil)
+     |> assign(:followup_history, [])
+     |> assign(:thinking?, false)
+     |> assign(:used_usage, nil)
+     |> assign(:tool_calls, [])
+     |> assign(:pending_tool_calls, [])
+     |> assign(:summary, compute_summary(messages))
+     |> assign(:messages, messages)}
   end
 
   def handle_info({:ai_stream, id, %{type: :done}}, %{assigns: %{stream_id: id}} = socket) do
@@ -932,51 +950,9 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   # IDs are binary_id strings now; no integer casting
 
-  defp effective_provider(socket, session) do
-    socket.assigns.used_provider || provider_from_session(session)
-  end
+  # request meta helpers moved to orchestrator
 
-  defp build_req_meta(socket, session, provider) do
-    {auth_type, auth_name} = auth_meta_from_session(session)
-
-    %{
-      "provider" => Atom.to_string(provider),
-      "model" => socket.assigns.used_model || default_model_for_session(session, provider),
-      "auth_type" => to_string(socket.assigns.used_auth_type || auth_type),
-      "auth_name" => socket.assigns.used_auth_name || auth_name,
-      "usage" => socket.assigns.used_usage || %{}
-    }
-  end
-
-  # Manager publishes a :finalized event with the persisted meta and text
-  def handle_info(
-        {:ai_stream, id, %{type: :finalized, content: final_text, meta: req_meta, usage: usage}},
-        %{assigns: %{stream_id: id}} = socket
-      ) do
-    meta = Map.put(req_meta || %{}, "usage", usage || %{})
-    messages = append_assistant_message(socket.assigns.messages || [], final_text || "", meta)
-
-    {:noreply,
-     socket
-     |> assign(:streaming?, false)
-     |> assign(:partial_answer, "")
-     |> assign(:stream_task, nil)
-     |> assign(:stream_id, nil)
-     |> assign(:pending_canonical, nil)
-     |> assign(:followup_history, [])
-     |> assign(:thinking?, false)
-     |> assign(:used_usage, nil)
-     |> assign(:tool_calls, [])
-     |> assign(:pending_tool_calls, [])
-     |> assign(:summary, compute_summary(messages))
-     |> assign(:messages, messages)}
-  end
-
-  # Catch-all to ignore unrelated messages (e.g., internal task signals)
-  def handle_info(_other, socket), do: {:noreply, socket}
-
-  # moved to orchestrator
-  defp run_pending_tools_and_follow_up(socket, _calls), do: {:ok, socket}
+  # moved to orchestrator; no-op stub removed
   # (old in-LV follow-up logic removed; handled by orchestrator)
 
   # moved to orchestrator

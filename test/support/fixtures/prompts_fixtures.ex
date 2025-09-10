@@ -1,4 +1,5 @@
 defmodule TheMaestro.PromptsFixtures do
+  @compile {:no_warn_undefined, TheMaestro.Prompts}
   @moduledoc """
   This module defines test helpers for creating
   entities via the `TheMaestro.Prompts` context.

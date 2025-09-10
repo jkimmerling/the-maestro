@@ -1,4 +1,6 @@
 defmodule TheMaestro.AgentsFixtures do
+  @compile {:no_warn_undefined, TheMaestro.Agents}
+  @compile {:no_warn_undefined, TheMaestro.Agents.Agent}
   @moduledoc """
   This module defines test helpers for creating
   entities via the `TheMaestro.Agents` context.
