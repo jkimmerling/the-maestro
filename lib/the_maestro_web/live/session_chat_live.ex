@@ -421,6 +421,17 @@ defmodule TheMaestroWeb.SessionChatLive do
     updated =
       put_in(canonical, ["messages"], (canonical["messages"] || []) ++ [user_msg(user_text)])
 
+    # Ensure we have a thread to attach this turn to
+    {tid, socket} =
+      case socket.assigns[:current_thread_id] do
+        id when is_binary(id) ->
+          {id, socket}
+
+        _ ->
+          {:ok, new_tid} = TheMaestro.Chat.ensure_thread(session.id)
+          {new_tid, assign(socket, :current_thread_id, new_tid)}
+      end
+
     # Persist user snapshot turn
     {:ok, _} =
       Conversations.create_chat_entry(%{
@@ -431,6 +442,7 @@ defmodule TheMaestroWeb.SessionChatLive do
         request_headers: %{},
         response_headers: %{},
         combined_chat: updated,
+        thread_id: tid,
         edit_version: 0
       })
 
@@ -920,7 +932,8 @@ defmodule TheMaestroWeb.SessionChatLive do
       req_meta,
       updated2,
       socket.assigns.used_usage,
-      socket.assigns.tool_calls
+      socket.assigns.tool_calls,
+      socket.assigns.current_thread_id
     )
 
     meta = %{
@@ -1155,11 +1168,19 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:followup_history, items)}
   end
 
-  defp persist_assistant_turn(_session, final_text, _req_meta, _updated2, _used_usage, _tools)
+  defp persist_assistant_turn(
+         _session,
+         final_text,
+         _req_meta,
+         _updated2,
+         _used_usage,
+         _tools,
+         _tid
+       )
        when final_text == "",
        do: :ok
 
-  defp persist_assistant_turn(session, _final_text, req_meta, updated2, used_usage, tools) do
+  defp persist_assistant_turn(session, _final_text, req_meta, updated2, used_usage, tools, tid) do
     req_hdrs = %{
       "provider" => req_meta["provider"],
       "model" => req_meta["model"],
@@ -1178,6 +1199,7 @@ defmodule TheMaestroWeb.SessionChatLive do
         request_headers: req_hdrs,
         response_headers: resp_hdrs,
         combined_chat: updated2,
+        thread_id: tid,
         edit_version: 0
       })
 
