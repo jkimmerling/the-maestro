@@ -24,9 +24,15 @@ defmodule TheMaestroWeb.ChatEntryLive.Show do
         <:item title="Turn index">{@chat_entry.turn_index}</:item>
         <:item title="Actor">{@chat_entry.actor}</:item>
         <:item title="Provider">{@chat_entry.provider}</:item>
-        <:item title="Request headers">{"map"}</:item>
-        <:item title="Response headers">{"map"}</:item>
-        <:item title="Combined chat">{"map"}</:item>
+        <:item title="Request headers">
+          <.json_viewer data={@chat_entry.request_headers || %{}} summary="Request headers" />
+        </:item>
+        <:item title="Response headers">
+          <.json_viewer data={@chat_entry.response_headers || %{}} summary="Response headers" />
+        </:item>
+        <:item title="Combined chat">
+          <.json_viewer data={@chat_entry.combined_chat || %{}} summary="Combined chat" />
+        </:item>
         <:item title="Edit version">{@chat_entry.edit_version}</:item>
         <:item title="Thread">{@chat_entry.thread_id}</:item>
         <:item title="Parent thread">{@chat_entry.parent_thread_id}</:item>

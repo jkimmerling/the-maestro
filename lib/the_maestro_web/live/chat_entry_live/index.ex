@@ -24,9 +24,15 @@ defmodule TheMaestroWeb.ChatEntryLive.Index do
         <:col :let={{_id, chat_entry}} label="Turn index">{chat_entry.turn_index}</:col>
         <:col :let={{_id, chat_entry}} label="Actor">{chat_entry.actor}</:col>
         <:col :let={{_id, chat_entry}} label="Provider">{chat_entry.provider}</:col>
-        <:col :let={{_id, chat_entry}} label="Request headers">{"map"}</:col>
-        <:col :let={{_id, chat_entry}} label="Response headers">{"map"}</:col>
-        <:col :let={{_id, chat_entry}} label="Combined chat">{"map"}</:col>
+        <:col :let={{_id, chat_entry}} label="Request headers">
+          <.json_viewer data={chat_entry.request_headers || %{}} summary="Request headers" />
+        </:col>
+        <:col :let={{_id, chat_entry}} label="Response headers">
+          <.json_viewer data={chat_entry.response_headers || %{}} summary="Response headers" />
+        </:col>
+        <:col :let={{_id, chat_entry}} label="Combined chat">
+          <.json_viewer data={chat_entry.combined_chat || %{}} summary="Combined chat" />
+        </:col>
         <:col :let={{_id, chat_entry}} label="Edit version">{chat_entry.edit_version}</:col>
         <:col :let={{_id, chat_entry}} label="Thread">{chat_entry.thread_id}</:col>
         <:col :let={{_id, chat_entry}} label="Parent thread">{chat_entry.parent_thread_id}</:col>
