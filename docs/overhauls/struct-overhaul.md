@@ -60,13 +60,12 @@ Persisted JSON (combined_chat):
 
 Progress Checklist (2025-09-10):
 - [x] 1) Add the domain structs — modules exist with `@enforce_keys`, `new/1` and `new!/1`; added `StreamEvent.content/1`, `usage/1`, `tool_calls/1` helpers
-- [x] 2) Normalize streaming events in one place — `TheMaestro.Streaming.parse_stream/3` now returns `%StreamEvent{}`; added compatibility publishing of `:function_call` for legacy consumers
-- [x] 3) Remove legacy map shape — Sessions.Manager and LiveView now publish/consume only `%StreamEvent{}`. No `function_call` legacy key is emitted; tool calls live under `:tool_calls` with `%Domain.ToolCall{}` items. Added `%StreamEvent{type: :thinking | :finalized}` to cover UI-only messages.
-- [ ] 3) Managers/UI consume `%StreamEvent{}` — update `Sessions.Manager` and LiveView
+- [x] 2) Normalize streaming events in one place — `TheMaestro.Streaming.parse_stream/3` now returns `%StreamEvent{}`
+- [x] 3) Remove legacy shapes and update consumers — Sessions.Manager publishes only `{:session_stream, %StreamEnvelope{...}}`; LiveViews consume `%StreamEvent{}` exclusively. No legacy tuple variants remain.
 - [ ] 4) Persist `CombinedChat` via helper — ensure `to_map/1`/`from_map/1` usage at boundary
-- [ ] 5) Compatibility helpers — thin adapter for any legacy consumers
+- [N/A] 5) Compatibility helpers — not applicable by decision (no legacy support maintained)
 - [ ] 6) Tests and contracts — unit + golden request fixtures
-- [ ] 7) Rollout and flagging — optional `:struct_events` flag, logging
+- [N/A] 7) Rollout/flagging — not applicable by decision (no feature flag; envelope is default)
 
 ### 1) Add the domain structs
 
@@ -132,8 +131,7 @@ Where to change:
 - `lib/the_maestro/conversations.ex`: call `CombinedChat.to_map/1` on write and `CombinedChat.from_map/1` on read around `ChatEntry.combined_chat`.
 - `lib/the_maestro/conversations/chat_entry.ex`: optionally add an `Ecto.Type` later if you want automatic casting.
 
-Optional feature flag (safe rollout):
-- Add `config :the_maestro, :struct_events, true` (default true in dev/test). Gate `StreamEvent` publishing to allow a quick revert if needed.
+Optional feature flag: N/A by decision. Envelope publishing is the default and only path.
 
 ### 6) Tests and contracts
 
@@ -145,8 +143,7 @@ Optional feature flag (safe rollout):
 
 ### 7) Rollout and flagging
 
-- Optional: feature flag `config :the_maestro, :struct_events, true` gating `%StreamEvent{}` publishing. Default ON in dev/test; allow disabling quickly in prod.
-- Logging: emit a single line per turn summarizing provider/model/usage from `RequestMeta`.
+N/A by decision. Envelope + `%StreamEvent{}` is the single supported model.
 
 ## File/Module Inventory (est.)
 
@@ -252,12 +249,10 @@ Suggested test additions:
 
 Operational tips:
 - Log one summary line per assistant turn from `%RequestMeta{}` – provider/model/auth/total_tokens – for easy regression detection.
-- If any consumer outside LiveView subscribes to `"session:" <> id`, add a temporary compatibility layer translating `%StreamEvent{}` to the previous map shape.
 
-## Notes on Backward Compatibility
+## Backward Compatibility
 
-- PubSub messages: If any external consumer subscribes to `"session:" <> id`, consider providing a compatibility shim (map translation) behind the feature flag while migrating.
-- Persisted rows: No migration; old JSON loads into the struct via `from_map/1`.
+None maintained for streaming events by decision. Persisted rows remain JSONB and will be handled by `from_map/1` once `CombinedChat` helpers are introduced.
 
 ## Appendix: What This Does NOT Solve
 
