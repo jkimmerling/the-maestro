@@ -18,7 +18,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     session = Conversations.get_session_with_auth!(id)
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
-    TheMaestro.Sessions.Manager.subscribe(session.id)
+    TheMaestro.Chat.subscribe(session.id)
 
     # Determine current thread (latest) for display
     tid = Conversations.latest_thread_id(session.id)
@@ -359,7 +359,7 @@ defmodule TheMaestroWeb.SessionChatLive do
           socket =
             if apply_behavior == "now" and socket.assigns.streaming? do
               # Cancel existing stream and restart using current pending canonical or latest snapshot
-              _ = TheMaestro.Sessions.Manager.cancel(updated.id)
+              _ = TheMaestro.Chat.cancel_turn(updated.id)
               provider = provider_from_session(updated)
 
               canon =
