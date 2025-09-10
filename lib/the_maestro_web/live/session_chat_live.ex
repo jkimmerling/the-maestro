@@ -497,38 +497,24 @@ defmodule TheMaestroWeb.SessionChatLive do
       (socket.assigns.messages || []) ++
         [%{"role" => "user", "content" => [%{"type" => "text", "text" => user_text}]}]
 
-    # Determine provider/model
-    provider =
-      provider_from_session(session)
-
-    model = pick_model_for_session(session, provider)
-    {auth_type, auth_name} = auth_meta_from_session(session)
-    {:ok, provider_msgs} = Translator.to_provider(updated, provider)
-
     t0 = System.monotonic_time(:millisecond)
 
-    {:ok, stream_id} =
-      TheMaestro.Chat.start_stream(
-        session.id,
-        provider,
-        auth_name,
-        provider_msgs,
-        model
-      )
+    {:ok, result} =
+      TheMaestro.Chat.start_turn(session.id, tid, user_text, t0_ms: t0)
 
     socket
     |> assign(:message, "")
     |> assign(:messages, ui_messages)
     |> assign(:streaming?, true)
     |> assign(:partial_answer, "")
-    |> assign(:stream_id, stream_id)
+    |> assign(:stream_id, result.stream_id)
     |> assign(:stream_task, nil)
-    |> assign(:pending_canonical, updated)
+    |> assign(:pending_canonical, result.pending_canonical)
     |> assign(:followup_history, [])
-    |> assign(:used_provider, provider)
-    |> assign(:used_model, model)
-    |> assign(:used_auth_type, auth_type)
-    |> assign(:used_auth_name, auth_name)
+    |> assign(:used_provider, result.provider)
+    |> assign(:used_model, result.model)
+    |> assign(:used_auth_type, result.auth_type)
+    |> assign(:used_auth_name, result.auth_name)
     |> assign(:used_usage, nil)
     |> assign(:tool_calls, [])
     |> assign(:used_t0_ms, t0)
