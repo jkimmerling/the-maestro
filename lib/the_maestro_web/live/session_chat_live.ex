@@ -418,7 +418,7 @@ defmodule TheMaestroWeb.SessionChatLive do
               model = pick_model_for_session(updated, provider)
 
               {:ok, stream_id} =
-                TheMaestro.Sessions.Manager.start_stream(
+                TheMaestro.Chat.start_stream(
                   updated.id,
                   provider,
                   elem(auth_meta_from_session(updated), 1),
@@ -508,7 +508,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     t0 = System.monotonic_time(:millisecond)
 
     {:ok, stream_id} =
-      TheMaestro.Sessions.Manager.start_stream(
+      TheMaestro.Chat.start_stream(
         session.id,
         provider,
         auth_name,
@@ -731,7 +731,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
         # Start a fresh streaming task with a new stream id
         {:ok, stream_id} =
-          TheMaestro.Sessions.Manager.start_stream(
+          TheMaestro.Chat.start_stream(
             socket.assigns.session.id,
             provider,
             socket.assigns.used_auth_name,
