@@ -133,12 +133,12 @@ defmodule TheMaestro.AgentLoop do
   defp resolve_workspace_root(provider, session_name) do
     # Prefer OAuth session, then API key. Fallback to File.cwd!/expanded.
     auth =
-      TheMaestro.SavedAuthentication.get_by_provider_and_name(provider, :oauth, session_name) ||
-        TheMaestro.SavedAuthentication.get_by_provider_and_name(provider, :api_key, session_name)
+      TheMaestro.Auth.get_by_provider_and_name(provider, :oauth, session_name) ||
+        TheMaestro.Auth.get_by_provider_and_name(provider, :api_key, session_name)
 
     case auth do
       %{id: auth_id} ->
-        case TheMaestro.Conversations.latest_session_for_auth_id(auth_id) do
+        case TheMaestro.Conversations.latest_session_for_auth_id(to_string(auth_id)) do
           nil ->
             File.cwd!() |> Path.expand()
 

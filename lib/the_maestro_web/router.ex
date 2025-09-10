@@ -21,16 +21,11 @@ defmodule TheMaestroWeb.Router do
     live "/auths/new", AuthNewLive, :new
     live "/auths/:id", AuthShowLive, :show
     live "/auths/:id/edit", AuthEditLive, :edit
-    # Generated CRUD routes for Prompts, Personas, and Agents
-    live "/base_system_prompts", BaseSystemPromptLive.Index, :index
-    live "/base_system_prompts/new", BaseSystemPromptLive.Form, :new
-    live "/base_system_prompts/:id", BaseSystemPromptLive.Show, :show
-    live "/base_system_prompts/:id/edit", BaseSystemPromptLive.Form, :edit
-
-    live "/personas", PersonaLive.Index, :index
-    live "/personas/new", PersonaLive.Form, :new
-    live "/personas/:id", PersonaLive.Show, :show
-    live "/personas/:id/edit", PersonaLive.Form, :edit
+    # SuppliedContext CRUD routes
+    live "/supplied_context", SuppliedContextItemLive.Index, :index
+    live "/supplied_context/new", SuppliedContextItemLive.Form, :new
+    live "/supplied_context/:id", SuppliedContextItemLive.Show, :show
+    live "/supplied_context/:id/edit", SuppliedContextItemLive.Form, :edit
 
     # Agents routes removed after session-centric cleanup
 

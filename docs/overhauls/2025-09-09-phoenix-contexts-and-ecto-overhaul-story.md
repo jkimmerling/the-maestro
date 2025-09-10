@@ -248,23 +248,23 @@ Refactor Plan — Phases & Checklists
     - [ ] `lib/the_maestro_web/live/persona_live/show.ex`
       - Action: retire or rewrite to show `SuppliedContextItem` with `type: :persona`.
 
-    - [ ] `lib/the_maestro_web/router.ex`
-      - Remove routes for `/base_system_prompts*` and `/personas*` if retiring those UIs.
+    - [x] `lib/the_maestro_web/router.ex`
+      - Remove routes for `/base_system_prompts*` and `/personas*` if retiring those UIs. (Removed)
       - If keeping UIs, update routes/modules to point to new SuppliedContext screens.
 
 - Phase 2b — SuppliedContext LiveView CRUD UI
-  - [ ] Generate LiveView screens (no duplicate context/schema)
+  - [x] Generate LiveView screens (no duplicate context/schema)
         Command:
         - `mix phx.gen.live SuppliedContext SuppliedContextItem supplied_context_items type:enum:persona:system_prompt name:string text:text version:integer tags:map metadata:map --no-context --no-schema`
         Notes:
         - We already generated the context/schema; `--no-context --no-schema` prevents duplication.
         - Keep binary_id usage in forms by binding to existing schema.
-  - [ ] Add routes in `lib/the_maestro_web/router.ex` (browser scope)
+  - [x] Add routes in `lib/the_maestro_web/router.ex` (browser scope)
         - `live "/supplied_context", SuppliedContextItemLive.Index, :index`
         - `live "/supplied_context/new", SuppliedContextItemLive.Form, :new`
         - `live "/supplied_context/:id", SuppliedContextItemLive.Show, :show`
         - `live "/supplied_context/:id/edit", SuppliedContextItemLive.Form, :edit`
-  - [ ] Implement LiveView modules (generator stubs) under `lib/the_maestro_web/live/supplied_context_item_live/`
+  - [x] Implement LiveView modules (generator stubs) under `lib/the_maestro_web/live/supplied_context_item_live/`
         - `index.ex` — list + stream items, type filter tabs (persona/system_prompt)
         - `form.ex` — create/edit with fields: `type` (select), `name` (text), `text` (textarea), `version` (number), `tags` (JSON textarea), `metadata` (JSON textarea)
         - `show.ex` — read-only view with edit link

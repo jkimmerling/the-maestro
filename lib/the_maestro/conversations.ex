@@ -180,8 +180,8 @@ defmodule TheMaestro.Conversations do
   Useful for locating the session-scoped working_dir when only an auth session
   name is available.
   """
-  @spec latest_session_for_auth_id(integer()) :: Session | nil
-  def latest_session_for_auth_id(auth_id) when is_integer(auth_id) do
+  @spec latest_session_for_auth_id(Ecto.UUID.t()) :: Session | nil
+  def latest_session_for_auth_id(auth_id) when is_binary(auth_id) do
     Repo.one(
       from s in Session,
         where: s.auth_id == ^auth_id,
