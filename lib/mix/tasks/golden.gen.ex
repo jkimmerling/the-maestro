@@ -63,10 +63,15 @@ defmodule Mix.Tasks.Golden.Gen do
     System.put_env("HTTP_DEBUG_LEVEL", "high")
     System.put_env("HTTP_DEBUG_FILE", log_path)
 
-    {:ok, _} = Chat.start_turn(session_id, nil, "hello")
-    Process.sleep(1500)
-    {:ok, _} = Chat.start_turn(session_id, nil, "please list the files in your current directory")
-    Process.sleep(3000)
+    TheMaestro.Chat.subscribe(session_id)
+
+    {:ok, t1} = Chat.start_turn(session_id, nil, "hello")
+    ensure_turn_passes!(session_id, t1.stream_id, require_tools?: false)
+
+    {:ok, t2} =
+      Chat.start_turn(session_id, nil, "please list the files in your current directory")
+
+    ensure_turn_passes!(session_id, t2.stream_id, require_tools?: true)
 
     fixtures = extract_fixtures(log_path)
     out_file = Path.join(log_dir, "request_fixtures.json")
@@ -136,5 +141,103 @@ defmodule Mix.Tasks.Golden.Gen do
       {:ok, m} -> m
       _ -> str
     end
+  end
+
+  defp ensure_turn_passes!(session_id, stream_id, opts) do
+    require_tools? = Keyword.get(opts, :require_tools?, false)
+    final = collect_turn_outcome(session_id, stream_id)
+    validate_outcome!(final, require_tools?)
+  end
+
+  defp collect_turn_outcome(session_id, stream_id) do
+    deadline = System.monotonic_time(:millisecond) + 30_000
+    state = %{content: "", saw_error?: false, saw_finalized?: false, saw_tool?: false}
+    wait_events(session_id, stream_id, state, deadline, &reduce_event/2)
+  end
+
+  defp reduce_event(%{type: :error}, acc), do: %{acc | saw_error?: true}
+  defp reduce_event(%{type: :finalized}, acc), do: %{acc | saw_finalized?: true}
+
+  defp reduce_event(%{type: :content, content: chunk}, acc) when is_binary(chunk),
+    do: %{acc | content: acc.content <> chunk}
+
+  defp reduce_event(%{type: :function_call, tool_calls: calls}, acc) when is_list(calls) do
+    any_tool = Enum.any?(calls, &tool_name_matches?/1)
+    %{acc | saw_tool?: acc.saw_tool? or any_tool}
+  end
+
+  defp reduce_event(_other, acc), do: acc
+
+  defp tool_name_matches?(c) do
+    n = (is_map(c) && (c["name"] || c[:name])) || nil
+    n in ["shell", "Bash", "run_shell_command", "list_directory"]
+  end
+
+  defp validate_outcome!(final, require_tools?) do
+    cond do
+      final.saw_error? ->
+        Mix.raise("Turn failed: provider returned error events")
+
+      not final.saw_finalized? ->
+        Mix.raise("Turn did not finalize in time")
+
+      String.trim(final.content) == "" ->
+        Mix.raise("Turn produced empty content")
+
+      require_tools? and not final.saw_tool? ->
+        Mix.raise("Second turn did not use tools as required")
+
+      require_tools? and not looks_like_listing?(final.content) ->
+        Mix.raise("Second turn did not appear to list files")
+
+      true ->
+        :ok
+    end
+  end
+
+  defp wait_events(session_id, stream_id, acc, deadline_ms, reducer) do
+    now = System.monotonic_time(:millisecond)
+
+    if now >= deadline_ms do
+      acc
+    else
+      receive do
+        {:session_stream,
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: ^session_id,
+           stream_id: ^stream_id,
+           event: ev
+         }} ->
+          acc2 = reducer.(ev, acc)
+
+          if acc2.saw_finalized?,
+            do: acc2,
+            else: wait_events(session_id, stream_id, acc2, deadline_ms, reducer)
+
+        _other ->
+          wait_events(session_id, stream_id, acc, deadline_ms, reducer)
+      after
+        1000 ->
+          wait_events(session_id, stream_id, acc, deadline_ms, reducer)
+      end
+    end
+  end
+
+  defp looks_like_listing?(text) when is_binary(text) do
+    sample = String.downcase(text)
+
+    Enum.any?(
+      [
+        "mix.exs",
+        "lib/",
+        "deps/",
+        "assets/",
+        ".gitignore",
+        "README.md",
+        "total ",
+        "drwx"
+      ],
+      fn needle -> String.contains?(sample, String.downcase(needle)) end
+    )
   end
 end
