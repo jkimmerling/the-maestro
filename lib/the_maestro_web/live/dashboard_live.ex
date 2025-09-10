@@ -302,11 +302,13 @@ defmodule TheMaestroWeb.DashboardLive do
         end
     end
   end
+
   # fallback clause grouped with the primary build_model_options/1
   defp build_model_options(_), do: []
 
   # Convert provider strings/atoms to a safe allowed atom
   defp to_provider_atom(p) when is_atom(p), do: p
+
   defp to_provider_atom(p) when is_binary(p) do
     allowed = TheMaestro.Provider.list_providers()
     allowed_str = Enum.map(allowed, &Atom.to_string/1)

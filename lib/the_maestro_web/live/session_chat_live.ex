@@ -700,23 +700,18 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   def handle_info({:ai_stream, id, %{type: :done}}, %{assigns: %{stream_id: id}} = socket) do
-    socket = push_event(socket, %{kind: "ai", type: "done", at: now_ms()})
-
-    case socket.assigns[:pending_tool_calls] do
-      calls when is_list(calls) and calls != [] ->
-        with {:ok, socket2} <- run_pending_tools_and_follow_up(socket, calls) do
-          {:noreply, assign(socket2, :pending_tool_calls, [])}
-        else
-          _ -> {:noreply, finalize_no_tools(socket)}
-        end
-
-      _ ->
-        {:noreply, finalize_no_tools(socket)}
-    end
+    # Manager now owns finalization and tool follow-ups; we only mark UI state
+    {:noreply, push_event(socket, %{kind: "ai", type: "done", at: now_ms()})}
   end
 
-  # Ignore stale stream messages
-  def handle_info({:ai_stream, _other, _msg}, socket), do: {:noreply, socket}
+  # Ignore stale stream messages (ids that do not match current stream)
+  def handle_info(
+        {:ai_stream, other_id, _msg},
+        %{assigns: %{stream_id: id}} = socket
+      )
+      when other_id != id do
+    {:noreply, socket}
+  end
 
   # Internal: retry the current provider call after a backoff
   def handle_info({:retry_stream, _attempt} = _msg, socket) do
@@ -776,8 +771,7 @@ defmodule TheMaestroWeb.SessionChatLive do
      })}
   end
 
-  # Catch-all to ignore unrelated messages (e.g., internal task signals)
-  def handle_info(_other, socket), do: {:noreply, socket}
+  # (moved catch-all to bottom to avoid shadowing specialized clauses)
 
   # ===== Event logging helpers =====
   defp now_ms, do: System.system_time(:millisecond)
@@ -954,309 +948,38 @@ defmodule TheMaestroWeb.SessionChatLive do
     }
   end
 
-  defp finalize_no_tools(socket) do
-    session = socket.assigns.session
-    final_text = socket.assigns.partial_answer || ""
+  # Manager publishes a :finalized event with the persisted meta and text
+  def handle_info(
+        {:ai_stream, id, %{type: :finalized, content: final_text, meta: req_meta, usage: usage}},
+        %{assigns: %{stream_id: id}} = socket
+      ) do
+    meta = Map.put(req_meta || %{}, "usage", usage || %{})
+    messages = append_assistant_message(socket.assigns.messages || [], final_text || "", meta)
 
-    provider = effective_provider(socket, session)
-    req_meta = build_req_meta(socket, session, provider)
-
-    updated = socket.assigns.pending_canonical || %{"messages" => []}
-
-    updated2 =
-      put_in(
-        updated,
-        ["messages"],
-        updated["messages"] ++ [assistant_msg_with_meta(final_text, req_meta)]
-      )
-
-    updated2 = Map.put(updated2, "events", socket.assigns.event_buffer || [])
-
-    persist_assistant_turn(
-      session,
-      final_text,
-      req_meta,
-      updated2,
-      socket.assigns.used_usage,
-      socket.assigns.tool_calls,
-      socket.assigns.current_thread_id
-    )
-
-    meta = %{
-      "provider" => req_meta["provider"],
-      "model" => req_meta["model"],
-      "auth_type" => req_meta["auth_type"],
-      "auth_name" => req_meta["auth_name"],
-      "usage" => req_meta["usage"],
-      "tools" => socket.assigns.tool_calls
-    }
-
-    messages = append_assistant_message(socket.assigns.messages || [], final_text, meta)
-
-    socket
-    |> assign(:streaming?, false)
-    |> assign(:partial_answer, "")
-    |> assign(:stream_task, nil)
-    |> assign(:stream_id, nil)
-    |> assign(:pending_canonical, nil)
-    |> assign(:followup_history, [])
-    |> assign(:thinking?, false)
-    |> assign(:used_usage, nil)
-    |> assign(:tool_calls, [])
-    |> assign(:summary, compute_summary(messages))
-    |> assign(:messages, messages)
-  end
-
-  defp run_pending_tools_and_follow_up(socket, calls) do
-    base_cwd =
-      case socket.assigns.session.working_dir do
-        wd when is_binary(wd) and wd != "" -> Path.expand(wd)
-        _ -> File.cwd!() |> Path.expand()
-      end
-
-    outputs =
-      Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-        case TheMaestro.Tools.Runtime.exec(name, args, base_cwd) do
-          {:ok, payload} -> {id, {:ok, payload}}
-          {:error, reason} -> {id, {:error, to_string(reason)}}
-        end
-      end)
-
-    # Include both the function_call item (so ChatGPT can correlate by call_id)
-    # and the function_call_output item with the executed tool result.
-    fc_items =
-      Enum.map(socket.assigns.pending_tool_calls || [], fn %{
-                                                             "id" => id,
-                                                             "name" => name,
-                                                             "arguments" => args
-                                                           } ->
-        %{"type" => "function_call", "call_id" => id, "name" => name, "arguments" => args || ""}
-      end)
-
-    out_items =
-      Enum.map(outputs, fn {id, result} ->
-        output =
-          case result do
-            {:ok, payload} ->
-              payload
-
-            {:error, msg} ->
-              Jason.encode!(%{
-                "output" => msg,
-                "metadata" => %{"exit_code" => 1, "duration_seconds" => 0.0}
-              })
-          end
-
-        %{"type" => "function_call_output", "call_id" => id, "output" => output}
-      end)
-
-    # Include prior assistant message for context continuity
-    # Include last user message for continuity (convert to input_text)
-    last_user_text =
-      (socket.assigns.messages || [])
-      |> Enum.reverse()
-      |> Enum.find_value(fn m ->
-        if m["role"] == "user", do: m["content"] |> List.first() |> Map.get("text"), else: nil
-      end)
-
-    user_ctx_items =
-      case last_user_text do
-        nil ->
-          []
-
-        text ->
-          [
-            %{
-              "type" => "message",
-              "role" => "user",
-              "content" => [%{"type" => "input_text", "text" => text}]
-            }
-          ]
-      end
-
-    prior_msg =
-      case socket.assigns.partial_answer || "" do
-        "" ->
-          []
-
-        text ->
-          [
-            %{
-              "type" => "message",
-              "role" => "assistant",
-              "content" => [%{"type" => "output_text", "text" => text}]
-            }
-          ]
-      end
-
-    history = socket.assigns.followup_history || []
-
-    # Include the user context only once at the start of a follow-up sequence
-    initial_ctx = if history == [], do: user_ctx_items, else: []
-
-    items_current = initial_ctx ++ prior_msg ++ fc_items ++ out_items
-    items = history ++ items_current
-
-    provider = effective_provider(socket, socket.assigns.session)
-    model = socket.assigns.used_model
-    {_, session_name} = auth_meta_from_session(socket.assigns.session)
-
-    # Determine provider-specific follow-up payload
-    provider_items =
-      case provider do
-        :openai ->
-          items
-
-        :anthropic ->
-          # Build Anthropic follow-up with full history and prior assistant text
-          canon = socket.assigns.pending_canonical || %{"messages" => []}
-          {:ok, prev_msgs} = TheMaestro.Conversations.Translator.to_provider(canon, :anthropic)
-
-          {anth_messages, _} =
-            TheMaestro.Followups.Anthropic.build(
-              prev_msgs,
-              calls,
-              socket.assigns.partial_answer || "",
-              base_cwd: base_cwd,
-              outputs: outputs
-            )
-
-          anth_messages
-
-        :gemini ->
-          # Build Gemini functionResponse-based follow-up
-          last_user =
-            (socket.assigns.messages || [])
-            |> Enum.reverse()
-            |> Enum.find(fn m -> (m["role"] || "") == "user" end) || %{}
-
-          last_user_parts =
-            case last_user do
-              %{"content" => content} when is_list(content) ->
-                # Convert OpenAI style [{"type"=>"input_text","text"=>..}] or text parts to Gemini
-                text =
-                  case content do
-                    [%{"type" => "input_text", "text" => t} | _] -> t
-                    [%{"type" => "text", "text" => t} | _] -> t
-                    _ -> ""
-                  end
-
-                if text == "", do: [], else: [%{"text" => text}]
-
-              _ ->
-                []
-            end
-
-          # Map outputs (id -> result) and attach names
-          call_lookup = Map.new(socket.assigns.pending_tool_calls || [], &{&1["id"], &1})
-
-          fr_parts =
-            Enum.map(outputs, fn {id, result} ->
-              name = (call_lookup[id] || %{})["name"] || "run_shell_command"
-
-              response =
-                case result do
-                  {:ok, payload} ->
-                    case Jason.decode(payload) do
-                      {:ok, map} -> map
-                      _ -> %{"output" => payload}
-                    end
-
-                  {:error, reason} ->
-                    %{"error" => to_string(reason)}
-                end
-
-              %{"functionResponse" => %{"name" => name, "id" => id, "response" => response}}
-            end)
-
-          # Echo assistant functionCall parts for each pending call
-          fc_parts =
-            Enum.map(socket.assigns.pending_tool_calls || [], fn call ->
-              args =
-                case Jason.decode(call["arguments"] || "{}") do
-                  {:ok, m} -> m
-                  _ -> %{}
-                end
-
-              %{"functionCall" => %{"name" => call["name"], "id" => call["id"], "args" => args}}
-            end)
-
-          contents =
-            if(last_user_parts == [],
-              do: [],
-              else: [%{"role" => "user", "parts" => last_user_parts}]
-            ) ++
-              [%{"role" => "assistant", "parts" => fc_parts}] ++
-              [%{"role" => "tool", "parts" => fr_parts}]
-
-          contents
-
-        _ ->
-          []
-      end
-
-    {:ok, new_stream_id} =
-      TheMaestro.Sessions.Manager.run_followup(
-        socket.assigns.session.id,
-        provider,
-        session_name,
-        provider_items,
-        model
-      )
-
-    {:ok,
+    {:noreply,
      socket
+     |> assign(:streaming?, false)
      |> assign(:partial_answer, "")
-     |> assign(:stream_id, new_stream_id)
      |> assign(:stream_task, nil)
-     |> assign(:used_usage, nil)
+     |> assign(:stream_id, nil)
+     |> assign(:pending_canonical, nil)
+     |> assign(:followup_history, [])
      |> assign(:thinking?, false)
-     |> assign(:followup_history, items)}
+     |> assign(:used_usage, nil)
+     |> assign(:tool_calls, [])
+     |> assign(:pending_tool_calls, [])
+     |> assign(:summary, compute_summary(messages))
+     |> assign(:messages, messages)}
   end
 
-  defp persist_assistant_turn(
-         _session,
-         final_text,
-         _req_meta,
-         _updated2,
-         _used_usage,
-         _tools,
-         _tid
-       )
-       when final_text == "",
-       do: :ok
+  # Catch-all to ignore unrelated messages (e.g., internal task signals)
+  def handle_info(_other, socket), do: {:noreply, socket}
 
-  defp persist_assistant_turn(session, _final_text, req_meta, updated2, used_usage, tools, tid) do
-    req_hdrs = %{
-      "provider" => req_meta["provider"],
-      "model" => req_meta["model"],
-      "auth_type" => req_meta["auth_type"],
-      "auth_name" => req_meta["auth_name"]
-    }
+  # moved to orchestrator
+  defp run_pending_tools_and_follow_up(socket, _calls), do: {:ok, socket}
+  # (old in-LV follow-up logic removed; handled by orchestrator)
 
-    resp_hdrs = %{"usage" => used_usage || %{}, "tools" => tools || []}
-
-    {:ok, entry} =
-      Conversations.create_chat_entry(%{
-        session_id: session.id,
-        turn_index: Conversations.next_turn_index(session.id),
-        actor: "assistant",
-        provider: req_meta["provider"],
-        request_headers: req_hdrs,
-        response_headers: resp_hdrs,
-        combined_chat: updated2,
-        thread_id: tid,
-        edit_version: 0
-      })
-
-    {:ok, _} =
-      Conversations.update_session(session, %{
-        latest_chat_entry_id: entry.id,
-        last_used_at: DateTime.utc_now()
-      })
-
-    :ok
-  end
+  # moved to orchestrator
 
   defp append_assistant_message(messages, final_text, meta) do
     messages ++

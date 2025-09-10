@@ -30,7 +30,7 @@ defmodule TheMaestro.SavedAuthentication do
       }
   """
 
-use Ecto.Schema
+  use Ecto.Schema
   import Ecto.Changeset
 
   @type t :: %__MODULE__{
@@ -319,6 +319,7 @@ use Ecto.Schema
   @spec get_by_provider(atom(), atom()) :: t() | nil
   def get_by_provider(provider, auth_type) do
     default_name = "default_" <> Atom.to_string(provider) <> "_" <> Atom.to_string(auth_type)
+
     TheMaestro.Auth.get_by_provider_and_name(provider, auth_type, default_name)
     |> case do
       nil -> nil
@@ -374,6 +375,7 @@ use Ecto.Schema
   defp put_if_present(map, k, v), do: Map.put(map, k, v)
   # provider_to_db no longer needed; provider normalization handled in Auth context
   defp compat(nil), do: nil
+
   defp compat(%TheMaestro.Auth.SavedAuthentication{} = rec) do
     provider = rec.provider
     provider = if is_binary(provider), do: String.to_atom(provider), else: provider
@@ -389,5 +391,6 @@ use Ecto.Schema
       updated_at: rec.updated_at
     }
   end
+
   defp compat(%__MODULE__{} = rec), do: rec
 end
