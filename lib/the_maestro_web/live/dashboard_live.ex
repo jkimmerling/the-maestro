@@ -61,14 +61,30 @@ defmodule TheMaestroWeb.DashboardLive do
     case id do
       id when is_binary(id) ->
         sa = Auth.get_saved_authentication!(id)
-        # Allow deletion; DB FK now nilifies agent.auth_id
-        _ = Provider.delete_session(sa.provider, sa.auth_type, sa.name)
+        # Delete via Auth context (accepts atom or string provider) so UI doesn't depend
+        # on Provider.validate_provider/1's atom-only contract.
+        case Auth.delete_named_session(sa.provider, sa.auth_type, sa.name) do
+          :ok ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Auth deleted; refresh jobs canceled if any.")
+             |> assign(:auths, Auth.list_saved_authentications())
+             |> assign(:auth_options, build_auth_options())}
 
-        {:noreply,
-         socket
-         |> put_flash(:info, "Auth deleted; linked agents detached.")
-         |> assign(:auths, Auth.list_saved_authentications())
-         |> assign(:auth_options, build_auth_options())}
+          {:error, :not_found} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, "Auth not found; nothing deleted.")
+             |> assign(:auths, Auth.list_saved_authentications())
+             |> assign(:auth_options, build_auth_options())}
+
+          {:error, reason} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, "Delete failed: #{inspect(reason)}")
+             |> assign(:auths, Auth.list_saved_authentications())
+             |> assign(:auth_options, build_auth_options())}
+        end
 
       :error ->
         {:noreply, socket}

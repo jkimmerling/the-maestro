@@ -52,6 +52,9 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
           # https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse
           session_uuid = Ecto.UUID.generate()
 
+          # Preflight token validity (handles revoked tokens that are not yet past expires_at)
+          :ok = preflight_refresh_if_needed(session_id)
+
           case TheMaestro.Providers.Gemini.CodeAssist.ensure_project(session_id) do
             {:ok, project} when is_binary(project) and project != "" ->
               Logger.debug("Gemini OAuth project resolved: #{inspect(project)}")
@@ -99,6 +102,26 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
               {:error, :missing_user_project}
           end
       end
+    end
+  end
+
+  # Attempt a very cheap GET to validate the bearer token. If it returns 401,
+  # force a refresh and continue. Errors are ignored so we don't block streaming.
+  defp preflight_refresh_if_needed(session_name) do
+    with {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
+      case Req.request(req,
+             method: :get,
+             url: "https://cloudcode-pa.googleapis.com/v1internal:getCodeAssistGlobalUserSetting"
+           ) do
+        {:ok, %Req.Response{status: 401}} ->
+          _ = TheMaestro.Providers.Gemini.OAuth.refresh_tokens(session_name)
+          :ok
+
+        _ ->
+          :ok
+      end
+    else
+      _ -> :ok
     end
   end
 

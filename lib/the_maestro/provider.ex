@@ -321,6 +321,15 @@ defmodule TheMaestro.Provider do
     if provider_has_modules?(provider), do: :ok, else: {:error, :invalid_provider}
   end
 
+  defp validate_provider(provider) when is_binary(provider) do
+    try do
+      atom = String.to_existing_atom(provider)
+      validate_provider(atom)
+    rescue
+      _ -> {:error, :invalid_provider}
+    end
+  end
+
   defp validate_provider(_), do: {:error, :invalid_provider}
 
   @spec validate_auth_type(term()) :: :ok | {:error, :invalid_auth_type}
