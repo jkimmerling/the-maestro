@@ -281,6 +281,7 @@ defmodule TheMaestroWeb.SessionChatLive do
         case Conversations.update_session(socket.assigns.session, attrs) do
           {:ok, updated} ->
             socket = assign(socket, :session, updated)
+            _ = TheMaestro.MCP.Registry.bump_revision(updated.id)
             apply_behavior = params["apply"] || "now"
             socket = maybe_restart_stream(socket, updated, apply_behavior)
 

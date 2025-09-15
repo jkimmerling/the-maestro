@@ -248,8 +248,8 @@ defmodule TheMaestro.Sessions.Manager do
       %{stream_id: ^stream_id, acc: acc} ->
         case acc do
           %{tool_calls: calls} when is_list(calls) and calls != [] ->
-            run_tools_and_followup(session_id, stream_id, st)
-
+            st = run_tools_and_followup(session_id, stream_id, st)
+            
           _ ->
             finalize_and_persist(session_id, stream_id, st)
         end
@@ -263,8 +263,20 @@ defmodule TheMaestro.Sessions.Manager do
 
   def handle_cast({:stream_done_followup, session_id, stream_id}, st) do
     case Map.get(st, session_id) do
-      %{stream_id: ^stream_id} ->
-        finalize_and_persist(session_id, stream_id, st)
+      %{stream_id: ^stream_id, acc: acc} ->
+        calls = acc && acc.tool_calls || []
+        rounds = ((acc && acc.meta && acc.meta[:followup_rounds]) || 0)
+
+        {st, took_action} =
+          cond do
+            is_list(calls) and calls != [] and rounds < 3 ->
+              {run_tools_and_followup(session_id, stream_id, st), true}
+
+            true ->
+              finalize_and_persist(session_id, stream_id, st)
+              {st, false}
+          end
+
         {:noreply, st}
 
       _ ->
@@ -342,9 +354,16 @@ defmodule TheMaestro.Sessions.Manager do
       }
 
       updated2 =
-        latest.combined_chat
-        |> append_assistant(text, req_meta)
-        |> Map.put("events", events || [])
+        case String.trim(to_string(text || "")) do
+          "" ->
+            # No assistant text to append; only update events timeline
+            Map.put(latest.combined_chat || %{"messages" => []}, "events", events || [])
+
+          _ ->
+            latest.combined_chat
+            |> append_assistant(text, req_meta)
+            |> Map.put("events", events || [])
+        end
 
       {:ok, entry} =
         Conversations.create_chat_entry(%{
@@ -413,7 +432,22 @@ defmodule TheMaestro.Sessions.Manager do
     latest = Conversations.latest_snapshot(session_id)
     last_user_text = last_user_text_from(latest)
 
-    outputs = exec_tools(acc.tool_calls || [], base_cwd)
+    # Deduplicate by (name,args) across rounds to avoid re-running identical calls
+    executed = (acc.meta && acc.meta[:executed_calls]) || MapSet.new()
+
+    calls_all = acc.tool_calls || []
+    calls_to_run =
+      Enum.reject(calls_all, fn %{"name" => name, "arguments" => args} ->
+        sig = make_call_sig(name, args)
+        MapSet.member?(executed, sig)
+      end)
+
+    # If nothing new to execute, finalize instead of looping
+    if calls_to_run == [] do
+      finalize_and_persist(session_id, stream_id, st)
+      st
+    else
+      outputs = exec_tools(session_id, calls_to_run, base_cwd)
 
     items =
       case provider do
@@ -423,7 +457,21 @@ defmodule TheMaestro.Sessions.Manager do
       end
 
     # Follow-up stream publishes under the SAME stream_id for UI continuity
-    {:ok, _task} =
+    # bump follow-up round counter to prevent infinite loops
+      st =
+      update_in(st, [session_id, :acc, :meta], fn meta ->
+        meta = meta || %{}
+        executed2 =
+          Enum.reduce(calls_to_run, executed, fn %{"name" => n, "arguments" => a}, accset ->
+            MapSet.put(accset, make_call_sig(n, a))
+          end)
+
+        meta
+        |> Map.update(:followup_rounds, 1, &(&1 + 1))
+        |> Map.put(:executed_calls, executed2)
+      end)
+
+      {:ok, _task} =
       Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
         result = do_followup_provider(provider, session_name, items, model)
 
@@ -464,7 +512,7 @@ defmodule TheMaestro.Sessions.Manager do
       end)
 
     # reset accumulators for follow-up turn (keep meta and t0)
-    _st =
+      st =
       put_in(st, [session_id, :acc], %{
         text: "",
         tool_calls: [],
@@ -472,6 +520,9 @@ defmodule TheMaestro.Sessions.Manager do
         events: acc.events,
         meta: acc.meta
       })
+
+      st
+    end
   end
 
   defp do_followup_provider(:openai, session_name, items, model),
@@ -490,9 +541,9 @@ defmodule TheMaestro.Sessions.Manager do
     end
   end
 
-  defp exec_tools(calls, base_cwd) do
+  defp exec_tools(session_id, calls, base_cwd) do
     Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-      case ToolsRuntime.exec(name, args, base_cwd) do
+      case ToolsRuntime.exec(session_id, name, args, base_cwd) do
         {:ok, payload} -> {id, {:ok, payload}}
         {:error, reason} -> {id, {:error, to_string(reason)}}
       end
@@ -556,34 +607,47 @@ defmodule TheMaestro.Sessions.Manager do
     anth_messages
   end
 
-  defp build_gemini_items(last_user_text, partial_answer, calls, outputs) do
-    last_user_parts =
-      if is_binary(last_user_text) and last_user_text != "",
-        do: [%{"text" => last_user_text}],
-        else: []
+  defp build_gemini_items(last_user_text, _partial_answer, calls, outputs) do
+    # Cloud Code expects conversation continuity. Send:
+    # 1) the last user message (text only),
+    # 2) the model functionCall echo(s),
+    # 3) the tool functionResponse(s).
 
-    prior_parts = if partial_answer != "", do: [%{"text" => partial_answer}], else: []
+    fc_parts =
+      Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
+        decoded_args =
+          case Jason.decode(args || "{}") do
+            {:ok, %{} = m} -> m
+            _ -> %{}
+          end
 
-    fc_items =
-      Enum.map(calls, fn %{"id" => id, "name" => name} ->
-        %{"functionCall" => %{"name" => name, "args" => %{}, "id" => id}}
+        %{"functionCall" => %{"name" => name, "args" => decoded_args, "id" => id}}
       end)
 
-    out_items =
+    fr_parts =
       Enum.map(outputs, fn {id, result} ->
+        payload = tool_output_payload(result)
+        response = maybe_decode_json(payload)
+
         %{
           "functionResponse" => %{
             "name" => find_name_for_call(id, calls),
-            "response" => tool_output_payload(result),
+            "response" => response,
             "id" => id
           }
         }
       end)
 
-    [] ++
-      if(last_user_parts == [], do: [], else: [%{"role" => "user", "parts" => last_user_parts}]) ++
-      if(prior_parts == [], do: [], else: [%{"role" => "model", "parts" => prior_parts}]) ++
-      fc_items ++ out_items
+    user_parts =
+      if is_binary(last_user_text) and String.trim(last_user_text) != "",
+        do: [%{"text" => last_user_text}],
+        else: []
+
+    msgs = []
+    msgs = if user_parts == [], do: msgs, else: msgs ++ [%{"role" => "user", "parts" => user_parts}]
+    msgs = if fc_parts == [], do: msgs, else: msgs ++ [%{"role" => "model", "parts" => fc_parts}]
+    msgs = if fr_parts == [], do: msgs, else: msgs ++ [%{"role" => "tool", "parts" => fr_parts}]
+    msgs
   end
 
   defp tool_output_payload({:ok, payload}), do: payload
@@ -600,6 +664,26 @@ defmodule TheMaestro.Sessions.Manager do
       %{"name" => name} -> name
       _ -> "tool"
     end
+  end
+
+  defp maybe_decode_json(payload) when is_binary(payload) do
+    case Jason.decode(payload) do
+      {:ok, %{} = map} -> map
+      {:ok, list} when is_list(list) -> list
+      _ -> payload
+    end
+  end
+
+  defp maybe_decode_json(other), do: other
+
+  defp make_call_sig(name, args_json) do
+    norm =
+      case Jason.decode(args_json || "{}") do
+        {:ok, %{} = m} -> Jason.encode!(m)
+        _ -> "{}"
+      end
+
+    to_string(name || "") <> "|" <> norm
   end
 
   defp last_user_text_from(%Conversations.ChatEntry{} = latest) do

@@ -80,6 +80,7 @@ defmodule TheMaestro.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.0", only: :test},
+      {:hermes_mcp, ">= 0.0.0"},
       {:igniter, "~> 0.5", only: [:dev], runtime: false}
     ]
   end

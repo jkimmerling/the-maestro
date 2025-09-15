@@ -11,8 +11,10 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   require Logger
 
   alias TheMaestro.Providers.Http.ReqClientFactory
+  alias TheMaestro.MCP.Registry, as: MCPRegistry
   alias TheMaestro.Providers.Http.StreamingAdapter
   alias TheMaestro.SavedAuthentication
+  alias TheMaestro.Conversations
   alias TheMaestro.Types
 
   @impl true
@@ -64,6 +66,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
 
               {contents, sys_inst} = split_system_instruction(ensure_gemini_contents(messages))
 
+              decl_session_id = resolve_decl_session_id(session_id, auth_type)
+
               request =
                 %{
                   "contents" => contents,
@@ -75,7 +79,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
                   "session_id" => session_uuid
                 }
                 |> maybe_put_system_instruction(sys_inst)
-                |> maybe_put_tools(function_declarations())
+                |> maybe_put_tools(function_declarations_for_session(decl_session_id))
 
               payload = %{
                 "model" => m,
@@ -147,13 +151,15 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
           m0 = strip_models_prefix(model)
           m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
 
+          decl_session_id = resolve_decl_session_id(session_id, :oauth)
+
           request =
             %{
               "contents" => contents,
               "generationConfig" => %{"temperature" => 0, "topP" => 1},
               "session_id" => session_uuid
             }
-            |> maybe_put_tools(function_declarations())
+            |> maybe_put_tools(function_declarations_for_session(decl_session_id))
 
           payload = %{
             "model" => m,
@@ -185,9 +191,31 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   end
 
   # -- Tools exposure for Gemini --
-  # Advertise a minimal set of function declarations so the model can emit
-  # functionCall parts. We keep our internal tools generic and translate at the provider layer.
-  defp function_declarations do
+  # Merge built-ins with MCP-declared tools for this session.
+  defp function_declarations_for_session(session_id) do
+    mcp_tools = MCPRegistry.to_gemini_decls(session_id)
+    builtins = built_in_function_declarations()
+    # prefer MCP if name collides
+    names = MapSet.new(Enum.map(mcp_tools, & &1["name"]))
+    builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
+    decls = mcp_tools ++ builtins_filtered
+    Logger.debug("[Gemini] Injected tools for session=#{session_id}: #{length(decls)} (mcp=#{length(mcp_tools)}, builtins=#{length(builtins_filtered)})")
+    decls
+  end
+
+  # Resolve the Conversations session UUID for use by MCP.Registry.
+  # The first parameter to this module is actually the SavedAuthentication session name.
+  defp resolve_decl_session_id(session_name, auth_type) when is_binary(session_name) do
+    with %SavedAuthentication{} = sa <-
+           SavedAuthentication.get_by_provider_and_name(:gemini, auth_type, session_name),
+         %Conversations.Session{} = s <- Conversations.latest_session_for_auth_id(sa.id) do
+      s.id
+    else
+      _ -> session_name # fall back; MCP.Registry will return [] and we’ll inject built-ins only
+    end
+  end
+
+  defp built_in_function_declarations do
     [
       %{
         "name" => "run_shell_command",
