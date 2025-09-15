@@ -9,6 +9,8 @@ defmodule TheMaestro.Tools.Runtime do
   returning a consistent result tuple.
   """
 
+  alias TheMaestro.MCP.Client, as: MCPClient
+  alias TheMaestro.MCP.Registry, as: MCPRegistry
   alias TheMaestro.Tools.{ApplyPatch, PathResolver, Shell}
   require Logger
 
@@ -38,7 +40,12 @@ defmodule TheMaestro.Tools.Runtime do
       Logger.debug("[tools] exec session_id=#{session_id} name=#{inspect(name)} cwd=#{base_cwd}")
     end
 
-    dispatch_with_session(session_id, to_string(name) |> String.downcase(), args_json || "{}", base_cwd)
+    dispatch_with_session(
+      session_id,
+      to_string(name) |> String.downcase(),
+      args_json || "{}",
+      base_cwd
+    )
   end
 
   # Split per-tool to keep complexity low
@@ -117,18 +124,19 @@ defmodule TheMaestro.Tools.Runtime do
     case do_dispatch_known(name, args_json, base_cwd) do
       {:unknown, ^name} ->
         # Try MCP registry resolution
-        case TheMaestro.MCP.Registry.resolve(session_id, name) do
+        case MCPRegistry.resolve(session_id, name) do
           {:ok, %{server: server_key, mcp_tool_name: tool}} ->
-            with {:ok, args} <- safe_decode(args_json) do
-              TheMaestro.MCP.Client.call_tool(session_id, server_key, tool, args)
-            else
+            case safe_decode(args_json) do
+              {:ok, args} -> MCPClient.call_tool(session_id, server_key, tool, args)
               {:error, reason} -> {:error, reason}
             end
 
-          :error -> {:error, "unsupported tool: #{name}"}
+          :error ->
+            {:error, "unsupported tool: #{name}"}
         end
 
-      other -> other
+      other ->
+        other
     end
   end
 

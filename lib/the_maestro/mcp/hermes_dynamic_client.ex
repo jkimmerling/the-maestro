@@ -6,4 +6,3 @@ defmodule TheMaestro.MCP.HermesDynamicClient do
     protocol_version: "2025-06-18",
     capabilities: [:roots]
 end
-

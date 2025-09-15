@@ -15,54 +15,54 @@ defmodule Golden.CompareGoldenFixturesTest do
   @dynamic_headers ~w(session_id chatgpt-account-id x-request-id request-id date cf-ray cf-visitor)
   @dynamic_body ~w(prompt_cache_key)
 
-  @run_strict (System.get_env("RUN_GOLDEN_STRICT") in ["1", "true", "TRUE"])
+  @run_strict System.get_env("RUN_GOLDEN_STRICT") in ["1", "true", "TRUE"]
 
   test "compare current request build with golden fixtures" do
     if @run_strict do
       for provider <- @providers do
         name = Map.fetch!(@names, provider)
 
-      sa =
-        Auth.get_by_provider_and_name(provider, :oauth, name) ||
-          Auth.get_by_provider_and_name(provider, :api_key, name)
+        sa =
+          Auth.get_by_provider_and_name(provider, :oauth, name) ||
+            Auth.get_by_provider_and_name(provider, :api_key, name)
 
-      if sa do
-        session_id = ensure_session(sa.id, provider)
+        if sa do
+          session_id = ensure_session(sa.id, provider)
 
-        path =
-          Path.join([
-            File.cwd!(),
-            "priv",
-            "golden",
-            Atom.to_string(provider),
-            "request_fixtures.json"
-          ])
+          path =
+            Path.join([
+              File.cwd!(),
+              "priv",
+              "golden",
+              Atom.to_string(provider),
+              "request_fixtures.json"
+            ])
 
-        if File.exists?(path) do
-          {:ok, bin} = File.read(path)
-          {:ok, fixtures} = Jason.decode(bin)
+          if File.exists?(path) do
+            {:ok, bin} = File.read(path)
+            {:ok, fixtures} = Jason.decode(bin)
 
-          # Only compare the first request of the first two turns
-          wanted = fixtures |> Enum.take(2)
+            # Only compare the first request of the first two turns
+            wanted = fixtures |> Enum.take(2)
 
-          current = build_current_requests(provider, session_id)
-          current = Enum.take(current, length(wanted))
+            current = build_current_requests(provider, session_id)
+            current = Enum.take(current, length(wanted))
 
-          Enum.zip(wanted, current)
-          |> Enum.each(fn {exp, got} ->
-            assert normalize(exp["headers"], @dynamic_headers) ==
-                     normalize(got.headers, @dynamic_headers),
-                   "headers mismatch for #{provider}"
+            Enum.zip(wanted, current)
+            |> Enum.each(fn {exp, got} ->
+              assert normalize(exp["headers"], @dynamic_headers) ==
+                       normalize(got.headers, @dynamic_headers),
+                     "headers mismatch for #{provider}"
 
-            assert normalize(exp["body"], @dynamic_body) == normalize(got.body, @dynamic_body),
-                   "body mismatch for #{provider}"
-          end)
+              assert normalize(exp["body"], @dynamic_body) == normalize(got.body, @dynamic_body),
+                     "body mismatch for #{provider}"
+            end)
+          end
+        else
+          IO.puts("\n⏭️  Skipping golden strict compare — set RUN_GOLDEN_STRICT=1 to enable")
+          assert true
+        end
       end
-    else
-      IO.puts("\n⏭️  Skipping golden strict compare — set RUN_GOLDEN_STRICT=1 to enable")
-      assert true
-    end
-  end
     end
   end
 

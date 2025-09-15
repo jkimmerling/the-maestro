@@ -40,4 +40,3 @@ defmodule TheMaestro.MCP.RegistryCache do
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 end
-

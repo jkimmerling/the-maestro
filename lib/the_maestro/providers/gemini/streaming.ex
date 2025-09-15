@@ -1,4 +1,3 @@
-# credo:disable-for-this-file
 defmodule TheMaestro.Providers.Gemini.Streaming do
   @moduledoc """
   Gemini streaming provider implementation.
@@ -10,121 +9,96 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   @behaviour TheMaestro.Providers.Behaviours.Streaming
   require Logger
 
-  alias TheMaestro.Providers.Http.ReqClientFactory
+  alias TheMaestro.Conversations
   alias TheMaestro.MCP.Registry, as: MCPRegistry
+  alias TheMaestro.Providers.Gemini.CodeAssist
+  alias TheMaestro.Providers.Gemini.OAuth, as: GemOAuth
+  alias TheMaestro.Providers.Http.ReqClientFactory
   alias TheMaestro.Providers.Http.StreamingAdapter
   alias TheMaestro.SavedAuthentication
-  alias TheMaestro.Conversations
   alias TheMaestro.Types
+
+  @dialyzer {:nowarn_function, resolve_decl_session_id: 2}
+  @dialyzer {:nowarn_function, stream_chat: 3}
+  @dialyzer :no_match
 
   @impl true
   @spec stream_chat(Types.session_id(), [map()], keyword()) ::
           {:ok, Enumerable.t()} | {:error, term()}
-  def stream_chat(session_id, messages, opts \\ []) do
+  def stream_chat(session_name, messages, opts \\ []) do
     Logger.debug("Gemini.Streaming.stream_chat/3 called")
 
-    with true <- (is_list(messages) and messages != []) or {:error, :empty_messages},
-         {:ok, auth_type} <- detect_auth_type(session_id),
-         {:ok, req} <- ReqClientFactory.create_client(:gemini, auth_type, session: session_id) do
-      model = Keyword.get(opts, :model)
+    with {:ok, ^messages} <- validate_messages(messages),
+         {:ok, auth_type} <- detect_auth_type(session_name),
+         {:ok, req} <- ReqClientFactory.create_client(:gemini, auth_type, session: session_name) do
+      do_stream_chat(auth_type, req, session_name, messages, opts)
+    end
+  end
 
-      cond do
-        is_nil(model) or model == "" ->
-          {:error, :missing_model}
+  defp validate_messages(messages) when is_list(messages) and messages != [], do: {:ok, messages}
+  defp validate_messages(_), do: {:error, :empty_messages}
 
-        auth_type == :api_key ->
-          # API key flow uses public Generative Language API
-          model_path = normalize_model_for_api(model, :genlang)
+  defp do_stream_chat(:api_key, req, _session_name, messages, opts) do
+    model = Keyword.get(opts, :model)
+    if is_nil(model) or model == "" do
+      {:error, :missing_model}
+    else
+      model_path = normalize_model_for_api(model, :genlang)
+      payload = %{"model" => model_path, "contents" => ensure_gemini_contents(messages), "stream" => true}
+      StreamingAdapter.stream_request(req, method: :post, url: "/v1beta/#{model_path}:streamGenerateContent", json: payload)
+    end
+  end
 
-          payload = %{
-            "model" => model_path,
-            "contents" => ensure_gemini_contents(messages),
-            "stream" => true
-          }
-
-          StreamingAdapter.stream_request(
-            req,
-            method: :post,
-            url: "/v1beta/#{model_path}:streamGenerateContent",
-            json: payload
-          )
-
-        auth_type == :oauth ->
-          # Personal OAuth flow must mimic gemini-cli and use Cloud Code endpoint
-          # https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse
-          session_uuid = Ecto.UUID.generate()
-
-          # Preflight token validity (handles revoked tokens that are not yet past expires_at)
-          :ok = preflight_refresh_if_needed(session_id)
-
-          case TheMaestro.Providers.Gemini.CodeAssist.ensure_project(session_id) do
-            {:ok, project} when is_binary(project) and project != "" ->
-              Logger.debug("Gemini OAuth project resolved: #{inspect(project)}")
-              # Coerce model to a known-valid Cloud Code model
-              m0 = strip_models_prefix(model)
-              m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
-
-              {contents, sys_inst} = split_system_instruction(ensure_gemini_contents(messages))
-
-              decl_session_id = resolve_decl_session_id(session_id, auth_type)
-
-              request =
-                %{
-                  "contents" => contents,
-                  # Keep minimal generation config; align with our default zero temperature
-                  "generationConfig" => %{
-                    "temperature" => 0,
-                    "topP" => 1
-                  },
-                  "session_id" => session_uuid
-                }
-                |> maybe_put_system_instruction(sys_inst)
-                |> maybe_put_tools(function_declarations_for_session(decl_session_id))
-
-              payload = %{
-                "model" => m,
-                "project" => project,
-                "user_prompt_id" => session_uuid,
-                "request" => request
-              }
-
-              req = maybe_http_debug(req, payload)
-
-              StreamingAdapter.stream_request(
-                req,
-                method: :post,
-                url:
-                  "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
-                json: payload,
-                timeout: Keyword.get(opts, :timeout, :infinity)
-              )
-
-            {:error, :project_required} ->
-              {:error, :project_required}
-
-            _ ->
-              {:error, :missing_user_project}
-          end
+  defp do_stream_chat(:oauth, req, session_name, messages, opts) do
+    model = Keyword.get(opts, :model)
+    if is_nil(model) or model == "" do
+      {:error, :missing_model}
+    else
+      session_uuid = Ecto.UUID.generate()
+      :ok = preflight_refresh_if_needed(session_name)
+      case CodeAssist.ensure_project(session_name) do
+        {:ok, project} when is_binary(project) and project != "" ->
+          stream_oauth_with_project(req, session_name, messages, opts, model, session_uuid, project)
+        {:error, :project_required} -> {:error, :project_required}
+        _ -> {:error, :missing_user_project}
       end
     end
+  end
+
+  defp stream_oauth_with_project(req, session_name, messages, opts, model, session_uuid, project) do
+    Logger.debug("Gemini OAuth project resolved: #{inspect(project)}")
+    m0 = strip_models_prefix(model)
+    m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
+    base_contents = ensure_gemini_contents(messages)
+    env_msg = build_env_context_message(session_name)
+    base_contents = [env_msg | base_contents]
+    {contents, sys_inst} = split_system_instruction(base_contents)
+    decl_session_id = Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
+    request = %{"contents" => contents, "generationConfig" => %{"temperature" => 0, "topP" => 1}, "session_id" => session_uuid}
+    |> maybe_put_system_instruction(sys_inst)
+    |> maybe_put_tools(function_declarations_for_session(decl_session_id))
+    payload = %{"model" => m, "project" => project, "user_prompt_id" => session_uuid, "request" => request}
+    req = maybe_http_debug(req, payload)
+    StreamingAdapter.stream_request(req, method: :post, url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse", json: payload, timeout: Keyword.get(opts, :timeout, :infinity))
   end
 
   # Attempt a very cheap GET to validate the bearer token. If it returns 401,
   # force a refresh and continue. Errors are ignored so we don't block streaming.
   defp preflight_refresh_if_needed(session_name) do
-    with {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
-      case Req.request(req,
-             method: :get,
-             url: "https://cloudcode-pa.googleapis.com/v1internal:getCodeAssistGlobalUserSetting"
-           ) do
-        {:ok, %Req.Response{status: 401}} ->
-          _ = TheMaestro.Providers.Gemini.OAuth.refresh_tokens(session_name)
-          :ok
+    case ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
+      {:ok, req} ->
+        case Req.request(req,
+               method: :get,
+               url: "https://cloudcode-pa.googleapis.com/v1internal:getCodeAssistGlobalUserSetting"
+             ) do
+          {:ok, %Req.Response{status: 401}} ->
+            _ = GemOAuth.refresh_tokens(session_name)
+            :ok
 
-        _ ->
-          :ok
-      end
-    else
+          _ ->
+            :ok
+        end
+
       _ -> :ok
     end
   end
@@ -140,18 +114,19 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   """
   @spec stream_tool_followup(Types.session_id(), [map()], keyword()) ::
           {:ok, Enumerable.t()} | {:error, term()}
-  def stream_tool_followup(session_id, contents, opts \\ []) when is_list(contents) do
-    with {:ok, :oauth} <- detect_auth_type(session_id),
-         {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_id) do
+  def stream_tool_followup(session_name, contents, opts \\ []) when is_list(contents) do
+    with {:ok, :oauth} <- detect_auth_type(session_name),
+         {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
       model = Keyword.get(opts, :model) || "gemini-2.5-pro"
       session_uuid = Ecto.UUID.generate()
 
-      case TheMaestro.Providers.Gemini.CodeAssist.ensure_project(session_id) do
+      case CodeAssist.ensure_project(session_name) do
         {:ok, project} when is_binary(project) and project != "" ->
           m0 = strip_models_prefix(model)
           m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
 
-          decl_session_id = resolve_decl_session_id(session_id, :oauth)
+          decl_session_id =
+            Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
 
           request =
             %{
@@ -199,19 +174,29 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     names = MapSet.new(Enum.map(mcp_tools, & &1["name"]))
     builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
     decls = mcp_tools ++ builtins_filtered
-    Logger.debug("[Gemini] Injected tools for session=#{session_id}: #{length(decls)} (mcp=#{length(mcp_tools)}, builtins=#{length(builtins_filtered)})")
+
+    Logger.debug(
+      "[Gemini] Injected tools for session=#{session_id}: #{length(decls)} (mcp=#{length(mcp_tools)}, builtins=#{length(builtins_filtered)})"
+    )
+
     decls
   end
 
   # Resolve the Conversations session UUID for use by MCP.Registry.
   # The first parameter to this module is actually the SavedAuthentication session name.
   defp resolve_decl_session_id(session_name, auth_type) when is_binary(session_name) do
-    with %SavedAuthentication{} = sa <-
-           SavedAuthentication.get_by_provider_and_name(:gemini, auth_type, session_name),
-         %Conversations.Session{} = s <- Conversations.latest_session_for_auth_id(sa.id) do
-      s.id
-    else
-      _ -> session_name # fall back; MCP.Registry will return [] and we’ll inject built-ins only
+    sa = SavedAuthentication.get_by_provider_and_name(:gemini, auth_type, session_name)
+
+    case sa do
+      %SavedAuthentication{} = found ->
+        case Conversations.latest_session_for_auth_id(found.id) do
+          %Conversations.Session{id: id} -> id
+          _ -> session_name
+        end
+
+      _ ->
+        # fall back; MCP.Registry will return [] and we’ll inject built-ins only
+        session_name
     end
   end
 
@@ -284,14 +269,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   end
 
   defp ensure_gemini_contents(messages) do
-    cond do
-      is_list(messages) and Enum.any?(messages, &is_map/1) and
-          Enum.all?(messages, fn m -> is_map(m) and Map.has_key?(m, "parts") end) ->
-        messages
-
-      true ->
-        normalize_messages(messages)
-    end
+    valid? = is_list(messages) and Enum.any?(messages, &is_map/1) and Enum.all?(messages, fn m -> is_map(m) and Map.has_key?(m, "parts") end)
+    if valid?, do: messages, else: normalize_messages(messages)
   end
 
   defp normalize_one(msg) do
@@ -356,6 +335,40 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   defp strip_models_prefix(model) do
     model = to_string(model)
     String.replace_prefix(model, "models/", "")
+  end
+
+  defp build_env_context_message(session_name) do
+    # Resolve Conversations session id for cwd lookup
+    session_id = resolve_decl_session_id(session_name, :oauth)
+    cwd = safe_session_cwd(session_id)
+
+    text = """
+    <environment_context>
+      <cwd>#{cwd}</cwd>
+    </environment_context>
+    """
+
+    %{"role" => "user", "parts" => [%{"text" => String.trim(text)}]}
+  end
+
+  defp safe_session_cwd(session_id) do
+    case Ecto.UUID.cast(session_id) do
+      :error ->
+        File.cwd!() |> Path.expand()
+
+      {:ok, _} ->
+        try do
+          case Conversations.get_session_with_auth!(session_id) do
+            %Conversations.Session{working_dir: wd} when is_binary(wd) and wd != "" ->
+              Path.expand(wd)
+
+            _ ->
+              File.cwd!() |> Path.expand()
+          end
+        rescue
+          _ -> File.cwd!() |> Path.expand()
+        end
+    end
   end
 
   # removed unused ensure_project_via_cloud_code/1 helper after refactor

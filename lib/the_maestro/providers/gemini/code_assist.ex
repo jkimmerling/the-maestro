@@ -47,7 +47,8 @@ defmodule TheMaestro.Providers.Gemini.CodeAssist do
           # Access token likely expired or revoked; attempt a single refresh and retry
           _ = TheMaestro.Providers.Gemini.OAuth.refresh_tokens(session_name)
 
-          with {:ok, req2} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
+          with {:ok, req2} <-
+                 ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
             case discover_project_via_cloud_code(req2) do
               {:ok, proj} ->
                 _ = persist_project(session_name, proj)

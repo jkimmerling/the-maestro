@@ -12,55 +12,200 @@ defmodule TheMaestro.MCP.Registry do
   """
 
   alias TheMaestro.Conversations
+  alias TheMaestro.MCP.Client, as: MCPClient
   alias TheMaestro.MCP.RegistryCache
-  
+
   @type tool_decl :: %{
           required(String.t()) => any()
         }
 
   @spec to_gemini_decls(String.t()) :: [tool_decl]
   def to_gemini_decls(session_id) when is_binary(session_id) do
-    with %TheMaestro.Conversations.Session{} = s <- Conversations.get_session!(session_id) do
-      mcps_hash = :erlang.phash2(s.mcps || %{})
+    case Conversations.get_session!(session_id) do
+      %Conversations.Session{} = s ->
+        mcps_hash = :erlang.phash2(s.mcps || %{})
 
-      case RegistryCache.get(session_id, mcps_hash) do
-        {:ok, decls} ->
-          decls
+        case RegistryCache.get(session_id, mcps_hash) do
+          {:ok, decls} ->
+            decls
 
-        _ ->
-          # Structured snapshot (if present)
-          from_registry =
-            s.tools
-            |> safe_get(["mcp_registry", "tools"], [])
-            |> Enum.flat_map(&map_registry_tool_to_gemini/1)
+          _ ->
+            decls = s |> collect_gemini_decls(session_id)
+            _ = RegistryCache.put(session_id, mcps_hash, decls)
+            decls
+        end
 
-          # Simple static tools under session.mcps["tools"]
-          from_simple =
-            s.mcps
-            |> safe_get(["tools"], [])
-            |> Enum.flat_map(&map_simple_tool_to_gemini/1)
-
-          # Dynamic handshake for each configured server under session.mcps
-          from_dynamic =
-            s.mcps
-            |> Map.drop(["tools"]) # remove simple list key if present
-            |> Enum.flat_map(fn {server_key, cfg} ->
-              if is_map(cfg) do
-                case TheMaestro.MCP.Client.discover(session_id, server_key) do
-                  {:ok, %{tools: tools}} ->
-                    tools |> Enum.flat_map(&map_hermes_tool_to_gemini/1)
-                  _ -> []
-                end
-              else
-                []
-              end
-            end)
-
-          decls = (from_registry ++ from_simple ++ from_dynamic) |> uniq_by_name()
-          _ = RegistryCache.put(session_id, mcps_hash, decls)
-          decls
-      end
+      _ ->
+        []
     end
+  rescue
+    _ -> []
+  end
+
+  @doc """
+  Materialize MCP tools for OpenAI Responses API.
+
+  Returns a list of maps like:
+    %{ "type" => "function", "name" => name, "description" => desc, "parameters" => json_schema }
+  """
+  @spec to_openai_decls(String.t()) :: [tool_decl]
+  def to_openai_decls(session_id) when is_binary(session_id) do
+    case Conversations.get_session!(session_id) do
+      %Conversations.Session{} = s ->
+        mcps_hash = :erlang.phash2(s.mcps || %{})
+
+        case RegistryCache.get({:openai, session_id}, mcps_hash) do
+          {:ok, decls} ->
+            decls
+
+          _ ->
+            decls =
+              s
+              |> collect_openai_decls(session_id)
+              |> nudge_openai_tool_descriptions()
+
+            _ = RegistryCache.put({:openai, session_id}, mcps_hash, decls)
+            decls
+        end
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
+  defp collect_gemini_decls(%Conversations.Session{} = s, session_id) do
+    from_registry =
+      s.tools
+      |> safe_get(["mcp_registry", "tools"], [])
+      |> Enum.flat_map(&map_registry_tool_to_gemini/1)
+
+    from_simple =
+      s.mcps
+      |> safe_get(["tools"], [])
+      |> Enum.flat_map(&map_simple_tool_to_gemini/1)
+
+    from_dynamic = collect_dynamic_decls(s, session_id, :gemini)
+
+    (from_registry ++ from_simple ++ from_dynamic) |> uniq_by_name()
+  end
+
+  defp collect_openai_decls(%Conversations.Session{} = s, session_id) do
+    from_registry =
+      s.tools
+      |> safe_get(["mcp_registry", "tools"], [])
+      |> Enum.flat_map(&map_registry_tool_to_openai/1)
+
+    from_simple =
+      s.mcps
+      |> safe_get(["tools"], [])
+      |> Enum.flat_map(&map_simple_tool_to_openai/1)
+
+    from_dynamic = collect_dynamic_decls(s, session_id, :openai)
+
+    (from_registry ++ from_simple ++ from_dynamic) |> uniq_by_name()
+  end
+
+  defp collect_dynamic_decls(%Conversations.Session{} = s, session_id, provider) do
+    s.mcps
+    # servers only
+    |> Map.drop(["tools"])
+    |> Enum.flat_map(fn {server_key, cfg} ->
+      map_server_dynamic(server_key, cfg, session_id, provider)
+    end)
+  end
+
+  defp map_server_dynamic(server_key, cfg, session_id, provider) do
+    if is_map(cfg) do
+      tools = list_server_tools(session_id, server_key)
+
+      case provider do
+        :gemini -> tools |> Enum.flat_map(&map_hermes_tool_to_gemini/1)
+        :openai -> tools |> Enum.flat_map(&map_hermes_tool_to_openai/1)
+      end
+    else
+      []
+    end
+  end
+
+  defp list_server_tools(session_id, server_key) do
+    case MCPClient.discover(session_id, server_key) do
+      {:ok, %{tools: tools}} when is_list(tools) -> tools
+      _ -> []
+    end
+  end
+
+  defp discovered_exposed_tools(%Conversations.Session{} = s, session_id) do
+    s.mcps
+    # servers only
+    |> Map.drop(["tools"])
+    |> Enum.flat_map(&exposed_tools_for_server(session_id, &1))
+  end
+
+  defp exposed_tools_for_server(session_id, {server_key, cfg}) when is_map(cfg) do
+    list_server_tools(session_id, server_key)
+    |> Enum.map(fn %{"name" => n} ->
+      %{server: to_string(server_key), name: n, exposed: sanitize_gemini_name(n)}
+    end)
+  end
+
+  defp exposed_tools_for_server(_session_id, _), do: []
+
+  # -- OpenAI mapping helpers --
+  defp map_registry_tool_to_openai(%{} = t) do
+    name =
+      get_in(t, ["provider_exposed_name", "openai"]) ||
+        t["canonical_name"] || t["mcp_tool_name"] || t["name"]
+
+    with true <- is_binary(name),
+         params when is_map(params) <- Map.get(t, "parameters", %{}) do
+      [
+        %{
+          "type" => "function",
+          "name" => sanitize_gemini_name(name),
+          "description" => Map.get(t, "description"),
+          "parameters" => normalize_json_schema(params),
+          "strict" => false
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  defp map_simple_tool_to_openai(%{} = t) do
+    name = t["name"] || t[:name]
+    params = t["parameters"] || t[:parameters] || %{}
+    desc = t["description"] || t[:description]
+
+    if is_binary(name) and is_map(params) do
+      [
+        %{
+          "type" => "function",
+          "name" => sanitize_gemini_name(name),
+          "description" => desc,
+          "parameters" => normalize_json_schema(params),
+          "strict" => false
+        }
+      ]
+    else
+      []
+    end
+  end
+
+  defp map_hermes_tool_to_openai(%{"name" => name} = t) do
+    params = t["inputSchema"] || %{}
+
+    [
+      %{
+        "type" => "function",
+        "name" => sanitize_gemini_name(name),
+        "description" => t["description"] || t["title"],
+        "parameters" => normalize_json_schema(params),
+        "strict" => false
+      }
+    ]
   rescue
     _ -> []
   end
@@ -91,24 +236,23 @@ defmodule TheMaestro.MCP.Registry do
     params = t["parameters"] || t[:parameters] || %{}
     desc = t["description"] || t[:description]
 
-    cond do
-      is_binary(name) and is_map(params) ->
-        [
-          %{
-            "name" => sanitize_gemini_name(name),
-            "description" => desc,
-            "parameters" => normalize_json_schema(params)
-          }
-        ]
-
-      true ->
-        []
+    if is_binary(name) and is_map(params) do
+      [
+        %{
+          "name" => sanitize_gemini_name(name),
+          "description" => desc,
+          "parameters" => normalize_json_schema(params)
+        }
+      ]
+    else
+      []
     end
   end
 
   # Map tool from Hermes tools/list → Gemini declaration
   defp map_hermes_tool_to_gemini(%{"name" => name} = t) do
     params = t["inputSchema"] || %{}
+
     [
       %{
         "name" => sanitize_gemini_name(name),
@@ -124,35 +268,25 @@ defmodule TheMaestro.MCP.Registry do
   Resolve a provider-exposed tool name (Gemini) to an MCP server + tool name.
   Returns {:ok, %{server: server_key, mcp_tool_name: name}} | :error
   """
-  @spec resolve(String.t(), String.t()) :: {:ok, %{server: String.t(), mcp_tool_name: String.t()}} | :error
+  @spec resolve(String.t(), String.t()) ::
+          {:ok, %{server: String.t(), mcp_tool_name: String.t()}} | :error
   def resolve(session_id, provider_exposed_name) do
-    with %TheMaestro.Conversations.Session{} = s <- Conversations.get_session!(session_id) do
-      # Invalidate cache is handled by bump_revision/1 on config save
-      # Build a map of exposed_name -> {server, original_name}
-      discovered =
-        s.mcps
-        |> Map.drop(["tools"]) # servers only
-        |> Enum.flat_map(fn {server_key, cfg} ->
-          if is_map(cfg) do
-            case TheMaestro.MCP.Client.discover(session_id, server_key) do
-              {:ok, %{tools: tools}} ->
-                Enum.map(tools, fn %{"name" => n} ->
-                  %{server: to_string(server_key), name: n, exposed: sanitize_gemini_name(n)}
-                end)
-
-              _ -> []
-            end
-          else
-            []
-          end
-        end)
-
-      case Enum.find(discovered, fn t -> t.exposed == provider_exposed_name end) do
-        %{server: server_key, name: original} -> {:ok, %{server: server_key, mcp_tool_name: original}}
-        _ -> :error
-      end
-    else
+    case Conversations.get_session!(session_id) do
+      %Conversations.Session{} = s -> do_resolve_exposed(s, session_id, provider_exposed_name)
       _ -> :error
+    end
+  end
+
+  defp do_resolve_exposed(%Conversations.Session{} = s, session_id, provider_exposed_name) do
+    s
+    |> discovered_exposed_tools(session_id)
+    |> Enum.find(fn t -> t.exposed == provider_exposed_name end)
+    |> case do
+      %{server: server_key, name: original} ->
+        {:ok, %{server: server_key, mcp_tool_name: original}}
+
+      _ ->
+        :error
     end
   end
 
@@ -169,11 +303,46 @@ defmodule TheMaestro.MCP.Registry do
   defp uniq_by_name(list) do
     {out, _seen} =
       Enum.reduce(list, {%{}, %{}}, fn %{"name" => name} = d, {acc, seen} ->
-        if Map.has_key?(seen, name), do: {acc, seen}, else: {Map.put(acc, name, d), Map.put(seen, name, true)}
+        if Map.has_key?(seen, name),
+          do: {acc, seen},
+          else: {Map.put(acc, name, d), Map.put(seen, name, true)}
       end)
 
     out |> Map.values()
   end
+
+  # Slightly steer OpenAI tool selection without changing the base prompt.
+  # We only add a short, directive hint to the Context7 tools when both are present.
+  defp nudge_openai_tool_descriptions(decls) when is_list(decls) do
+    names = Enum.map(decls, & &1["name"]) |> MapSet.new()
+
+    if MapSet.member?(names, "resolve-library-id") and MapSet.member?(names, "get-library-docs") do
+      Enum.map(decls, &update_openai_desc/1)
+    else
+      decls
+    end
+  end
+
+  # Update descriptions for Context7 tools when both are present
+  defp update_openai_desc(%{"name" => "resolve-library-id"} = d) do
+    desc =
+      (d["description"] || "") <>
+        " After resolving a library, call get-library-docs with the returned context7CompatibleLibraryID and the user's topic before answering."
+
+    Map.put(d, "description", desc)
+  end
+
+  defp update_openai_desc(%{"name" => "get-library-docs"} = d) do
+    desc =
+      (d["description"] || "") <>
+        " Fetch authoritative docs for the resolved library id and a specific topic; prefer using it before composing explanations."
+
+    Map.put(d, "description", desc)
+  end
+
+  defp update_openai_desc(d), do: d
+
+  # no non-list callers
 
   # Keep a conservative schema: ensure type/object with properties; coerce unknowns to string
   defp normalize_json_schema(%{"type" => "object"} = m) do
@@ -242,6 +411,7 @@ defmodule TheMaestro.MCP.Registry do
 
   defp ellipsize_middle(s, max) when is_integer(max) and max > 3 do
     len = String.length(s)
+
     if len <= max do
       s
     else

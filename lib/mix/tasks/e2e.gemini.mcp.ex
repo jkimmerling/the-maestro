@@ -55,7 +55,9 @@ defmodule Mix.Tasks.E2e.Gemini.Mcp do
     final = collect_turn_outcome(session_id, turn.stream_id)
     validate_outcome!(final)
 
-    Mix.shell().info("E2E OK: Gemini OAuth + Context7 MCP: model called resolve-library-id, stream finalized.")
+    Mix.shell().info(
+      "E2E OK: Gemini OAuth + Context7 MCP: model called resolve-library-id, stream finalized."
+    )
   end
 
   defp ensure_session(sa) do
@@ -77,25 +79,31 @@ defmodule Mix.Tasks.E2e.Gemini.Mcp do
   defp ensure_mcps!(session_id) do
     base_url = System.get_env("CONTEXT7_BASE_URL") || "https://mcp.context7.com"
     endpoint = System.get_env("CONTEXT7_ENDPOINT") || "/mcp"
+
     headers =
       case System.get_env("CONTEXT7_HEADERS_JSON") do
         nil ->
           key = System.get_env("CONTEXT7_API_KEY")
+
           if is_binary(key) and key != "" do
             %{"X-Api-Key" => key}
           else
             %{}
           end
-        json -> Jason.decode!(json)
+
+        json ->
+          Jason.decode!(json)
       end
 
     s = Conversations.get_session!(session_id)
-    mcps = Map.put(s.mcps || %{}, "context7", %{
-      "transport" => "stream",
-      "base_url" => base_url,
-      "endpoint" => endpoint,
-      "headers" => headers
-    })
+
+    mcps =
+      Map.put(s.mcps || %{}, "context7", %{
+        "transport" => "stream",
+        "base_url" => base_url,
+        "endpoint" => endpoint,
+        "headers" => headers
+      })
 
     {:ok, _} = Conversations.update_session(s, %{mcps: mcps})
   end
@@ -113,33 +121,42 @@ defmodule Mix.Tasks.E2e.Gemini.Mcp do
 
   defp do_wait(session_id, stream_id, state, deadline) do
     receive do
-      {:session_stream, %TheMaestro.Domain.StreamEnvelope{session_id: ^session_id, stream_id: ^stream_id, event: ev}} ->
-        state2 =
-          case ev do
-            %{type: :function_call, tool_calls: calls} when is_list(calls) ->
-              # Detect resolve-library-id call
-              saw = Enum.any?(calls, fn c ->
-                n = (is_map(c) && (c["name"] || c[:name])) || nil
-                n == "resolve-library-id"
-              end)
-              %{state | saw_fc?: state.saw_fc? or saw}
-
-            %{type: :done} -> %{state | finalized?: true}
-
-            _ -> state
-          end
-
+      {:session_stream,
+       %TheMaestro.Domain.StreamEnvelope{
+         session_id: ^session_id,
+         stream_id: ^stream_id,
+         event: ev
+       }} ->
+        state2 = reduce_event(ev, state)
         if state2.finalized?, do: state2, else: wait(session_id, stream_id, state2, deadline)
 
-      _ -> wait(session_id, stream_id, state, deadline)
+      _ ->
+        wait(session_id, stream_id, state, deadline)
     after
       1000 -> wait(session_id, stream_id, state, deadline)
     end
   end
 
+  # -- helpers to keep do_wait/4 simple --
+  defp reduce_event(%{type: :done}, state), do: %{state | finalized?: true}
+
+  defp reduce_event(%{type: :function_call, tool_calls: calls}, state) when is_list(calls) do
+    %{state | saw_fc?: state.saw_fc? or Enum.any?(calls, &resolve_lib_call?/1)}
+  end
+
+  defp reduce_event(_other, state), do: state
+
+  defp resolve_lib_call?(%TheMaestro.Domain.ToolCall{name: "resolve-library-id"}), do: true
+  defp resolve_lib_call?(%TheMaestro.Domain.ToolCall{}), do: false
+  defp resolve_lib_call?(%{name: "resolve-library-id"}), do: true
+  defp resolve_lib_call?(%{"name" => "resolve-library-id"}), do: true
+  defp resolve_lib_call?(_), do: false
+
   defp validate_outcome!(%{finalized?: true, saw_fc?: true}), do: :ok
   defp validate_outcome!(%{finalized?: false}), do: Mix.raise("Stream did not finalize")
-  defp validate_outcome!(%{saw_fc?: false}), do: Mix.raise("Model did not call resolve-library-id")
+
+  defp validate_outcome!(%{saw_fc?: false}),
+    do: Mix.raise("Model did not call resolve-library-id")
 
   # No file-based assertion; the presence of a function call + finalization is enough
 end

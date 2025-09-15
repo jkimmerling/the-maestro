@@ -322,11 +322,12 @@ defmodule TheMaestro.Provider do
   end
 
   defp validate_provider(provider) when is_binary(provider) do
-    try do
-      atom = String.to_existing_atom(provider)
-      validate_provider(atom)
-    rescue
-      _ -> {:error, :invalid_provider}
+    down = String.downcase(provider)
+    allowed = list_providers()
+
+    case Enum.find(allowed, fn p -> Atom.to_string(p) == down end) do
+      nil -> {:error, :invalid_provider}
+      atom -> validate_provider(atom)
     end
   end
 

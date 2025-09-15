@@ -15,6 +15,8 @@ defmodule TheMaestro.Sessions.Manager do
   alias TheMaestro.Domain.{StreamEnvelope, StreamEvent}
   alias TheMaestro.Tools.Runtime, as: ToolsRuntime
 
+  @dialyzer {:nowarn_function, finalize_and_persist: 3}
+
   @type session_entry :: %{
           task: pid() | nil,
           stream_id: String.t() | nil,
@@ -81,7 +83,14 @@ defmodule TheMaestro.Sessions.Manager do
 
     {:ok, task} =
       Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
-        result = do_call_provider(provider, session_name, provider_messages, model)
+        result =
+          do_call_provider(
+            provider,
+            session_name,
+            provider_messages,
+            model,
+            Keyword.put_new(opts, :decl_session_id, session_id)
+          )
 
         case result do
           {:ok, stream} ->
@@ -186,14 +195,34 @@ defmodule TheMaestro.Sessions.Manager do
     st =
       update_in(st, [session_id, :acc], fn acc ->
         if acc do
-          events = acc.events ++ [%{type: :content, at: now_ms(), size: byte_size(chunk)}]
-          %{acc | text: acc.text <> chunk, events: events}
+          meta = acc.meta || %{}
+          last_chunk = meta[:last_content_chunk]
+          # Guard against duplicated large chunks (e.g., after SSE retry)
+          if duplicate_large_chunk?(acc.text, last_chunk, chunk) do
+            acc
+          else
+            events = acc.events ++ [%{type: :content, at: now_ms(), size: byte_size(chunk)}]
+            new_meta = Map.put(meta, :last_content_chunk, chunk)
+            %{acc | text: acc.text <> chunk, events: events, meta: new_meta}
+          end
         else
           acc
         end
       end)
 
     {:noreply, st}
+  end
+
+  # Consider chunks >= 200 bytes and skip if identical to the last chunk
+  # or if the current text already ends with the incoming chunk.
+  defp duplicate_large_chunk?(acc_text, last_chunk, chunk) do
+    cond do
+      not is_binary(chunk) -> false
+      byte_size(chunk) < 200 -> false
+      is_binary(last_chunk) and last_chunk == chunk -> true
+      is_binary(acc_text) and String.ends_with?(acc_text, chunk) -> true
+      true -> false
+    end
   end
 
   def handle_cast({:acc_calls, session_id, _stream_id, calls}, st) do
@@ -249,7 +278,7 @@ defmodule TheMaestro.Sessions.Manager do
         case acc do
           %{tool_calls: calls} when is_list(calls) and calls != [] ->
             st = run_tools_and_followup(session_id, stream_id, st)
-            
+
           _ ->
             finalize_and_persist(session_id, stream_id, st)
         end
@@ -264,17 +293,15 @@ defmodule TheMaestro.Sessions.Manager do
   def handle_cast({:stream_done_followup, session_id, stream_id}, st) do
     case Map.get(st, session_id) do
       %{stream_id: ^stream_id, acc: acc} ->
-        calls = acc && acc.tool_calls || []
-        rounds = ((acc && acc.meta && acc.meta[:followup_rounds]) || 0)
+        calls = (acc && acc.tool_calls) || []
+        rounds = (acc && acc.meta && acc.meta[:followup_rounds]) || 0
 
         {st, took_action} =
-          cond do
-            is_list(calls) and calls != [] and rounds < 3 ->
-              {run_tools_and_followup(session_id, stream_id, st), true}
-
-            true ->
-              finalize_and_persist(session_id, stream_id, st)
-              {st, false}
+          if is_list(calls) and calls != [] and rounds < 3 do
+            {run_tools_and_followup(session_id, stream_id, st), true}
+          else
+            finalize_and_persist(session_id, stream_id, st)
+            {st, false}
           end
 
         {:noreply, st}
@@ -284,16 +311,25 @@ defmodule TheMaestro.Sessions.Manager do
     end
   end
 
-  defp do_call_provider(:openai, session_name, messages, model),
-    do: OpenAI.Streaming.stream_chat(session_name, messages, model: model)
+  defp do_call_provider(:openai, session_name, messages, model, opts),
+    do:
+      OpenAI.Streaming.stream_chat(session_name, messages,
+        model: model,
+        decl_session_id: Keyword.get(opts, :decl_session_id)
+      )
 
-  defp do_call_provider(:gemini, session_name, messages, model),
-    do: Gemini.Streaming.stream_chat(session_name, messages, model: model)
+  defp do_call_provider(:gemini, session_name, messages, model, opts),
+    do:
+      Gemini.Streaming.stream_chat(session_name, messages,
+        model: model,
+        decl_session_id: Keyword.get(opts, :decl_session_id)
+      )
 
-  defp do_call_provider(:anthropic, session_name, messages, model),
+  defp do_call_provider(:anthropic, session_name, messages, model, _opts),
     do: Anthropic.Streaming.stream_chat(session_name, messages, model: model)
 
-  defp do_call_provider(other, _s, _m, _model), do: {:error, {:unsupported_provider, other}}
+  defp do_call_provider(other, _s, _m, _model, _opts),
+    do: {:error, {:unsupported_provider, other}}
 
   defp cancel_if_running(st, session_id) do
     case Map.get(st, session_id) do
@@ -436,11 +472,13 @@ defmodule TheMaestro.Sessions.Manager do
     executed = (acc.meta && acc.meta[:executed_calls]) || MapSet.new()
 
     calls_all = acc.tool_calls || []
+
     calls_to_run =
       Enum.reject(calls_all, fn %{"name" => name, "arguments" => args} ->
         sig = make_call_sig(name, args)
         MapSet.member?(executed, sig)
       end)
+      |> maybe_guard_resolve_once()
 
     # If nothing new to execute, finalize instead of looping
     if calls_to_run == [] do
@@ -449,90 +487,102 @@ defmodule TheMaestro.Sessions.Manager do
     else
       outputs = exec_tools(session_id, calls_to_run, base_cwd)
 
-    items =
-      case provider do
-        :openai -> build_openai_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
-        :anthropic -> build_anthropic_items(latest, acc.text, acc.tool_calls || [], outputs)
-        :gemini -> build_gemini_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
-      end
+      items =
+        case provider do
+          :openai -> build_openai_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
+          :anthropic -> build_anthropic_items(latest, acc.text, acc.tool_calls || [], outputs)
+          :gemini -> build_gemini_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
+        end
 
-    # Follow-up stream publishes under the SAME stream_id for UI continuity
-    # bump follow-up round counter to prevent infinite loops
+      # Follow-up stream publishes under the SAME stream_id for UI continuity
+      # bump follow-up round counter to prevent infinite loops
       st =
-      update_in(st, [session_id, :acc, :meta], fn meta ->
-        meta = meta || %{}
-        executed2 =
-          Enum.reduce(calls_to_run, executed, fn %{"name" => n, "arguments" => a}, accset ->
-            MapSet.put(accset, make_call_sig(n, a))
-          end)
+        update_in(st, [session_id, :acc, :meta], fn meta ->
+          meta = meta || %{}
 
-        meta
-        |> Map.update(:followup_rounds, 1, &(&1 + 1))
-        |> Map.put(:executed_calls, executed2)
-      end)
+          executed2 =
+            Enum.reduce(calls_to_run, executed, fn %{"name" => n, "arguments" => a}, accset ->
+              MapSet.put(accset, make_call_sig(n, a))
+            end)
+
+          meta
+          |> Map.update(:followup_rounds, 1, &(&1 + 1))
+          |> Map.put(:executed_calls, executed2)
+        end)
 
       {:ok, _task} =
-      Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
-        result = do_followup_provider(provider, session_name, items, model)
+        Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
+          result =
+            do_followup_provider(provider, session_name, items, model,
+              decl_session_id: session_id
+            )
 
-        case result do
-          {:ok, stream} ->
-            for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
-              publish_both(session_id, stream_id, msg)
+          case result do
+            {:ok, stream} ->
+              for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
+                publish_both(session_id, stream_id, msg)
 
-              case msg do
-                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
-                when is_binary(chunk) ->
-                  GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+                case msg do
+                  %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
+                  when is_binary(chunk) ->
+                    GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
 
-                %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
-                when is_list(calls) ->
-                  GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
+                  %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
+                  when is_list(calls) ->
+                    GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
 
-                %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
-                  GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
+                  %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
+                    GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
 
-                _ ->
-                  :ok
+                  _ ->
+                    :ok
+                end
               end
-            end
 
-            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
-            GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
+              publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
+              GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
 
-          {:error, reason} ->
-            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
-              type: :error,
-              error: inspect(reason)
-            })
+            {:error, reason} ->
+              publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
+                type: :error,
+                error: inspect(reason)
+              })
 
-            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
-            GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
-        end
-      end)
+              publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
+              GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
+          end
+        end)
 
-    # reset accumulators for follow-up turn (keep meta and t0)
+      # reset accumulators for follow-up turn (keep meta and t0)
       st =
-      put_in(st, [session_id, :acc], %{
-        text: "",
-        tool_calls: [],
-        usage: nil,
-        events: acc.events,
-        meta: acc.meta
-      })
+        put_in(st, [session_id, :acc], %{
+          text: "",
+          tool_calls: [],
+          usage: nil,
+          events: acc.events,
+          meta: acc.meta
+        })
 
       st
     end
   end
 
-  defp do_followup_provider(:openai, session_name, items, model),
-    do: OpenAI.Streaming.stream_tool_followup(session_name, items, model: model)
+  defp do_followup_provider(:openai, session_name, items, model, opts),
+    do:
+      OpenAI.Streaming.stream_tool_followup(session_name, items,
+        model: model,
+        decl_session_id: Keyword.get(opts, :decl_session_id)
+      )
 
-  defp do_followup_provider(:anthropic, session_name, items, model),
+  defp do_followup_provider(:anthropic, session_name, items, model, _opts),
     do: Anthropic.Streaming.stream_tool_followup(session_name, items, model: model)
 
-  defp do_followup_provider(:gemini, session_name, items, model),
-    do: Gemini.Streaming.stream_tool_followup(session_name, items, model: model)
+  defp do_followup_provider(:gemini, session_name, items, model, opts),
+    do:
+      Gemini.Streaming.stream_tool_followup(session_name, items,
+        model: model,
+        decl_session_id: Keyword.get(opts, :decl_session_id)
+      )
 
   defp resolve_base_cwd(session) do
     case session.working_dir do
@@ -554,28 +604,24 @@ defmodule TheMaestro.Sessions.Manager do
   defp usage_to_map(%{} = m), do: m
   defp usage_to_map(nil), do: nil
 
-  defp build_openai_items(last_user_text, partial_answer, calls, outputs) do
-    user_ctx_items =
-      if is_binary(last_user_text) and last_user_text != "",
-        do: [
-          %{
-            "type" => "message",
-            "role" => "user",
-            "content" => [%{"type" => "input_text", "text" => last_user_text}]
-          }
-        ],
-        else: []
+  defp build_openai_items(last_user_text, _partial_answer, calls, outputs) do
+    # Mimic Codex: include the last user message to keep the model on task,
+    # then echo function_call(s) and provide function_call_output(s).
 
-    prior_msg =
-      if partial_answer != "",
-        do: [
-          %{
-            "type" => "message",
-            "role" => "assistant",
-            "content" => [%{"type" => "output_text", "text" => partial_answer}]
-          }
-        ],
-        else: []
+    user_items =
+      case last_user_text && String.trim(to_string(last_user_text)) do
+        text when is_binary(text) and text != "" ->
+          [
+            %{
+              "type" => "message",
+              "role" => "user",
+              "content" => [%{"type" => "input_text", "text" => text}]
+            }
+          ]
+
+        _ ->
+          []
+      end
 
     fc_items =
       Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
@@ -591,7 +637,7 @@ defmodule TheMaestro.Sessions.Manager do
         }
       end)
 
-    user_ctx_items ++ prior_msg ++ fc_items ++ out_items
+    user_items ++ fc_items ++ out_items
   end
 
   defp build_anthropic_items(latest_entry, partial_answer, calls, outputs) do
@@ -644,7 +690,10 @@ defmodule TheMaestro.Sessions.Manager do
         else: []
 
     msgs = []
-    msgs = if user_parts == [], do: msgs, else: msgs ++ [%{"role" => "user", "parts" => user_parts}]
+
+    msgs =
+      if user_parts == [], do: msgs, else: msgs ++ [%{"role" => "user", "parts" => user_parts}]
+
     msgs = if fc_parts == [], do: msgs, else: msgs ++ [%{"role" => "model", "parts" => fc_parts}]
     msgs = if fr_parts == [], do: msgs, else: msgs ++ [%{"role" => "tool", "parts" => fr_parts}]
     msgs
@@ -677,13 +726,52 @@ defmodule TheMaestro.Sessions.Manager do
   defp maybe_decode_json(other), do: other
 
   defp make_call_sig(name, args_json) do
-    norm =
-      case Jason.decode(args_json || "{}") do
-        {:ok, %{} = m} -> Jason.encode!(m)
-        _ -> "{}"
-      end
+    n = to_string(name || "")
 
-    to_string(name || "") <> "|" <> norm
+    case {n, Jason.decode(args_json || "{}")} do
+      {"resolve-library-id", {:ok, %{"libraryName" => lib}}} ->
+        canon =
+          lib
+          |> to_string()
+          |> String.trim()
+          |> String.downcase()
+          |> String.replace(~r/\s+/u, " ")
+
+        n <> "|" <> Jason.encode!(%{"libraryName" => canon})
+
+      {"get-library-docs", {:ok, %{} = m}} ->
+        lib_id = to_string(Map.get(m, "context7CompatibleLibraryID", ""))
+
+        topic =
+          m
+          |> Map.get("topic", "")
+          |> to_string()
+          |> String.downcase()
+          |> String.trim()
+          |> String.replace(~r/\s+/u, " ")
+
+        n <> "|" <> Jason.encode!(%{"context7CompatibleLibraryID" => lib_id, "topic" => topic})
+
+      {_other, {:ok, %{} = m}} ->
+        n <> "|" <> Jason.encode!(m)
+
+      {_other, _} ->
+        n <> "|{}"
+    end
+  end
+
+  # Allow at most one resolve-library-id execution per follow-up turn
+  defp maybe_guard_resolve_once(calls) when is_list(calls) do
+    {kept, _seen} =
+      Enum.reduce(calls, {[], false}, fn %{"name" => name} = c, {acc, seen?} ->
+        if name == "resolve-library-id" do
+          if seen?, do: {acc, true}, else: {[c | acc], true}
+        else
+          {[c | acc], seen?}
+        end
+      end)
+
+    Enum.reverse(kept)
   end
 
   defp last_user_text_from(%Conversations.ChatEntry{} = latest) do

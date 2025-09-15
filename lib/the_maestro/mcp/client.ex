@@ -20,6 +20,7 @@ defmodule TheMaestro.MCP.Client do
   """
 
   require Logger
+  alias Hermes.MCP.Response, as: HermesResponse
   alias TheMaestro.Conversations
 
   @type connector_id :: String.t()
@@ -30,16 +31,20 @@ defmodule TheMaestro.MCP.Client do
   Perform initialize + tools/list against a named server key configured on the Session.
   Returns {:ok, %{tools: [tool_decl], instructions: String.t() | nil}}.
   """
-  @spec discover(String.t(), server_key()) :: {:ok, %{tools: [tool_decl], instructions: String.t() | nil}} | {:error, term()}
+  @spec discover(String.t(), server_key()) ::
+          {:ok, %{tools: [tool_decl], instructions: String.t() | nil}} | {:error, term()}
   def discover(session_id, server_key) do
-    with {:ok, sup, client} <- start_client(session_id, server_key) do
-      # Try tools/list a few times in case initialize/handshake is still settling
-      tools = retry_list_tools(client, 3, 300)
-      _ = Supervisor.stop(sup)
-      {:ok, %{tools: tools, instructions: nil}}
-    else
-      {:error, _} = err -> err
-      other -> other
+    case start_client(session_id, server_key) do
+      {:ok, sup, client} ->
+        tools = retry_list_tools(client, 3, 300)
+        _ = Supervisor.stop(sup)
+        {:ok, %{tools: tools, instructions: nil}}
+
+      {:error, _} = err ->
+        err
+
+      other ->
+        other
     end
   end
 
@@ -47,7 +52,8 @@ defmodule TheMaestro.MCP.Client do
   Call a tool by name with args (map). Returns {:ok, payload_string} | {:error, reason}.
   We return string payloads to fit our functionResponse.response handling.
   """
-  @spec call_tool(String.t(), server_key(), String.t(), map()) :: {:ok, String.t()} | {:error, String.t()}
+  @spec call_tool(String.t(), server_key(), String.t(), map()) ::
+          {:ok, String.t()} | {:error, String.t()}
   def call_tool(session_id, server_key, tool_name, args) do
     with {:ok, sup, client_name} <- start_client(session_id, server_key) do
       # Ensure handshake is fully initialized (server_capabilities present)
@@ -63,12 +69,14 @@ defmodule TheMaestro.MCP.Client do
       _ = Supervisor.stop(sup)
 
       case result do
-        {:ok, resp} -> {:ok, resp |> unwrap() |> encode_result()}
+        {:ok, resp} ->
+          {:ok, resp |> HermesResponse.unwrap() |> encode_result()}
+
         {:error, %Hermes.MCP.Error{reason: reason, message: msg, data: data}} ->
           {:error, format_mcp_error(reason, msg, data)}
-        {:error, %{} = m} -> {:error, encode_result(m)}
-        {:error, e} -> {:error, Exception.message(e)}
-        other -> {:error, inspect(other)}
+
+        {:error, e} ->
+          {:error, Exception.message(e)}
       end
     end
   end
@@ -79,10 +87,7 @@ defmodule TheMaestro.MCP.Client do
     key = to_string(server_key)
     cfg = (s.mcps || %{})[key] || (s.mcps || %{})[String.to_atom(key)] || %{}
 
-    transport = (cfg["transport"] || cfg[:transport] || "stream") |> to_string()
-    base_url = cfg["base_url"] || cfg[:base_url]
-    endpoint = cfg["endpoint"] || cfg[:endpoint] || "/mcp"
-    headers = cfg["headers"] || cfg[:headers] || %{}
+    {transport, base_url, endpoint, headers} = resolve_connector_config(cfg)
 
     case transport do
       "stream" -> start_stream_supervisor(base_url, endpoint, headers)
@@ -91,7 +96,16 @@ defmodule TheMaestro.MCP.Client do
     end
   end
 
+  defp resolve_connector_config(cfg) when is_map(cfg) do
+    transport = (cfg["transport"] || cfg[:transport] || "stream") |> to_string()
+    base_url = cfg["base_url"] || cfg[:base_url]
+    endpoint = cfg["endpoint"] || cfg[:endpoint] || "/mcp"
+    headers = cfg["headers"] || cfg[:headers] || %{}
+    {transport, base_url, endpoint, headers}
+  end
+
   defp start_stream_supervisor(nil, _p, _h), do: {:error, :missing_base_url}
+
   defp start_stream_supervisor(base_url, endpoint, headers) do
     # Create a unique name for the ad-hoc client and its transport
     unique = :erlang.unique_integer([:positive])
@@ -116,21 +130,21 @@ defmodule TheMaestro.MCP.Client do
     end
   end
 
-  defp encode_result(%{} = m), do: Jason.encode!(m)
-  defp encode_result(l) when is_list(l), do: Jason.encode!(l)
-  defp encode_result(bin) when is_binary(bin), do: bin
-  defp encode_result(other), do: inspect(other)
+  defp encode_result(%{} = value), do: Jason.encode!(value)
 
-  defp unwrap(%Hermes.MCP.Response{} = resp), do: Hermes.MCP.Response.unwrap(resp)
-  defp unwrap(%{} = m), do: m
+  # unwrap handled inline for Dialyzer friendliness
 
   defp retry_list_tools(_client, 0, _sleep_ms), do: []
+
   defp retry_list_tools(client, attempts, sleep_ms) do
     case Hermes.Client.Base.list_tools(client) do
       {:ok, resp} ->
-        m = unwrap(resp)
+        m = HermesResponse.unwrap(resp)
+
         case m["tools"] do
-          l when is_list(l) and l != [] -> l
+          l when is_list(l) and l != [] ->
+            l
+
           _ ->
             Process.sleep(sleep_ms)
             retry_list_tools(client, attempts - 1, sleep_ms)
@@ -143,21 +157,26 @@ defmodule TheMaestro.MCP.Client do
   end
 
   defp wait_for_capabilities(_client, 0, _sleep_ms), do: :timeout
+
   defp wait_for_capabilities(client, attempts, sleep_ms) do
     case Hermes.Client.Base.get_server_capabilities(client) do
       nil ->
         Process.sleep(sleep_ms)
         wait_for_capabilities(client, attempts - 1, sleep_ms)
-      _ -> :ok
+
+      _ ->
+        :ok
     end
   end
 
   defp format_mcp_error(reason, msg, data) do
     base = to_string(reason)
-    parts = [base, msg]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.map(&to_string/1)
-    |> Enum.join(": ")
+
+    parts =
+      [base, msg]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&to_string/1)
+      |> Enum.join(": ")
 
     if data && map_size(data) > 0 do
       parts <> " " <> encode_result(data)

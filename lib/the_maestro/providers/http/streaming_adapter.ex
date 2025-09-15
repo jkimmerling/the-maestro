@@ -53,9 +53,18 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
         req
       end
 
+    # Allow caller to set retry behavior via request headers (rare) or defaults
+    max_retries = 3
+    backoff_ms = 250
+
     stream =
       Stream.resource(
-        fn -> start_req_streaming(req, method, path_or_url, body, json, timeout) end,
+        fn ->
+          start_req_streaming(req, method, path_or_url, body, json, timeout,
+            max_retries: max_retries,
+            backoff_ms: backoff_ms
+          )
+        end,
         fn state -> next_events(state) end,
         fn _state -> :ok end
       )
@@ -63,7 +72,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
     {:ok, stream}
   end
 
-  defp start_req_streaming(req, method, url, body, json, timeout) do
+  defp start_req_streaming(req, method, url, body, json, timeout, opts \\ []) do
     parent = self()
 
     {:ok, task} =
@@ -72,7 +81,23 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
         run_request_and_forward(req, req_opts, parent)
       end)
 
-    %{task: task, buffer: "", done: false, timeout: timeout}
+    ref = Process.monitor(task)
+
+    %{
+      task: task,
+      mon_ref: ref,
+      buffer: "",
+      done: false,
+      timeout: timeout,
+      req: req,
+      method: method,
+      url: url,
+      body: body,
+      json: json,
+      attempts: 0,
+      max_retries: Keyword.get(opts, :max_retries, 3),
+      backoff_ms: Keyword.get(opts, :backoff_ms, 250)
+    }
   end
 
   defp build_req_opts(method, url, body, json, timeout) do
@@ -86,8 +111,15 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
     case Req.request(req, req_opts) do
       {:ok, %Req.Response{status: status} = resp} when status < 400 ->
         maybe_debug_response_headers(status, resp.headers)
-        forward_body_chunks(resp.body, parent)
-        send(parent, :done)
+
+        try do
+          forward_body_chunks(resp.body, parent)
+          send(parent, :done)
+        rescue
+          e ->
+            maybe_debug_transport_error(e)
+            send(parent, {:transport_error, e})
+        end
 
       {:ok, %Req.Response{status: status, body: body} = resp} ->
         # For non-2xx/3xx, body may still be an async stream; drain it if possible
@@ -110,8 +142,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
       {:error, reason} ->
         maybe_debug_transport_error(reason)
-        send(parent, {:data, error_event_payload(%{request_error: inspect(reason)})})
-        send(parent, :done)
+        send(parent, {:transport_error, reason})
     end
   end
 
@@ -205,12 +236,61 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
         :done ->
           {:halt, %{state | done: true}}
+
+        {:transport_error, reason} ->
+          handle_transport_error(state, reason)
+
+        {:DOWN, ref, :process, _pid, reason} when ref == state.mon_ref ->
+          # If task died unexpectedly, try transparent retry
+          if reason in [:normal, :shutdown] or state.done do
+            {:halt, %{state | done: true}}
+          else
+            handle_transport_error(state, reason)
+          end
       after
         state.timeout ->
           # Emit a synthetic SSE error event as raw text, then halt
           timeout_event = "event: error\ndata: stream_timeout\n\n"
           {[timeout_event], %{state | done: true}}
       end
+    end
+  end
+
+  defp handle_transport_error(state, reason) do
+    attempts = state.attempts || 0
+    maxr = state.max_retries || 0
+
+    if attempts < maxr do
+      # Backoff with jitter to avoid thundering herd
+      base = state.backoff_ms || 250
+      delay = min((base * :math.pow(2, attempts)) |> round(), 4_000)
+      jitter = :rand.uniform(100)
+      :timer.sleep(delay + jitter)
+
+      # Restart streaming with same request params
+      new_state =
+        start_req_streaming(
+          state.req,
+          state.method,
+          state.url,
+          state.body,
+          state.json,
+          state.timeout,
+          max_retries: maxr,
+          backoff_ms: base
+        )
+        |> Map.put(:attempts, attempts + 1)
+
+      {[], new_state}
+    else
+      # Exhausted retries – emit a normalized error event and halt
+      err_evt =
+        error_event_payload(%{
+          request_error: inspect(reason),
+          retries_exhausted: true
+        })
+
+      {[err_evt], %{state | done: true}}
     end
   end
 
