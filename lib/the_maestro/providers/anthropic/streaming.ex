@@ -5,9 +5,13 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
   """
   @behaviour TheMaestro.Providers.Behaviours.Streaming
   require Logger
+  alias TheMaestro.MCP.Registry, as: MCPRegistry
   alias TheMaestro.Providers.Http.ReqClientFactory
   alias TheMaestro.Providers.Http.StreamingAdapter
   alias TheMaestro.SavedAuthentication
+  alias TheMaestro.Conversations
+  alias TheMaestro.MCP.Registry, as: MCPRegistry
+  alias TheMaestro.Conversations
   alias TheMaestro.Types
 
   @impl true
@@ -22,6 +26,12 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
       if is_nil(model) do
         {:error, :missing_model}
       else
+        decl_session_id =
+          Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_id, auth_type)
+
+        env_msg = build_env_context_message(decl_session_id)
+        messages = [env_msg | List.wrap(messages)]
+
         base_body = %{
           "model" => model,
           "messages" => messages,
@@ -38,10 +48,11 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
               |> Map.put("system", anthropic_system_blocks())
               |> Map.put("messages", transform_messages_for_claude_code(messages))
               |> Map.put("metadata", %{"user_id" => compute_user_id(session_id)})
-              |> Map.put("tools", anthropic_tools())
+              |> Map.put("tools", function_declarations_for_session(decl_session_id))
 
             _ ->
               base_body
+              |> Map.put("tools", function_declarations_for_session(decl_session_id))
           end
 
         url = if auth_type == :oauth, do: "/v1/messages?beta=true", else: "/v1/messages"
@@ -76,6 +87,9 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
       if is_nil(model) do
         {:error, :missing_model}
       else
+        decl_session_id =
+          Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_id, auth_type)
+
         body =
           case auth_type do
             :oauth ->
@@ -84,7 +98,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
                 "messages" => transform_messages_for_claude_code(messages),
                 "system" => anthropic_system_blocks(),
                 "max_tokens" => Keyword.get(opts, :max_tokens, 512),
-                "tools" => anthropic_tools(),
+                "tools" => function_declarations_for_session(decl_session_id),
                 "metadata" => %{"user_id" => compute_user_id(session_id)},
                 "stream" => true
               }
@@ -94,7 +108,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
                 "model" => model,
                 "messages" => messages,
                 "max_tokens" => Keyword.get(opts, :max_tokens, 512),
-                "tools" => anthropic_tools(),
+                "tools" => function_declarations_for_session(decl_session_id),
                 "metadata" => %{"user_id" => compute_user_id(session_id)},
                 "stream" => true
               }
@@ -105,6 +119,63 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
         maybe_log_request(:followup, req, url, body)
         StreamingAdapter.stream_request(req, method: :post, url: url, json: body)
       end
+    end
+  end
+
+  # Merge MCP tools with built-ins; MCP wins on collision
+  defp function_declarations_for_session(session_id) do
+    mcp_tools = MCPRegistry.to_anthropic_decls(session_id)
+    builtins = anthropic_tools()
+    names = MapSet.new(Enum.map(mcp_tools, & &1["name"]))
+    builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
+    mcp_tools ++ builtins_filtered
+  end
+
+  # Resolve the Conversations session UUID for MCP registry lookups
+  defp resolve_decl_session_id(session_name, auth_type) when is_binary(session_name) do
+    sa = SavedAuthentication.get_by_provider_and_name(:anthropic, auth_type, session_name)
+
+    case sa do
+      %SavedAuthentication{} = found ->
+        case Conversations.latest_session_for_auth_id(found.id) do
+          %Conversations.Session{id: id} -> id
+          _ -> session_name
+        end
+
+      _ ->
+        session_name
+    end
+  end
+
+  defp build_env_context_message(session_id) do
+    cwd = safe_session_cwd(session_id)
+
+    text = """
+    <environment_context>
+      <cwd>#{cwd}</cwd>
+    </environment_context>
+    """
+
+    %{"role" => "user", "content" => [%{"type" => "text", "text" => String.trim(text)}]}
+  end
+
+  defp safe_session_cwd(session_id) do
+    case Ecto.UUID.cast(session_id) do
+      :error ->
+        File.cwd!() |> Path.expand()
+
+      {:ok, _} ->
+        try do
+          case Conversations.get_session_with_auth!(session_id) do
+            %Conversations.Session{working_dir: wd} when is_binary(wd) and wd != "" ->
+              Path.expand(wd)
+
+            _ ->
+              File.cwd!() |> Path.expand()
+          end
+        rescue
+          _ -> File.cwd!() |> Path.expand()
+        end
     end
   end
 

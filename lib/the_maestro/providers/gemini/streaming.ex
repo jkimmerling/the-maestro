@@ -40,27 +40,52 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
 
   defp do_stream_chat(:api_key, req, _session_name, messages, opts) do
     model = Keyword.get(opts, :model)
+
     if is_nil(model) or model == "" do
       {:error, :missing_model}
     else
       model_path = normalize_model_for_api(model, :genlang)
-      payload = %{"model" => model_path, "contents" => ensure_gemini_contents(messages), "stream" => true}
-      StreamingAdapter.stream_request(req, method: :post, url: "/v1beta/#{model_path}:streamGenerateContent", json: payload)
+
+      payload = %{
+        "model" => model_path,
+        "contents" => ensure_gemini_contents(messages),
+        "stream" => true
+      }
+
+      StreamingAdapter.stream_request(req,
+        method: :post,
+        url: "/v1beta/#{model_path}:streamGenerateContent",
+        json: payload
+      )
     end
   end
 
   defp do_stream_chat(:oauth, req, session_name, messages, opts) do
     model = Keyword.get(opts, :model)
+
     if is_nil(model) or model == "" do
       {:error, :missing_model}
     else
       session_uuid = Ecto.UUID.generate()
       :ok = preflight_refresh_if_needed(session_name)
+
       case CodeAssist.ensure_project(session_name) do
         {:ok, project} when is_binary(project) and project != "" ->
-          stream_oauth_with_project(req, session_name, messages, opts, model, session_uuid, project)
-        {:error, :project_required} -> {:error, :project_required}
-        _ -> {:error, :missing_user_project}
+          stream_oauth_with_project(
+            req,
+            session_name,
+            messages,
+            opts,
+            model,
+            session_uuid,
+            project
+          )
+
+        {:error, :project_required} ->
+          {:error, :project_required}
+
+        _ ->
+          {:error, :missing_user_project}
       end
     end
   end
@@ -73,13 +98,34 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     env_msg = build_env_context_message(session_name)
     base_contents = [env_msg | base_contents]
     {contents, sys_inst} = split_system_instruction(base_contents)
-    decl_session_id = Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
-    request = %{"contents" => contents, "generationConfig" => %{"temperature" => 0, "topP" => 1}, "session_id" => session_uuid}
-    |> maybe_put_system_instruction(sys_inst)
-    |> maybe_put_tools(function_declarations_for_session(decl_session_id))
-    payload = %{"model" => m, "project" => project, "user_prompt_id" => session_uuid, "request" => request}
+
+    decl_session_id =
+      Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
+
+    request =
+      %{
+        "contents" => contents,
+        "generationConfig" => %{"temperature" => 0, "topP" => 1},
+        "session_id" => session_uuid
+      }
+      |> maybe_put_system_instruction(sys_inst)
+      |> maybe_put_tools(function_declarations_for_session(decl_session_id))
+
+    payload = %{
+      "model" => m,
+      "project" => project,
+      "user_prompt_id" => session_uuid,
+      "request" => request
+    }
+
     req = maybe_http_debug(req, payload)
-    StreamingAdapter.stream_request(req, method: :post, url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse", json: payload, timeout: Keyword.get(opts, :timeout, :infinity))
+
+    StreamingAdapter.stream_request(req,
+      method: :post,
+      url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+      json: payload,
+      timeout: Keyword.get(opts, :timeout, :infinity)
+    )
   end
 
   # Attempt a very cheap GET to validate the bearer token. If it returns 401,
@@ -89,7 +135,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
       {:ok, req} ->
         case Req.request(req,
                method: :get,
-               url: "https://cloudcode-pa.googleapis.com/v1internal:getCodeAssistGlobalUserSetting"
+               url:
+                 "https://cloudcode-pa.googleapis.com/v1internal:getCodeAssistGlobalUserSetting"
              ) do
           {:ok, %Req.Response{status: 401}} ->
             _ = GemOAuth.refresh_tokens(session_name)
@@ -99,7 +146,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
             :ok
         end
 
-      _ -> :ok
+      _ ->
+        :ok
     end
   end
 
@@ -269,7 +317,10 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   end
 
   defp ensure_gemini_contents(messages) do
-    valid? = is_list(messages) and Enum.any?(messages, &is_map/1) and Enum.all?(messages, fn m -> is_map(m) and Map.has_key?(m, "parts") end)
+    valid? =
+      is_list(messages) and Enum.any?(messages, &is_map/1) and
+        Enum.all?(messages, fn m -> is_map(m) and Map.has_key?(m, "parts") end)
+
     if valid?, do: messages, else: normalize_messages(messages)
   end
 

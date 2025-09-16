@@ -67,37 +67,34 @@ STOP FUCKING USING 10s WHEN RUNNING THE SERVER.  ----- RUN THE BACKGROUND PROCES
 
 **Professional developers solve problems. They never bypass protections.**
 
-# Archon Research Integration
+# Documentation Research Guidance
 
-**Use Archon MCP server for documentation research and knowledge retrieval.**
+**Use web search or request documentation from the user for research and knowledge retrieval.**
 
 ## Documentation Research Requirements
 
 ### Before Any Implementation
 
-**MANDATORY: Use Archon for research before coding:**
+**MANDATORY: Confirm understanding before coding:**
 
 ```bash
 # Research best practices and patterns
-archon:perform_rag_query(
-  query="[technology/feature] best practices patterns",
-  match_count=3-5
-)
+web:search("[technology/feature] best practices", results=3-5)
 
 # Get specific implementation examples
-archon:search_code_examples(
-  query="[specific feature] implementation examples",
-  match_count=2-3
-)
+web:search("[specific feature] implementation examples", results=2-3)
+
+# If web search is insufficient
+ask user to provide the relevant documentation or context
 ```
 
 ### Research Guidelines
 
 **Query Strategy:**
 - Start with broad architectural queries, narrow to specific implementation
-- Use RAG for both strategic decisions and tactical "how-to" questions
 - Cross-reference multiple sources for validation
-- Keep match_count low (2-5) for focused results
+- Verify publish dates and prefer up-to-date material
+- Keep result counts focused (2-5 high quality sources)
 
 **Research Scope Examples:**
 - **High-level**: "microservices architecture patterns", "database security practices", "API design patterns"
@@ -107,86 +104,86 @@ archon:search_code_examples(
 
 ## Programming Language Code Examples
 
-### MANDATORY: Check Archon for Code Examples
+### MANDATORY: Gather Code Examples Responsibly
 
-**BEFORE using ANY library, function, or module, MUST query Archon for examples:**
+**BEFORE using ANY library, function, or module, gather examples via web search or user-provided docs:**
 
 ```bash
 # Generic pattern for any language/framework
-archon:search_code_examples(
-  query="[language] [function/library] usage examples",
-  match_count=3
-)
+web:search("[language] [function/library] usage examples", results=3)
 
 # For specific implementations
-archon:search_code_examples(
-  query="[framework] [feature] implementation examples",
-  match_count=3
-)
+web:search("[framework] [feature] implementation examples", results=3)
+
+# When search results are unclear
+ask user for preferred references or internal guidelines
 ```
 
-### Required Code Example Queries by Language
+### Recommended Code Example Queries by Language
 
 **For React/TypeScript Frontend:**
 ```bash
 # React hooks and patterns
-archon:search_code_examples(query="React useState hook examples", match_count=3)
-archon:search_code_examples(query="React useEffect cleanup examples", match_count=3)
-archon:search_code_examples(query="TypeScript React component props examples", match_count=3)
-archon:search_code_examples(query="React Context API usage examples", match_count=3)
+web:search("React useState hook examples", results=3)
+web:search("React useEffect cleanup examples", results=3)
+web:search("TypeScript React component props examples", results=3)
+web:search("React Context API usage examples", results=3)
 
 # Form handling and state management
-archon:search_code_examples(query="React Hook Form validation examples", match_count=3)
-archon:search_code_examples(query="React Zustand state management examples", match_count=3)
+web:search("React Hook Form validation examples", results=3)
+web:search("React Zustand state management examples", results=3)
 ```
 
 **For Python Backend:**
 ```bash
 # Core Python patterns
-archon:search_code_examples(query="Python asyncio examples", match_count=3)
-archon:search_code_examples(query="Python FastAPI routing examples", match_count=3)
-archon:search_code_examples(query="Python Pydantic model validation examples", match_count=3)
-archon:search_code_examples(query="Python SQLAlchemy query examples", match_count=3)
+web:search("Python asyncio examples", results=3)
+web:search("Python FastAPI routing examples", results=3)
+web:search("Python Pydantic model validation examples", results=3)
+web:search("Python SQLAlchemy query examples", results=3)
 
 # Authentication and middleware
-archon:search_code_examples(query="Python JWT authentication examples", match_count=3)
-archon:search_code_examples(query="FastAPI middleware examples", match_count=3)
+web:search("Python JWT authentication examples", results=3)
+web:search("FastAPI middleware examples", results=3)
 ```
 
 **For Elixir/Phoenix Backend:**
 ```bash
 # Core Elixir patterns
-archon:search_code_examples(query="Elixir Enum.reduce examples", match_count=3)
-archon:search_code_examples(query="GenServer handle_call patterns", match_count=3)
-archon:search_code_examples(query="Phoenix LiveView form handling examples", match_count=3)
-archon:search_code_examples(query="Ecto changeset validation examples", match_count=3)
+web:search("Elixir Enum.reduce examples", results=3)
+web:search("GenServer handle_call patterns", results=3)
+web:search("Phoenix LiveView form handling examples", results=3)
+web:search("Ecto changeset validation examples", results=3)
 
 # Phoenix-specific features
-archon:search_code_examples(query="Phoenix Context pattern examples", match_count=3)
-archon:search_code_examples(query="Phoenix Channel authentication examples", match_count=3)
+web:search("Phoenix Context pattern examples", results=3)
+web:search("Phoenix Channel authentication examples", results=3)
 ```
 
 **For TypeScript Utilities:**
 ```bash
 # TypeScript-specific patterns
-archon:search_code_examples(query="TypeScript generic constraints examples", match_count=3)
-archon:search_code_examples(query="TypeScript utility types examples", match_count=3)
-archon:search_code_examples(query="TypeScript decorators examples", match_count=3)
-archon:search_code_examples(query="TypeScript async/await error handling examples", match_count=3)
+web:search("TypeScript generic constraints examples", results=3)
+web:search("TypeScript utility types examples", results=3)
+web:search("TypeScript decorators examples", results=3)
+web:search("TypeScript async/await error handling examples", results=3)
 ```
 
 **For External Libraries (Any Language):**
 ```bash
 # Framework-agnostic library usage
-archon:search_code_examples(query="[library_name] [language] setup examples", match_count=3)
-archon:search_code_examples(query="[package_name] configuration examples", match_count=3)
-archon:search_code_examples(query="[tool_name] integration examples", match_count=3)
+web:search("[library_name] [language] setup examples", results=3)
+web:search("[package_name] configuration examples", results=3)
+web:search("[tool_name] integration examples", results=3)
+
+# If results conflict or lack detail
+ask user for internal runbooks or preferred references
 ```
 
 ### Research Validation
 
 **Always validate research findings:**
-- Cross-reference multiple sources
+- Cross-reference multiple reputable sources
 - Verify recency of information
 - Test applicability to current project context
 - Document assumptions and limitations

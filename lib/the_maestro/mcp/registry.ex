@@ -43,6 +43,39 @@ defmodule TheMaestro.MCP.Registry do
   end
 
   @doc """
+  Materialize MCP tools for Anthropic Messages API.
+
+  Returns a list of maps like:
+    %{"name" => name, "description" => desc, "input_schema" => json_schema}
+  """
+  @spec to_anthropic_decls(String.t()) :: [tool_decl]
+  def to_anthropic_decls(session_id) when is_binary(session_id) do
+    case Conversations.get_session!(session_id) do
+      %Conversations.Session{} = s ->
+        mcps_hash = :erlang.phash2(s.mcps || %{})
+
+        case RegistryCache.get({:anthropic, session_id}, mcps_hash) do
+          {:ok, decls} ->
+            decls
+
+          _ ->
+            decls =
+              s
+              |> collect_anthropic_decls(session_id)
+              |> uniq_by_name()
+
+            _ = RegistryCache.put({:anthropic, session_id}, mcps_hash, decls)
+            decls
+        end
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
+  @doc """
   Materialize MCP tools for OpenAI Responses API.
 
   Returns a list of maps like:
@@ -107,6 +140,22 @@ defmodule TheMaestro.MCP.Registry do
     (from_registry ++ from_simple ++ from_dynamic) |> uniq_by_name()
   end
 
+  defp collect_anthropic_decls(%Conversations.Session{} = s, session_id) do
+    from_registry =
+      s.tools
+      |> safe_get(["mcp_registry", "tools"], [])
+      |> Enum.flat_map(&map_registry_tool_to_anthropic/1)
+
+    from_simple =
+      s.mcps
+      |> safe_get(["tools"], [])
+      |> Enum.flat_map(&map_simple_tool_to_anthropic/1)
+
+    from_dynamic = collect_dynamic_decls(s, session_id, :anthropic)
+
+    from_registry ++ from_simple ++ from_dynamic
+  end
+
   defp collect_dynamic_decls(%Conversations.Session{} = s, session_id, provider) do
     s.mcps
     # servers only
@@ -123,6 +172,7 @@ defmodule TheMaestro.MCP.Registry do
       case provider do
         :gemini -> tools |> Enum.flat_map(&map_hermes_tool_to_gemini/1)
         :openai -> tools |> Enum.flat_map(&map_hermes_tool_to_openai/1)
+        :anthropic -> tools |> Enum.flat_map(&map_hermes_tool_to_anthropic/1)
       end
     else
       []
@@ -172,6 +222,58 @@ defmodule TheMaestro.MCP.Registry do
     else
       _ -> []
     end
+  end
+
+  # -- Anthropic mapping helpers --
+  defp map_registry_tool_to_anthropic(%{} = t) do
+    name =
+      get_in(t, ["provider_exposed_name", "anthropic"]) ||
+        t["canonical_name"] || t["mcp_tool_name"] || t["name"]
+
+    with true <- is_binary(name),
+         params when is_map(params) <- Map.get(t, "parameters", %{}) do
+      [
+        %{
+          "name" => sanitize_anthropic_name(name),
+          "description" => Map.get(t, "description"),
+          "input_schema" => normalize_json_schema(params)
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  defp map_simple_tool_to_anthropic(%{} = t) do
+    name = t["name"] || t[:name]
+    params = t["parameters"] || t[:parameters] || %{}
+    desc = t["description"] || t[:description]
+
+    if is_binary(name) and is_map(params) do
+      [
+        %{
+          "name" => sanitize_anthropic_name(name),
+          "description" => desc,
+          "input_schema" => normalize_json_schema(params)
+        }
+      ]
+    else
+      []
+    end
+  end
+
+  defp map_hermes_tool_to_anthropic(%{"name" => name} = t) do
+    params = t["inputSchema"] || %{}
+
+    [
+      %{
+        "name" => sanitize_anthropic_name(name),
+        "description" => t["description"] || t["title"],
+        "input_schema" => normalize_json_schema(params)
+      }
+    ]
+  rescue
+    _ -> []
   end
 
   defp map_simple_tool_to_openai(%{} = t) do
@@ -407,6 +509,12 @@ defmodule TheMaestro.MCP.Registry do
     else
       ellipsize_middle(sanitized, 63)
     end
+  end
+
+  # Anthropic tool name sanitizer: keep it simple/safe
+  defp sanitize_anthropic_name(name) when is_binary(name) do
+    sanitized = name |> String.replace(~r/[^A-Za-z0-9_.-]/u, "_")
+    if String.length(sanitized) <= 63, do: sanitized, else: ellipsize_middle(sanitized, 63)
   end
 
   defp ellipsize_middle(s, max) when is_integer(max) and max > 3 do

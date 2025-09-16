@@ -8,9 +8,21 @@ defmodule TheMaestro.Conversations.Translator do
   @type canonical_event :: map()
 
   @spec to_provider(canonical(), provider()) :: {:ok, list()} | {:error, term()}
-  def to_provider(%{"messages" => msgs}, :openai), do: {:ok, Enum.map(msgs, &to_openai_msg/1)}
-  def to_provider(%{"messages" => msgs}, :anthropic), do: {:ok, Enum.map(msgs, &to_openai_msg/1)}
-  def to_provider(%{"messages" => msgs}, :gemini), do: {:ok, Enum.map(msgs, &to_gemini_msg/1)}
+  def to_provider(%{"messages" => msgs} = canon, :openai) do
+    base = Enum.map(msgs, &to_openai_msg/1)
+    {:ok, append_full_tool_history(base, canon, :openai)}
+  end
+
+  def to_provider(%{"messages" => msgs} = canon, :anthropic) do
+    base = Enum.map(msgs, &to_openai_msg/1)
+    {:ok, append_full_tool_history(base, canon, :anthropic)}
+  end
+
+  def to_provider(%{"messages" => msgs} = canon, :gemini) do
+    base = Enum.map(msgs, &to_gemini_msg/1)
+    {:ok, append_full_tool_history(base, canon, :gemini)}
+  end
+
   def to_provider(_c, _), do: {:error, :invalid_canonical}
 
   @spec from_provider(map() | list() | binary(), provider()) ::
@@ -190,4 +202,144 @@ defmodule TheMaestro.Conversations.Translator do
     do: [%{type: "content", delta: delta}]
 
   defp gemini_evt(_), do: []
+
+  # ==== Tool history transfer for provider swaps ====
+  # Append a human-readable, full-session tool history (calls + outputs) so that
+  # a different provider can faithfully see what happened earlier.
+  defp append_full_tool_history(msgs, %{"tool_history" => hist} = _canon, provider)
+       when is_list(hist) and hist != [] do
+    text = build_full_tool_history_text(hist)
+    msgs ++ split_tool_history_into_messages(text, provider)
+  end
+
+  defp append_full_tool_history(msgs, canon, provider) do
+    # Fallback to last-turn event trace if there is no rolling history yet
+    case canon do
+      %{"events" => events} when is_list(events) and events != [] ->
+        trace = build_tool_trace_text(events)
+
+        if trace == "" do
+          msgs
+        else
+          msgs ++ [tool_trace_msg(trace, provider)]
+        end
+
+      _ ->
+        msgs
+    end
+  end
+
+  defp tool_trace_msg(text, :gemini), do: %{"role" => "user", "parts" => [%{"text" => text}]}
+
+  defp tool_trace_msg(text, _),
+    do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
+
+  defp build_tool_trace_text(events) do
+    calls =
+      events
+      |> Enum.flat_map(fn ev ->
+        case ev do
+          %{:type => :function_call, :tool_calls => calls} when is_list(calls) -> calls
+          %{"type" => :function_call, "tool_calls" => calls} when is_list(calls) -> calls
+          %{"type" => "function_call", "tool_calls" => calls} when is_list(calls) -> calls
+          _ -> []
+        end
+      end)
+
+    case calls do
+      [] ->
+        ""
+
+      _ ->
+        lines =
+          Enum.map(calls, fn c ->
+            name = c[:name] || c["name"] || ""
+            args = c[:arguments] || c["arguments"] || "{}"
+            "- #{name}(#{truncate_args(args)})"
+          end)
+
+        [
+          "Previous tool calls (Context7 MCP):",
+          Enum.join(lines, "\n")
+        ]
+        |> Enum.join("\n")
+    end
+  end
+
+  defp truncate_args(args) when is_binary(args) do
+    s = String.trim(args)
+    if String.length(s) > 200, do: String.slice(s, 0, 200) <> "…", else: s
+  end
+
+  defp truncate_args(%{} = m) do
+    try do
+      s = Jason.encode!(m)
+      truncate_args(s)
+    rescue
+      _ -> "{}"
+    end
+  end
+
+  defp truncate_args(other), do: to_string(other)
+  # keep module open for history helpers below
+
+  defp build_full_tool_history_text(hist) do
+    Enum.map(hist, fn entry ->
+      provider = entry["provider"] || entry[:provider] || ""
+      at = entry["at"] || entry[:at]
+      calls = entry["calls"] || entry[:calls] || []
+      outs = entry["outputs"] || entry[:outputs] || []
+
+      call_lines =
+        for c <- calls do
+          name = c["name"] || c[:name] || ""
+          args = c["arguments"] || c[:arguments] || "{}"
+          "- call #{name}(#{truncate_args(args)})"
+        end
+
+      out_lines =
+        for o <- outs do
+          id = o["id"] || o[:id] || ""
+          out = o["output"] || o[:output] || ""
+          "  output[#{id}]: #{truncate_args(out)}"
+        end
+
+      header =
+        case at do
+          t when is_integer(t) -> "Turn @#{t} provider=#{provider}"
+          _ -> "Turn provider=#{provider}"
+        end
+
+      Enum.join([header | call_lines ++ out_lines], "\n")
+    end)
+    |> Enum.join("\n\n")
+  end
+
+  defp split_tool_history_into_messages(text, :gemini) do
+    chunks = chunk_text(text, 3500)
+    Enum.map(chunks, fn t -> %{"role" => "user", "parts" => [%{"text" => t}]} end)
+  end
+
+  defp split_tool_history_into_messages(text, _provider) do
+    chunks = chunk_text(text, 3500)
+
+    Enum.map(chunks, fn t ->
+      %{"role" => "user", "content" => [%{"type" => "text", "text" => t}]}
+    end)
+  end
+
+  defp chunk_text(text, max) when is_binary(text) and is_integer(max) do
+    if String.length(text) <= max do
+      [text]
+    else
+      do_chunk(text, max, []) |> Enum.reverse()
+    end
+  end
+
+  defp do_chunk(<<>>, _m, acc), do: acc
+
+  defp do_chunk(text, m, acc) do
+    {chunk, rest} = String.split_at(text, m)
+    do_chunk(rest, m, [chunk | acc])
+  end
 end

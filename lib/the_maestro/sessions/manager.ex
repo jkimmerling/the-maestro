@@ -325,8 +325,12 @@ defmodule TheMaestro.Sessions.Manager do
         decl_session_id: Keyword.get(opts, :decl_session_id)
       )
 
-  defp do_call_provider(:anthropic, session_name, messages, model, _opts),
-    do: Anthropic.Streaming.stream_chat(session_name, messages, model: model)
+  defp do_call_provider(:anthropic, session_name, messages, model, opts),
+    do:
+      Anthropic.Streaming.stream_chat(session_name, messages,
+        model: model,
+        decl_session_id: Keyword.get(opts, :decl_session_id)
+      )
 
   defp do_call_provider(other, _s, _m, _model, _opts),
     do: {:error, {:unsupported_provider, other}}
@@ -393,12 +397,15 @@ defmodule TheMaestro.Sessions.Manager do
         case String.trim(to_string(text || "")) do
           "" ->
             # No assistant text to append; only update events timeline
-            Map.put(latest.combined_chat || %{"messages" => []}, "events", events || [])
+            (latest.combined_chat || %{"messages" => []})
+            |> Map.put("events", events || [])
+            |> maybe_append_tool_history(meta)
 
           _ ->
             latest.combined_chat
             |> append_assistant(text, req_meta)
             |> Map.put("events", events || [])
+            |> maybe_append_tool_history(meta)
         end
 
       {:ok, entry} =
@@ -439,6 +446,17 @@ defmodule TheMaestro.Sessions.Manager do
       })
     else
       _ -> :ok
+    end
+  end
+
+  defp maybe_append_tool_history(canon, meta) do
+    hist = (meta && meta[:tool_history_acc]) || []
+
+    if hist == [] do
+      canon
+    else
+      existing = Map.get(canon || %{}, "tool_history", [])
+      Map.put(canon || %{}, "tool_history", existing ++ hist)
     end
   end
 
@@ -496,6 +514,19 @@ defmodule TheMaestro.Sessions.Manager do
 
       # Follow-up stream publishes under the SAME stream_id for UI continuity
       # bump follow-up round counter to prevent infinite loops
+      history_entry = %{
+        provider: provider,
+        at: now_ms(),
+        calls:
+          Enum.map(calls_to_run, fn %{"id" => id, "name" => name, "arguments" => args} ->
+            %{"id" => id, "name" => name, "arguments" => args}
+          end),
+        outputs:
+          Enum.map(outputs, fn {id, result} ->
+            %{"id" => id, "output" => tool_output_payload(result)}
+          end)
+      }
+
       st =
         update_in(st, [session_id, :acc, :meta], fn meta ->
           meta = meta || %{}
@@ -508,6 +539,7 @@ defmodule TheMaestro.Sessions.Manager do
           meta
           |> Map.update(:followup_rounds, 1, &(&1 + 1))
           |> Map.put(:executed_calls, executed2)
+          |> Map.update(:tool_history_acc, [history_entry], fn l -> l ++ [history_entry] end)
         end)
 
       {:ok, _task} =
@@ -574,8 +606,12 @@ defmodule TheMaestro.Sessions.Manager do
         decl_session_id: Keyword.get(opts, :decl_session_id)
       )
 
-  defp do_followup_provider(:anthropic, session_name, items, model, _opts),
-    do: Anthropic.Streaming.stream_tool_followup(session_name, items, model: model)
+  defp do_followup_provider(:anthropic, session_name, items, model, opts),
+    do:
+      Anthropic.Streaming.stream_tool_followup(session_name, items,
+        model: model,
+        decl_session_id: Keyword.get(opts, :decl_session_id)
+      )
 
   defp do_followup_provider(:gemini, session_name, items, model, opts),
     do:
