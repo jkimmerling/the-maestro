@@ -3,7 +3,9 @@ defmodule TheMaestroWeb.DashboardLive do
 
   alias TheMaestro.Auth
   alias TheMaestro.Conversations
+  alias TheMaestro.MCP
   alias TheMaestro.Provider
+  alias TheMaestroWeb.MCPServersLive.FormComponent
 
   @impl true
   def mount(_params, _session, socket) do
@@ -22,6 +24,10 @@ defmodule TheMaestroWeb.DashboardLive do
       |> assign(:session_auth_options, build_auth_options_for(:openai))
       |> assign(:session_model_options, [])
       |> assign(:show_session_dir_picker, false)
+      |> assign(:mcp_server_options, MCP.server_options())
+      |> assign(:session_mcp_selected_ids, [])
+      |> assign(:show_mcp_modal, false)
+      |> assign(:session_form_params, %{})
       |> assign(:page_title, "Dashboard")
       |> assign(:active_streams, %{})
       |> assign(:show_delete_session_modal, false)
@@ -143,6 +149,10 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:auth_options, build_auth_options())
      |> assign(:orphan_threads, orphan_thread_options())
      |> assign(:session_form, to_form(cs))
+     |> assign(:mcp_server_options, MCP.server_options())
+     |> assign(:session_mcp_selected_ids, [])
+     |> assign(:session_form_params, %{})
+     |> assign(:show_mcp_modal, false)
      |> assign(:show_session_modal, true)}
   end
 
@@ -150,7 +160,8 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply,
      socket
      |> assign(:show_session_modal, false)
-     |> assign(:show_session_dir_picker, false)}
+     |> assign(:show_session_dir_picker, false)
+     |> assign(:show_mcp_modal, false)}
   end
 
   # Target-aware validate to avoid clobbering model list when provider also present
@@ -163,7 +174,13 @@ defmodule TheMaestroWeb.DashboardLive do
       Conversations.change_session(%Conversations.Session{}, params)
       |> Map.put(:action, :validate)
 
-    socket = assign(socket, session_form: to_form(cs, action: :validate))
+    selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
+
+    socket =
+      socket
+      |> assign(:session_form, to_form(cs, action: :validate))
+      |> assign(:session_form_params, params)
+      |> assign(:session_mcp_selected_ids, selected)
 
     case target do
       "provider" ->
@@ -190,23 +207,42 @@ defmodule TheMaestroWeb.DashboardLive do
       Conversations.change_session(%Conversations.Session{}, params)
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, session_form: to_form(cs, action: :validate))}
+    selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
+
+    {:noreply,
+     socket
+     |> assign(:session_form, to_form(cs, action: :validate))
+     |> assign(:session_form_params, params)
+     |> assign(:session_mcp_selected_ids, selected)}
   end
 
   def handle_event("open_session_dir_picker", _params, socket) do
     {:noreply, assign(socket, :show_session_dir_picker, true)}
   end
 
+  def handle_event("open_mcp_modal", _params, socket) do
+    {:noreply, assign(socket, :show_mcp_modal, true)}
+  end
+
+  def handle_event("close_mcp_modal", _params, socket) do
+    {:noreply, assign(socket, :show_mcp_modal, false)}
+  end
+
   def handle_event("session_use_root_dir", _params, socket) do
     wd = File.cwd!() |> Path.expand()
 
     params = merge_session_params(socket, %{"working_dir" => wd})
+    selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
 
     cs =
       Conversations.change_session(%Conversations.Session{}, params)
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, session_form: to_form(cs, action: :validate))}
+    {:noreply,
+     socket
+     |> assign(:session_form, to_form(cs, action: :validate))
+     |> assign(:session_form_params, params)
+     |> assign(:session_mcp_selected_ids, selected)}
   end
 
   def handle_event("session_save", %{"session" => params}, socket) do
@@ -226,10 +262,19 @@ defmodule TheMaestroWeb.DashboardLive do
        |> put_flash(:info, "Session created")
        |> assign(:show_session_modal, false)
        |> assign(:show_session_dir_picker, false)
-       |> assign(:sessions, Conversations.list_sessions_with_auth())}
+       |> assign(:show_mcp_modal, false)
+       |> assign(:sessions, Conversations.list_sessions_with_auth())
+       |> assign(:session_form_params, %{})
+       |> assign(:session_mcp_selected_ids, [])}
     else
-      {:error, %Ecto.Changeset{} = cs} -> {:noreply, assign(socket, session_form: to_form(cs))}
-      {:error, _} -> {:noreply, socket}
+      {:error, %Ecto.Changeset{} = cs} ->
+        selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
+
+        {:noreply,
+         socket
+         |> assign(:session_form, to_form(cs))
+         |> assign(:session_form_params, params)
+         |> assign(:session_mcp_selected_ids, selected)}
     end
   end
 
@@ -284,6 +329,7 @@ defmodule TheMaestroWeb.DashboardLive do
   @impl true
   def handle_info({TheMaestroWeb.DirectoryPicker, :selected, path, :new_session}, socket) do
     params = merge_session_params(socket, %{"working_dir" => path})
+    selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
 
     cs =
       Conversations.change_session(%Conversations.Session{}, params)
@@ -292,12 +338,40 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply,
      socket
      |> assign(:session_form, to_form(cs, action: :validate))
+     |> assign(:session_form_params, params)
+     |> assign(:session_mcp_selected_ids, selected)
      |> assign(:show_session_dir_picker, false)}
   end
 
   @impl true
   def handle_info({TheMaestroWeb.DirectoryPicker, :cancel, :new_session}, socket) do
     {:noreply, assign(socket, :show_session_dir_picker, false)}
+  end
+
+  def handle_info({FormComponent, {:saved, server}}, socket) do
+    selected = Enum.uniq([server.id | socket.assigns.session_mcp_selected_ids || []])
+
+    params =
+      socket.assigns[:session_form_params]
+      |> Kernel.||(%{})
+      |> Map.put("mcp_server_ids", selected)
+
+    cs =
+      socket.assigns.session_form.data
+      |> Conversations.change_session(params)
+      |> Map.put(:action, :validate)
+
+    {:noreply,
+     socket
+     |> assign(:mcp_server_options, MCP.server_options(include_disabled?: true))
+     |> assign(:session_mcp_selected_ids, selected)
+     |> assign(:session_form_params, params)
+     |> assign(:session_form, to_form(cs, action: :validate))
+     |> assign(:show_mcp_modal, false)}
+  end
+
+  def handle_info({FormComponent, {:canceled, _}}, socket) do
+    {:noreply, assign(socket, :show_mcp_modal, false)}
   end
 
   @impl true
@@ -410,8 +484,20 @@ defmodule TheMaestroWeb.DashboardLive do
 
   # Merge new form values into the current session form params, preserving prior selections
   defp merge_session_params(socket, extra) when is_map(extra) do
-    (socket.assigns[:session_form] && socket.assigns.session_form.params) |> Map.merge(extra)
+    current = socket.assigns[:session_form_params] || %{}
+    Map.merge(current, extra)
   end
+
+  defp normalize_mcp_ids(nil), do: []
+
+  defp normalize_mcp_ids(ids) when is_list(ids) do
+    ids
+    |> Enum.map(&to_string/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp normalize_mcp_ids(id), do: normalize_mcp_ids([id])
 
   defp session_label(s) do
     cond do
@@ -429,167 +515,145 @@ defmodule TheMaestroWeb.DashboardLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} show_header={false} main_class="p-0" container_class="p-0">
+    <Layouts.app
+      flash={@flash}
+      page_title={@page_title}
+      main_class="px-6 py-8"
+      container_class="mx-auto max-w-7xl"
+    >
       <div
         id="dashboard-root"
-        class="min-h-screen bg-black text-amber-400 font-mono relative overflow-hidden"
         phx-hook="DashboardHotkeys"
       >
-        <div class="container mx-auto px-6 py-8">
-          <div class="flex justify-between items-center mb-8 border-b border-amber-600 pb-4">
-            <h1 class="text-4xl font-bold text-amber-400 glow tracking-wider">
-              &gt;&gt;&gt; DASHBOARD TERMINAL V2.1.4 &lt;&lt;&lt;
-            </h1>
-            <div class="flex gap-2">
-              <.link
-                navigate={~p"/supplied_context"}
-                class="px-6 py-2 rounded transition-all duration-200 btn-green hover:glow-strong"
-                data-hotkey="alt+c"
-                data-hotkey-seq="g c"
-                data-hotkey-label="Context Library"
-              >
-                <.icon name="hero-archive-box" class="inline mr-2 w-4 h-4" /> CONTEXT LIBRARY
-              </.link>
-              <.link
-                navigate={~p"/chat_history"}
-                class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
-                data-hotkey="alt+h"
-                data-hotkey-seq="g h"
-                data-hotkey-label="Chat Histories"
-              >
-                <.icon name="hero-clock" class="inline mr-2 w-4 h-4" /> CHAT HISTORIES
-              </.link>
-              <.link
-                navigate={~p"/auths/new"}
-                class="px-6 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
-                data-hotkey="alt+h"
-                data-hotkey-seq="g h"
-                data-hotkey-label="New Auth"
-              >
-                <.icon name="hero-plus" class="inline mr-2 w-4 h-4" /> NEW AUTH
-              </.link>
-            </div>
-          </div>
-
-          <section class="mb-12">
-            <h2 class="text-2xl font-bold text-green-400 mb-6 glow">
+        <section class="mb-12">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-2xl font-bold text-green-400 glow">
               &gt; SAVED_AUTHENTICATIONS.DAT
             </h2>
-            <div class="terminal-card terminal-border-amber rounded-lg overflow-hidden">
-              <div class="overflow-x-auto">
-                <table class="w-full">
-                  <thead class="bg-amber-600/20">
-                    <tr>
-                      <th class="px-4 py-3 text-left font-bold text-amber-300">NAME</th>
-                      <th class="px-4 py-3 text-left font-bold text-amber-300">PROVIDER</th>
-                      <th class="px-4 py-3 text-left font-bold text-amber-300">AUTH_TYPE</th>
-                      <th class="px-4 py-3 text-left font-bold text-amber-300">EXPIRATION</th>
-                      <th class="px-4 py-3 text-left font-bold text-amber-300">CREATED</th>
-                      <th class="px-4 py-3 text-left font-bold text-amber-300">ACTIONS</th>
+            <.link
+              navigate={~p"/auths/new"}
+              class="px-4 py-2 rounded transition-all duration-200 btn-amber hover:glow-strong"
+              data-hotkey="alt+a"
+              data-hotkey-seq="g a"
+              data-hotkey-label="New Auth"
+            >
+              <.icon name="hero-key" class="inline mr-2 h-4 w-4" /> NEW AUTH
+            </.link>
+          </div>
+          <div class="terminal-card terminal-border-amber rounded-lg overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-amber-600/20">
+                  <tr>
+                    <th class="px-4 py-3 text-left font-bold text-amber-300">NAME</th>
+                    <th class="px-4 py-3 text-left font-bold text-amber-300">PROVIDER</th>
+                    <th class="px-4 py-3 text-left font-bold text-amber-300">AUTH_TYPE</th>
+                    <th class="px-4 py-3 text-left font-bold text-amber-300">EXPIRATION</th>
+                    <th class="px-4 py-3 text-left font-bold text-amber-300">CREATED</th>
+                    <th class="px-4 py-3 text-left font-bold text-amber-300">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <%= for sa <- @auths do %>
+                    <tr id={"auth-#{sa.id}"} class="border-t border-amber-800 hover:bg-amber-600/10">
+                      <td class="px-4 py-3 text-amber-200">{sa.name}</td>
+                      <td class="px-4 py-3 text-amber-200">{provider_label(sa.provider)}</td>
+                      <td class="px-4 py-3 text-amber-200 uppercase">{sa.auth_type}</td>
+                      <td class="px-4 py-3 text-amber-200">{format_dt(sa.expires_at)}</td>
+                      <td class="px-4 py-3 text-amber-200">{format_dt(sa.inserted_at)}</td>
+                      <td class="px-4 py-3">
+                        <div class="flex space-x-2">
+                          <.link
+                            navigate={~p"/auths/#{sa.id}"}
+                            class="text-green-400 hover:text-green-300"
+                          >
+                            <.icon name="hero-eye" class="h-4 w-4" />
+                          </.link>
+                          <.link
+                            navigate={~p"/auths/#{sa.id}/edit"}
+                            class="text-blue-400 hover:text-blue-300"
+                          >
+                            <.icon name="hero-pencil-square" class="h-4 w-4" />
+                          </.link>
+                          <button
+                            phx-click="delete"
+                            phx-value-id={sa.id}
+                            data-confirm="Delete this auth?"
+                            class="text-red-400 hover:text-red-300"
+                          >
+                            <.icon name="hero-trash" class="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    <%= for sa <- @auths do %>
-                      <tr id={"auth-#{sa.id}"} class="border-t border-amber-800 hover:bg-amber-600/10">
-                        <td class="px-4 py-3 text-amber-200">{sa.name}</td>
-                        <td class="px-4 py-3 text-amber-200">{provider_label(sa.provider)}</td>
-                        <td class="px-4 py-3 text-amber-200 uppercase">{sa.auth_type}</td>
-                        <td class="px-4 py-3 text-amber-200">{format_dt(sa.expires_at)}</td>
-                        <td class="px-4 py-3 text-amber-200">{format_dt(sa.inserted_at)}</td>
-                        <td class="px-4 py-3">
-                          <div class="flex space-x-2">
-                            <.link
-                              navigate={~p"/auths/#{sa.id}"}
-                              class="text-green-400 hover:text-green-300"
-                            >
-                              <.icon name="hero-eye" class="h-4 w-4" />
-                            </.link>
-                            <.link
-                              navigate={~p"/auths/#{sa.id}/edit"}
-                              class="text-blue-400 hover:text-blue-300"
-                            >
-                              <.icon name="hero-pencil-square" class="h-4 w-4" />
-                            </.link>
-                            <button
-                              phx-click="delete"
-                              phx-value-id={sa.id}
-                              data-confirm="Delete this auth?"
-                              class="text-red-400 hover:text-red-300"
-                            >
-                              <.icon name="hero-trash" class="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    <% end %>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-
-          <section>
-            <div class="flex justify-between items-center mb-6">
-              <h2 class="text-2xl font-bold text-green-400 glow">&gt; SESSION_MANAGER.DAT</h2>
-              <button
-                class="px-4 py-2 rounded transition-all duration-200 btn-blue"
-                phx-click="open_session_modal"
-                data-hotkey="alt+n"
-                data-hotkey-seq="g n"
-                data-hotkey-label="New Session"
-              >
-                <.icon name="hero-plus" class="inline mr-2 h-4 w-4" /> NEW SESSION
-              </button>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <%= for s <- @sessions do %>
-                <div
-                  class="terminal-card terminal-border-blue rounded-lg p-6 transition-colors"
-                  id={"session-" <> to_string(s.id)}
-                >
-                  <h3 class="text-xl font-bold text-blue-300 mb-1 glow">{session_label(s)}</h3>
-                  <%= if Map.get(@active_streams || %{}, s.id) do %>
-                    <div class="text-xs text-amber-400 glow mb-2" role="status" aria-live="polite">
-                      ACTIVE
-                    </div>
                   <% end %>
-                  <div class="space-y-2 text-sm">
-                    <p class="text-amber-300">
-                      Auth: {s.saved_authentication && s.saved_authentication.name} ({s.saved_authentication &&
-                        s.saved_authentication.provider}/ {s.saved_authentication &&
-                        s.saved_authentication.auth_type})
-                    </p>
-                    <p class="text-amber-200">Model: {s.model_id || "(auto)"}</p>
-                    <p class="text-amber-200">Last used: {format_dt(s.last_used_at)}</p>
-                  </div>
-                  <div class="flex justify-between mt-4 pt-3 border-t border-blue-800">
-                    <div class="flex space-x-2">
-                      <.link
-                        class="px-3 py-1 rounded text-xs btn-green"
-                        navigate={~p"/sessions/#{s.id}/chat"}
-                      >
-                        CHAT
-                      </.link>
-                      <.link
-                        class="text-blue-400 hover:text-blue-300"
-                        navigate={~p"/sessions/#{s.id}/edit"}
-                      >
-                        <.icon name="hero-pencil-square" class="h-4 w-4" />
-                      </.link>
-                    </div>
-                    <button
-                      class="text-red-400 hover:text-red-300"
-                      phx-click="delete_session"
-                      phx-value-id={s.id}
-                    >
-                      <.icon name="hero-trash" class="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              <% end %>
+                </tbody>
+              </table>
             </div>
-          </section>
-        </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold text-green-400 glow">&gt; SESSION_MANAGER.DAT</h2>
+            <button
+              class="px-4 py-2 rounded transition-all duration-200 btn-blue"
+              phx-click="open_session_modal"
+              data-hotkey="alt+n"
+              data-hotkey-seq="g n"
+              data-hotkey-label="New Session"
+            >
+              <.icon name="hero-plus" class="inline mr-2 h-4 w-4" /> NEW SESSION
+            </button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <%= for s <- @sessions do %>
+              <div
+                class="terminal-card terminal-border-blue rounded-lg p-6 transition-colors"
+                id={"session-" <> to_string(s.id)}
+              >
+                <h3 class="text-xl font-bold text-blue-300 mb-1 glow">{session_label(s)}</h3>
+                <%= if Map.get(@active_streams || %{}, s.id) do %>
+                  <div class="text-xs text-amber-400 glow mb-2" role="status" aria-live="polite">
+                    ACTIVE
+                  </div>
+                <% end %>
+                <div class="space-y-2 text-sm">
+                  <p class="text-amber-300">
+                    Auth: {s.saved_authentication && s.saved_authentication.name} ({s.saved_authentication &&
+                      s.saved_authentication.provider}/ {s.saved_authentication &&
+                      s.saved_authentication.auth_type})
+                  </p>
+                  <p class="text-amber-200">Model: {s.model_id || "(auto)"}</p>
+                  <p class="text-amber-200">Last used: {format_dt(s.last_used_at)}</p>
+                </div>
+                <div class="flex justify-between mt-4 pt-3 border-t border-blue-800">
+                  <div class="flex space-x-2">
+                    <.link
+                      class="px-3 py-1 rounded text-xs btn-green"
+                      navigate={~p"/sessions/#{s.id}/chat"}
+                    >
+                      CHAT
+                    </.link>
+                    <.link
+                      class="text-blue-400 hover:text-blue-300"
+                      navigate={~p"/sessions/#{s.id}/edit"}
+                    >
+                      <.icon name="hero-pencil-square" class="h-4 w-4" />
+                    </.link>
+                  </div>
+                  <button
+                    class="text-red-400 hover:text-red-300"
+                    phx-click="delete_session"
+                    phx-value-id={s.id}
+                  >
+                    <.icon name="hero-trash" class="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </section>
 
         <.modal :if={@show_session_modal} id="session-modal">
           <h3 class="text-2xl font-bold text-blue-400 mb-6 glow">CREATE NEW SESSION</h3>
@@ -664,6 +728,28 @@ defmodule TheMaestroWeb.DashboardLive do
                 <textarea name="session[memory_json]" rows="4" class="textarea-terminal"></textarea>
               </div>
             </div>
+            <div class="mt-4 space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-semibold uppercase tracking-wide">MCP Servers</label>
+                <button type="button" class="btn btn-xs" phx-click="open_mcp_modal">
+                  <.icon name="hero-plus" class="h-4 w-4" />
+                  <span class="ml-1">New</span>
+                </button>
+              </div>
+              <p class="text-[11px] text-slate-400">
+                Select one or more connectors to preload for this session. Disabled entries appear with
+                a badge.
+              </p>
+              <.input
+                type="select"
+                name="session[mcp_server_ids][]"
+                label=""
+                multiple
+                options={@mcp_server_options}
+                value={@session_mcp_selected_ids}
+                class="min-h-[6rem]"
+              />
+            </div>
             <div class="mt-2"></div>
             <div class="mt-3 space-x-2">
               <button type="submit" class="btn btn-blue">Save</button>
@@ -676,6 +762,15 @@ defmodule TheMaestroWeb.DashboardLive do
               id="dirpick-session-new"
               start_path={@session_form[:working_dir].value || Path.expand(".")}
               context={:new_session}
+            />
+          </.modal>
+          <.modal :if={@show_mcp_modal} id="session-mcp-modal">
+            <.live_component
+              module={FormComponent}
+              id="session-mcp-form"
+              title="New MCP Server"
+              server={%MCP.Servers{}}
+              action={:new}
             />
           </.modal>
         </.modal>

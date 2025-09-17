@@ -5,13 +5,10 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
   """
   @behaviour TheMaestro.Providers.Behaviours.Streaming
   require Logger
+  alias TheMaestro.Conversations
   alias TheMaestro.MCP.Registry, as: MCPRegistry
-  alias TheMaestro.Providers.Http.ReqClientFactory
-  alias TheMaestro.Providers.Http.StreamingAdapter
+  alias TheMaestro.Providers.Http.{ReqClientFactory, StreamingAdapter}
   alias TheMaestro.SavedAuthentication
-  alias TheMaestro.Conversations
-  alias TheMaestro.MCP.Registry, as: MCPRegistry
-  alias TheMaestro.Conversations
   alias TheMaestro.Types
 
   @impl true
@@ -138,7 +135,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
     case sa do
       %SavedAuthentication{} = found ->
         case Conversations.latest_session_for_auth_id(found.id) do
-          %Conversations.Session{id: id} -> id
+          session when not is_nil(session) -> session.id
           _ -> session_name
         end
 

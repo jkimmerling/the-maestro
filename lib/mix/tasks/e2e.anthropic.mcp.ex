@@ -9,7 +9,7 @@ defmodule Mix.Tasks.E2e.Anthropic.Mcp do
       mix e2e.anthropic.mcp --anthropic personal_oauth_anthropic
   """
 
-  alias TheMaestro.{Auth, Chat, Conversations}
+  alias TheMaestro.{Auth, Chat, Conversations, MCP}
 
   @impl true
   def run(args) do
@@ -29,21 +29,23 @@ defmodule Mix.Tasks.E2e.Anthropic.Mcp do
 
     unless sa, do: Mix.raise("No saved_authentication for anthropic name=#{session_name}")
 
-    session_id =
+    session =
       case Conversations.latest_session_for_auth_id(sa.id) do
-        %Conversations.Session{id: id} ->
-          id
+        existing when not is_nil(existing) ->
+          existing
 
         _ ->
-          {:ok, s} =
+          {:ok, created} =
             Conversations.create_session(%{
               auth_id: sa.id,
               model_id: "claude-3-5-sonnet-latest",
               working_dir: File.cwd!()
             })
 
-          s.id
+          created
       end
+
+    session_id = session.id
 
     ensure_mcps!(session_id)
 
@@ -64,30 +66,26 @@ defmodule Mix.Tasks.E2e.Anthropic.Mcp do
   end
 
   defp ensure_mcps!(session_id) do
-    base_url = System.get_env("CONTEXT7_BASE_URL") || "https://mcp.context7.com"
-    endpoint = System.get_env("CONTEXT7_ENDPOINT") || "/mcp"
+    # Use the existing Context7 stdio server
+    context7_server_id = "1ae83be6-3f07-47b5-b092-7994b6a009c5"
 
-    headers =
-      case System.get_env("CONTEXT7_HEADERS_JSON") do
-        nil ->
-          key = System.get_env("CONTEXT7_API_KEY")
-          if is_binary(key) and key != "", do: %{"X-Api-Key" => key}, else: %{}
+    # Get the server to ensure it exists
+    server = MCP.get_server!(context7_server_id)
 
-        json ->
-          Jason.decode!(json)
-      end
+    unless server do
+      Mix.raise(
+        "Context7 MCP server not found. Please ensure it exists with ID: #{context7_server_id}"
+      )
+    end
 
-    s = Conversations.get_session!(session_id)
+    existing_ids =
+      session_id
+      |> MCP.list_session_servers()
+      |> Enum.map(& &1.mcp_server_id)
 
-    mcps =
-      Map.put(s.mcps || %{}, "context7", %{
-        "transport" => "stream",
-        "base_url" => base_url,
-        "endpoint" => endpoint,
-        "headers" => headers
-      })
-
-    {:ok, _} = Conversations.update_session(s, %{mcps: mcps})
+    # Add the Context7 server to the session if not already attached
+    {:ok, _} =
+      MCP.replace_session_servers(session_id, Enum.uniq(existing_ids ++ [context7_server_id]))
   end
 
   defp collect_turn_outcome(session_id, stream_id) do

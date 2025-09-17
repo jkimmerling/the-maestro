@@ -12,6 +12,7 @@ defmodule TheMaestro.MCP.Registry do
   """
 
   alias TheMaestro.Conversations
+  alias TheMaestro.MCP
   alias TheMaestro.MCP.Client, as: MCPClient
   alias TheMaestro.MCP.RegistryCache
 
@@ -22,15 +23,17 @@ defmodule TheMaestro.MCP.Registry do
   @spec to_gemini_decls(String.t()) :: [tool_decl]
   def to_gemini_decls(session_id) when is_binary(session_id) do
     case Conversations.get_session!(session_id) do
-      %Conversations.Session{} = s ->
-        mcps_hash = :erlang.phash2(s.mcps || %{})
+      %Conversations.Session{} = session ->
+        session = Conversations.preload_session_mcp(session)
+        connectors = MCP.session_connector_map(session)
+        mcps_hash = connectors_signature(session, connectors)
 
         case RegistryCache.get(session_id, mcps_hash) do
           {:ok, decls} ->
             decls
 
           _ ->
-            decls = s |> collect_gemini_decls(session_id)
+            decls = collect_gemini_decls(session, session_id, connectors)
             _ = RegistryCache.put(session_id, mcps_hash, decls)
             decls
         end
@@ -51,8 +54,10 @@ defmodule TheMaestro.MCP.Registry do
   @spec to_anthropic_decls(String.t()) :: [tool_decl]
   def to_anthropic_decls(session_id) when is_binary(session_id) do
     case Conversations.get_session!(session_id) do
-      %Conversations.Session{} = s ->
-        mcps_hash = :erlang.phash2(s.mcps || %{})
+      %Conversations.Session{} = session ->
+        session = Conversations.preload_session_mcp(session)
+        connectors = MCP.session_connector_map(session)
+        mcps_hash = connectors_signature(session, connectors)
 
         case RegistryCache.get({:anthropic, session_id}, mcps_hash) do
           {:ok, decls} ->
@@ -60,8 +65,8 @@ defmodule TheMaestro.MCP.Registry do
 
           _ ->
             decls =
-              s
-              |> collect_anthropic_decls(session_id)
+              session
+              |> collect_anthropic_decls(session_id, connectors)
               |> uniq_by_name()
 
             _ = RegistryCache.put({:anthropic, session_id}, mcps_hash, decls)
@@ -84,8 +89,10 @@ defmodule TheMaestro.MCP.Registry do
   @spec to_openai_decls(String.t()) :: [tool_decl]
   def to_openai_decls(session_id) when is_binary(session_id) do
     case Conversations.get_session!(session_id) do
-      %Conversations.Session{} = s ->
-        mcps_hash = :erlang.phash2(s.mcps || %{})
+      %Conversations.Session{} = session ->
+        session = Conversations.preload_session_mcp(session)
+        connectors = MCP.session_connector_map(session)
+        mcps_hash = connectors_signature(session, connectors)
 
         case RegistryCache.get({:openai, session_id}, mcps_hash) do
           {:ok, decls} ->
@@ -93,8 +100,8 @@ defmodule TheMaestro.MCP.Registry do
 
           _ ->
             decls =
-              s
-              |> collect_openai_decls(session_id)
+              session
+              |> collect_openai_decls(session_id, connectors)
               |> nudge_openai_tool_descriptions()
 
             _ = RegistryCache.put({:openai, session_id}, mcps_hash, decls)
@@ -108,61 +115,70 @@ defmodule TheMaestro.MCP.Registry do
     _ -> []
   end
 
-  defp collect_gemini_decls(%Conversations.Session{} = s, session_id) do
+  defp collect_gemini_decls(%Conversations.Session{} = s, session_id, connectors) do
     from_registry =
       s.tools
       |> safe_get(["mcp_registry", "tools"], [])
       |> Enum.flat_map(&map_registry_tool_to_gemini/1)
 
     from_simple =
-      s.mcps
+      connectors
       |> safe_get(["tools"], [])
       |> Enum.flat_map(&map_simple_tool_to_gemini/1)
 
-    from_dynamic = collect_dynamic_decls(s, session_id, :gemini)
+    from_dynamic = collect_dynamic_decls(connectors, session_id, :gemini)
 
     (from_registry ++ from_simple ++ from_dynamic) |> uniq_by_name()
   end
 
-  defp collect_openai_decls(%Conversations.Session{} = s, session_id) do
+  defp collect_openai_decls(%Conversations.Session{} = s, session_id, connectors) do
     from_registry =
       s.tools
       |> safe_get(["mcp_registry", "tools"], [])
       |> Enum.flat_map(&map_registry_tool_to_openai/1)
 
     from_simple =
-      s.mcps
+      connectors
       |> safe_get(["tools"], [])
       |> Enum.flat_map(&map_simple_tool_to_openai/1)
 
-    from_dynamic = collect_dynamic_decls(s, session_id, :openai)
+    from_dynamic = collect_dynamic_decls(connectors, session_id, :openai)
 
     (from_registry ++ from_simple ++ from_dynamic) |> uniq_by_name()
   end
 
-  defp collect_anthropic_decls(%Conversations.Session{} = s, session_id) do
+  defp collect_anthropic_decls(%Conversations.Session{} = s, session_id, connectors) do
     from_registry =
       s.tools
       |> safe_get(["mcp_registry", "tools"], [])
       |> Enum.flat_map(&map_registry_tool_to_anthropic/1)
 
     from_simple =
-      s.mcps
+      connectors
       |> safe_get(["tools"], [])
       |> Enum.flat_map(&map_simple_tool_to_anthropic/1)
 
-    from_dynamic = collect_dynamic_decls(s, session_id, :anthropic)
+    from_dynamic = collect_dynamic_decls(connectors, session_id, :anthropic)
 
     from_registry ++ from_simple ++ from_dynamic
   end
 
-  defp collect_dynamic_decls(%Conversations.Session{} = s, session_id, provider) do
-    s.mcps
-    # servers only
+  defp collect_dynamic_decls(connectors, session_id, provider) do
+    connectors
     |> Map.drop(["tools"])
     |> Enum.flat_map(fn {server_key, cfg} ->
       map_server_dynamic(server_key, cfg, session_id, provider)
     end)
+  end
+
+  defp connectors_signature(session, connectors) do
+    join_sig =
+      session.session_mcp_servers
+      |> List.wrap()
+      |> Enum.map(fn binding -> {binding.mcp_server_id, binding.alias, binding.updated_at} end)
+      |> Enum.sort()
+
+    :erlang.phash2({connectors, join_sig})
   end
 
   defp map_server_dynamic(server_key, cfg, session_id, provider) do
@@ -187,8 +203,9 @@ defmodule TheMaestro.MCP.Registry do
   end
 
   defp discovered_exposed_tools(%Conversations.Session{} = s, session_id) do
-    s.mcps
-    # servers only
+    s
+    |> Conversations.preload_session_mcp()
+    |> MCP.session_connector_map()
     |> Map.drop(["tools"])
     |> Enum.flat_map(&exposed_tools_for_server(session_id, &1))
   end

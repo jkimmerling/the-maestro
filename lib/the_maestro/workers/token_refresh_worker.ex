@@ -367,6 +367,8 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   defp perform_token_refresh(provider, refresh_token) do
     case provider do
       "anthropic" -> refresh_anthropic_token(refresh_token)
+      "gemini" -> refresh_gemini_token(refresh_token)
+      "openai" -> refresh_openai_token(refresh_token)
       _ -> {:error, {:unsupported_provider, provider}}
     end
   end
@@ -502,5 +504,67 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
       _ ->
         {:error, :invalid_refresh_response}
     end
+  end
+
+  # Refresh Gemini OAuth token using Google OAuth endpoint
+  defp refresh_gemini_token(refresh_token) do
+    request_body = %{
+      "grant_type" => "refresh_token",
+      "refresh_token" => refresh_token,
+      "client_id" =>
+        Application.get_env(:the_maestro, :gemini_oauth_client_id) ||
+          "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com",
+      "client_secret" =>
+        Application.get_env(:the_maestro, :gemini_oauth_client_secret) ||
+          "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"
+    }
+
+    perform_refresh_request(
+      :gemini,
+      :gemini_finch,
+      "https://oauth2.googleapis.com/token",
+      request_body
+    )
+  end
+
+  # Refresh OpenAI OAuth token using OpenAI OAuth endpoint
+  defp refresh_openai_token(refresh_token) do
+    case TheMaestro.Auth.get_openai_oauth_config() do
+      {:ok, config} ->
+        request_body = %{
+          "grant_type" => "refresh_token",
+          "refresh_token" => refresh_token,
+          "client_id" => config.client_id
+        }
+
+        perform_refresh_request(:openai, :openai_finch, config.token_endpoint, request_body)
+
+      {:error, reason} = error ->
+        Logger.error("Failed to get OpenAI OAuth config: #{inspect(reason)}")
+        error
+    end
+  end
+
+  defp perform_refresh_request(provider, finch, url, form_params) do
+    Req.new(headers: [{"content-type", "application/x-www-form-urlencoded"}], finch: finch)
+    |> Req.request(method: :post, url: url, form: form_params)
+    |> case do
+      {:ok, %Req.Response{} = resp} ->
+        handle_refresh_response(resp)
+
+      {:error, reason} ->
+        Logger.error(
+          "#{String.capitalize(to_string(provider))} token refresh request failed: #{inspect(reason)}"
+        )
+
+        {:error, :request_failed}
+    end
+  rescue
+    error ->
+      Logger.error(
+        "Unexpected error during #{String.capitalize(to_string(provider))} token refresh: #{inspect(error)}"
+      )
+
+      {:error, :refresh_error}
   end
 end

@@ -6,8 +6,9 @@ defmodule TheMaestro.Sessions.Manager do
   use GenServer
   require Logger
 
+  alias Ecto.Adapters.SQL.Sandbox, as: RepoSandbox
   alias Phoenix.PubSub
-  alias TheMaestro.{Auth, Conversations}
+  alias TheMaestro.{Auth, Conversations, Repo}
   alias TheMaestro.Conversations.Translator
   alias TheMaestro.Followups.Anthropic, as: AnthFollowups
   alias TheMaestro.Providers.{Anthropic, Gemini, OpenAI}
@@ -66,23 +67,27 @@ defmodule TheMaestro.Sessions.Manager do
   @impl true
   def handle_call(
         {:start_stream, session_id, provider, session_name, provider_messages, model, opts},
-        _from,
+        from,
         st
       ) do
     st = cancel_if_running(st, session_id)
     stream_id = Ecto.UUID.generate()
     t0_ms = Keyword.get(opts, :t0_ms, System.monotonic_time(:millisecond))
+    owner_pid = Keyword.get(opts, :sandbox_owner) || sandbox_owner(from)
 
     meta = %{
       session_id: session_id,
       provider: provider,
       session_name: session_name,
       model: model,
-      t0_ms: t0_ms
+      t0_ms: t0_ms,
+      sandbox_owner: owner_pid
     }
 
     {:ok, task} =
       Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
+        maybe_allow_sandbox(owner_pid)
+
         result =
           do_call_provider(
             provider,
@@ -143,15 +148,18 @@ defmodule TheMaestro.Sessions.Manager do
   end
 
   def handle_call(
-        {:run_followup, session_id, provider, session_name, items, model, _opts},
-        _from,
+        {:run_followup, session_id, provider, session_name, items, model, opts},
+        from,
         st
       ) do
     st = cancel_if_running(st, session_id)
     stream_id = Ecto.UUID.generate()
+    owner_pid = Keyword.get(opts, :sandbox_owner) || sandbox_owner(from)
 
     {:ok, task} =
       Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
+        maybe_allow_sandbox(owner_pid)
+
         result =
           case provider do
             :openai ->
@@ -213,18 +221,6 @@ defmodule TheMaestro.Sessions.Manager do
     {:noreply, st}
   end
 
-  # Consider chunks >= 200 bytes and skip if identical to the last chunk
-  # or if the current text already ends with the incoming chunk.
-  defp duplicate_large_chunk?(acc_text, last_chunk, chunk) do
-    cond do
-      not is_binary(chunk) -> false
-      byte_size(chunk) < 200 -> false
-      is_binary(last_chunk) and last_chunk == chunk -> true
-      is_binary(acc_text) and String.ends_with?(acc_text, chunk) -> true
-      true -> false
-    end
-  end
-
   def handle_cast({:acc_calls, session_id, _stream_id, calls}, st) do
     st =
       update_in(st, [session_id, :acc], fn acc ->
@@ -275,15 +271,17 @@ defmodule TheMaestro.Sessions.Manager do
   def handle_cast({:stream_done, session_id, stream_id}, st) do
     case Map.get(st, session_id) do
       %{stream_id: ^stream_id, acc: acc} ->
-        case acc do
-          %{tool_calls: calls} when is_list(calls) and calls != [] ->
-            st = run_tools_and_followup(session_id, stream_id, st)
+        new_state =
+          case acc do
+            %{tool_calls: calls} when is_list(calls) and calls != [] ->
+              run_tools_and_followup(session_id, stream_id, st)
 
-          _ ->
-            finalize_and_persist(session_id, stream_id, st)
-        end
+            _ ->
+              finalize_and_persist(session_id, stream_id, st)
+              st
+          end
 
-        {:noreply, st}
+        {:noreply, new_state}
 
       _ ->
         {:noreply, st}
@@ -296,15 +294,15 @@ defmodule TheMaestro.Sessions.Manager do
         calls = (acc && acc.tool_calls) || []
         rounds = (acc && acc.meta && acc.meta[:followup_rounds]) || 0
 
-        {st, took_action} =
+        new_state =
           if is_list(calls) and calls != [] and rounds < 3 do
-            {run_tools_and_followup(session_id, stream_id, st), true}
+            run_tools_and_followup(session_id, stream_id, st)
           else
             finalize_and_persist(session_id, stream_id, st)
-            {st, false}
+            st
           end
 
-        {:noreply, st}
+        {:noreply, new_state}
 
       _ ->
         {:noreply, st}
@@ -374,6 +372,36 @@ defmodule TheMaestro.Sessions.Manager do
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 
+  defp sandbox_owner({pid, _ref}) when is_pid(pid), do: pid
+  defp sandbox_owner(_), do: nil
+
+  defp maybe_allow_sandbox(owner_pid) when is_pid(owner_pid) do
+    if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
+      try do
+        RepoSandbox.allow(Repo, owner_pid, self())
+        :ok
+      rescue
+        _ -> :ok
+      end
+    else
+      :ok
+    end
+  end
+
+  defp maybe_allow_sandbox(_), do: :ok
+
+  # Consider chunks >= 200 bytes and skip if identical to the last chunk
+  # or if the accumulated text already ends with the incoming chunk.
+  defp duplicate_large_chunk?(acc_text, last_chunk, chunk) do
+    cond do
+      not is_binary(chunk) -> false
+      byte_size(chunk) < 200 -> false
+      is_binary(last_chunk) and last_chunk == chunk -> true
+      is_binary(acc_text) and String.ends_with?(acc_text, chunk) -> true
+      true -> false
+    end
+  end
+
   defp finalize_and_persist(session_id, stream_id, st) do
     with %{acc: %{text: text, usage: usage, meta: meta, events: events}} <-
            Map.get(st, session_id),
@@ -393,6 +421,24 @@ defmodule TheMaestro.Sessions.Manager do
         "latency_ms" => latency
       }
 
+      # Extract complete tool call and response data from current session and history
+      current_tool_calls = Map.get(st[session_id].acc, :tool_calls, [])
+      tool_history = (meta && meta[:tool_history_acc]) || []
+
+      # Convert tool history to call_id -> response mapping
+      tool_responses =
+        Enum.flat_map(tool_history, fn history_entry ->
+          outputs = history_entry[:outputs] || history_entry["outputs"] || []
+
+          # Create mapping from call_id to response
+          Enum.map(outputs, fn output ->
+            call_id = output[:id] || output["id"]
+            response_data = output[:output] || output["output"]
+            {call_id, response_data}
+          end)
+        end)
+        |> Map.new()
+
       updated2 =
         case String.trim(to_string(text || "")) do
           "" ->
@@ -402,8 +448,14 @@ defmodule TheMaestro.Sessions.Manager do
             |> maybe_append_tool_history(meta)
 
           _ ->
+            # Use the new function to include complete tool data
             latest.combined_chat
-            |> append_assistant(text, req_meta)
+            |> append_assistant_with_tools(
+              text,
+              req_meta,
+              current_tool_calls,
+              Map.to_list(tool_responses)
+            )
             |> Map.put("events", events || [])
             |> maybe_append_tool_history(meta)
         end
@@ -422,7 +474,8 @@ defmodule TheMaestro.Sessions.Manager do
           },
           response_headers: %{
             "usage" => usage || %{},
-            "tools" => Map.get(st[session_id].acc, :tool_calls, [])
+            "tools" => Map.get(st[session_id].acc, :tool_calls, []),
+            "tool_history" => (meta && meta[:tool_history_acc]) || []
           },
           combined_chat: updated2,
           edit_version: 0,
@@ -455,23 +508,54 @@ defmodule TheMaestro.Sessions.Manager do
     if hist == [] do
       canon
     else
-      existing = Map.get(canon || %{}, "tool_history", [])
-      Map.put(canon || %{}, "tool_history", existing ++ hist)
+      existing = Map.get(canon, "tool_history", [])
+      Map.put(canon, "tool_history", existing ++ hist)
     end
   end
 
-  defp append_assistant(%{"messages" => msgs} = canon, text, req_meta) do
+  # New function to append assistant message with complete tool calls and responses
+  defp append_assistant_with_tools(
+         %{"messages" => msgs} = canon,
+         text,
+         req_meta,
+         tool_calls,
+         tool_responses
+       ) do
+    assistant_msg = %{
+      "role" => "assistant",
+      "content" => [%{"type" => "text", "text" => text}],
+      "_meta" => req_meta
+    }
+
+    # Add tool_calls if they exist
+    assistant_msg =
+      if tool_calls != nil and tool_calls != [] do
+        Map.put(assistant_msg, "tool_calls", tool_calls)
+      else
+        assistant_msg
+      end
+
+    # Add tool responses as separate messages for each response
+    tool_response_msgs =
+      Enum.map(tool_responses, fn {call_id, response} ->
+        # Find the function name for this call_id from tool_calls
+        function_name =
+          Enum.find_value(tool_calls || [], fn call ->
+            if call["id"] == call_id, do: call["name"]
+          end) || "unknown_function"
+
+        %{
+          "role" => "tool",
+          "tool_call_id" => call_id,
+          "content" => [%{"type" => "text", "text" => Jason.encode!(response)}],
+          "_meta" => %{"response_type" => "tool_result", "function_name" => function_name}
+        }
+      end)
+
     Map.put(
       canon,
       "messages",
-      msgs ++
-        [
-          %{
-            "role" => "assistant",
-            "content" => [%{"type" => "text", "text" => text}],
-            "_meta" => req_meta
-          }
-        ]
+      msgs ++ [assistant_msg] ++ tool_response_msgs
     )
   end
 
@@ -503,6 +587,8 @@ defmodule TheMaestro.Sessions.Manager do
       finalize_and_persist(session_id, stream_id, st)
       st
     else
+      owner_pid = acc.meta && acc.meta[:sandbox_owner]
+
       outputs = exec_tools(session_id, calls_to_run, base_cwd)
 
       items =
@@ -544,6 +630,8 @@ defmodule TheMaestro.Sessions.Manager do
 
       {:ok, _task} =
         Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
+          maybe_allow_sandbox(owner_pid)
+
           result =
             do_followup_provider(provider, session_name, items, model,
               decl_session_id: session_id

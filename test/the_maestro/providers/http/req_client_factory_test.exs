@@ -77,10 +77,23 @@ defmodule TheMaestro.Providers.Http.ReqClientFactoryTest do
 
   describe "Gemini client" do
     test "builds Req client with base URL and pool, no default headers" do
-      assert {:ok, %Req.Request{} = req} = ReqClientFactory.create_client(:gemini)
-      assert Map.get(req.options, :finch) == :gemini_finch
-      assert Map.get(req.options, :base_url) == "https://generativelanguage.googleapis.com"
-      assert req.headers == %{}
+      # Clear environment variables to ensure no API key headers are added
+      original_google = System.get_env("GOOGLE_API_KEY")
+      original_gemini = System.get_env("GEMINI_API_KEY")
+
+      System.delete_env("GOOGLE_API_KEY")
+      System.delete_env("GEMINI_API_KEY")
+
+      try do
+        assert {:ok, %Req.Request{} = req} = ReqClientFactory.create_client(:gemini)
+        assert Map.get(req.options, :finch) == :gemini_finch
+        assert Map.get(req.options, :base_url) == "https://generativelanguage.googleapis.com"
+        assert req.headers == %{}
+      after
+        # Restore original environment variables
+        if original_google, do: System.put_env("GOOGLE_API_KEY", original_google)
+        if original_gemini, do: System.put_env("GEMINI_API_KEY", original_gemini)
+      end
     end
   end
 

@@ -1,5 +1,102 @@
 ## dev is default branch, NOT MAIN
 
+**CRITICAL** Never install anything on your own, ALWAYS ask the user to install it. Provide the needed commands.
+
+## Integration Tests Are Mandatory
+
+- Green unit tests and a green `mix precommit` are baseline hygiene ONLY — they are NOT proof that a feature works.
+- Every new feature and bugfix must include integration tests that verify end-to-end behavior through the public boundary (contexts, Phoenix routes/controllers, LiveView flows).
+- Cover success paths and the key failure/edge paths. Prefer `Phoenix.ConnCase` for API/HTTP routes and `Phoenix.LiveViewTest` for LiveView flows.
+- Do not rely on manual testing. Ship repeatable integration tests that run in CI and locally.
+
+## Task Tracking and Commits
+
+- Mark tasks complete the moment they are done (issue checklists, PR TODOs, plans).
+- Commit in small, coherent phases. At minimum, commit at the end of each phase/milestone. Use descriptive messages.
+- Never bypass hooks. If hooks fail, fix the issues and re-run.
+
+## Story/Epic/Overhaul Docs — Required Structure
+
+For any story, epic, or major overhaul document an agent creates (PR description, doc in `docs/`, planning note, etc.), include the following sections verbatim. Use Markdown checkboxes so developers can check items off as they go. Keep the document living and updated throughout delivery.
+
+- Mandatory sections:
+  - Tasks and Subtasks checklist
+  - Dev Notes
+  - Blockers
+  - Deviations From Plan (with reasons)
+  - Tests Created and Ran
+
+### Template (copy/paste and fill in)
+
+```md
+# Story | Epic | Overhaul — <concise title>
+- Owner: <name/agent-id>
+- Start: <YYYY-MM-DD>  Target End: <YYYY-MM-DD>
+- Links: [Issue](), [PR](), [Design Doc]()
+
+## Goals
+- <explicit outcomes; acceptance criteria>
+
+## Tasks
+- [ ] Task A
+  - [ ] Subtask A1
+  - [ ] Subtask A2
+- [ ] Task B
+
+## Dev Notes
+- <key decisions, rationale, implementation details, gotchas>
+- <follow-ups or refactors to consider>
+
+## Blockers
+- <YYYY-MM-DD> <summary> — Status: <open/unblocked> — Owner: <person>
+  - Next step: <action>
+  - Link: <issue/PR if applicable>
+
+## Deviations From Plan
+- <YYYY-MM-DD> <what changed>
+  - Reason: <why we deviated>
+  - Impact: <scope/timeline/test plan changes>
+  - Approval: <who approved/why self-approved>
+
+## Tests Created and Ran
+- Test plan:
+  - Success paths: <list>
+  - Edge/failure paths: <list>
+- Implemented:
+  - [ ] Unit
+  - [ ] Integration (Phoenix.ConnCase, Phoenix.LiveViewTest)
+  - [ ] E2E
+- Files:
+  - `test/<app>/**/_test.exs` (list key files)
+- Commands and results:
+  - `mix test test/..._test.exs` — <pass/fail summary>
+  - `mix precommit` — <green/red>
+  - CI link: <URL>
+```
+
+Notes:
+- Keep the checklist granular; each item should be completable in under a day.
+- Always log deviations with explicit reasons to preserve context for reviewers and future maintainers.
+- Integration tests are mandatory; ensure both success and key failure/edge paths are covered.
+
+## Phoenix Generators Only (Contexts/Schemas)
+
+- All contexts, schemas, and scaffolds MUST be created with Phoenix generators: `mix phx.gen.context`, `mix phx.gen.schema`, `mix phx.gen.html|live|json`, and `mix ecto.gen.migration`.
+- Never hand-craft context or schema modules. Hand-written scaffolding leads to drift, missed conventions, and bugs.
+- When changing data models, add proper migrations via generators. Keep generated artifacts consistent (routes, views/components, tests, etc.).
+
+## Centralized, Interface-Agnostic Business Logic
+
+- Business logic lives in contexts/domain modules under `lib/<app>` — not in `lib/<app>_web`.
+- All UIs (LiveViews, controllers, channels, API) must call the same context APIs. No direct `Repo` calls and no business rules in UI layers.
+- If orchestration is needed, create service/use-case modules behind the context. Expose a single public interface to prevent diverging behavior across UIs.
+
+## Canonical Documentation Source (HexDocs)
+
+- For Elixir, Phoenix, LiveView, Ecto, and Mix, the canonical reference is HexDocs (`https://hexdocs.pm`).
+- Pull examples and references from HexDocs directly. Secondary sources may be used only to supplement; HexDocs governs behavior and APIs.
+
+
 # Agents Index
 
 This file serves as an index for all available agents.  

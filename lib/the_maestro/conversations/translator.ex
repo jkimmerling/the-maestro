@@ -14,7 +14,7 @@ defmodule TheMaestro.Conversations.Translator do
   end
 
   def to_provider(%{"messages" => msgs} = canon, :anthropic) do
-    base = Enum.map(msgs, &to_openai_msg/1)
+    base = Enum.map(msgs, &to_anthropic_msg/1)
     {:ok, append_full_tool_history(base, canon, :anthropic)}
   end
 
@@ -82,14 +82,202 @@ defmodule TheMaestro.Conversations.Translator do
 
   def events_to_canonical(_, _), do: {:error, :unsupported_events}
 
+  defp to_openai_msg(%{"role" => "tool", "tool_call_id" => call_id} = m) do
+    text = extract_text(m)
+
+    %{
+      "role" => "tool",
+      "tool_call_id" => call_id,
+      "content" => text
+    }
+  end
+
+  defp to_openai_msg(%{"role" => "assistant", "tool_calls" => tool_calls} = m)
+       when is_list(tool_calls) do
+    text = extract_text(m)
+
+    # Convert tool_calls to OpenAI format
+    openai_tool_calls =
+      Enum.map(tool_calls, fn call ->
+        %{
+          "id" => call["id"],
+          "type" => "function",
+          "function" => %{
+            "name" => call["name"],
+            "arguments" => call["arguments"] || "{}"
+          }
+        }
+      end)
+
+    msg = %{"role" => "assistant", "tool_calls" => openai_tool_calls}
+
+    # Only add content if there's actual text
+    if String.trim(text) != "" do
+      Map.put(msg, "content", text)
+    else
+      msg
+    end
+  end
+
   defp to_openai_msg(%{"role" => role} = m) do
     text = extract_text(m)
     %{"role" => role, "content" => text}
   end
 
+  # Anthropic message conversion functions
+  defp to_anthropic_msg(%{"role" => "tool", "tool_call_id" => call_id} = m) do
+    text = extract_text(m)
+    # Parse the response to get the actual result
+    response_data =
+      case Jason.decode(text) do
+        {:ok, parsed} -> parsed
+        _ -> text
+      end
+
+    %{
+      "role" => "user",
+      "content" => [
+        %{
+          "type" => "tool_result",
+          "tool_use_id" => call_id,
+          "content" => response_data
+        }
+      ]
+    }
+  end
+
+  defp to_anthropic_msg(%{"role" => "assistant", "tool_calls" => tool_calls} = m)
+       when is_list(tool_calls) do
+    text = extract_text(m)
+
+    # Convert tool_calls to Anthropic tool_use blocks
+    tool_use_blocks =
+      Enum.map(tool_calls, fn call ->
+        # Parse arguments if they're JSON string
+        input =
+          case Jason.decode(call["arguments"] || "{}") do
+            {:ok, parsed} -> parsed
+            _ -> %{}
+          end
+
+        %{
+          "type" => "tool_use",
+          "id" => call["id"],
+          "name" => call["name"],
+          "input" => input
+        }
+      end)
+
+    content_blocks = []
+
+    # Add text content if present
+    content_blocks =
+      if String.trim(text) != "" do
+        [%{"type" => "text", "text" => text} | content_blocks]
+      else
+        content_blocks
+      end
+
+    # Add tool use blocks
+    content_blocks = content_blocks ++ tool_use_blocks
+
+    %{
+      "role" => "assistant",
+      "content" => content_blocks
+    }
+  end
+
+  defp to_anthropic_msg(%{"role" => role} = m) do
+    text = extract_text(m)
+
+    %{
+      "role" => role,
+      "content" => [%{"type" => "text", "text" => text}]
+    }
+  end
+
+  defp to_gemini_msg(%{"role" => "tool", "tool_call_id" => call_id} = m) do
+    text = extract_text(m)
+    # Parse the response to get the actual result
+    response_data =
+      case Jason.decode(text) do
+        {:ok, parsed} -> parsed
+        _ -> %{"output" => text}
+      end
+
+    # Extract function name from metadata if available
+    function_name =
+      case m do
+        %{"_meta" => %{"function_name" => name}} -> name
+        _ -> "tool_response"
+      end
+
+    %{
+      "role" => "tool",
+      "parts" => [
+        %{
+          "functionResponse" => %{
+            "name" => function_name,
+            "response" => response_data,
+            "id" => call_id
+          }
+        }
+      ]
+    }
+  end
+
+  defp to_gemini_msg(%{"role" => "assistant", "tool_calls" => tool_calls} = m)
+       when is_list(tool_calls) do
+    text = extract_text(m)
+
+    # Convert tool_calls to Gemini functionCall parts
+    function_call_parts =
+      Enum.map(tool_calls, fn call ->
+        # Parse arguments if they're JSON string
+        args =
+          case Jason.decode(call["arguments"] || "{}") do
+            {:ok, parsed} -> parsed
+            _ -> %{}
+          end
+
+        %{
+          "functionCall" => %{
+            "name" => call["name"],
+            "args" => args,
+            "id" => call["id"]
+          }
+        }
+      end)
+
+    parts = []
+
+    # Add text part if present
+    parts =
+      if String.trim(text) != "" do
+        [%{"text" => text} | parts]
+      else
+        parts
+      end
+
+    # Add function call parts
+    parts = parts ++ function_call_parts
+
+    %{
+      "role" => "model",
+      "parts" => parts
+    }
+  end
+
   defp to_gemini_msg(%{"role" => role} = m) do
     text = extract_text(m)
-    %{"role" => role, "parts" => [%{"text" => text}]}
+
+    gemini_role =
+      case role do
+        "assistant" -> "model"
+        other -> other
+      end
+
+    %{"role" => gemini_role, "parts" => [%{"text" => text}]}
   end
 
   defp extract_text(%{"content" => parts}) when is_list(parts) do
@@ -235,35 +423,75 @@ defmodule TheMaestro.Conversations.Translator do
     do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
 
   defp build_tool_trace_text(events) do
-    calls =
-      events
-      |> Enum.flat_map(fn ev ->
-        case ev do
-          %{:type => :function_call, :tool_calls => calls} when is_list(calls) -> calls
-          %{"type" => :function_call, "tool_calls" => calls} when is_list(calls) -> calls
-          %{"type" => "function_call", "tool_calls" => calls} when is_list(calls) -> calls
-          _ -> []
-        end
+    events
+    |> Enum.flat_map(&tool_calls_from_event/1)
+    |> format_tool_trace()
+  end
+
+  defp format_history_entry(entry) do
+    provider = fetch(entry, :provider, "")
+    at = fetch(entry, :at)
+    calls = fetch(entry, :calls, [])
+    outputs = fetch(entry, :outputs, [])
+
+    header = history_header(provider, at)
+    lines = [header | history_call_lines(calls) ++ history_output_lines(outputs)]
+    Enum.join(lines, "\n")
+  end
+
+  defp history_header(provider, at) when is_integer(at),
+    do: "Turn @#{at} provider=#{provider}"
+
+  defp history_header(provider, _), do: "Turn provider=#{provider}"
+
+  defp history_call_lines(calls) do
+    Enum.map(calls, fn call ->
+      name = fetch(call, :name, "")
+      args = fetch(call, :arguments, "{}")
+      "- call #{name}(#{truncate_args(args)})"
+    end)
+  end
+
+  defp history_output_lines(outputs) do
+    Enum.map(outputs, fn output ->
+      id = fetch(output, :id, "")
+      data = fetch(output, :output, "")
+      "  output[#{id}]: #{truncate_args(data)}"
+    end)
+  end
+
+  defp tool_calls_from_event(%{type: :function_call, tool_calls: calls}) when is_list(calls),
+    do: calls
+
+  defp tool_calls_from_event(%{"type" => :function_call, "tool_calls" => calls})
+       when is_list(calls),
+       do: calls
+
+  defp tool_calls_from_event(%{"type" => "function_call", "tool_calls" => calls})
+       when is_list(calls),
+       do: calls
+
+  defp tool_calls_from_event(_), do: []
+
+  defp format_tool_trace([]), do: ""
+
+  defp format_tool_trace(calls) do
+    lines =
+      Enum.map(calls, fn call ->
+        name = fetch(call, :name, "")
+        args = fetch(call, :arguments, "{}")
+        "- #{name}(#{truncate_args(args)})"
       end)
 
-    case calls do
-      [] ->
-        ""
+    [
+      "Previous tool calls (Context7 MCP):",
+      Enum.join(lines, "\n")
+    ]
+    |> Enum.join("\n")
+  end
 
-      _ ->
-        lines =
-          Enum.map(calls, fn c ->
-            name = c[:name] || c["name"] || ""
-            args = c[:arguments] || c["arguments"] || "{}"
-            "- #{name}(#{truncate_args(args)})"
-          end)
-
-        [
-          "Previous tool calls (Context7 MCP):",
-          Enum.join(lines, "\n")
-        ]
-        |> Enum.join("\n")
-    end
+  defp fetch(map, key, default \\ nil) when is_map(map) do
+    Map.get(map, key) || Map.get(map, to_string(key)) || default
   end
 
   defp truncate_args(args) when is_binary(args) do
@@ -272,11 +500,9 @@ defmodule TheMaestro.Conversations.Translator do
   end
 
   defp truncate_args(%{} = m) do
-    try do
-      s = Jason.encode!(m)
-      truncate_args(s)
-    rescue
-      _ -> "{}"
+    case Jason.encode(m) do
+      {:ok, json} -> truncate_args(json)
+      {:error, _} -> "{}"
     end
   end
 
@@ -284,34 +510,8 @@ defmodule TheMaestro.Conversations.Translator do
   # keep module open for history helpers below
 
   defp build_full_tool_history_text(hist) do
-    Enum.map(hist, fn entry ->
-      provider = entry["provider"] || entry[:provider] || ""
-      at = entry["at"] || entry[:at]
-      calls = entry["calls"] || entry[:calls] || []
-      outs = entry["outputs"] || entry[:outputs] || []
-
-      call_lines =
-        for c <- calls do
-          name = c["name"] || c[:name] || ""
-          args = c["arguments"] || c[:arguments] || "{}"
-          "- call #{name}(#{truncate_args(args)})"
-        end
-
-      out_lines =
-        for o <- outs do
-          id = o["id"] || o[:id] || ""
-          out = o["output"] || o[:output] || ""
-          "  output[#{id}]: #{truncate_args(out)}"
-        end
-
-      header =
-        case at do
-          t when is_integer(t) -> "Turn @#{t} provider=#{provider}"
-          _ -> "Turn provider=#{provider}"
-        end
-
-      Enum.join([header | call_lines ++ out_lines], "\n")
-    end)
+    hist
+    |> Enum.map(&format_history_entry/1)
     |> Enum.join("\n\n")
   end
 

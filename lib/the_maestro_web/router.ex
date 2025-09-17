@@ -31,6 +31,13 @@ defmodule TheMaestroWeb.Router do
     live "/supplied_context/:id", SuppliedContextItemLive.Show, :show
     live "/supplied_context/:id/edit", SuppliedContextItemLive.Form, :edit
 
+    # MCP Hub
+    live "/mcp/servers", MCPServersLive.Index, :index
+    live "/mcp/servers/new", MCPServersLive.Index, :new
+    live "/mcp/servers/import", MCPServersLive.Index, :import
+    live "/mcp/servers/:id/edit", MCPServersLive.Index, :edit
+    live "/mcp/servers/:id", MCPServersLive.Show, :show
+
     # Agents routes removed after session-centric cleanup
 
     # Sessions LiveViews

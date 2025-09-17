@@ -72,7 +72,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
     {:ok, stream}
   end
 
-  defp start_req_streaming(req, method, url, body, json, timeout, opts \\ []) do
+  defp start_req_streaming(req, method, url, body, json, timeout, opts) do
     parent = self()
 
     {:ok, task} =
