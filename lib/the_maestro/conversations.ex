@@ -4,10 +4,11 @@ defmodule TheMaestro.Conversations do
   """
 
   import Ecto.Query, warn: false
-  alias TheMaestro.Repo
+  alias Ecto.Changeset
+  alias Ecto.Multi
 
-  alias TheMaestro.Conversations.ChatEntry
-  alias TheMaestro.Conversations.Session
+  alias TheMaestro.Conversations.{ChatEntry, Session}
+  alias TheMaestro.{MCP, Repo}
 
   @doc """
   Returns the list of sessions.
@@ -43,7 +44,11 @@ defmodule TheMaestro.Conversations do
       ** (Ecto.NoResultsError)
 
   """
-  def get_session!(id), do: Repo.get!(Session, id)
+  def get_session!(id) do
+    Session
+    |> Repo.get!(id)
+    |> Repo.preload([:mcp_servers, :session_mcp_servers])
+  end
 
   @doc """
   Gets a single session preloaded with saved_authentication.
@@ -64,9 +69,22 @@ defmodule TheMaestro.Conversations do
 
   """
   def create_session(attrs) do
-    %Session{}
-    |> Session.changeset(attrs)
-    |> Repo.insert()
+    {mcp_ids, attrs} = extract_mcp_server_ids(attrs)
+
+    Multi.new()
+    |> Multi.insert(:session, Session.changeset(%Session{}, attrs))
+    |> maybe_attach_mcp_servers(:session, mcp_ids)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{session: _session, session_mcp_servers: updated_session}} ->
+        {:ok, Repo.preload(updated_session, [:mcp_servers, :session_mcp_servers])}
+
+      {:ok, %{session: session}} ->
+        {:ok, Repo.preload(session, [:mcp_servers, :session_mcp_servers])}
+
+      {:error, _step, %Changeset{} = changeset, _} ->
+        {:error, changeset}
+    end
   end
 
   @doc """
@@ -82,9 +100,22 @@ defmodule TheMaestro.Conversations do
 
   """
   def update_session(%Session{} = session, attrs) do
-    session
-    |> Session.changeset(attrs)
-    |> Repo.update()
+    {mcp_ids, attrs} = extract_mcp_server_ids(attrs)
+
+    Multi.new()
+    |> Multi.update(:session, Session.changeset(session, attrs))
+    |> maybe_attach_mcp_servers(:session, mcp_ids)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{session: _session, session_mcp_servers: reloaded}} ->
+        {:ok, Repo.preload(reloaded, [:mcp_servers, :session_mcp_servers])}
+
+      {:ok, %{session: updated_session}} ->
+        {:ok, Repo.preload(updated_session, [:mcp_servers, :session_mcp_servers])}
+
+      {:error, _step, %Changeset{} = changeset, _} ->
+        {:error, changeset}
+    end
   end
 
   @doc """
@@ -135,6 +166,35 @@ defmodule TheMaestro.Conversations do
   """
   def change_session(%Session{} = session, attrs \\ %{}) do
     Session.changeset(session, attrs)
+  end
+
+  @doc """
+  Preload MCP associations on a session struct.
+  """
+  def preload_session_mcp(%Session{} = session) do
+    Repo.preload(session, [:mcp_servers, :session_mcp_servers])
+  end
+
+  defp extract_mcp_server_ids(attrs) when is_map(attrs) do
+    cond do
+      Map.has_key?(attrs, :mcp_server_ids) ->
+        {Map.get(attrs, :mcp_server_ids), Map.delete(attrs, :mcp_server_ids)}
+
+      Map.has_key?(attrs, "mcp_server_ids") ->
+        {Map.get(attrs, "mcp_server_ids"), Map.delete(attrs, "mcp_server_ids")}
+
+      true ->
+        {nil, attrs}
+    end
+  end
+
+  defp maybe_attach_mcp_servers(multi, _session_key, ids) when ids in [nil, ""], do: multi
+
+  defp maybe_attach_mcp_servers(multi, session_key, ids) do
+    Multi.run(multi, :session_mcp_servers, fn _repo, changes ->
+      session = Map.fetch!(changes, session_key)
+      MCP.replace_session_servers(session, ids)
+    end)
   end
 
   # ===== Chat History APIs =====

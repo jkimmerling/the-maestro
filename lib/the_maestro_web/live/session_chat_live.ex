@@ -3,12 +3,16 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   alias TheMaestro.Auth
   alias TheMaestro.Conversations
+  alias TheMaestro.MCP
   alias TheMaestro.SuppliedContext
   require Logger
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    session = Conversations.get_session_with_auth!(id)
+    session =
+      id
+      |> Conversations.get_session_with_auth!()
+      |> Conversations.preload_session_mcp()
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
     TheMaestro.Chat.subscribe(session.id)
@@ -281,6 +285,7 @@ defmodule TheMaestroWeb.SessionChatLive do
         case Conversations.update_session(socket.assigns.session, attrs) do
           {:ok, updated} ->
             socket = assign(socket, :session, updated)
+            _ = TheMaestro.MCP.Registry.bump_revision(updated.id)
             apply_behavior = params["apply"] || "now"
             socket = maybe_restart_stream(socket, updated, apply_behavior)
 
@@ -340,8 +345,12 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp decode_mcps(socket, params) do
-    default = Jason.encode!(socket.assigns.session.mcps || %{})
+    default = Jason.encode!(legacy_session_mcps(socket.assigns.session))
     safe_decode(params["mcps_json"] || default)
+  end
+
+  defp legacy_session_mcps(session) do
+    MCP.session_connector_map(session)
   end
 
   defp maybe_restart_stream(socket, updated, apply_behavior) do
@@ -1251,7 +1260,9 @@ defmodule TheMaestroWeb.SessionChatLive do
             </div>
             <div class="md:col-span-2">
               <label class="text-xs">MCPs (JSON)</label>
-              <textarea name="mcps_json" rows="3" class="textarea-terminal"><%= @config_form["mcps_json"] || Jason.encode!(@session.mcps || %{}) %></textarea>
+              <textarea name="mcps_json" rows="3" class="textarea-terminal"><%=
+                @config_form["mcps_json"] || Jason.encode!(legacy_session_mcps(@session))
+              %></textarea>
             </div>
           </div>
           <div class="mt-3">

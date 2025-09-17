@@ -27,6 +27,50 @@ import topbar from "../vendor/topbar"
 
 const Hooks = {}
 
+Hooks.HamburgerToggle = {
+  mounted() {
+    this.targetId = this.el.getAttribute('data-target')
+    this.el.setAttribute('aria-expanded', 'false')
+
+    this.onClick = (e) => {
+      e.stopPropagation()
+      if (!this.targetId) return
+      const target = document.getElementById(this.targetId)
+      if (!target) return
+      const nowHidden = target.classList.toggle('hidden')
+      this.el.setAttribute('aria-expanded', nowHidden ? 'false' : 'true')
+
+      // Add click outside listener when menu is opened
+      if (!nowHidden) {
+        this.setupClickOutside(target)
+      }
+    }
+
+    this.clickOutside = (e) => {
+      const target = document.getElementById(this.targetId)
+      if (!target) return
+      if (!target.contains(e.target) && !this.el.contains(e.target)) {
+        target.classList.add('hidden')
+        this.el.setAttribute('aria-expanded', 'false')
+        document.removeEventListener('click', this.clickOutside)
+      }
+    }
+
+    this.setupClickOutside = (target) => {
+      // Small delay to avoid immediate closure
+      setTimeout(() => {
+        document.addEventListener('click', this.clickOutside)
+      }, 10)
+    }
+
+    this.el.addEventListener('click', this.onClick)
+  },
+  destroyed() {
+    this.el.removeEventListener('click', this.onClick)
+    document.removeEventListener('click', this.clickOutside)
+  }
+}
+
 Hooks.DirPickerNav = {
   mounted() {
     this.onKeydown = (e) => {

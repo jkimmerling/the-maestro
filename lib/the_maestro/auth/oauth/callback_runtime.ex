@@ -98,6 +98,24 @@ defmodule TheMaestro.OAuthCallbackRuntime do
     {:noreply, state}
   end
 
+  @impl true
+  def handle_info({:DOWN, ref, :process, pid, reason}, state) do
+    # Tolerate unexpected server terminations. This message can arrive if the HTTP
+    # server exits on its own (e.g., after idle), or races with stop_server/1.
+    # If it corresponds to our current server_pid, clear it; otherwise, ignore.
+    _ = ref
+    _ = reason
+
+    state =
+      if state.server_pid == pid do
+        %{state | server_pid: nil, timer_ref: nil}
+      else
+        state
+      end
+
+    {:noreply, state}
+  end
+
   defp stop_server(%{server_pid: pid, timer_ref: tref} = state) do
     if is_reference(tref), do: Process.cancel_timer(tref)
 

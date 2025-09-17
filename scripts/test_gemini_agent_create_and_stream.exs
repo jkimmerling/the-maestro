@@ -56,7 +56,6 @@ end
     model_id: model,
     auth_id: new_auth.id,
     tools: %{},
-    mcps: %{},
     memory: %{}
   })
 
@@ -94,4 +93,3 @@ case AgentLoop.run_turn(:gemini, new_session, model, messages) do
     IO.puts("\n❌ Streaming failed: #{inspect(reason)}")
     System.halt(6)
 end
-

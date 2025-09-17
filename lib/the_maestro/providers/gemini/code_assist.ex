@@ -37,10 +37,33 @@ defmodule TheMaestro.Providers.Gemini.CodeAssist do
   end
 
   defp discover_and_persist_project(session_name) do
-    with {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name),
-         {:ok, proj} <- discover_project_via_cloud_code(req) do
-      _ = persist_project(session_name, proj)
-      {:ok, proj}
+    with {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
+      case discover_project_via_cloud_code(req) do
+        {:ok, proj} ->
+          _ = persist_project(session_name, proj)
+          {:ok, proj}
+
+        {:error, {:http_error, 401, _body}} ->
+          # Access token likely expired or revoked; attempt a single refresh and retry
+          _ = TheMaestro.Providers.Gemini.OAuth.refresh_tokens(session_name)
+
+          with {:ok, req2} <-
+                 ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
+            case discover_project_via_cloud_code(req2) do
+              {:ok, proj} ->
+                _ = persist_project(session_name, proj)
+                {:ok, proj}
+
+              other ->
+                other
+            end
+          else
+            other -> other
+          end
+
+        other ->
+          other
+      end
     end
   end
 

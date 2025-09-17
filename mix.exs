@@ -16,7 +16,8 @@ defmodule TheMaestro.MixProject do
       # Dialyzer configuration
       dialyzer: [
         plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
-        plt_add_apps: [:mix, :ex_unit, :ecto, :phoenix, :phoenix_ecto]
+        plt_add_apps: [:mix, :ex_unit, :ecto, :phoenix, :phoenix_ecto],
+        ignore_warnings: "dialyzer.ignore-warnings.exs"
       ]
     ]
   end
@@ -75,11 +76,13 @@ defmodule TheMaestro.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
+      {:toml, "~> 0.7.0"},
 
       # Development and testing tools
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.0", only: :test},
+      {:hermes_mcp, ">= 0.0.0"},
       {:igniter, "~> 0.5", only: [:dev], runtime: false}
     ]
   end

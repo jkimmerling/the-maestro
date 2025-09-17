@@ -15,7 +15,12 @@ defmodule TheMaestro.Conversations.Session do
     field :persona, :map, default: %{}
     field :memory, :map, default: %{}
     field :tools, :map, default: %{}
-    field :mcps, :map, default: %{}
+
+    has_many :session_mcp_servers, TheMaestro.MCP.SessionServer
+
+    many_to_many :mcp_servers, TheMaestro.MCP.Servers,
+      join_through: TheMaestro.MCP.SessionServer,
+      join_keys: [session_id: :id, mcp_server_id: :id]
 
     # Saved authentication
     belongs_to :saved_authentication, TheMaestro.Auth.SavedAuthentication,
@@ -42,8 +47,7 @@ defmodule TheMaestro.Conversations.Session do
       :model_id,
       :persona,
       :memory,
-      :tools,
-      :mcps
+      :tools
     ])
     |> validate_required([:auth_id])
     |> validate_change(:working_dir, fn :working_dir, v ->

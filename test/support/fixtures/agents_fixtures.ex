@@ -24,7 +24,6 @@ defmodule TheMaestro.AgentsFixtures do
       |> TheMaestro.Repo.insert()
 
     base_attrs = %{
-      mcps: %{},
       memory: %{},
       name: "some_name-" <> short,
       tools: %{},

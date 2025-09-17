@@ -321,6 +321,16 @@ defmodule TheMaestro.Provider do
     if provider_has_modules?(provider), do: :ok, else: {:error, :invalid_provider}
   end
 
+  defp validate_provider(provider) when is_binary(provider) do
+    down = String.downcase(provider)
+    allowed = list_providers()
+
+    case Enum.find(allowed, fn p -> Atom.to_string(p) == down end) do
+      nil -> {:error, :invalid_provider}
+      atom -> validate_provider(atom)
+    end
+  end
+
   defp validate_provider(_), do: {:error, :invalid_provider}
 
   @spec validate_auth_type(term()) :: :ok | {:error, :invalid_auth_type}

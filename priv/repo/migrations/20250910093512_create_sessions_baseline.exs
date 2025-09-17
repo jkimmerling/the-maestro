@@ -9,10 +9,9 @@ defmodule TheMaestro.Repo.Migrations.CreateSessionsBaseline do
       add :working_dir, :string
 
       add :model_id, :string
-      add :persona, :map
-      add :memory, :map
-      add :tools, :map
-      add :mcps, :map
+      add :persona, :map, default: %{}
+      add :memory, :map, default: %{}
+      add :tools, :map, default: %{}
 
       add :auth_id, references(:saved_authentications, on_delete: :nothing, type: :binary_id)
 

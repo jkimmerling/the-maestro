@@ -12,6 +12,7 @@ defmodule TheMaestro.Chat do
   resolution fully behind this API (see docs/overhauls/2025-09-10-*.md).
   """
 
+  alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
   alias Phoenix.PubSub
   alias TheMaestro.{Auth, Conversations, Provider}
   alias TheMaestro.Sessions.Manager, as: SessionsManager
@@ -127,9 +128,19 @@ defmodule TheMaestro.Chat do
 
     t0_ms = Keyword.get(opts, :t0_ms, System.monotonic_time(:millisecond))
 
+    opts =
+      opts
+      |> Keyword.put_new(:t0_ms, t0_ms)
+      |> put_sandbox_owner()
+
     with {:ok, stream_id} <-
-           SessionsManager.start_stream(session_id, provider, auth_name, provider_msgs, model,
-             t0_ms: t0_ms
+           SessionsManager.start_stream(
+             session_id,
+             provider,
+             auth_name,
+             provider_msgs,
+             model,
+             opts
            ) do
       {:ok,
        %{
@@ -172,6 +183,8 @@ defmodule TheMaestro.Chat do
           {:ok, stream_id} | {:error, term()}
   def start_stream(session_id, provider, session_name, provider_messages, model, opts \\ [])
       when is_binary(session_id) and is_atom(provider) and is_binary(model) do
+    opts = put_sandbox_owner(opts)
+
     SessionsManager.start_stream(
       session_id,
       provider,
@@ -193,6 +206,42 @@ defmodule TheMaestro.Chat do
     allowed_strings = Enum.map(allowed, &Atom.to_string/1)
     if p in allowed_strings, do: String.to_existing_atom(p), else: :openai
   end
+
+  defp put_sandbox_owner(opts) do
+    if Keyword.has_key?(opts, :sandbox_owner) do
+      opts
+    else
+      case sandbox_owner_from_process() do
+        nil -> opts
+        owner -> Keyword.put(opts, :sandbox_owner, owner)
+      end
+    end
+  end
+
+  defp sandbox_owner_from_process do
+    [
+      Process.get(:phoenix_ecto_sandbox_owner),
+      Process.get(:"$ecto_sandbox_owner"),
+      Process.get({TheMaestro.Repo, :sandbox_owner}),
+      extract_owner_from_meta(Process.get(:phoenix_ecto_sandbox))
+    ]
+    |> Enum.find(&is_pid/1)
+  end
+
+  defp extract_owner_from_meta(%{owner: owner}) when is_pid(owner), do: owner
+
+  defp extract_owner_from_meta(metadata) when is_binary(metadata) do
+    if Code.ensure_loaded?(PhoenixSandbox) do
+      case PhoenixSandbox.decode_metadata(metadata) do
+        %{owner: owner} when is_pid(owner) -> owner
+        _ -> nil
+      end
+    else
+      nil
+    end
+  end
+
+  defp extract_owner_from_meta(_), do: nil
 
   # Public wrappers for LV/REST parity
   @doc "Return provider atom for a session's saved authentication."

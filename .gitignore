@@ -67,3 +67,5 @@ Thumbs.db
 *.dump
 __pycache__/
 playwright/
+./*.json
+./*.jsonl

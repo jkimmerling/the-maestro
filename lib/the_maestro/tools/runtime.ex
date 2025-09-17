@@ -9,6 +9,8 @@ defmodule TheMaestro.Tools.Runtime do
   returning a consistent result tuple.
   """
 
+  alias TheMaestro.MCP.Client, as: MCPClient
+  alias TheMaestro.MCP.Registry, as: MCPRegistry
   alias TheMaestro.Tools.{ApplyPatch, PathResolver, Shell}
   require Logger
 
@@ -17,9 +19,11 @@ defmodule TheMaestro.Tools.Runtime do
   @doc """
   Execute a tool by `name` with `args_json` (string) in `base_cwd`.
 
-  Returns `{:ok, payload}` or `{:error, reason}`. The `payload` is a string:
-  - for shell-like tools, JSON produced by ExecOutput.format/3
-  - for read, the raw file contents (optionally sliced)
+  Overloads:
+  - exec(name, args_json, base_cwd) – legacy path (no MCP routing)
+  - exec(session_id, name, args_json, base_cwd) – preferred (enables MCP routing)
+
+  Returns `{:ok, payload}` or `{:error, reason}`. The `payload` is a string.
   """
   @spec exec(String.t() | atom(), String.t() | nil, String.t()) :: exec_result
   def exec(name, args_json, base_cwd) do
@@ -28,6 +32,20 @@ defmodule TheMaestro.Tools.Runtime do
     end
 
     dispatch(to_string(name) |> String.downcase(), args_json || "{}", base_cwd)
+  end
+
+  @spec exec(String.t(), String.t() | atom(), String.t() | nil, String.t()) :: exec_result
+  def exec(session_id, name, args_json, base_cwd) when is_binary(session_id) do
+    if System.get_env("HTTP_DEBUG") in ["1", "true", "TRUE"] do
+      Logger.debug("[tools] exec session_id=#{session_id} name=#{inspect(name)} cwd=#{base_cwd}")
+    end
+
+    dispatch_with_session(
+      session_id,
+      to_string(name) |> String.downcase(),
+      args_json || "{}",
+      base_cwd
+    )
   end
 
   # Split per-tool to keep complexity low
@@ -100,6 +118,41 @@ defmodule TheMaestro.Tools.Runtime do
   end
 
   defp dispatch(other, _args_json, _cwd), do: {:error, "unsupported tool: #{other}"}
+
+  # Same as dispatch/3 but with MCP fallback using the session registry
+  defp dispatch_with_session(session_id, name, args_json, base_cwd) do
+    case do_dispatch_known(name, args_json, base_cwd) do
+      {:unknown, ^name} ->
+        # Try MCP registry resolution
+        case MCPRegistry.resolve(session_id, name) do
+          {:ok, %{server: server_key, mcp_tool_name: tool}} ->
+            case safe_decode(args_json) do
+              {:ok, args} -> MCPClient.call_tool(session_id, server_key, tool, args)
+              {:error, reason} -> {:error, reason}
+            end
+
+          :error ->
+            {:error, "unsupported tool: #{name}"}
+        end
+
+      other ->
+        other
+    end
+  end
+
+  defp do_dispatch_known(name, args_json, base_cwd) do
+    case name do
+      "read" -> dispatch("read", args_json, base_cwd)
+      "bash" -> dispatch("bash", args_json, base_cwd)
+      "shell" -> dispatch("shell", args_json, base_cwd)
+      "run_shell_command" -> dispatch("run_shell_command", args_json, base_cwd)
+      "list_directory" -> dispatch("list_directory", args_json, base_cwd)
+      "apply_patch" -> dispatch("apply_patch", args_json, base_cwd)
+      "glob" -> dispatch("glob", args_json, base_cwd)
+      "grep" -> dispatch("grep", args_json, base_cwd)
+      _ -> {:unknown, name}
+    end
+  end
 
   # ===== helpers =====
 

@@ -50,6 +50,7 @@ defmodule TheMaestro.Providers.OpenAI.Models do
           {:ok,
            [
              %Model{id: "gpt-5", name: "gpt-5", capabilities: []},
+             %Model{id: "gpt-5-codex", name: "gpt-5-codex", capabilities: []},
              %Model{id: "gpt-4o", name: "gpt-4o", capabilities: []}
            ]}
 
