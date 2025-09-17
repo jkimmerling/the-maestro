@@ -58,8 +58,12 @@ Thumbs.db
 .idea/
 *.iml
 
-# BMad core files (if not needed in version control)
-# .bmad-core/
+
+.bmad-core/
+.claude/
+.elixir_ls/
+.ai/
+docs/
 
 
 *.py
@@ -67,5 +71,8 @@ Thumbs.db
 *.dump
 __pycache__/
 playwright/
-./*.json
-./*.jsonl
+.playwright-mcp/
+*.json
+*.jsonl
+*.md
+scripts/
