@@ -51,6 +51,19 @@ defmodule TheMaestroWeb.Telemetry do
         tags: [:event],
         unit: {:native, :millisecond}
       ),
+      summary("system_prompts.resolved.duration",
+        tags: [:provider, :source],
+        unit: {:native, :millisecond}
+      ),
+      summary("system_prompts.resolved.prompt_count",
+        tags: [:provider, :source]
+      ),
+      summary("system_prompts.resolved.overrides_count",
+        tags: [:provider, :source]
+      ),
+      sum("system_prompts.resolved.missing_defaults",
+        tags: [:provider]
+      ),
 
       # Database Metrics
       summary("the_maestro.repo.query.total_time",

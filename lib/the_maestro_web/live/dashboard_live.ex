@@ -5,7 +5,11 @@ defmodule TheMaestroWeb.DashboardLive do
   alias TheMaestro.Conversations
   alias TheMaestro.MCP
   alias TheMaestro.Provider
+  alias TheMaestro.SuppliedContext
+  alias TheMaestro.SystemPrompts
   alias TheMaestroWeb.MCPServersLive.FormComponent
+
+  @prompt_providers [:openai, :anthropic, :gemini]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -17,7 +21,6 @@ defmodule TheMaestroWeb.DashboardLive do
       |> assign(:sessions, Conversations.list_sessions_with_auth())
       |> assign(:show_session_modal, false)
       |> assign(:auth_options, build_auth_options())
-      |> assign(:prompt_options, build_prompt_options())
       |> assign(:persona_options, build_persona_options())
       |> assign(:session_form, to_form(Conversations.change_session(%Conversations.Session{})))
       |> assign(:session_provider, "openai")
@@ -28,6 +31,12 @@ defmodule TheMaestroWeb.DashboardLive do
       |> assign(:session_mcp_selected_ids, [])
       |> assign(:show_mcp_modal, false)
       |> assign(:session_form_params, %{})
+      |> assign(:prompt_picker_provider, :openai)
+      |> assign(:prompt_picker_providers, @prompt_providers)
+      |> assign(:session_prompt_builder, empty_builder())
+      |> assign(:prompt_library, %{})
+      |> assign(:prompt_catalog, %{})
+      |> assign(:prompt_picker_selection, %{})
       |> assign(:page_title, "Dashboard")
       |> assign(:active_streams, %{})
       |> assign(:show_delete_session_modal, false)
@@ -41,6 +50,8 @@ defmodule TheMaestroWeb.DashboardLive do
       else
         socket
       end
+
+    socket = refresh_prompt_state(socket)
 
     {:ok, socket}
   end
@@ -58,8 +69,8 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:auths, Auth.list_saved_authentications())
      |> assign(:sessions, sessions)
      |> assign(:auth_options, build_auth_options())
-     |> assign(:prompt_options, build_prompt_options())
-     |> assign(:persona_options, build_persona_options())}
+     |> assign(:persona_options, build_persona_options())
+     |> refresh_prompt_state()}
   end
 
   @impl true
@@ -140,6 +151,15 @@ defmodule TheMaestroWeb.DashboardLive do
 
   def handle_event("open_session_modal", _params, socket) do
     cs = Conversations.change_session(%Conversations.Session{})
+    builder = build_default_prompt_builder()
+
+    socket =
+      socket
+      |> refresh_prompt_state()
+      |> assign(:session_prompt_builder, builder)
+      |> merge_builder_into_catalog(builder)
+      |> assign(:prompt_picker_provider, :openai)
+      |> assign(:prompt_picker_selection, %{})
 
     {:noreply,
      socket
@@ -184,13 +204,15 @@ defmodule TheMaestroWeb.DashboardLive do
 
     case target do
       "provider" ->
-        provider = to_provider_atom(params["provider"])
+        provider = to_provider_atom(params["provider"]) || :openai
 
         {:noreply,
          socket
          |> assign(:session_provider, params["provider"])
          |> assign(:session_auth_options, build_auth_options_for(provider))
-         |> assign(:session_model_options, [])}
+         |> assign(:session_model_options, [])
+         |> assign(:prompt_picker_provider, provider)
+         |> ensure_prompt_builder()}
 
       "auth_id" ->
         models = build_model_options(%{"auth_id" => params["auth_id"]})
@@ -213,7 +235,8 @@ defmodule TheMaestroWeb.DashboardLive do
      socket
      |> assign(:session_form, to_form(cs, action: :validate))
      |> assign(:session_form_params, params)
-     |> assign(:session_mcp_selected_ids, selected)}
+     |> assign(:session_mcp_selected_ids, selected)
+     |> ensure_prompt_builder()}
   end
 
   def handle_event("open_session_dir_picker", _params, socket) do
@@ -246,7 +269,9 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   def handle_event("session_save", %{"session" => params}, socket) do
-    with {:ok, params2} <- build_session_params(params),
+    socket = ensure_prompt_builder(socket)
+
+    with {:ok, params2} <- build_session_params(socket, params),
          {:ok, session} <- Conversations.create_session(params2) do
       case Map.get(params, "attach_thread_id") do
         tid when is_binary(tid) and tid != "" ->
@@ -265,7 +290,10 @@ defmodule TheMaestroWeb.DashboardLive do
        |> assign(:show_mcp_modal, false)
        |> assign(:sessions, Conversations.list_sessions_with_auth())
        |> assign(:session_form_params, %{})
-       |> assign(:session_mcp_selected_ids, [])}
+       |> assign(:session_mcp_selected_ids, [])
+       |> assign(:session_prompt_builder, build_default_prompt_builder())
+       |> assign(:prompt_picker_selection, %{})
+       |> assign(:prompt_picker_provider, :openai)}
     else
       {:error, %Ecto.Changeset{} = cs} ->
         selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
@@ -280,6 +308,196 @@ defmodule TheMaestroWeb.DashboardLive do
 
   # Keep all handle_event/3 clauses grouped together to avoid warnings
   @impl true
+  def handle_event("prompt_picker:tab", %{"provider" => provider_param}, socket) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    {:noreply, assign(socket, :prompt_picker_provider, provider)}
+  end
+
+  def handle_event("prompt_picker:add", params, socket) do
+    provider =
+      to_provider_atom(Map.get(params, "provider")) || socket.assigns[:prompt_picker_provider] ||
+        :openai
+
+    prompt_id = Map.get(params, "prompt_id", "") |> to_string |> String.trim()
+
+    selection = Map.put(socket.assigns[:prompt_picker_selection] || %{}, provider, "")
+
+    {:noreply, do_add_prompt(socket, provider, prompt_id, selection)}
+  end
+
+  defp do_add_prompt(socket, _provider, "", selection),
+    do: assign(socket, :prompt_picker_selection, selection)
+
+  defp do_add_prompt(socket, provider, prompt_id, selection) do
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    current = Map.get(builder, provider, [])
+
+    if Enum.any?(current, &(&1.id == prompt_id)) do
+      socket
+      |> assign(:prompt_picker_selection, selection)
+      |> put_flash(:info, "Prompt already present for #{provider_label(provider)}")
+    else
+      handle_fetch_prompt(socket, builder, provider, current, prompt_id, selection)
+    end
+  end
+
+  defp handle_fetch_prompt(socket, builder, provider, current, prompt_id, selection) do
+    case fetch_prompt(socket, prompt_id) do
+      {nil, updated_socket} ->
+        updated_socket
+        |> assign(:prompt_picker_selection, selection)
+        |> put_flash(:error, "Prompt could not be loaded. Try refreshing.")
+
+      {prompt, updated_socket} ->
+        case prompt.provider do
+          ^provider ->
+            add_prompt_to_builder(updated_socket, builder, provider, current, prompt, selection)
+
+          :shared ->
+            add_prompt_to_builder(updated_socket, builder, provider, current, prompt, selection)
+
+          _ ->
+            provider_mismatch_flash(updated_socket, selection, prompt)
+        end
+    end
+  end
+
+  defp add_prompt_to_builder(socket, builder, provider, current, prompt, selection) do
+    entry = %{
+      id: prompt.id,
+      prompt: prompt,
+      enabled: true,
+      overrides: %{},
+      source: :manual
+    }
+
+    updated_builder = Map.put(builder, provider, current ++ [entry])
+
+    socket
+    |> assign(:session_prompt_builder, updated_builder)
+    |> assign(:prompt_picker_selection, selection)
+    |> assign(:prompt_picker_provider, provider)
+    |> merge_builder_into_catalog(updated_builder)
+  end
+
+  defp provider_mismatch_flash(socket, selection, prompt) do
+    socket
+    |> assign(:prompt_picker_selection, selection)
+    |> put_flash(:error, "#{prompt.name} belongs to #{provider_label(prompt.provider)} prompts.")
+  end
+
+  def handle_event(
+        "prompt_picker:remove",
+        %{"provider" => provider_param, "id" => prompt_id},
+        socket
+      ) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    list = Map.get(builder, provider, [])
+
+    case Enum.split_with(list, &(&1.id == prompt_id)) do
+      {[entry], rest} ->
+        if entry.prompt.immutable do
+          {:noreply,
+           put_flash(socket, :error, "#{entry.prompt.name} is immutable and cannot be removed.")}
+        else
+          updated_builder = Map.put(builder, provider, rest)
+
+          {:noreply,
+           socket
+           |> assign(:session_prompt_builder, updated_builder)
+           |> merge_builder_into_catalog(updated_builder)}
+        end
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event(
+        "prompt_picker:toggle",
+        %{"provider" => provider_param, "id" => prompt_id},
+        socket
+      ) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    list = Map.get(builder, provider, [])
+
+    case Enum.find(list, &(&1.id == prompt_id)) do
+      nil ->
+        {:noreply, socket}
+
+      entry ->
+        desired = !entry.enabled
+
+        if entry.prompt.immutable and not desired do
+          {:noreply,
+           socket
+           |> put_flash(:error, "#{entry.prompt.name} is immutable and must remain enabled.")}
+        else
+          {:noreply, apply_toggle(socket, builder, provider, list, prompt_id, desired)}
+        end
+    end
+  end
+
+  defp apply_toggle(socket, builder, provider, list, prompt_id, desired) do
+    updated_list =
+      Enum.map(list, fn
+        %{id: ^prompt_id} = e -> %{e | enabled: desired}
+        e -> e
+      end)
+
+    updated_builder = Map.put(builder, provider, updated_list)
+
+    socket
+    |> assign(:session_prompt_builder, updated_builder)
+    |> merge_builder_into_catalog(updated_builder)
+  end
+
+  def handle_event(
+        "prompt_picker:reorder",
+        %{"provider" => provider_param, "ordered_ids" => ordered_ids},
+        socket
+      ) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    list = Map.get(builder, provider, [])
+    ordered_ids = List.wrap(ordered_ids) |> Enum.map(&to_string/1)
+
+    case reorder_entries(list, ordered_ids) do
+      {:ok, reordered} ->
+        updated_builder = Map.put(builder, provider, reordered)
+
+        {:noreply,
+         socket
+         |> assign(:session_prompt_builder, updated_builder)}
+
+      :error ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("prompt_picker:refresh", %{"provider" => provider_param}, socket) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    socket =
+      socket
+      |> refresh_prompt_state()
+      |> merge_builder_into_catalog()
+      |> assign(:prompt_picker_provider, provider)
+
+    {:noreply, socket}
+  end
+
   def handle_event("close_modal", _params, socket) do
     {:noreply,
      socket
@@ -289,10 +507,19 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   # Keep all handle_event/3 clauses grouped together to avoid warnings
-  defp build_session_params(params) do
+  defp build_session_params(socket, params) do
     with {:ok, p2} <- mirror_persona(params),
          {:ok, p3} <- decode_memory_json(p2) do
-      {:ok, p3}
+      prompt_map = prompt_specs_from_builder(socket.assigns[:session_prompt_builder] || %{})
+
+      payload =
+        if prompt_map == %{} do
+          Map.put_new(p3, "system_prompt_ids_by_provider", %{})
+        else
+          Map.put(p3, "system_prompt_ids_by_provider", prompt_map)
+        end
+
+      {:ok, payload}
     end
   end
 
@@ -408,18 +635,9 @@ defmodule TheMaestroWeb.DashboardLive do
   defp format_dt(%NaiveDateTime{} = ndt),
     do: Calendar.strftime(ndt, "%Y-%m-%d %H:%M:%S") <> " UTC"
 
-  defp provider_label(p) when is_atom(p), do: Atom.to_string(p)
-  defp provider_label(p) when is_binary(p), do: p
-
-  # map_count helpers removed; not used
-
   defp build_auth_options do
     Auth.list_saved_authentications()
     |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
-  end
-
-  defp build_prompt_options do
-    TheMaestro.SuppliedContext.list_items(:system_prompt) |> Enum.map(&{&1.name, &1.id})
   end
 
   defp build_persona_options do
@@ -469,13 +687,17 @@ defmodule TheMaestroWeb.DashboardLive do
   defp default_models_for(_), do: []
 
   # Convert provider strings/atoms to a safe allowed atom
-  defp to_provider_atom(p) when is_atom(p), do: p
+  defp to_provider_atom(p) when is_atom(p) do
+    providers = Provider.list_providers()
+    if p in providers, do: p, else: nil
+  end
 
   defp to_provider_atom(p) when is_binary(p) do
-    allowed = TheMaestro.Provider.list_providers()
-    allowed_str = Enum.map(allowed, &Atom.to_string/1)
-    if p in allowed_str, do: String.to_existing_atom(p), else: :openai
+    providers = Provider.list_providers()
+    Enum.find(providers, fn provider -> Atom.to_string(provider) == p end)
   end
+
+  defp to_provider_atom(_), do: nil
 
   defp build_auth_options_for(provider) when is_atom(provider) do
     Auth.list_saved_authentications_by_provider(provider)
@@ -486,6 +708,173 @@ defmodule TheMaestroWeb.DashboardLive do
   defp merge_session_params(socket, extra) when is_map(extra) do
     current = socket.assigns[:session_form_params] || %{}
     Map.merge(current, extra)
+  end
+
+  defp refresh_prompt_state(socket) do
+    library =
+      Enum.reduce(@prompt_providers, %{}, fn provider, acc ->
+        prompts =
+          SuppliedContext.list_system_prompts(provider,
+            include_shared: true,
+            only_defaults: false,
+            group_by_family: false
+          )
+
+        Map.put(acc, provider, prompts)
+      end)
+
+    catalog =
+      library
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.reduce(%{}, fn prompt, acc ->
+        Map.put(acc, prompt.id, prompt)
+      end)
+
+    socket
+    |> assign(:prompt_library, library)
+    |> assign(:prompt_catalog, catalog)
+    |> merge_builder_into_catalog()
+  end
+
+  defp empty_builder do
+    Enum.into(@prompt_providers, %{}, &{&1, []})
+  end
+
+  defp build_default_prompt_builder do
+    Enum.reduce(@prompt_providers, %{}, fn provider, acc ->
+      stack = SystemPrompts.default_stack(provider)
+
+      entries =
+        stack.prompts
+        |> Enum.map(fn %{prompt: prompt, overrides: overrides} ->
+          %{
+            id: prompt.id,
+            prompt: prompt,
+            enabled: true,
+            overrides: overrides || %{},
+            source: stack.source
+          }
+        end)
+
+      Map.put(acc, provider, entries)
+    end)
+  end
+
+  defp ensure_prompt_builder(socket) do
+    builder = socket.assigns[:session_prompt_builder] || %{}
+
+    complete? =
+      builder != %{} and Enum.all?(@prompt_providers, &Map.has_key?(builder, &1))
+
+    if complete? do
+      socket
+    else
+      defaults = build_default_prompt_builder()
+
+      merged =
+        Enum.reduce(@prompt_providers, %{}, fn provider, acc ->
+          Map.put(acc, provider, Map.get(builder, provider, Map.get(defaults, provider, [])))
+        end)
+
+      socket
+      |> assign(:session_prompt_builder, merged)
+      |> merge_builder_into_catalog(merged)
+    end
+  end
+
+  defp merge_builder_into_catalog(socket, builder) do
+    updated_catalog =
+      builder
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.reduce(socket.assigns[:prompt_catalog] || %{}, fn entry, acc ->
+        Map.put(acc, entry.id, entry.prompt)
+      end)
+
+    assign(socket, :prompt_catalog, updated_catalog)
+  end
+
+  defp merge_builder_into_catalog(socket) do
+    builder = socket.assigns[:session_prompt_builder] || %{}
+    merge_builder_into_catalog(socket, builder)
+  end
+
+  defp prompt_specs_from_builder(builder) do
+    Enum.reduce(builder, %{}, fn {provider, entries}, acc ->
+      specs = Enum.map(entries, &to_spec/1)
+      if specs == [], do: acc, else: Map.put(acc, Atom.to_string(provider), specs)
+    end)
+  end
+
+  defp to_spec(entry) do
+    overrides = entry.overrides || %{}
+    enabled = if entry.prompt.immutable, do: true, else: !!entry.enabled
+
+    %{
+      "id" => entry.id,
+      "enabled" => enabled,
+      "overrides" => overrides
+    }
+  end
+
+  defp fetch_prompt(socket, prompt_id) do
+    catalog = socket.assigns[:prompt_catalog] || %{}
+
+    case Map.get(catalog, prompt_id) do
+      %{} = prompt ->
+        {prompt, socket}
+
+      _ ->
+        try do
+          prompt = SuppliedContext.get_item!(prompt_id)
+          new_catalog = Map.put(catalog, prompt_id, prompt)
+          {prompt, assign(socket, :prompt_catalog, new_catalog)}
+        rescue
+          Ecto.NoResultsError -> {nil, socket}
+        end
+    end
+  end
+
+  defp provider_label(:openai), do: "OpenAI"
+  defp provider_label(:anthropic), do: "Anthropic"
+  defp provider_label(:gemini), do: "Gemini"
+  defp provider_label(other), do: other |> to_string() |> String.capitalize()
+
+  defp prompt_error_message({:immutable_prompt_disabled, prompt_id}, socket) do
+    "#{prompt_name(socket, prompt_id)} is immutable and must remain enabled."
+  end
+
+  defp prompt_error_message(:provider_mismatch, _socket),
+    do: "Prompt provider mismatch. Refresh the library and try again."
+
+  defp prompt_error_message(:unknown_prompt, _socket),
+    do: "Prompt could not be found. Refresh the library and try again."
+
+  defp prompt_error_message(reason, _socket) when is_binary(reason), do: reason
+  defp prompt_error_message(reason, _socket), do: "Prompt update failed: #{inspect(reason)}"
+
+  defp prompt_name(socket, prompt_id) do
+    socket.assigns[:prompt_catalog]
+    |> Kernel.||(%{})
+    |> Map.get(prompt_id)
+    |> case do
+      nil -> prompt_id
+      prompt -> prompt.name
+    end
+  end
+
+  defp reorder_entries(entries, ordered_ids) do
+    current_ids = Enum.map(entries, & &1.id) |> MapSet.new()
+    desired_ids = MapSet.new(ordered_ids)
+
+    if current_ids == desired_ids do
+      by_id = Map.new(entries, &{&1.id, &1})
+      reordered = Enum.map(ordered_ids, &Map.fetch!(by_id, &1))
+      {:ok, reordered}
+    else
+      :error
+    end
   end
 
   defp normalize_mcp_ids(nil), do: []
@@ -727,6 +1116,17 @@ defmodule TheMaestroWeb.DashboardLive do
                 <label class="text-xs">Memory (JSON)</label>
                 <textarea name="session[memory_json]" rows="4" class="textarea-terminal"></textarea>
               </div>
+            </div>
+            <div class="mt-6">
+              <.live_component
+                module={TheMaestroWeb.SystemPromptPickerComponent}
+                id="session-prompt-picker"
+                providers={@prompt_picker_providers}
+                active_provider={@prompt_picker_provider}
+                selected_by_provider={@session_prompt_builder}
+                library_by_provider={@prompt_library}
+                selections={@prompt_picker_selection}
+              />
             </div>
             <div class="mt-4 space-y-2">
               <div class="flex items-center justify-between">

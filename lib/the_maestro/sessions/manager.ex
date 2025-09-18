@@ -163,13 +163,22 @@ defmodule TheMaestro.Sessions.Manager do
         result =
           case provider do
             :openai ->
-              OpenAI.Streaming.stream_tool_followup(session_name, items, model: model)
+              OpenAI.Streaming.stream_tool_followup(session_name, items,
+                model: model,
+                decl_session_id: session_id
+              )
 
             :anthropic ->
-              Anthropic.Streaming.stream_tool_followup(session_name, items, model: model)
+              Anthropic.Streaming.stream_tool_followup(session_name, items,
+                model: model,
+                decl_session_id: session_id
+              )
 
             :gemini ->
-              Gemini.Streaming.stream_tool_followup(session_name, items, model: model)
+              Gemini.Streaming.stream_tool_followup(session_name, items,
+                model: model,
+                decl_session_id: session_id
+              )
           end
 
         case result do

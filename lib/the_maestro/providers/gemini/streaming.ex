@@ -16,6 +16,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   alias TheMaestro.Providers.Http.ReqClientFactory
   alias TheMaestro.Providers.Http.StreamingAdapter
   alias TheMaestro.SavedAuthentication
+  alias TheMaestro.SystemPrompts
+  alias TheMaestro.SystemPrompts.Defaults, as: PromptDefaults
   alias TheMaestro.Types
 
   @dialyzer {:nowarn_function, resolve_decl_session_id: 2}
@@ -45,12 +47,15 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
       {:error, :missing_model}
     else
       model_path = normalize_model_for_api(model, :genlang)
+      system_instruction = resolve_system_instruction(Keyword.get(opts, :decl_session_id))
 
-      payload = %{
-        "model" => model_path,
-        "contents" => ensure_gemini_contents(messages),
-        "stream" => true
-      }
+      payload =
+        %{
+          "model" => model_path,
+          "contents" => ensure_gemini_contents(messages),
+          "stream" => true
+        }
+        |> maybe_put_system_instruction(system_instruction)
 
       StreamingAdapter.stream_request(req,
         method: :post,
@@ -94,13 +99,14 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     Logger.debug("Gemini OAuth project resolved: #{inspect(project)}")
     m0 = strip_models_prefix(model)
     m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
-    base_contents = ensure_gemini_contents(messages)
-    env_msg = build_env_context_message(session_name)
-    base_contents = [env_msg | base_contents]
-    {contents, sys_inst} = split_system_instruction(base_contents)
+
+    contents =
+      [build_env_context_message(session_name) | ensure_gemini_contents(messages)]
 
     decl_session_id =
       Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
+
+    system_instruction = resolve_system_instruction(decl_session_id)
 
     request =
       %{
@@ -108,7 +114,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
         "generationConfig" => %{"temperature" => 0, "topP" => 1},
         "session_id" => session_uuid
       }
-      |> maybe_put_system_instruction(sys_inst)
+      |> maybe_put_system_instruction(system_instruction)
       |> maybe_put_tools(function_declarations_for_session(decl_session_id))
 
     payload = %{
@@ -176,12 +182,15 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
           decl_session_id =
             Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
 
+          system_instruction = resolve_system_instruction(decl_session_id)
+
           request =
             %{
               "contents" => contents,
               "generationConfig" => %{"temperature" => 0, "topP" => 1},
               "session_id" => session_uuid
             }
+            |> maybe_put_system_instruction(system_instruction)
             |> maybe_put_tools(function_declarations_for_session(decl_session_id))
 
           payload = %{
@@ -340,35 +349,33 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     }
   end
 
-  # Extract first "system" message as systemInstruction and remove it from contents
-  defp split_system_instruction(messages) do
-    msgs =
-      if is_list(messages) and Enum.all?(messages, &is_map/1) and
-           Enum.any?(messages, &Map.has_key?(&1, "parts")) do
-        messages
-      else
-        normalize_messages(messages)
-      end
+  defp resolve_system_instruction(nil), do: PromptDefaults.gemini_system_instruction()
 
-    {sys_msgs, rest} = Enum.split_with(msgs, fn m -> m["role"] == "system" end)
+  defp resolve_system_instruction(session_id) when is_binary(session_id) do
+    case SystemPrompts.resolve_for_session(session_id, :gemini) do
+      {:ok, resolved} ->
+        instruction =
+          SystemPrompts.render_for_provider(:gemini, %{prompts: Map.get(resolved, :prompts, [])})
 
-    sys_text =
-      sys_msgs
-      |> Enum.flat_map(fn m -> m["parts"] || [] end)
-      |> Enum.map(fn p -> p["text"] || "" end)
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.join("\n\n")
+        parts = Map.get(instruction, "parts") || []
 
-    sys_inst =
-      case String.trim(sys_text) do
-        "" -> nil
-        txt -> %{"role" => "user", "parts" => [%{"text" => txt}]}
-      end
+        if parts == [] do
+          Logger.warning(
+            "gemini system instruction empty for session #{session_id}; using defaults"
+          )
 
-    {rest, sys_inst}
+          PromptDefaults.gemini_system_instruction()
+        else
+          instruction
+        end
+    end
+  rescue
+    exception ->
+      Logger.error("gemini system prompts resolution raised #{inspect(exception)}")
+      PromptDefaults.gemini_system_instruction()
   end
 
-  defp maybe_put_system_instruction(map, nil), do: map
+  defp resolve_system_instruction(_), do: PromptDefaults.gemini_system_instruction()
 
   defp maybe_put_system_instruction(map, sys_inst),
     do: Map.put(map, "systemInstruction", sys_inst)

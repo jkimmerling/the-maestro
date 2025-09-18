@@ -10,7 +10,7 @@ defmodule TheMaestroWeb.SuppliedContextItemLiveTest do
     version: 42,
     metadata: %{},
     text: "some text",
-    tags: %{}
+    labels: %{}
   }
   @update_attrs %{
     name: "some updated name",
@@ -18,9 +18,16 @@ defmodule TheMaestroWeb.SuppliedContextItemLiveTest do
     version: 43,
     metadata: %{},
     text: "some updated text",
-    tags: %{}
+    labels: %{}
   }
-  @invalid_attrs %{name: nil, type: nil, version: nil, metadata: nil, text: nil, tags: nil}
+  @invalid_attrs %{
+    name: nil,
+    type: nil,
+    version: nil,
+    metadata: nil,
+    text: nil,
+    labels: nil
+  }
   defp create_supplied_context_item(_) do
     supplied_context_item = supplied_context_item_fixture()
 
@@ -95,7 +102,10 @@ defmodule TheMaestroWeb.SuppliedContextItemLiveTest do
                  "Edit"
                )
                |> render_click()
-               |> follow_redirect(conn, ~p"/supplied_context/#{supplied_context_item}/edit")
+               |> follow_redirect(
+                 conn,
+                 ~p"/supplied_context/#{supplied_context_item}/edit?return_to=index&type=persona&provider=all"
+               )
 
       assert render(form_live) =~ "Edit Supplied context item"
 

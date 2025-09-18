@@ -66,6 +66,7 @@ Install the toolchain versions below before running any mix tasks:
 
 - Rebuild once: `mix assets.build`
 - Continuous rebuild: handled automatically by dev watchers configured in `config/dev.exs`
+- Install SortableJS once for LiveView prompt drag-and-drop: `npm install --prefix assets sortablejs`
 
 ## Development Workflow
 

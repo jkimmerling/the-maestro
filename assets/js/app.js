@@ -24,8 +24,37 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/the_maestro"
 import topbar from "../vendor/topbar"
+import Sortable from "sortablejs"
 
 const Hooks = {}
+
+Hooks.PromptSortable = {
+  mounted() { this.initSortable() },
+  updated() { this.destroySortable(); this.initSortable() },
+  destroyed() { this.destroySortable() },
+  initSortable() {
+    if (this.el.dataset.disabled === 'true') return
+    if (this.sortable) return
+    const provider = this.el.dataset.provider
+    if (!provider) return
+    this.sortable = new Sortable(this.el, {
+      animation: 160,
+      handle: '.prompt-handle',
+      ghostClass: 'opacity-60',
+      onEnd: () => {
+        const orderedIds = Array.from(this.el.querySelectorAll('[data-prompt-id]')).map(el => el.dataset.promptId)
+        if (orderedIds.length === 0) return
+        this.pushEvent('prompt_picker:reorder', {provider, ordered_ids: orderedIds})
+      }
+    })
+  },
+  destroySortable() {
+    if (this.sortable) {
+      this.sortable.destroy()
+      this.sortable = null
+    }
+  }
+}
 
 Hooks.HamburgerToggle = {
   mounted() {

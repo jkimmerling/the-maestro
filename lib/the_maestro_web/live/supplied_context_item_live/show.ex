@@ -28,7 +28,16 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Show do
         <:item title="Name">{@supplied_context_item.name}</:item>
         <:item title="Text">{@supplied_context_item.text}</:item>
         <:item title="Version">{@supplied_context_item.version}</:item>
-        <:item title="Tags">{inspect(@supplied_context_item.tags)}</:item>
+        <:item title="Provider">{@supplied_context_item.provider}</:item>
+        <:item title="Render Format">{@supplied_context_item.render_format}</:item>
+        <:item title="Position">{@supplied_context_item.position}</:item>
+        <:item title="Default?">{inspect(@supplied_context_item.is_default)}</:item>
+        <:item title="Immutable?">{inspect(@supplied_context_item.immutable)}</:item>
+        <:item title="Source Ref">{@supplied_context_item.source_ref || "—"}</:item>
+        <:item title="Family ID">{@supplied_context_item.family_id}</:item>
+        <:item title="Editor">{@supplied_context_item.editor || "—"}</:item>
+        <:item title="Change Note">{@supplied_context_item.change_note || "—"}</:item>
+        <:item title="Labels">{inspect(@supplied_context_item.labels)}</:item>
         <:item title="Metadata">{inspect(@supplied_context_item.metadata)}</:item>
       </.list>
     </Layouts.app>
