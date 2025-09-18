@@ -64,7 +64,7 @@ defmodule TheMaestroWeb.ChatEntryLiveTest do
     test "lists all chat_history", %{conn: conn, chat_entry: chat_entry} do
       {:ok, _index_live, html} = live(conn, ~p"/chat_history")
 
-      assert html =~ "Listing Chat history"
+      assert html =~ "Chat Histories"
       assert html =~ chat_entry.actor
     end
 
