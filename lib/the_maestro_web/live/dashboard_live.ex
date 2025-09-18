@@ -1051,7 +1051,9 @@ defmodule TheMaestroWeb.DashboardLive do
             id="session-modal-form"
             phx-submit="session_save"
             phx-change="session_validate"
+            class="flex flex-col max-h-[80vh]"
           >
+            <div class="flex-1 overflow-y-auto pr-1">
             <.input field={@session_form[:name]} type="text" label="Session Name" />
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -1150,10 +1152,12 @@ defmodule TheMaestroWeb.DashboardLive do
                 class="min-h-[6rem]"
               />
             </div>
-            <div class="mt-2"></div>
-            <div class="mt-3 space-x-2">
-              <button type="submit" class="btn btn-blue">Save</button>
-              <button type="button" class="btn" phx-click="cancel_session_modal">Cancel</button>
+            </div>
+            <div class="sticky bottom-0 mt-3 border-t border-base-300 bg-base-100 pt-3">
+              <div class="flex justify-end gap-2">
+                <button type="submit" class="btn btn-blue">Save</button>
+                <button type="button" class="btn" phx-click="cancel_session_modal">Cancel</button>
+              </div>
             </div>
           </.form>
           <.modal :if={@show_session_dir_picker} id="dir-picker-session-new">

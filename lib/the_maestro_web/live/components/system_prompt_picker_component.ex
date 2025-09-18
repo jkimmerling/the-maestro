@@ -191,7 +191,7 @@ defmodule TheMaestroWeb.SystemPromptPickerComponent do
                     phx-no-curly-interpolation
                   >
                     <code class="block whitespace-pre-wrap break-all text-[11px] leading-relaxed">
-                      {preview_payload(@active_provider, entry)}
+                      <%= preview_payload(@active_provider, entry) %>
                     </code>
                   </div>
                 </div>
