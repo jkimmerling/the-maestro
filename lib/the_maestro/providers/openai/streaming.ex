@@ -21,6 +21,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
   alias TheMaestro.Types
 
   @dialyzer {:nowarn_function, resolve_decl_session_id: 1}
+  @dialyzer {:nowarn_function, normalize_instructions_for_chatgpt: 1}
 
   @type mode :: :chatgpt_personal | :enterprise
 
@@ -93,6 +94,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
 
       decl_session_id = Keyword.get(opts, :decl_session_id)
       instructions = resolve_instruction_items(decl_session_id)
+      instructions = normalize_instructions_for_chatgpt(instructions)
 
       req =
         req0
@@ -138,6 +140,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
 
       decl_session_id = Keyword.get(opts, :decl_session_id)
       instructions = resolve_instruction_items(decl_session_id)
+      instructions = normalize_instructions_for_chatgpt(instructions)
 
       req =
         req0
@@ -213,6 +216,28 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
   defp resolve_instruction_items(_), do: fallback_instruction_items()
 
   defp fallback_instruction_items, do: PromptDefaults.openai_segments()
+
+  # ChatGPT backend is stricter than the public Responses API and expects
+  # instructions as a single string. Our renderer emits a list of segments.
+  # To maximize compatibility, collapse segments into a single string for
+  # the chatgpt.com backend while keeping list-of-segments for enterprise.
+  defp normalize_instructions_for_chatgpt(value) do
+    cond do
+      is_list(value) ->
+        value
+        |> Enum.map(fn
+          %{"text" => t} when is_binary(t) -> t
+          %{:text => t} when is_binary(t) -> t
+          bin when is_binary(bin) -> bin
+          _ -> nil
+        end)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join("\n\n")
+
+      is_binary(value) -> value
+      true -> ""
+    end
+  end
 
   # Convert a list of chat-style messages into Responses API message items,
   # preserving role and using input_text/output_text appropriately.
