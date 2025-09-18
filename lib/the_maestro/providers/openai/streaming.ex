@@ -382,7 +382,9 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         |> Req.Request.put_header("accept", "text/event-stream")
         |> Req.Request.put_header("version", version)
 
-      instructions = resolve_instruction_items(Keyword.get(opts, :decl_session_id))
+      instructions =
+        resolve_instruction_items(Keyword.get(opts, :decl_session_id))
+        |> normalize_instructions_for_chatgpt()
 
       payload =
         followup_payload_common(
