@@ -11,7 +11,7 @@ defmodule TheMaestro.Tools.Runtime do
 
   alias TheMaestro.MCP.Client, as: MCPClient
   alias TheMaestro.MCP.Registry, as: MCPRegistry
-  alias TheMaestro.Tools.{ApplyPatch, PathResolver, Shell}
+  alias TheMaestro.Tools.{ApplyPatch, PathResolver, Shell, WriteFile}
   require Logger
 
   @type exec_result :: {:ok, String.t()} | {:error, String.t()}
@@ -90,6 +90,13 @@ defmodule TheMaestro.Tools.Runtime do
     end
   end
 
+  defp dispatch(name, args_json, base_cwd) when name in ["write_file", "write", "create_file"] do
+    case safe_decode(args_json) do
+      {:ok, args} -> WriteFile.run(args, base_cwd: base_cwd)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp dispatch("apply_patch", args_json, base_cwd) do
     case safe_decode(args_json) do
       {:ok, args} ->
@@ -148,6 +155,9 @@ defmodule TheMaestro.Tools.Runtime do
       "run_shell_command" -> dispatch("run_shell_command", args_json, base_cwd)
       "list_directory" -> dispatch("list_directory", args_json, base_cwd)
       "apply_patch" -> dispatch("apply_patch", args_json, base_cwd)
+      "write_file" -> dispatch("write_file", args_json, base_cwd)
+      "write" -> dispatch("write_file", args_json, base_cwd)
+      "create_file" -> dispatch("write_file", args_json, base_cwd)
       "glob" -> dispatch("glob", args_json, base_cwd)
       "grep" -> dispatch("grep", args_json, base_cwd)
       _ -> {:unknown, name}

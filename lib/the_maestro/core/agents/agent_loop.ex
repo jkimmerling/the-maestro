@@ -396,6 +396,15 @@ defmodule TheMaestro.AgentLoop do
                   })
               end
 
+            name when name in ["write_file", "write", "create_file"] ->
+              with {:ok, json} <- Jason.decode(args || "{}"),
+                   {:ok, payload} <- TheMaestro.Tools.WriteFile.run(json, base_cwd: base_cwd) do
+                payload
+              else
+                {:error, reason} -> TheMaestro.Tools.ExecOutput.format("write_file error: #{reason}", 1, 0.0)
+                _ -> TheMaestro.Tools.ExecOutput.format("write_file error", 1, 0.0)
+              end
+
             _ ->
               Jason.encode!(%{
                 "output" => "unsupported tool",
@@ -559,6 +568,17 @@ defmodule TheMaestro.AgentLoop do
           ),
           base_cwd
         )
+
+      name when name in ["write_file", "write", "create_file"] ->
+        case TheMaestro.Tools.WriteFile.run(args, base_cwd: base_cwd) do
+          {:ok, payload_json} ->
+            case Jason.decode(payload_json) do
+              {:ok, map} -> {:ok, map}
+              _ -> {:ok, %{"output" => payload_json}}
+            end
+
+          {:error, reason} -> {:error, reason}
+        end
 
       _ ->
         {:error, "unsupported tool: #{other}"}
