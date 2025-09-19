@@ -107,51 +107,84 @@ defmodule TheMaestro.Chat do
         _ -> %{"messages" => []}
       end
 
-    updated =
-      put_in(canonical, ["messages"], (canonical["messages"] || []) ++ [user_msg(user_text)])
+    {updated, persisted?} =
+      case needs_append_user?(canonical, user_text) do
+        true ->
+          updated =
+            put_in(
+              canonical,
+              ["messages"],
+              (canonical["messages"] || []) ++ [user_msg(user_text)]
+            )
 
-    {:ok, _} =
-      Conversations.create_chat_entry(%{
-        session_id: session_id,
-        turn_index: Conversations.next_turn_index(session_id),
-        actor: "user",
-        provider: nil,
-        request_headers: %{},
-        response_headers: %{},
-        combined_chat: updated,
-        thread_id: tid,
-        edit_version: 0
-      })
+          {:ok, _} =
+            Conversations.create_chat_entry(%{
+              session_id: session_id,
+              turn_index: Conversations.next_turn_index(session_id),
+              actor: "user",
+              provider: nil,
+              request_headers: %{},
+              response_headers: %{},
+              combined_chat: updated,
+              thread_id: tid,
+              edit_version: 0
+            })
 
-    {:ok, provider_msgs} = Conversations.Translator.to_provider(updated, provider)
-    model = pick_model_for_session(session, provider)
+          {updated, true}
 
-    t0_ms = Keyword.get(opts, :t0_ms, System.monotonic_time(:millisecond))
+        false ->
+          # Duplicate user turn detected; do not persist or start a new provider stream
+          {:duplicate, false}
+      end
 
-    opts =
-      opts
-      |> Keyword.put_new(:t0_ms, t0_ms)
-      |> put_sandbox_owner()
+    if updated == :duplicate do
+      {:error, :duplicate_turn}
+    else
+      model = pick_model_for_session(session, provider)
 
-    with {:ok, stream_id} <-
-           SessionsManager.start_stream(
-             session_id,
-             provider,
-             auth_name,
-             provider_msgs,
-             model,
-             opts
-           ) do
-      {:ok,
-       %{
-         stream_id: stream_id,
-         provider: provider,
-         model: model,
-         auth_type: auth_type,
-         auth_name: auth_name,
-         thread_id: tid,
-         pending_canonical: updated
-       }}
+      t0_ms = Keyword.get(opts, :t0_ms, System.monotonic_time(:millisecond))
+
+      opts =
+        opts
+        |> Keyword.put_new(:t0_ms, t0_ms)
+        |> put_sandbox_owner()
+
+      if Keyword.get(opts, :start_stream?, true) do
+        {:ok, provider_msgs} = Conversations.Translator.to_provider(updated, provider)
+
+        with {:ok, stream_id} <-
+               SessionsManager.start_stream(
+                 session_id,
+                 provider,
+                 auth_name,
+                 provider_msgs,
+                 model,
+                 opts
+               ) do
+          {:ok,
+           %{
+             stream_id: stream_id,
+             provider: provider,
+             model: model,
+             auth_type: auth_type,
+             auth_name: auth_name,
+             thread_id: tid,
+             pending_canonical: updated
+           }}
+        end
+      else
+        # Dry-run path for tests: do not start provider streaming
+        {:ok,
+         %{
+           stream_id: "dry-" <> Ecto.UUID.generate(),
+           provider: provider,
+           model: model,
+           auth_type: auth_type,
+           auth_name: auth_name,
+           thread_id: tid,
+           pending_canonical: updated
+         }}
+      end
     end
   end
 
@@ -254,6 +287,18 @@ defmodule TheMaestro.Chat do
   def resolve_model_for_session(session, provider), do: pick_model_for_session(session, provider)
 
   defp user_msg(text), do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
+
+  defp needs_append_user?(%{"messages" => msgs}, text) when is_list(msgs) do
+    case List.last(msgs) do
+      %{"role" => "user", "content" => [%{"type" => "text", "text" => last_txt} | _]} ->
+        String.trim(to_string(last_txt)) != String.trim(to_string(text))
+
+      _ ->
+        true
+    end
+  end
+
+  defp needs_append_user?(_, _), do: true
 
   defp provider_from_session(session) do
     saved = session.saved_authentication

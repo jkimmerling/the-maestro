@@ -118,6 +118,21 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         "prompt_cache_key" => session_id_hdr
       }
 
+      :telemetry.execute(
+        [
+          :providers,
+          :openai,
+          :request_built
+        ],
+        %{},
+        %{
+          mode: :enterprise,
+          model: model,
+          instructions_shape: instruction_shape(instructions),
+          tools_count: length(Map.get(payload, "tools", []))
+        }
+      )
+
       adapter.stream_request(req,
         method: :post,
         url: "/v1/responses",
@@ -167,6 +182,21 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         "prompt_cache_key" => session_id_hdr,
         "text" => %{"verbosity" => "medium"}
       }
+
+      :telemetry.execute(
+        [
+          :providers,
+          :openai,
+          :request_built
+        ],
+        %{},
+        %{
+          mode: :oauth,
+          model: model,
+          instructions_shape: instruction_shape(instructions),
+          tools_count: length(Map.get(payload, "tools", []))
+        }
+      )
 
       maybe_log_payload(:openai_oauth_initial, payload)
 
@@ -234,8 +264,11 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         |> Enum.reject(&is_nil/1)
         |> Enum.join("\n\n")
 
-      is_binary(value) -> value
-      true -> ""
+      is_binary(value) ->
+        value
+
+      true ->
+        ""
     end
   end
 
@@ -354,18 +387,49 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
     end
   end
 
+  defp instruction_shape(v) when is_binary(v), do: :string
+  defp instruction_shape(v) when is_list(v), do: :list
+  defp instruction_shape(_), do: :unknown
+
   # legacy collapsed form no longer used
 
   # Build OpenAI Responses tool list for this session merging built-ins + MCP
   defp tools_for_session(session_id) do
     decl_session_id = resolve_decl_session_id(session_id)
-    mcp = MCPRegistry.to_openai_decls(decl_session_id)
-    builtins = [shell_tool_function(), apply_patch_function_tool()]
+    allowed = allowed_names_for(decl_session_id, :openai)
+
+    mcp = MCPRegistry.to_openai_decls(decl_session_id) |> maybe_filter_tools(allowed)
+    builtins = [shell_tool_function(), apply_patch_function_tool()] |> maybe_filter_tools(allowed)
 
     # prefer MCP when names collide
     names = MapSet.new(Enum.map(mcp, & &1["name"]))
     builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
     mcp ++ builtins_filtered
+  end
+
+  defp maybe_filter_tools(list, :absent), do: list
+
+  defp maybe_filter_tools(list, {:present, names}) when is_list(list) do
+    allowed = MapSet.new(names)
+    Enum.filter(list, fn %{"name" => n} -> MapSet.member?(allowed, n) end)
+  end
+
+  # Read persisted allowed tool names for the provider; returns :absent when not set
+  defp allowed_names_for(session_id, provider) when is_binary(session_id) and is_atom(provider) do
+    prov = Atom.to_string(provider)
+
+    case TheMaestro.Conversations.get_session!(session_id) do
+      %TheMaestro.Conversations.Session{tools: %{"allowed" => %{} = m}} ->
+        case Map.fetch(m, prov) do
+          {:ok, list} when is_list(list) -> {:present, Enum.map(list, &to_string/1)}
+          _ -> :absent
+        end
+
+      _ ->
+        :absent
+    end
+  rescue
+    _ -> :absent
   end
 
   # -- follow-up builders (extracted to reduce complexity) --
@@ -397,6 +461,21 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
           store?: nil
         )
 
+      :telemetry.execute(
+        [
+          :providers,
+          :openai,
+          :request_built
+        ],
+        %{},
+        %{
+          mode: :enterprise_followup,
+          model: Keyword.get(opts, :model, "gpt-4o"),
+          instructions_shape: instruction_shape(instructions),
+          tools_count: length(Map.get(payload, "tools", []))
+        }
+      )
+
       {:ok, req, "/v1/responses", payload, Keyword.get(opts, :timeout, :infinity)}
     end
   end
@@ -418,7 +497,9 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         |> Req.Request.put_header("originator", "codex_cli_rs")
         |> Req.Request.put_header("chatgpt-account-id", account_id)
 
-      instructions = resolve_instruction_items(Keyword.get(opts, :decl_session_id))
+      instructions =
+        resolve_instruction_items(Keyword.get(opts, :decl_session_id))
+        |> normalize_instructions_for_chatgpt()
 
       payload =
         followup_payload_common(
@@ -431,6 +512,21 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
           store?: false
         )
         |> Map.put("text", %{"verbosity" => "medium"})
+
+      :telemetry.execute(
+        [
+          :providers,
+          :openai,
+          :request_built
+        ],
+        %{},
+        %{
+          mode: :oauth_followup,
+          model: Keyword.get(opts, :model, "gpt-5"),
+          instructions_shape: instruction_shape(instructions),
+          tools_count: length(Map.get(payload, "tools", []))
+        }
+      )
 
       if System.get_env("DEBUG_STREAM_EVENTS") == "1" do
         IO.puts("\n📌 Follow-up headers: session_id=" <> session_id_hdr)

@@ -229,6 +229,24 @@ defmodule TheMaestroWeb.MCPServersLive.FormComponent do
       {:ok, server} ->
         notify_parent({:saved, server})
 
+        # Prefetch and cache tools for this server so pickers respond instantly
+        Task.start(fn ->
+          case TheMaestro.MCP.Client.discover_server(server) do
+            {:ok, %{tools: tools}} ->
+              ttl_ms =
+                case server.metadata do
+                  %{} = md -> ((md["tool_cache_ttl_minutes"] || 60) |> to_int()) * 60_000
+                  _ -> 60 * 60_000
+                end
+
+              _ = TheMaestro.MCP.ToolsCache.put(server.id, tools, ttl_ms)
+              :ok
+
+            _ ->
+              :ok
+          end
+        end)
+
         {:noreply,
          socket
          |> put_flash(:info, "Updated #{server.display_name}.")
@@ -279,7 +297,20 @@ defmodule TheMaestroWeb.MCPServersLive.FormComponent do
          {:ok, tags} <- parse_list(raw.tags_raw, :tags),
          {:ok, headers} <- parse_key_values(raw.headers_raw, :headers),
          {:ok, env} <- parse_key_values(raw.env_raw, :env),
-         {:ok, metadata} <- parse_metadata(raw.metadata_raw) do
+         {:ok, metadata0} <- parse_metadata(raw.metadata_raw) do
+      metadata =
+        case Map.get(params, "tool_cache_ttl_minutes") do
+          ttl when is_binary(ttl) ->
+            if String.trim(ttl) != "" do
+              Map.put(metadata0, "tool_cache_ttl_minutes", to_int(ttl))
+            else
+              metadata0
+            end
+
+          _ ->
+            metadata0
+        end
+
       attrs =
         base_attrs
         |> Map.put("args", args)
@@ -322,6 +353,17 @@ defmodule TheMaestroWeb.MCPServersLive.FormComponent do
       end
     end)
   end
+
+  defp to_int(n) when is_integer(n), do: n
+
+  defp to_int(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      _ -> 60
+    end
+  end
+
+  defp to_int(_), do: 60
 
   defp parse_metadata(value) when value in [nil, ""] do
     {:ok, %{}}
@@ -586,6 +628,19 @@ defmodule TheMaestroWeb.MCPServersLive.FormComponent do
               help="Comma or newline separated."
             />
             <.input field={@form[:auth_token]} label="Auth token" />
+            <.input
+              name="server[tool_cache_ttl_minutes]"
+              type="number"
+              min="1"
+              value={
+                case @server.metadata do
+                  %{} = md -> md["tool_cache_ttl_minutes"] || ""
+                  _ -> ""
+                end
+              }
+              label="Tool cache TTL (minutes)"
+              help="Controls how long discovered tools are cached for quick pickers."
+            />
             <.input
               name="server[metadata_raw]"
               type="textarea"

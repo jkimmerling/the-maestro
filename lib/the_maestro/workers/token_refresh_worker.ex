@@ -293,7 +293,8 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
   """
   @spec refresh_token_for_provider(String.t(), String.t()) ::
           {:ok, OAuthToken.t()} | {:error, term()}
-  def refresh_token_for_provider("anthropic" = provider, auth_id) do
+  def refresh_token_for_provider(provider, auth_id)
+      when provider in ["anthropic", "gemini", "openai"] do
     saved =
       try do
         Auth.get_saved_authentication!(auth_id)
@@ -306,7 +307,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
         prov = sa.provider
         prov_str = if is_atom(prov), do: Atom.to_string(prov), else: prov
 
-        if prov_str == "anthropic" and sa.auth_type == :oauth do
+        if prov_str == provider and sa.auth_type == :oauth do
           process_token_refresh(provider, sa)
         else
           {:error, :not_found}

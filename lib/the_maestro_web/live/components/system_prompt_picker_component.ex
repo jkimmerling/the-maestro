@@ -146,6 +146,30 @@ defmodule TheMaestroWeb.SystemPromptPickerComponent do
                     </div>
 
                     <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-1" role="group" aria-label="Reorder">
+                        <button
+                          type="button"
+                          class="btn btn-xs"
+                          aria-label="Move up"
+                          phx-click="prompt_picker:move_up"
+                          phx-value-provider={@active_provider}
+                          phx-value-id={entry.id}
+                          disabled={@disabled or entry.prompt.immutable}
+                        >
+                          <.icon name="hero-chevron-up" class="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-xs"
+                          aria-label="Move down"
+                          phx-click="prompt_picker:move_down"
+                          phx-value-provider={@active_provider}
+                          phx-value-id={entry.id}
+                          disabled={@disabled or entry.prompt.immutable}
+                        >
+                          <.icon name="hero-chevron-down" class="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                       <button
                         type="button"
                         class={toggle_button_class(entry.enabled)}
@@ -190,8 +214,8 @@ defmodule TheMaestroWeb.SystemPromptPickerComponent do
                     class="mt-3 hidden rounded border border-slate-800 bg-slate-950/80 p-3 text-xs text-slate-200"
                     phx-no-curly-interpolation
                   >
-                    <code class="block whitespace-pre-wrap break-all text-[11px] leading-relaxed">
-                      <%= preview_payload(@active_provider, entry) %>
+                    <code class="block whitespace-pre-wrap break-words text-[11px] leading-relaxed">
+                      {preview_payload(@active_provider, entry)}
                     </code>
                   </div>
                 </div>

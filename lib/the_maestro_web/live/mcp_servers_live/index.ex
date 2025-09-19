@@ -86,7 +86,27 @@ defmodule TheMaestroWeb.MCPServersLive.Index do
 
   def handle_event("toggle_enabled", %{"id" => id}, socket) do
     server = MCP.get_server!(id)
-    {:ok, _} = MCP.update_server(server, %{is_enabled: !server.is_enabled})
+    {:ok, updated} = MCP.update_server(server, %{is_enabled: !server.is_enabled})
+
+    if updated.is_enabled do
+      # Warm tools cache when enabling a server
+      Task.start(fn ->
+        case MCP.Client.discover_server(updated) do
+          {:ok, %{tools: tools}} ->
+            ttl_ms =
+              case updated.metadata do
+                %{} = md -> (md["tool_cache_ttl_minutes"] || 60) * 60_000
+                _ -> 60 * 60_000
+              end
+
+            _ = TheMaestro.MCP.ToolsCache.put(updated.id, tools, ttl_ms)
+            :ok
+
+          _ ->
+            :ok
+        end
+      end)
+    end
 
     {:noreply, reload_servers(socket)}
   end
@@ -96,12 +116,30 @@ defmodule TheMaestroWeb.MCPServersLive.Index do
 
     case MCPClient.discover_server(server) do
       {:ok, %{tools: tools}} ->
+        ttl_ms =
+          case server.metadata do
+            %{} = md -> ((md["tool_cache_ttl_minutes"] || 60) |> to_int()) * 60_000
+            _ -> 60 * 60_000
+          end
+
+        _ = TheMaestro.MCP.ToolsCache.put(server.id, tools, ttl_ms)
         {:noreply, socket |> put_flash(:info, format_test_success(server, tools))}
 
       {:error, reason} ->
         {:noreply, socket |> put_flash(:error, format_test_error(server, reason))}
     end
   end
+
+  defp to_int(n) when is_integer(n), do: n
+
+  defp to_int(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      _ -> 60
+    end
+  end
+
+  defp to_int(_), do: 60
 
   defp close_modal(socket) do
     socket

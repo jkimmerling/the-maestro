@@ -57,6 +57,21 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
         }
         |> maybe_put_system_instruction(system_instruction)
 
+      :telemetry.execute(
+        [
+          :providers,
+          :gemini,
+          :request_built
+        ],
+        %{},
+        %{
+          auth_type: :api_key,
+          model: model_path,
+          system_instruction?: not is_nil(system_instruction),
+          tools_count: 0
+        }
+      )
+
       StreamingAdapter.stream_request(req,
         method: :post,
         url: "/v1beta/#{model_path}:streamGenerateContent",
@@ -125,6 +140,28 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     }
 
     req = maybe_http_debug(req, payload)
+
+    tools_count =
+      case get_in(request, ["tools"]) do
+        [%{"function_declarations" => decls}] when is_list(decls) -> length(decls)
+        [%{"functionDeclarations" => decls}] when is_list(decls) -> length(decls)
+        _ -> 0
+      end
+
+    :telemetry.execute(
+      [
+        :providers,
+        :gemini,
+        :request_built
+      ],
+      %{},
+      %{
+        auth_type: :oauth,
+        model: m,
+        system_instruction?: not is_nil(get_in(request, ["systemInstruction"])),
+        tools_count: tools_count
+      }
+    )
 
     StreamingAdapter.stream_request(req,
       method: :post,
@@ -202,6 +239,28 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
 
           req = maybe_http_debug(req, payload)
 
+          tools_count =
+            case get_in(request, ["tools"]) do
+              [%{"function_declarations" => decls}] when is_list(decls) -> length(decls)
+              [%{"functionDeclarations" => decls}] when is_list(decls) -> length(decls)
+              _ -> 0
+            end
+
+          :telemetry.execute(
+            [
+              :providers,
+              :gemini,
+              :request_built
+            ],
+            %{},
+            %{
+              auth_type: :oauth_followup,
+              model: m,
+              system_instruction?: not is_nil(get_in(request, ["systemInstruction"])),
+              tools_count: tools_count
+            }
+          )
+
           StreamingAdapter.stream_request(
             req,
             method: :post,
@@ -225,8 +284,10 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   # -- Tools exposure for Gemini --
   # Merge built-ins with MCP-declared tools for this session.
   defp function_declarations_for_session(session_id) do
-    mcp_tools = MCPRegistry.to_gemini_decls(session_id)
-    builtins = built_in_function_declarations()
+    allowed = allowed_names_for(session_id, :gemini)
+
+    mcp_tools = MCPRegistry.to_gemini_decls(session_id) |> maybe_filter_tools(allowed)
+    builtins = built_in_function_declarations() |> maybe_filter_tools(allowed)
     # prefer MCP if name collides
     names = MapSet.new(Enum.map(mcp_tools, & &1["name"]))
     builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
@@ -237,6 +298,31 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     )
 
     decls
+  end
+
+  defp maybe_filter_tools(list, :absent), do: list
+
+  defp maybe_filter_tools(list, {:present, names}) when is_list(list) do
+    allowed = MapSet.new(names)
+    Enum.filter(list, fn %{"name" => n} -> MapSet.member?(allowed, n) end)
+  end
+
+  # Read persisted allowed tool names for the provider; returns :absent when not set
+  defp allowed_names_for(session_id, provider) when is_binary(session_id) and is_atom(provider) do
+    prov = Atom.to_string(provider)
+
+    case TheMaestro.Conversations.get_session!(session_id) do
+      %TheMaestro.Conversations.Session{tools: %{"allowed" => %{} = m}} ->
+        case Map.fetch(m, prov) do
+          {:ok, list} when is_list(list) -> {:present, Enum.map(list, &to_string/1)}
+          _ -> :absent
+        end
+
+      _ ->
+        :absent
+    end
+  rescue
+    _ -> :absent
   end
 
   # Resolve the Conversations session UUID for use by MCP.Registry.

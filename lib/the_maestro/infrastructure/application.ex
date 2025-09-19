@@ -20,6 +20,7 @@ defmodule TheMaestro.Application do
       finch_child_spec(:openai_finch, finch_pools[:openai]),
       finch_child_spec(:gemini_finch, finch_pools[:gemini]),
       {Phoenix.PubSub, name: TheMaestro.PubSub},
+      {Task, fn -> TheMaestro.MCP.Warmup.run() end},
       # Session streaming manager (Task.Supervisor + Manager)
       {Task.Supervisor, name: TheMaestro.Sessions.TaskSup},
       TheMaestro.Sessions.Manager,

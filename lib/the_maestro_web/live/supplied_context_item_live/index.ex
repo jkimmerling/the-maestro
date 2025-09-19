@@ -10,7 +10,7 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} container_class={container_class(@filter_type)}>
       <.header>
         Listing Supplied context items
         <:actions>
@@ -47,16 +47,19 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Index do
           <% end %>
         </div>
 
-        <div id="system-prompts" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div
+          id="system-prompts"
+          class="mx-auto w-full max-w-[1600px] grid gap-6 sm:grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3"
+        >
           <%= for {dom_id, prompt} <- @streams.supplied_context_items do %>
             <div
               id={dom_id}
-              class="rounded-lg border border-slate-800 bg-slate-900/60 p-4 shadow-sm"
+              class="rounded-lg border border-slate-800 bg-slate-900/60 p-4 shadow-sm overflow-hidden"
             >
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <div class="flex flex-wrap items-center gap-2">
-                    <h3 class="text-sm font-semibold text-slate-100">{prompt.name}</h3>
+                    <h3 class="text-sm font-semibold text-slate-100 break-words">{prompt.name}</h3>
                     <span class="badge badge-xs text-slate-300">
                       {provider_label(prompt.provider)}
                     </span>
@@ -113,10 +116,10 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Index do
                 </button>
                 <div
                   id={preview_dom_id(prompt.id)}
-                  class="mt-2 hidden rounded border border-slate-800 bg-slate-950/80 p-3 text-xs text-slate-200"
+                  class="mt-2 hidden rounded border border-slate-800 bg-slate-950/80 p-3 text-xs text-slate-200 overflow-x-auto max-h-80 overflow-y-auto"
                   phx-no-curly-interpolation
                 >
-                  <code class="block whitespace-pre-wrap break-all text-[11px] leading-relaxed">
+                  <code class="block whitespace-pre-wrap break-words text-[11px] leading-relaxed">
                     {preview_payload(prompt)}
                   </code>
                 </div>
@@ -321,4 +324,8 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Index do
   defp preview_dom_id(id), do: "prompt-preview-#{id}"
 
   defp preview_toggle(dom_id), do: JS.toggle(to: "##{dom_id}")
+
+  # Layout container width rules per tab
+  defp container_class(:system_prompt), do: "mx-auto w-[80vw] max-w-[1600px] space-y-4"
+  defp container_class(_), do: "mx-auto max-w-2xl space-y-4"
 end

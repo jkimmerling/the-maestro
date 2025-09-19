@@ -445,6 +445,20 @@ defmodule TheMaestro.Conversations do
   end
 
   @doc """
+  Returns a list of thread ids and labels regardless of session attachment.
+  Useful for pickers that allow reattaching an existing conversation to a new session.
+  """
+  def list_threads do
+    Repo.all(
+      from e in ChatEntry,
+        where: not is_nil(e.thread_id),
+        group_by: [e.thread_id],
+        order_by: [desc: max(e.inserted_at)],
+        select: %{thread_id: e.thread_id, label: max(e.thread_label)}
+    )
+  end
+
+  @doc """
   Attaches all entries in a thread to the given session.
   """
   def attach_thread_to_session(thread_id, session_id)

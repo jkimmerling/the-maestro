@@ -1,0 +1,77 @@
+name: Nightly E2E
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # 9:00 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.16'
+          otp-version: '26'
+
+      - name: Cache Mix deps
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: mix-deps-${{ hashFiles('**/mix.lock') }}
+
+      - name: Install deps
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+
+      - name: Run tests
+        run: mix test
+
+      - name: Run E2E (OpenAI)
+        if: ${{ env.OPENAI_SESSION_NAME != '' }}
+        env:
+          OPENAI_SESSION_NAME: ${{ secrets.OPENAI_SESSION_NAME }}
+        run: |
+          mix e2e.openai.mcp
+          mix e2e.openai.tools
+
+      - name: Run E2E (Anthropic)
+        if: ${{ env.ANTHROPIC_SESSION_NAME != '' }}
+        env:
+          ANTHROPIC_SESSION_NAME: ${{ secrets.ANTHROPIC_SESSION_NAME }}
+        run: |
+          mix e2e.anthropic.mcp
+          mix e2e.anthropic.tools
+
+      - name: Run E2E (Gemini)
+        if: ${{ env.GEMINI_SESSION_NAME != '' }}
+        env:
+          GEMINI_SESSION_NAME: ${{ secrets.GEMINI_SESSION_NAME }}
+        run: |
+          mix e2e.gemini.mcp
+          mix e2e.gemini.tools
+
+  visuals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: ${{ false }} # opt-in only; flip to true when ready
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright
+        run: |
+          npm ci --prefix playwright
+          npx --prefix playwright playwright install --with-deps
+      - name: Run visual tests
+        env:
+          APP_BASE_URL: http://localhost:4000
+        run: |
+          npx --prefix playwright playwright test

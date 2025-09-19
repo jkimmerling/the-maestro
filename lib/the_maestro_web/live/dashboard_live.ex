@@ -29,6 +29,9 @@ defmodule TheMaestroWeb.DashboardLive do
       |> assign(:show_session_dir_picker, false)
       |> assign(:mcp_server_options, MCP.server_options())
       |> assign(:session_mcp_selected_ids, [])
+      |> assign(:tool_picker_allowed_map, %{})
+      |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers([]))
+      |> assign(:mcp_warming, false)
       |> assign(:show_mcp_modal, false)
       |> assign(:session_form_params, %{})
       |> assign(:prompt_picker_provider, :openai)
@@ -171,6 +174,7 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:session_form, to_form(cs))
      |> assign(:mcp_server_options, MCP.server_options())
      |> assign(:session_mcp_selected_ids, [])
+     |> assign(:ui_sections, %{prompt: true, persona: true, memory: true})
      |> assign(:session_form_params, %{})
      |> assign(:show_mcp_modal, false)
      |> assign(:show_session_modal, true)}
@@ -218,6 +222,10 @@ defmodule TheMaestroWeb.DashboardLive do
         models = build_model_options(%{"auth_id" => params["auth_id"]})
         {:noreply, assign(socket, :session_model_options, models)}
 
+      "mcp_server_ids" ->
+        _ = Task.start(fn -> warm_mcp_tools_cache(selected); send(self(), :refresh_mcp_inventory) end)
+        {:noreply, assign(socket, :mcp_warming, true)}
+
       _ ->
         {:noreply, socket}
     end
@@ -251,6 +259,8 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply, assign(socket, :show_mcp_modal, false)}
   end
 
+  # All dynamic UI events handled inside SessionFormComponent to keep LiveView dry.
+
   def handle_event("session_use_root_dir", _params, socket) do
     wd = File.cwd!() |> Path.expand()
 
@@ -265,7 +275,10 @@ defmodule TheMaestroWeb.DashboardLive do
      socket
      |> assign(:session_form, to_form(cs, action: :validate))
      |> assign(:session_form_params, params)
-     |> assign(:session_mcp_selected_ids, selected)}
+     |> assign(:session_mcp_selected_ids, selected)
+     |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers(selected))}
+    _ = Task.start(fn -> warm_mcp_tools_cache(selected); send(self(), :refresh_mcp_inventory) end)
+    {:noreply, assign(socket, :mcp_warming, true)}
   end
 
   def handle_event("session_save", %{"session" => params}, socket) do
@@ -512,11 +525,21 @@ defmodule TheMaestroWeb.DashboardLive do
          {:ok, p3} <- decode_memory_json(p2) do
       prompt_map = prompt_specs_from_builder(socket.assigns[:session_prompt_builder] || %{})
 
+      payload0 =
+        if prompt_map == %{}, do: Map.put_new(p3, "system_prompt_ids_by_provider", %{}), else: Map.put(p3, "system_prompt_ids_by_provider", prompt_map)
+
+      # Persist MCP server ids chosen via checkboxes (component emits hidden fields into params)
+      payload1 = Map.put(payload0, "mcp_server_ids", Map.get(params, "mcp_server_ids", []))
+
+      # Prefer tools_json from hidden field emitted by SessionFormComponent
       payload =
-        if prompt_map == %{} do
-          Map.put_new(p3, "system_prompt_ids_by_provider", %{})
-        else
-          Map.put(p3, "system_prompt_ids_by_provider", prompt_map)
+        case Map.get(params, "tools_json") do
+          s when is_binary(s) and byte_size(s) > 0 ->
+            case Jason.decode(s) do
+              {:ok, %{} = tools_map} -> Map.put(payload1, "tools", tools_map)
+              _ -> payload1
+            end
+          _ -> payload1
         end
 
       {:ok, payload}
@@ -622,7 +645,7 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply, put_active_stream(socket, sid, type)}
   end
 
-  def handle_info(_msg, socket), do: {:noreply, socket}
+  # moved catch-all to end of module to avoid overshadowing specific clauses
 
   defp put_active_stream(socket, session_id, type) do
     active? = type in [:thinking, :content, :function_call, :usage]
@@ -685,6 +708,9 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   defp default_models_for(_), do: []
+
+  # helpers mirrored from SessionChatLive
+  # removed: stringify_provider_keys (unused)
 
   # Convert provider strings/atoms to a safe allowed atom
   defp to_provider_atom(p) when is_atom(p) do
@@ -841,28 +867,7 @@ defmodule TheMaestroWeb.DashboardLive do
   defp provider_label(:gemini), do: "Gemini"
   defp provider_label(other), do: other |> to_string() |> String.capitalize()
 
-  defp prompt_error_message({:immutable_prompt_disabled, prompt_id}, socket) do
-    "#{prompt_name(socket, prompt_id)} is immutable and must remain enabled."
-  end
-
-  defp prompt_error_message(:provider_mismatch, _socket),
-    do: "Prompt provider mismatch. Refresh the library and try again."
-
-  defp prompt_error_message(:unknown_prompt, _socket),
-    do: "Prompt could not be found. Refresh the library and try again."
-
-  defp prompt_error_message(reason, _socket) when is_binary(reason), do: reason
-  defp prompt_error_message(reason, _socket), do: "Prompt update failed: #{inspect(reason)}"
-
-  defp prompt_name(socket, prompt_id) do
-    socket.assigns[:prompt_catalog]
-    |> Kernel.||(%{})
-    |> Map.get(prompt_id)
-    |> case do
-      nil -> prompt_id
-      prompt -> prompt.name
-    end
-  end
+  # removed: prompt error helpers (unused)
 
   defp reorder_entries(entries, ordered_ids) do
     current_ids = Enum.map(entries, & &1.id) |> MapSet.new()
@@ -1054,104 +1059,84 @@ defmodule TheMaestroWeb.DashboardLive do
             class="flex flex-col max-h-[80vh]"
           >
             <div class="flex-1 overflow-y-auto pr-1">
-            <.input field={@session_form[:name]} type="text" label="Session Name" />
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label class="text-xs">Provider (filter)</label>
-                <select name="session[provider]" class="input">
-                  <%= for p <- ["openai", "anthropic", "gemini"] do %>
-                    <option value={p} selected={@session_provider == p}>{p}</option>
-                  <% end %>
-                </select>
-              </div>
-              <.input
-                field={@session_form[:auth_id]}
-                type="select"
-                label="Saved Auth"
-                options={@session_auth_options}
-                prompt="Select auth"
-              />
-              <.input
-                field={@session_form[:model_id]}
-                type="select"
-                label="Model"
-                options={@session_model_options}
-                prompt="(auto)"
-              />
-              <div>
-                <.input field={@session_form[:working_dir]} type="text" label="Working Directory" />
-                <div class="mt-1 flex gap-2">
-                  <button type="button" class="btn btn-xs btn-amber" phx-click="session_use_root_dir">
-                    ROOT
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-xs btn-amber"
-                    phx-click="open_session_dir_picker"
-                  >
-                    <.icon name="hero-folder" class="h-4 w-4" />
-                  </button>
+              <.input field={@session_form[:name]} type="text" label="Session Name" />
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label class="text-xs">Provider (filter)</label>
+                  <select name="session[provider]" class="input">
+                    <%= for p <- ["openai", "anthropic", "gemini"] do %>
+                      <option value={p} selected={@session_provider == p}>{p}</option>
+                    <% end %>
+                  </select>
+                </div>
+                <.input
+                  field={@session_form[:auth_id]}
+                  type="select"
+                  label="Saved Auth"
+                  options={@session_auth_options}
+                  prompt="Select auth"
+                />
+                <.input
+                  field={@session_form[:model_id]}
+                  type="select"
+                  label="Model"
+                  options={@session_model_options}
+                  prompt="(auto)"
+                />
+                <div>
+                  <.input field={@session_form[:working_dir]} type="text" label="Working Directory" />
+                  <div class="mt-1 flex gap-2">
+                    <button
+                      type="button"
+                      class="btn btn-xs btn-amber"
+                      phx-click="session_use_root_dir"
+                    >
+                      ROOT
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-xs btn-amber"
+                      phx-click="open_session_dir_picker"
+                    >
+                      <.icon name="hero-folder" class="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="mt-2">
-              <label class="text-xs">Chat History</label>
-              <div class="text-sm opacity-80">Start New Chat or attach an existing thread</div>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <.input
-                field={@session_form[:persona_id]}
-                type="select"
-                label="Persona"
-                options={@persona_options}
-                prompt="(optional)"
-              />
-              <.input
-                name="session[attach_thread_id]"
-                type="select"
-                label="Attach Existing Thread"
-                options={@orphan_threads}
-                prompt="(Start New Chat)"
-                value={nil}
-              />
-              <div>
-                <label class="text-xs">Memory (JSON)</label>
-                <textarea name="session[memory_json]" rows="4" class="textarea-terminal"></textarea>
+              <div class="mt-2">
+                <label class="text-xs">Chat History</label>
+                <div class="text-sm opacity-80">Start New Chat or attach an existing thread</div>
               </div>
-            </div>
-            <div class="mt-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <.input
+                  name="session[attach_thread_id]"
+                  type="select"
+                  label="Attach Existing Thread"
+                  options={@orphan_threads}
+                  prompt="(Start New Chat)"
+                  value={nil}
+                />
+              </div>
+
+              <!-- Shared sections: System Prompts, Persona, Memory, Tool pickers, MCPs -->
               <.live_component
-                module={TheMaestroWeb.SystemPromptPickerComponent}
-                id="session-prompt-picker"
-                providers={@prompt_picker_providers}
-                active_provider={@prompt_picker_provider}
-                selected_by_provider={@session_prompt_builder}
-                library_by_provider={@prompt_library}
-                selections={@prompt_picker_selection}
+                module={TheMaestroWeb.SessionFormComponent}
+                id="session-modal-form-body"
+                mode={:create}
+                provider={@prompt_picker_provider}
+                prompt_picker_provider={@prompt_picker_provider}
+                session_prompt_builder={@session_prompt_builder}
+                prompt_library={@prompt_library}
+                prompt_picker_selection={@prompt_picker_selection}
+                ui_sections={@ui_sections || %{prompt: true, persona: true, memory: true}}
+                session_form={@session_form}
+                persona_options={@persona_options}
+                mcp_server_options={@mcp_server_options}
+                session_mcp_selected_ids={@session_mcp_selected_ids}
+                mcp_warming={@mcp_warming}
+                tool_picker_allowed={@tool_picker_allowed_map}
+                tool_inventory_by_provider={@tool_inventory_by_provider}
               />
-            </div>
-            <div class="mt-4 space-y-2">
-              <div class="flex items-center justify-between">
-                <label class="text-xs font-semibold uppercase tracking-wide">MCP Servers</label>
-                <button type="button" class="btn btn-xs" phx-click="open_mcp_modal">
-                  <.icon name="hero-plus" class="h-4 w-4" />
-                  <span class="ml-1">New</span>
-                </button>
-              </div>
-              <p class="text-[11px] text-slate-400">
-                Select one or more connectors to preload for this session. Disabled entries appear with
-                a badge.
-              </p>
-              <.input
-                type="select"
-                name="session[mcp_server_ids][]"
-                label=""
-                multiple
-                options={@mcp_server_options}
-                value={@session_mcp_selected_ids}
-                class="min-h-[6rem]"
-              />
-            </div>
             </div>
             <div class="sticky bottom-0 mt-3 border-t border-base-300 bg-base-100 pt-3">
               <div class="flex justify-end gap-2">
@@ -1294,5 +1279,47 @@ defmodule TheMaestroWeb.DashboardLive do
       </div>
     </div>
     """
+  end
+  # -- MCP inventory/warmup helpers and message handling --
+
+  @impl true
+  def handle_info(:refresh_mcp_inventory, socket) do
+    selected = socket.assigns[:session_mcp_selected_ids] || []
+    {:noreply,
+     socket
+     |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers(selected))
+     |> assign(:mcp_warming, false)}
+  end
+
+  # Catch-all handle_info should be last among handle_info clauses
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
+  defp build_tool_inventory_for_servers(server_ids) do
+    %{
+      openai: TheMaestro.Tools.Inventory.list_for_provider_with_servers(server_ids, :openai),
+      anthropic: TheMaestro.Tools.Inventory.list_for_provider_with_servers(server_ids, :anthropic),
+      gemini: TheMaestro.Tools.Inventory.list_for_provider_with_servers(server_ids, :gemini)
+    }
+  end
+
+  defp warm_mcp_tools_cache(server_ids) do
+    Enum.each(server_ids, fn sid ->
+      case TheMaestro.MCP.ToolsCache.get(sid, 60 * 60_000) do
+        {:ok, _} -> :ok
+        _ ->
+          server = TheMaestro.MCP.get_server!(sid)
+          case TheMaestro.MCP.Client.discover_server(server) do
+            {:ok, %{tools: tools}} ->
+              ttl_ms =
+                case server.metadata do
+                  %{} = md -> ((md["tool_cache_ttl_minutes"] || 60) * 60_000)
+                  _ -> 60 * 60_000
+                end
+              _ = TheMaestro.MCP.ToolsCache.put(sid, tools, ttl_ms)
+              :ok
+            _ -> :ok
+          end
+      end
+    end)
   end
 end

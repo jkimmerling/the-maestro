@@ -1,6 +1,7 @@
 defmodule Mix.Tasks.E2e.Gemini.Mcp do
   use Mix.Task
-  @shortdoc "E2E: Gemini OAuth + Context7 MCP resolve_library_id → functionResponse"
+
+  @shortdoc "E2E: Gemini OAuth + MCP resolve_library_id → functionResponse + systemInstruction + no-duplicates"
 
   @moduledoc """
   Runs an end-to-end check against Gemini OAuth (Cloud Code) using the session’s
@@ -23,6 +24,7 @@ defmodule Mix.Tasks.E2e.Gemini.Mcp do
   """
 
   alias TheMaestro.{Auth, Chat, Conversations, MCP}
+  alias TheMaestro.Conversations.Translator
 
   @impl true
   def run(args) do
@@ -47,13 +49,25 @@ defmodule Mix.Tasks.E2e.Gemini.Mcp do
 
     # Subscribe to stream events
     Chat.subscribe(session_id)
+    # Telemetry shape capture (real request)
+    {:ok, cap} = Agent.start_link(fn -> nil end)
+    handler_id = attach_gemini_shape_handler(cap)
 
     prompt = "please use the context7 mcp to look up the docs on Elixir ecto migrations"
+    pre = message_count(session_id)
     {:ok, turn} = Chat.start_turn(session_id, nil, prompt)
 
     # Collect events until finalized
     final = collect_turn_outcome(session_id, turn.stream_id)
     validate_outcome!(final)
+    validate_normalization!(session_id, pre)
+
+    meta = wait_for_meta(cap)
+
+    unless meta[:system_instruction?] in [true, false],
+      do: Mix.raise("Gemini systemInstruction telemetry missing")
+
+    :telemetry.detach(handler_id)
 
     Mix.shell().info(
       "E2E OK: Gemini OAuth + Context7 MCP: model called resolve-library-id, stream finalized."
@@ -150,4 +164,73 @@ defmodule Mix.Tasks.E2e.Gemini.Mcp do
     do: Mix.raise("Model did not call resolve-library-id")
 
   # No file-based assertion; the presence of a function call + finalization is enough
+  # ===== Shape and normalization helpers =====
+  defp attach_gemini_shape_handler(agent) do
+    id = "e2e-gemini-shape-" <> Integer.to_string(System.unique_integer([:positive]))
+
+    :telemetry.attach(
+      id,
+      [:providers, :gemini, :request_built],
+      fn _ev, _meas, meta, a ->
+        Agent.update(a, fn _ -> meta end)
+      end,
+      agent
+    )
+
+    id
+  end
+
+  defp wait_for_meta(agent, deadline_ms \\ 10_000) do
+    t0 = System.monotonic_time(:millisecond)
+    do_wait_meta(agent, t0 + deadline_ms)
+  end
+
+  defp do_wait_meta(agent, deadline) do
+    meta = Agent.get(agent, & &1)
+
+    cond do
+      is_map(meta) ->
+        meta
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        %{}
+
+      true ->
+        Process.sleep(100)
+        do_wait_meta(agent, deadline)
+    end
+  end
+
+  defp message_count(session_id) do
+    case Conversations.latest_snapshot(session_id) do
+      %{combined_chat: %{"messages" => msgs}} -> length(msgs)
+      _ -> 0
+    end
+  end
+
+  defp validate_normalization!(session_id, pre) do
+    afterc = wait_until(fn -> message_count(session_id) end, pre + 2)
+    unless afterc == pre + 2, do: Mix.raise("Conversation not normalized (+2 expected)")
+  end
+
+  defp wait_until(fun, target, deadline_ms \\ 5_000) do
+    t0 = System.monotonic_time(:millisecond)
+    do_wait_until(fun, target, t0 + deadline_ms)
+  end
+
+  defp do_wait_until(fun, target, deadline) do
+    val = fun.()
+
+    cond do
+      val == target ->
+        val
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        val
+
+      true ->
+        Process.sleep(100)
+        do_wait_until(fun, target, deadline)
+    end
+  end
 end

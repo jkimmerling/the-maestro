@@ -21,6 +21,10 @@ defmodule TheMaestroWeb.SessionChatLiveUITest do
     # Switch provider; ensures auth select re-renders (options presence)
     render_change(view, "validate_config", %{provider: "openai"})
     assert has_element?(view, "select[name=auth_id]")
+
+    # Prompt picker defaults collapsed; expand and assert
+    view |> element("#toggle-prompt") |> render_click()
+    assert has_element?(view, "#session-config-prompt-picker")
   end
 
   test "new and clear chat buttons exist", %{conn: conn, session: s} do
