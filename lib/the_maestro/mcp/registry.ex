@@ -59,7 +59,7 @@ defmodule TheMaestro.MCP.Registry do
         connectors = MCP.session_connector_map(session)
         mcps_hash = connectors_signature(session, connectors)
 
-        case RegistryCache.get({:anthropic, session_id}, mcps_hash) do
+        case RegistryCache.get("anth:" <> session_id, mcps_hash) do
           {:ok, decls} ->
             decls
 
@@ -69,7 +69,7 @@ defmodule TheMaestro.MCP.Registry do
               |> collect_anthropic_decls(session_id, connectors)
               |> uniq_by_name()
 
-            _ = RegistryCache.put({:anthropic, session_id}, mcps_hash, decls)
+            _ = RegistryCache.put("anth:" <> session_id, mcps_hash, decls)
             decls
         end
 
@@ -94,7 +94,7 @@ defmodule TheMaestro.MCP.Registry do
         connectors = MCP.session_connector_map(session)
         mcps_hash = connectors_signature(session, connectors)
 
-        case RegistryCache.get({:openai, session_id}, mcps_hash) do
+        case RegistryCache.get("oai:" <> session_id, mcps_hash) do
           {:ok, decls} ->
             decls
 
@@ -104,7 +104,7 @@ defmodule TheMaestro.MCP.Registry do
               |> collect_openai_decls(session_id, connectors)
               |> nudge_openai_tool_descriptions()
 
-            _ = RegistryCache.put({:openai, session_id}, mcps_hash, decls)
+            _ = RegistryCache.put("oai:" <> session_id, mcps_hash, decls)
             decls
         end
 

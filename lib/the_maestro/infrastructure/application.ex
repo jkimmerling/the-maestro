@@ -4,6 +4,7 @@ defmodule TheMaestro.Application do
   @moduledoc false
 
   use Application
+  alias TheMaestro.Cache.Redis, as: RedisCache
   alias TheMaestro.MCP.Warmup
 
   @impl true
@@ -16,6 +17,8 @@ defmodule TheMaestro.Application do
       TheMaestro.Repo,
       {DNSCluster, query: Application.get_env(:the_maestro, :dns_cluster_query) || :ignore},
       {Oban, Application.fetch_env!(:the_maestro, Oban)},
+      # Redis cache connection (required for SuppliedContext caching)
+      RedisCache,
       # Finch pools for HTTP client connection pooling
       finch_child_spec(:anthropic_finch, finch_pools[:anthropic]),
       finch_child_spec(:openai_finch, finch_pools[:openai]),

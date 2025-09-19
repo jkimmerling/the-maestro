@@ -165,3 +165,7 @@ config :the_maestro, :openai_oauth,
 config :the_maestro,
        :openai_oauth_client_id,
        System.get_env("OPENAI_OAUTH_CLIENT_ID") || "app_EMoamEEZ73f0CkXaXp7hrann"
+
+# Redis cache configuration
+config :the_maestro, :redis_url, System.get_env("REDIS_URL") || "redis://localhost:6379/0"
+config :the_maestro, :redis_cache_prefix, System.get_env("REDIS_CACHE_PREFIX") || "the_maestro:prompts"

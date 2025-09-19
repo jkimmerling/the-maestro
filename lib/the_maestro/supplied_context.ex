@@ -4,11 +4,11 @@ defmodule TheMaestro.SuppliedContext do
   """
 
   import Ecto.Query, warn: false
+  alias TheMaestro.Cache.Redis
   alias TheMaestro.Repo
 
   alias TheMaestro.SuppliedContext.SuppliedContextItem
 
-  @cache_table :supplied_context_prompt_cache
   @cache_ttl_ms 120_000
 
   @doc """
@@ -186,8 +186,7 @@ defmodule TheMaestro.SuppliedContext do
 
   @doc false
   def invalidate_prompt_cache do
-    ensure_cache_table()
-    :ets.delete_all_objects(@cache_table)
+    Redis.delete_all()
     :ok
   end
 
@@ -299,49 +298,8 @@ defmodule TheMaestro.SuppliedContext do
   end
 
   defp cache_fetch(key, fun) do
-    ensure_cache_table()
-
-    case :ets.lookup(@cache_table, key) do
-      [{^key, %{value: value, at_ms: at_ms}}] ->
-        if fresh_cache_entry?(at_ms) do
-          value
-        else
-          compute_and_cache(key, fun)
-        end
-
-      _ ->
-        compute_and_cache(key, fun)
-    end
+    Redis.fetch(key, @cache_ttl_ms, fun)
   end
-
-  defp compute_and_cache(key, fun) do
-    value = fun.()
-    :ets.insert(@cache_table, {key, %{value: value, at_ms: now_ms()}})
-    value
-  end
-
-  defp ensure_cache_table do
-    case :ets.whereis(@cache_table) do
-      :undefined ->
-        try do
-          :ets.new(@cache_table, [:named_table, :set, :public, read_concurrency: true])
-          :ok
-        rescue
-          ArgumentError -> :ok
-        end
-
-      _ ->
-        :ok
-    end
-  end
-
-  defp fresh_cache_entry?(at_ms) when is_integer(at_ms) do
-    now_ms() - at_ms < @cache_ttl_ms
-  end
-
-  defp fresh_cache_entry?(_), do: false
-
-  defp now_ms, do: System.monotonic_time(:millisecond)
 
   defp tap_success({:ok, result} = ok, fun) when is_function(fun, 1) do
     fun.(result)
