@@ -147,6 +147,11 @@ defmodule TheMaestro.Conversations do
       from(e in ChatEntry, where: e.session_id == ^session.id)
       |> Repo.update_all(set: [session_id: nil])
 
+      {:ok, session} =
+        session
+        |> Ecto.Changeset.change(latest_chat_entry_id: nil)
+        |> Repo.update()
+
       case Repo.delete(session) do
         {:ok, deleted} -> deleted
         {:error, changeset} -> Repo.rollback(changeset)
@@ -427,8 +432,67 @@ defmodule TheMaestro.Conversations do
   Lists orphan chat history entries (those not attached to a session).
   Intended for the Chat Histories admin view.
   """
-  def list_chat_history do
+  def list_orphan_chat_entries do
     Repo.all(from e in ChatEntry, where: is_nil(e.session_id), order_by: [desc: e.inserted_at])
+  end
+
+  @doc """
+  Returns aggregated chat history information for sessions that have messages.
+  Each entry includes the session struct, total message count, and the most
+  recent chat entry metadata.
+  """
+  def list_chat_history_summary do
+    counts_by_session =
+      Repo.all(
+        from e in ChatEntry,
+          where: not is_nil(e.session_id),
+          group_by: e.session_id,
+          select: {e.session_id, count(e.id)}
+      )
+      |> Map.new()
+
+    if map_size(counts_by_session) == 0,
+      do: [],
+      else: build_chat_history_summary(counts_by_session)
+  end
+
+  defp build_chat_history_summary(counts_by_session) when is_map(counts_by_session) do
+    session_ids = Map.keys(counts_by_session)
+
+    latest_entries =
+      Repo.all(
+        from e in ChatEntry,
+          where: e.session_id in ^session_ids,
+          order_by: [desc: e.inserted_at],
+          distinct: e.session_id,
+          select:
+            {e.session_id,
+             %{
+               id: e.id,
+               inserted_at: e.inserted_at,
+               actor: e.actor,
+               provider: e.provider,
+               turn_index: e.turn_index
+             }}
+      )
+      |> Map.new()
+
+    sessions =
+      Repo.all(from s in Session, where: s.id in ^session_ids, preload: [:saved_authentication])
+
+    sessions
+    |> Enum.sort_by(&latest_dt(&1, latest_entries), fn a, b -> DateTime.compare(a, b) != :lt end)
+    |> Enum.map(fn session ->
+      %{
+        session: session,
+        message_count: Map.fetch!(counts_by_session, session.id),
+        latest_entry: Map.get(latest_entries, session.id)
+      }
+    end)
+  end
+
+  defp latest_dt(session, latest_entries) do
+    Map.get(latest_entries, session.id, %{inserted_at: session.inserted_at}).inserted_at
   end
 
   @doc """
@@ -497,7 +561,7 @@ defmodule TheMaestro.Conversations do
   Returns lightweight session options for selects: [{label, id}].
   """
   def list_sessions_brief do
-    Repo.all(from s in Session, order_by: [desc: s.inserted_at])
+    Repo.all(from s in Session, order_by: [desc: s.inserted_at], preload: [:saved_authentication])
     |> Enum.map(fn s ->
       {s.name || (s.saved_authentication && s.saved_authentication.name) ||
          "sess-" <> String.slice(s.id, 0, 8), s.id}
