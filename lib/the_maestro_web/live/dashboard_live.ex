@@ -199,13 +199,10 @@ defmodule TheMaestroWeb.DashboardLive do
       Conversations.change_session(%Conversations.Session{}, params)
       |> Map.put(:action, :validate)
 
-    selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
-
     socket =
       socket
       |> assign(:session_form, to_form(cs, action: :validate))
       |> assign(:session_form_params, params)
-      |> assign(:session_mcp_selected_ids, selected)
 
     case target do
       "provider" ->
@@ -224,13 +221,8 @@ defmodule TheMaestroWeb.DashboardLive do
         {:noreply, assign(socket, :session_model_options, models)}
 
       "mcp_server_ids" ->
-        _ =
-          Task.start(fn ->
-            warm_mcp_tools_cache(selected)
-            send(self(), :refresh_mcp_inventory)
-          end)
-
-        {:noreply, assign(socket, :mcp_warming, true)}
+        # Selection is stateful within SessionFormComponent; ignore change echo here
+        {:noreply, socket}
 
       _ ->
         {:noreply, socket}
@@ -243,13 +235,10 @@ defmodule TheMaestroWeb.DashboardLive do
       Conversations.change_session(%Conversations.Session{}, params)
       |> Map.put(:action, :validate)
 
-    selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
-
     {:noreply,
      socket
      |> assign(:session_form, to_form(cs, action: :validate))
      |> assign(:session_form_params, params)
-     |> assign(:session_mcp_selected_ids, selected)
      |> ensure_prompt_builder()}
   end
 
@@ -271,7 +260,6 @@ defmodule TheMaestroWeb.DashboardLive do
     wd = File.cwd!() |> Path.expand()
 
     params = merge_session_params(socket, %{"working_dir" => wd})
-    selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
 
     cs =
       Conversations.change_session(%Conversations.Session{}, params)
@@ -280,17 +268,9 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply,
      socket
      |> assign(:session_form, to_form(cs, action: :validate))
-     |> assign(:session_form_params, params)
-     |> assign(:session_mcp_selected_ids, selected)
-     |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers(selected))}
+     |> assign(:session_form_params, params)}
 
-    _ =
-      Task.start(fn ->
-        warm_mcp_tools_cache(selected)
-        send(self(), :refresh_mcp_inventory)
-      end)
-
-    {:noreply, assign(socket, :mcp_warming, true)}
+    {:noreply, socket}
   end
 
   def handle_event("session_save", %{"session" => params}, socket) do
@@ -611,6 +591,11 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:session_form_params, params)
      |> assign(:session_mcp_selected_ids, selected)
      |> assign(:show_session_dir_picker, false)}
+  end
+
+  @impl true
+  def handle_info({:session_mcp_selected_ids, ids}, socket) when is_list(ids) do
+    {:noreply, assign(socket, :session_mcp_selected_ids, Enum.map(ids, &to_string/1))}
   end
 
   @impl true
@@ -1166,9 +1151,7 @@ defmodule TheMaestroWeb.DashboardLive do
                 persona_options={@persona_options}
                 mcp_server_options={@mcp_server_options}
                 session_mcp_selected_ids={@session_mcp_selected_ids}
-                mcp_warming={@mcp_warming}
                 tool_picker_allowed={@tool_picker_allowed_map}
-                tool_inventory_by_provider={@tool_inventory_by_provider}
               />
             </div>
             <div class="sticky bottom-0 mt-3 border-t border-base-300 bg-base-100 pt-3">

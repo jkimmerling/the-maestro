@@ -364,6 +364,8 @@ defmodule TheMaestroWeb.SessionFormComponent do
 
     inv = build_tool_inventory_for_servers(selected)
 
+    send(self(), {:session_mcp_selected_ids, selected})
+
     {:noreply,
      assign(socket,
        session_mcp_selected_ids: selected,

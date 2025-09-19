@@ -31,8 +31,8 @@ defmodule TheMaestro.Cache.Redis do
 
     case Redix.command(conn, ["GET", key]) do
       {:ok, nil} -> set_and_return(conn, key, ttl_ms, fun)
-      {:ok, json} when is_binary(json) ->
-        with {:ok, %{"v" => value, "at_ms" => at_ms}} <- Jason.decode(json),
+      {:ok, bin} when is_binary(bin) ->
+        with {:ok, %{:v => value, :at_ms => at_ms}} <- decode_payload(bin),
              true <- fresh?(at_ms, ttl_ms) do
           value
         else
@@ -57,7 +57,7 @@ defmodule TheMaestro.Cache.Redis do
 
   defp set_and_return(conn, key, ttl_ms, fun) do
     value = fun.()
-    payload = Jason.encode!(%{"v" => value, "at_ms" => now_ms()})
+    payload = :erlang.term_to_binary(%{v: value, at_ms: now_ms()})
     ttl_sec = max(div(ttl_ms, 1000), 1)
     _ = Redix.command(conn, ["SETEX", key, Integer.to_string(ttl_sec), payload])
     value
@@ -78,4 +78,12 @@ defmodule TheMaestro.Cache.Redis do
   defp now_ms, do: System.monotonic_time(:millisecond)
   defp fresh?(at_ms, ttl_ms) when is_integer(at_ms), do: now_ms() - at_ms < ttl_ms
   defp fresh?(_, _), do: false
+
+  defp decode_payload(<<131, _::binary>> = bin), do: {:ok, :erlang.binary_to_term(bin)}
+  defp decode_payload(bin) when is_binary(bin) do
+    case Jason.decode(bin) do
+      {:ok, %{"v" => v, "at_ms" => at}} -> {:ok, %{v: v, at_ms: at}}
+      _ -> :error
+    end
+  end
 end

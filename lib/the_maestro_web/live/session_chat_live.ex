@@ -995,6 +995,11 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   @impl true
+  def handle_info({:session_mcp_selected_ids, ids}, socket) when is_list(ids) do
+    {:noreply, assign(socket, :session_mcp_selected_ids, Enum.map(ids, &to_string/1))}
+  end
+
+  @impl true
   def handle_info(
         {:session_stream,
          %TheMaestro.Domain.StreamEnvelope{
@@ -1423,22 +1428,8 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp maybe_update_mcp_selection(socket, params) do
-    if Map.has_key?(params, "mcp_server_ids") do
-      selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
-
-      _ =
-        Task.start(fn ->
-          warm_mcp_tools_cache(selected)
-          send(self(), :refresh_mcp_inventory)
-        end)
-
-      socket
-      |> assign(:session_mcp_selected_ids, selected)
-      |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers(selected))
-      |> assign(:mcp_warming, true)
-    else
-      socket
-    end
+    # Component owns MCP selection state; ignore change echo from form params
+    socket
   end
 
   defp normalize_mcp_ids(nil), do: []
@@ -1823,9 +1814,7 @@ defmodule TheMaestroWeb.SessionChatLive do
                   config_form={Map.put(@config_form || %{}, "session_id", @session.id)}
                   mcp_server_options={@mcp_server_options || []}
                   session_mcp_selected_ids={@session_mcp_selected_ids || []}
-                  mcp_warming={@mcp_warming}
                   tool_picker_allowed={@tool_picker_allowed || %{}}
-                  tool_inventory_by_provider={@tool_inventory_by_provider || %{}}
                 />
               </div>
               <div class="mt-3">
