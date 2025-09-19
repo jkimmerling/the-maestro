@@ -11,7 +11,10 @@ defmodule TheMaestroWeb.SessionChatLiveMCPToolsRenderTest do
     %{session: s}
   end
 
-  test "config modal renders MCP tools from registry without server_label", %{conn: conn, session: s} do
+  test "config modal renders MCP tools from registry without server_label", %{
+    conn: conn,
+    session: s
+  } do
     # Seed session.tools.mcp_registry.tools with a simple tool entry
     tool = %{
       "name" => "resolve-library-id",
@@ -34,4 +37,3 @@ defmodule TheMaestroWeb.SessionChatLiveMCPToolsRenderTest do
     assert has_element?(view, "#tool-openai-resolve-library-id-mcp")
   end
 end
-

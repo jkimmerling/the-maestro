@@ -13,7 +13,6 @@ defmodule Mix.Tasks.E2e.Openai.Mcp do
   """
 
   alias TheMaestro.{Chat, Conversations, MCP}
-  alias TheMaestro.Conversations.Translator
 
   @impl true
   def run(args) do
@@ -21,7 +20,7 @@ defmodule Mix.Tasks.E2e.Openai.Mcp do
 
     {opts, _, _} = OptionParser.parse(args, switches: [openai: :string, api: :string])
     session_name = opts[:openai] || System.get_env("OPENAI_SESSION_NAME")
-    api_name = opts[:api] || System.get_env("OPENAI_API_NAME")
+    _api_name = opts[:api] || System.get_env("OPENAI_API_NAME")
 
     unless is_binary(session_name) and session_name != "" do
       Mix.raise("Provide --openai <saved_auth_name> or OPENAI_SESSION_NAME env var")

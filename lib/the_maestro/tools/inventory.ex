@@ -9,10 +9,10 @@ defmodule TheMaestro.Tools.Inventory do
     [%{name: binary(), source: :builtin | :mcp, description: binary() | nil}]
   """
 
-  alias TheMaestro.MCP.Registry, as: MCPRegistry
-  alias TheMaestro.MCP
-  alias TheMaestro.MCP.ToolsCache
   alias TheMaestro.Conversations
+  alias TheMaestro.MCP
+  alias TheMaestro.MCP.Registry, as: MCPRegistry
+  alias TheMaestro.MCP.ToolsCache
 
   @type provider :: :openai | :anthropic | :gemini
   @type item :: %{name: String.t(), source: :builtin | :mcp, description: String.t() | nil}

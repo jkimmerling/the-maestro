@@ -8,6 +8,7 @@ defmodule TheMaestro.MCP.Warmup do
 
   require Logger
   alias TheMaestro.MCP
+  alias TheMaestro.MCP.Client
   alias TheMaestro.MCP.ToolsCache
 
   def run do
@@ -16,7 +17,7 @@ defmodule TheMaestro.MCP.Warmup do
 
     Enum.each(servers, fn server ->
       with :miss <- ToolsCache.get(server.id, ttl_ms(server)),
-           {:ok, %{tools: tools}} <- TheMaestro.MCP.Client.discover_server(server) do
+           {:ok, %{tools: tools}} <- Client.discover_server(server) do
         _ = ToolsCache.put(server.id, tools, ttl_ms(server))
       else
         {:ok, _} -> :ok

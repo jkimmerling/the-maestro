@@ -7,6 +7,7 @@ defmodule TheMaestroWeb.DashboardLive do
   alias TheMaestro.Provider
   alias TheMaestro.SuppliedContext
   alias TheMaestro.SystemPrompts
+  alias TheMaestro.Tools.Inventory
   alias TheMaestroWeb.MCPServersLive.FormComponent
 
   @prompt_providers [:openai, :anthropic, :gemini]
@@ -223,7 +224,12 @@ defmodule TheMaestroWeb.DashboardLive do
         {:noreply, assign(socket, :session_model_options, models)}
 
       "mcp_server_ids" ->
-        _ = Task.start(fn -> warm_mcp_tools_cache(selected); send(self(), :refresh_mcp_inventory) end)
+        _ =
+          Task.start(fn ->
+            warm_mcp_tools_cache(selected)
+            send(self(), :refresh_mcp_inventory)
+          end)
+
         {:noreply, assign(socket, :mcp_warming, true)}
 
       _ ->
@@ -277,7 +283,13 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:session_form_params, params)
      |> assign(:session_mcp_selected_ids, selected)
      |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers(selected))}
-    _ = Task.start(fn -> warm_mcp_tools_cache(selected); send(self(), :refresh_mcp_inventory) end)
+
+    _ =
+      Task.start(fn ->
+        warm_mcp_tools_cache(selected)
+        send(self(), :refresh_mcp_inventory)
+      end)
+
     {:noreply, assign(socket, :mcp_warming, true)}
   end
 
@@ -340,66 +352,9 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply, do_add_prompt(socket, provider, prompt_id, selection)}
   end
 
-  defp do_add_prompt(socket, _provider, "", selection),
-    do: assign(socket, :prompt_picker_selection, selection)
+  # moved below to keep handle_event/3 clauses contiguous
 
-  defp do_add_prompt(socket, provider, prompt_id, selection) do
-    builder = socket.assigns[:session_prompt_builder] || empty_builder()
-    current = Map.get(builder, provider, [])
-
-    if Enum.any?(current, &(&1.id == prompt_id)) do
-      socket
-      |> assign(:prompt_picker_selection, selection)
-      |> put_flash(:info, "Prompt already present for #{provider_label(provider)}")
-    else
-      handle_fetch_prompt(socket, builder, provider, current, prompt_id, selection)
-    end
-  end
-
-  defp handle_fetch_prompt(socket, builder, provider, current, prompt_id, selection) do
-    case fetch_prompt(socket, prompt_id) do
-      {nil, updated_socket} ->
-        updated_socket
-        |> assign(:prompt_picker_selection, selection)
-        |> put_flash(:error, "Prompt could not be loaded. Try refreshing.")
-
-      {prompt, updated_socket} ->
-        case prompt.provider do
-          ^provider ->
-            add_prompt_to_builder(updated_socket, builder, provider, current, prompt, selection)
-
-          :shared ->
-            add_prompt_to_builder(updated_socket, builder, provider, current, prompt, selection)
-
-          _ ->
-            provider_mismatch_flash(updated_socket, selection, prompt)
-        end
-    end
-  end
-
-  defp add_prompt_to_builder(socket, builder, provider, current, prompt, selection) do
-    entry = %{
-      id: prompt.id,
-      prompt: prompt,
-      enabled: true,
-      overrides: %{},
-      source: :manual
-    }
-
-    updated_builder = Map.put(builder, provider, current ++ [entry])
-
-    socket
-    |> assign(:session_prompt_builder, updated_builder)
-    |> assign(:prompt_picker_selection, selection)
-    |> assign(:prompt_picker_provider, provider)
-    |> merge_builder_into_catalog(updated_builder)
-  end
-
-  defp provider_mismatch_flash(socket, selection, prompt) do
-    socket
-    |> assign(:prompt_picker_selection, selection)
-    |> put_flash(:error, "#{prompt.name} belongs to #{provider_label(prompt.provider)} prompts.")
-  end
+  # moved below to keep handle_event/3 clauses contiguous
 
   def handle_event(
         "prompt_picker:remove",
@@ -459,20 +414,6 @@ defmodule TheMaestroWeb.DashboardLive do
     end
   end
 
-  defp apply_toggle(socket, builder, provider, list, prompt_id, desired) do
-    updated_list =
-      Enum.map(list, fn
-        %{id: ^prompt_id} = e -> %{e | enabled: desired}
-        e -> e
-      end)
-
-    updated_builder = Map.put(builder, provider, updated_list)
-
-    socket
-    |> assign(:session_prompt_builder, updated_builder)
-    |> merge_builder_into_catalog(updated_builder)
-  end
-
   def handle_event(
         "prompt_picker:reorder",
         %{"provider" => provider_param, "ordered_ids" => ordered_ids},
@@ -520,13 +461,90 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   # Keep all handle_event/3 clauses grouped together to avoid warnings
+  defp apply_toggle(socket, builder, provider, list, prompt_id, desired) do
+    updated_list =
+      Enum.map(list, fn
+        %{id: ^prompt_id} = e -> %{e | enabled: desired}
+        e -> e
+      end)
+
+    updated_builder = Map.put(builder, provider, updated_list)
+
+    socket
+    |> assign(:session_prompt_builder, updated_builder)
+    |> merge_builder_into_catalog(updated_builder)
+  end
+
+  defp add_prompt_to_builder(socket, builder, provider, current, prompt, selection) do
+    entry = %{
+      id: prompt.id,
+      prompt: prompt,
+      enabled: true,
+      overrides: %{},
+      source: :manual
+    }
+
+    updated_builder = Map.put(builder, provider, current ++ [entry])
+
+    socket
+    |> assign(:session_prompt_builder, updated_builder)
+    |> assign(:prompt_picker_selection, selection)
+    |> assign(:prompt_picker_provider, provider)
+    |> merge_builder_into_catalog(updated_builder)
+  end
+
+  defp do_add_prompt(socket, _provider, "", selection),
+    do: assign(socket, :prompt_picker_selection, selection)
+
+  defp do_add_prompt(socket, provider, prompt_id, selection) do
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    current = Map.get(builder, provider, [])
+
+    if Enum.any?(current, &(&1.id == prompt_id)) do
+      socket
+      |> assign(:prompt_picker_selection, selection)
+      |> put_flash(:info, "Prompt already present for #{provider_label(provider)}")
+    else
+      handle_fetch_prompt(socket, builder, provider, current, prompt_id, selection)
+    end
+  end
+
+  defp handle_fetch_prompt(socket, builder, provider, current, prompt_id, selection) do
+    case fetch_prompt(socket, prompt_id) do
+      {nil, updated_socket} ->
+        updated_socket
+        |> assign(:prompt_picker_selection, selection)
+        |> put_flash(:error, "Prompt could not be loaded. Try refreshing.")
+
+      {prompt, updated_socket} ->
+        case prompt.provider do
+          ^provider ->
+            add_prompt_to_builder(updated_socket, builder, provider, current, prompt, selection)
+
+          :shared ->
+            add_prompt_to_builder(updated_socket, builder, provider, current, prompt, selection)
+
+          _ ->
+            provider_mismatch_flash(updated_socket, selection, prompt)
+        end
+    end
+  end
+
+  defp provider_mismatch_flash(socket, selection, prompt) do
+    socket
+    |> assign(:prompt_picker_selection, selection)
+    |> put_flash(:error, "#{prompt.name} belongs to #{provider_label(prompt.provider)} prompts.")
+  end
+
   defp build_session_params(socket, params) do
     with {:ok, p2} <- mirror_persona(params),
          {:ok, p3} <- decode_memory_json(p2) do
       prompt_map = prompt_specs_from_builder(socket.assigns[:session_prompt_builder] || %{})
 
       payload0 =
-        if prompt_map == %{}, do: Map.put_new(p3, "system_prompt_ids_by_provider", %{}), else: Map.put(p3, "system_prompt_ids_by_provider", prompt_map)
+        if prompt_map == %{},
+          do: Map.put_new(p3, "system_prompt_ids_by_provider", %{}),
+          else: Map.put(p3, "system_prompt_ids_by_provider", prompt_map)
 
       # Persist MCP server ids chosen via checkboxes (component emits hidden fields into params)
       payload1 = Map.put(payload0, "mcp_server_ids", Map.get(params, "mcp_server_ids", []))
@@ -539,7 +557,9 @@ defmodule TheMaestroWeb.DashboardLive do
               {:ok, %{} = tools_map} -> Map.put(payload1, "tools", tools_map)
               _ -> payload1
             end
-          _ -> payload1
+
+          _ ->
+            payload1
         end
 
       {:ok, payload}
@@ -644,6 +664,19 @@ defmodule TheMaestroWeb.DashboardLive do
       ) do
     {:noreply, put_active_stream(socket, sid, type)}
   end
+
+  @impl true
+  def handle_info(:refresh_mcp_inventory, socket) do
+    selected = socket.assigns[:session_mcp_selected_ids] || []
+
+    {:noreply,
+     socket
+     |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers(selected))
+     |> assign(:mcp_warming, false)}
+  end
+
+  # Catch-all handle_info should be last among handle_info clauses
+  def handle_info(_msg, socket), do: {:noreply, socket}
 
   # moved catch-all to end of module to avoid overshadowing specific clauses
 
@@ -1117,8 +1150,8 @@ defmodule TheMaestroWeb.DashboardLive do
                   value={nil}
                 />
               </div>
-
-              <!-- Shared sections: System Prompts, Persona, Memory, Tool pickers, MCPs -->
+              
+    <!-- Shared sections: System Prompts, Persona, Memory, Tool pickers, MCPs -->
               <.live_component
                 module={TheMaestroWeb.SessionFormComponent}
                 id="session-modal-form-body"
@@ -1280,46 +1313,54 @@ defmodule TheMaestroWeb.DashboardLive do
     </div>
     """
   end
+
   # -- MCP inventory/warmup helpers and message handling --
-
-  @impl true
-  def handle_info(:refresh_mcp_inventory, socket) do
-    selected = socket.assigns[:session_mcp_selected_ids] || []
-    {:noreply,
-     socket
-     |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers(selected))
-     |> assign(:mcp_warming, false)}
-  end
-
-  # Catch-all handle_info should be last among handle_info clauses
-  def handle_info(_msg, socket), do: {:noreply, socket}
 
   defp build_tool_inventory_for_servers(server_ids) do
     %{
-      openai: TheMaestro.Tools.Inventory.list_for_provider_with_servers(server_ids, :openai),
-      anthropic: TheMaestro.Tools.Inventory.list_for_provider_with_servers(server_ids, :anthropic),
-      gemini: TheMaestro.Tools.Inventory.list_for_provider_with_servers(server_ids, :gemini)
+      openai: Inventory.list_for_provider_with_servers(server_ids, :openai),
+      anthropic: Inventory.list_for_provider_with_servers(server_ids, :anthropic),
+      gemini: Inventory.list_for_provider_with_servers(server_ids, :gemini)
     }
   end
 
   defp warm_mcp_tools_cache(server_ids) do
-    Enum.each(server_ids, fn sid ->
-      case TheMaestro.MCP.ToolsCache.get(sid, 60 * 60_000) do
-        {:ok, _} -> :ok
-        _ ->
-          server = TheMaestro.MCP.get_server!(sid)
-          case TheMaestro.MCP.Client.discover_server(server) do
-            {:ok, %{tools: tools}} ->
-              ttl_ms =
-                case server.metadata do
-                  %{} = md -> ((md["tool_cache_ttl_minutes"] || 60) * 60_000)
-                  _ -> 60 * 60_000
-                end
-              _ = TheMaestro.MCP.ToolsCache.put(sid, tools, ttl_ms)
-              :ok
-            _ -> :ok
-          end
-      end
-    end)
+    Enum.each(server_ids, &warm_single_server_cache/1)
   end
+
+  defp warm_single_server_cache(sid) do
+    case MCP.ToolsCache.get(sid, 60 * 60_000) do
+      {:ok, _} -> :ok
+      _ -> discover_and_cache_server_tools(sid)
+    end
+  end
+
+  defp discover_and_cache_server_tools(sid) do
+    server = MCP.get_server!(sid)
+
+    case MCP.Client.discover_server(server) do
+      {:ok, %{tools: tools}} -> cache_server_tools(sid, server, tools)
+      _ -> :ok
+    end
+  end
+
+  defp cache_server_tools(sid, server, tools) do
+    ttl_ms = calculate_server_cache_ttl(server.metadata)
+    _ = MCP.ToolsCache.put(sid, tools, ttl_ms)
+    :ok
+  end
+
+  defp calculate_server_cache_ttl(%{} = metadata),
+    do: to_int(metadata["tool_cache_ttl_minutes"] || 60) * 60_000
+
+  defp to_int(n) when is_integer(n), do: n
+
+  defp to_int(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      _ -> 60
+    end
+  end
+
+  defp to_int(_), do: 60
 end

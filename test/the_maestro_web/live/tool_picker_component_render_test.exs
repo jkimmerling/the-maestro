@@ -33,7 +33,7 @@ defmodule TheMaestroWeb.ToolPickerComponentRenderTest do
           module={TheMaestroWeb.ToolPickerComponent}
           id="test-picker"
           provider={@provider}
-          session_id={"fake-session"}
+          session_id="fake-session"
           allowed_by_provider={@allowed}
           inventory_by_provider={@inv}
           show_groups={[:mcp]}
@@ -74,7 +74,7 @@ defmodule TheMaestroWeb.ToolPickerComponentRenderTest do
           module={TheMaestroWeb.ToolPickerComponent}
           id="test-picker"
           provider={@provider}
-          session_id={"fake-session"}
+          session_id="fake-session"
           allowed_by_provider={@allowed}
           inventory_by_provider={@inv}
           show_groups={[:mcp]}

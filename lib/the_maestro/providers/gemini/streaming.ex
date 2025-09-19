@@ -207,77 +207,84 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
           {:ok, Enumerable.t()} | {:error, term()}
   def stream_tool_followup(session_name, contents, opts \\ []) when is_list(contents) do
     with {:ok, :oauth} <- detect_auth_type(session_name),
-         {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
-      model = Keyword.get(opts, :model) || "gemini-2.5-pro"
-      session_uuid = Ecto.UUID.generate()
-
-      case CodeAssist.ensure_project(session_name) do
-        {:ok, project} when is_binary(project) and project != "" ->
-          m0 = strip_models_prefix(model)
-          m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
-
-          decl_session_id =
-            Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
-
-          system_instruction = resolve_system_instruction(decl_session_id)
-
-          request =
-            %{
-              "contents" => contents,
-              "generationConfig" => %{"temperature" => 0, "topP" => 1},
-              "session_id" => session_uuid
-            }
-            |> maybe_put_system_instruction(system_instruction)
-            |> maybe_put_tools(function_declarations_for_session(decl_session_id))
-
-          payload = %{
-            "model" => m,
-            "project" => project,
-            "user_prompt_id" => session_uuid,
-            "request" => request
-          }
-
-          req = maybe_http_debug(req, payload)
-
-          tools_count =
-            case get_in(request, ["tools"]) do
-              [%{"function_declarations" => decls}] when is_list(decls) -> length(decls)
-              [%{"functionDeclarations" => decls}] when is_list(decls) -> length(decls)
-              _ -> 0
-            end
-
-          :telemetry.execute(
-            [
-              :providers,
-              :gemini,
-              :request_built
-            ],
-            %{},
-            %{
-              auth_type: :oauth_followup,
-              model: m,
-              system_instruction?: not is_nil(get_in(request, ["systemInstruction"])),
-              tools_count: tools_count
-            }
-          )
-
-          StreamingAdapter.stream_request(
-            req,
-            method: :post,
-            url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
-            json: payload,
-            timeout: Keyword.get(opts, :timeout, :infinity)
-          )
-
-        {:error, :project_required} ->
-          {:error, :project_required}
-
-        _ ->
-          {:error, :missing_user_project}
+         {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name),
+         {:ok, project} <- CodeAssist.ensure_project(session_name) do
+      if is_binary(project) and project != "" do
+        do_stream_tool_followup(session_name, contents, opts, req, project)
+      else
+        {:error, :invalid_project}
       end
-    else
-      {:ok, :api_key} -> {:error, :tool_followup_not_supported_for_api_key}
-      other -> other
+    end
+  end
+
+  defp do_stream_tool_followup(session_name, contents, opts, req, project) do
+    model = normalize_model(Keyword.get(opts, :model) || "gemini-2.5-pro")
+    session_uuid = Ecto.UUID.generate()
+
+    decl_session_id =
+      Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
+
+    request = build_followup_request(contents, session_uuid, decl_session_id)
+    payload = build_followup_payload(model, project, session_uuid, request)
+    req = maybe_http_debug(req, payload)
+
+    emit_followup_telemetry(request, model)
+
+    StreamingAdapter.stream_request(
+      req,
+      method: :post,
+      url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+      json: payload,
+      timeout: Keyword.get(opts, :timeout, :infinity)
+    )
+  end
+
+  defp normalize_model(model) do
+    m0 = strip_models_prefix(model)
+    if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
+  end
+
+  defp build_followup_request(contents, session_uuid, decl_session_id) do
+    system_instruction = resolve_system_instruction(decl_session_id)
+
+    %{
+      "contents" => contents,
+      "generationConfig" => %{"temperature" => 0, "topP" => 1},
+      "session_id" => session_uuid
+    }
+    |> maybe_put_system_instruction(system_instruction)
+    |> maybe_put_tools(function_declarations_for_session(decl_session_id))
+  end
+
+  defp build_followup_payload(model, project, session_uuid, request) do
+    %{
+      "model" => model,
+      "project" => project,
+      "user_prompt_id" => session_uuid,
+      "request" => request
+    }
+  end
+
+  defp emit_followup_telemetry(request, model) do
+    tools_count = count_tools(request)
+
+    :telemetry.execute(
+      [:providers, :gemini, :request_built],
+      %{},
+      %{
+        auth_type: :oauth_followup,
+        model: model,
+        system_instruction?: not is_nil(get_in(request, ["systemInstruction"])),
+        tools_count: tools_count
+      }
+    )
+  end
+
+  defp count_tools(request) do
+    case get_in(request, ["tools"]) do
+      [%{"function_declarations" => decls}] when is_list(decls) -> length(decls)
+      [%{"functionDeclarations" => decls}] when is_list(decls) -> length(decls)
+      _ -> 0
     end
   end
 

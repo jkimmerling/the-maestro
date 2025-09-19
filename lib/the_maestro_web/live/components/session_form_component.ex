@@ -1,6 +1,10 @@
 defmodule TheMaestroWeb.SessionFormComponent do
   use TheMaestroWeb, :live_component
 
+  alias TheMaestro.MCP
+  alias TheMaestro.MCP.ToolsCache
+  alias TheMaestro.Tools.Inventory
+
   @moduledoc """
   Shared inner sections for the Session form modal used by both Edit (Chat)
   and Create (Dashboard). Keeps layout/UI identical to Edit, with a `:mode`
@@ -18,6 +22,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
     - MCP: mcp_server_options, session_mcp_selected_ids, mcp_warming
     - Tools: tool_picker_allowed, tool_inventory_by_provider
   """
+
   # attrs declared before render/1 only
 
   @impl true
@@ -50,20 +55,22 @@ defmodule TheMaestroWeb.SessionFormComponent do
     |> assign(:mcp_warming, assigns[:mcp_warming] || false)
   end
 
-  defp build_initial_inventory(%{mode: :edit, config_form: %{"session_id" => sid}}) when is_binary(sid) do
+  defp build_initial_inventory(%{mode: :edit, config_form: %{"session_id" => sid}})
+       when is_binary(sid) do
     %{
-      openai: TheMaestro.Tools.Inventory.list_for_provider(sid, :openai),
-      anthropic: TheMaestro.Tools.Inventory.list_for_provider(sid, :anthropic),
-      gemini: TheMaestro.Tools.Inventory.list_for_provider(sid, :gemini)
+      openai: Inventory.list_for_provider(sid, :openai),
+      anthropic: Inventory.list_for_provider(sid, :anthropic),
+      gemini: Inventory.list_for_provider(sid, :gemini)
     }
   end
 
   defp build_initial_inventory(%{mode: :create, session_mcp_selected_ids: ids}) do
     ids = Enum.map(List.wrap(ids), &to_string/1)
+
     %{
-      openai: TheMaestro.Tools.Inventory.list_for_provider_with_servers(ids, :openai),
-      anthropic: TheMaestro.Tools.Inventory.list_for_provider_with_servers(ids, :anthropic),
-      gemini: TheMaestro.Tools.Inventory.list_for_provider_with_servers(ids, :gemini)
+      openai: Inventory.list_for_provider_with_servers(ids, :openai),
+      anthropic: Inventory.list_for_provider_with_servers(ids, :anthropic),
+      gemini: Inventory.list_for_provider_with_servers(ids, :gemini)
     }
   end
 
@@ -101,14 +108,21 @@ defmodule TheMaestroWeb.SessionFormComponent do
           <button
             type="button"
             class="btn btn-xs relative z-20"
-            phx-click={JS.push("toggle_section", target: @myself, value: %{name: "prompt"}) |> JS.toggle(to: "#section-system-prompts-content")}
+            phx-click={
+              JS.push("toggle_section", target: @myself, value: %{name: "prompt"})
+              |> JS.toggle(to: "#section-system-prompts-content")
+            }
             id="toggle-prompt"
           >
             <.icon
-              name={(Map.get(@ui_sections, :prompt, true) && "hero-chevron-right") || "hero-chevron-down"}
+              name={
+                (Map.get(@ui_sections, :prompt, true) && "hero-chevron-right") || "hero-chevron-down"
+              }
               class="h-3.5 w-3.5"
             />
-            <span class="ml-1">{(Map.get(@ui_sections, :prompt, true) && "Expand") || "Collapse"}</span>
+            <span class="ml-1">
+              {(Map.get(@ui_sections, :prompt, true) && "Expand") || "Collapse"}
+            </span>
           </button>
         </div>
         <div
@@ -117,7 +131,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
         >
           <.live_component
             module={TheMaestroWeb.SystemPromptPickerComponent}
-            id={(if @mode == :edit, do: "session-config-prompt-picker", else: "session-prompt-picker")}
+            id={if @mode == :edit, do: "session-config-prompt-picker", else: "session-prompt-picker"}
             providers={[:openai, :anthropic, :gemini]}
             active_provider={@prompt_picker_provider}
             selected_by_provider={@session_prompt_builder}
@@ -127,25 +141,35 @@ defmodule TheMaestroWeb.SessionFormComponent do
           />
         </div>
       </div>
-
-      <!-- Persona (collapsible) -->
+      
+    <!-- Persona (collapsible) -->
       <div class="md:col-span-2 mt-4" id="section-persona">
         <div class="flex items-center justify-between">
           <label class="text-xs font-semibold uppercase tracking-wide">Persona</label>
           <button
             type="button"
             class="btn btn-xs relative z-20"
-            phx-click={JS.push("toggle_section", target: @myself, value: %{name: "persona"}) |> JS.toggle(to: "#section-persona-content")}
+            phx-click={
+              JS.push("toggle_section", target: @myself, value: %{name: "persona"})
+              |> JS.toggle(to: "#section-persona-content")
+            }
             id="toggle-persona"
           >
             <.icon
-              name={(Map.get(@ui_sections, :persona, true) && "hero-chevron-right") || "hero-chevron-down"}
+              name={
+                (Map.get(@ui_sections, :persona, true) && "hero-chevron-right") || "hero-chevron-down"
+              }
               class="h-3.5 w-3.5"
             />
-            <span class="ml-1">{(Map.get(@ui_sections, :persona, true) && "Expand") || "Collapse"}</span>
+            <span class="ml-1">
+              {(Map.get(@ui_sections, :persona, true) && "Expand") || "Collapse"}
+            </span>
           </button>
         </div>
-        <div id="section-persona-content" class={["mt-2 space-y-2", Map.get(@ui_sections, :persona, true) && "hidden"]}>
+        <div
+          id="section-persona-content"
+          class={["mt-2 space-y-2", Map.get(@ui_sections, :persona, true) && "hidden"]}
+        >
           <%= if @mode == :edit do %>
             <div class="flex gap-2 items-center">
               <select name="persona_id" class="input">
@@ -156,7 +180,9 @@ defmodule TheMaestroWeb.SessionFormComponent do
                   </option>
                 <% end %>
               </select>
-              <button type="button" class="btn btn-xs" phx-click="open_persona_modal">Add Persona…</button>
+              <button type="button" class="btn btn-xs" phx-click="open_persona_modal">
+                Add Persona…
+              </button>
             </div>
             <div>
               <label class="text-xs">Persona (JSON)</label>
@@ -173,30 +199,42 @@ defmodule TheMaestroWeb.SessionFormComponent do
           <% end %>
         </div>
       </div>
-
-      <!-- Memory (collapsible) -->
+      
+    <!-- Memory (collapsible) -->
       <div class="md:col-span-2 mt-4" id="section-memory">
         <div class="flex items-center justify-between">
           <label class="text-xs font-semibold uppercase tracking-wide">Memory</label>
           <button
             type="button"
             class="btn btn-xs relative z-20"
-            phx-click={JS.push("toggle_section", target: @myself, value: %{name: "memory"}) |> JS.toggle(to: "#section-memory-content")}
+            phx-click={
+              JS.push("toggle_section", target: @myself, value: %{name: "memory"})
+              |> JS.toggle(to: "#section-memory-content")
+            }
             id="toggle-memory"
           >
             <.icon
-              name={(Map.get(@ui_sections, :memory, true) && "hero-chevron-right") || "hero-chevron-down"}
+              name={
+                (Map.get(@ui_sections, :memory, true) && "hero-chevron-right") || "hero-chevron-down"
+              }
               class="h-3.5 w-3.5"
             />
-            <span class="ml-1">{(Map.get(@ui_sections, :memory, true) && "Expand") || "Collapse"}</span>
+            <span class="ml-1">
+              {(Map.get(@ui_sections, :memory, true) && "Expand") || "Collapse"}
+            </span>
           </button>
         </div>
-        <div id="section-memory-content" class={["mt-2", Map.get(@ui_sections, :memory, true) && "hidden"]}>
+        <div
+          id="section-memory-content"
+          class={["mt-2", Map.get(@ui_sections, :memory, true) && "hidden"]}
+        >
           <%= if @mode == :edit do %>
             <label class="text-xs">Memory (JSON)</label>
             <textarea name="memory_json" rows="3" class="textarea-terminal"><%= @config_form["memory_json"] || Jason.encode!(@config_form["memory"] || %{}) %></textarea>
             <div class="mt-1">
-              <button type="button" class="btn btn-xs" phx-click="open_memory_modal">Open Advanced Editor…</button>
+              <button type="button" class="btn btn-xs" phx-click="open_memory_modal">
+                Open Advanced Editor…
+              </button>
             </div>
           <% else %>
             <label class="text-xs">Memory (JSON)</label>
@@ -204,22 +242,22 @@ defmodule TheMaestroWeb.SessionFormComponent do
           <% end %>
         </div>
       </div>
-
-      <!-- Built-in Tools -->
+      
+    <!-- Built-in Tools -->
       <div class="md:col-span-2 mt-4">
         <.live_component
           module={TheMaestroWeb.ToolPickerComponent}
-          id={(if @mode == :edit, do: "session-tool-picker", else: "new-session-tool-picker")}
+          id={if @mode == :edit, do: "session-tool-picker", else: "new-session-tool-picker"}
           provider={@provider}
-          session_id={(if @mode == :edit, do: @config_form["session_id"], else: nil)}
+          session_id={if @mode == :edit, do: @config_form["session_id"], else: nil}
           allowed_by_provider={@tool_picker_allowed || %{}}
           inventory_by_provider={@tool_inventory_by_provider || %{}}
           target={@myself}
           show_groups={[:builtin]}
         />
       </div>
-
-      <!-- MCPs Container -->
+      
+    <!-- MCPs Container -->
       <div class="md:col-span-2 mt-4">
         <label class="text-xs font-semibold uppercase tracking-wide">MCPs</label>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-start mt-2">
@@ -254,9 +292,11 @@ defmodule TheMaestroWeb.SessionFormComponent do
           <div>
             <.live_component
               module={TheMaestroWeb.ToolPickerComponent}
-              id={(if @mode == :edit, do: "session-tool-picker-mcp", else: "new-session-tool-picker-mcp")}
+              id={
+                if @mode == :edit, do: "session-tool-picker-mcp", else: "new-session-tool-picker-mcp"
+              }
               provider={@provider}
-              session_id={(if @mode == :edit, do: @config_form["session_id"], else: nil)}
+              session_id={if @mode == :edit, do: @config_form["session_id"], else: nil}
               allowed_by_provider={@tool_picker_allowed || %{}}
               inventory_by_provider={@tool_inventory_by_provider || %{}}
               show_groups={[:mcp]}
@@ -269,12 +309,20 @@ defmodule TheMaestroWeb.SessionFormComponent do
           </div>
         </div>
       </div>
-
-      <!-- Hidden fields kept in-sync for saving on both modals -->
-      <input type="hidden" name={if @mode == :edit, do: "tools_json", else: "session[tools_json]"} value={encode_tools_json(@tool_picker_allowed)} />
+      
+    <!-- Hidden fields kept in-sync for saving on both modals -->
+      <input
+        type="hidden"
+        name={if @mode == :edit, do: "tools_json", else: "session[tools_json]"}
+        value={encode_tools_json(@tool_picker_allowed)}
+      />
 
       <%= for id <- @session_mcp_selected_ids || [] do %>
-        <input type="hidden" name={if @mode == :edit, do: "mcp_server_ids[]", else: "session[mcp_server_ids][]"} value={id} />
+        <input
+          type="hidden"
+          name={if @mode == :edit, do: "mcp_server_ids[]", else: "session[mcp_server_ids][]"}
+          value={id}
+        />
       <% end %>
     </div>
     """
@@ -283,6 +331,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
   @impl true
   def handle_event("toggle_section", %{"name" => name}, socket) do
     sections = socket.assigns[:ui_sections] || %{}
+
     updated =
       case name do
         "prompt" -> Map.put(sections, :prompt, !Map.get(sections, :prompt, true))
@@ -305,11 +354,22 @@ defmodule TheMaestroWeb.SessionFormComponent do
     Task.start(fn ->
       warm_mcp_tools_cache(selected)
       inv = build_tool_inventory_for_servers(selected)
-      Phoenix.LiveView.send_update(__MODULE__, id: comp_id, tool_inventory_by_provider: inv, mcp_warming: false)
+
+      Phoenix.LiveView.send_update(__MODULE__,
+        id: comp_id,
+        tool_inventory_by_provider: inv,
+        mcp_warming: false
+      )
     end)
 
     inv = build_tool_inventory_for_servers(selected)
-    {:noreply, assign(socket, session_mcp_selected_ids: selected, tool_inventory_by_provider: inv, mcp_warming: true)}
+
+    {:noreply,
+     assign(socket,
+       session_mcp_selected_ids: selected,
+       tool_inventory_by_provider: inv,
+       mcp_warming: true
+     )}
   end
 
   def handle_event("tool_picker:toggle", %{"provider" => prov_param, "name" => name}, socket) do
@@ -317,11 +377,18 @@ defmodule TheMaestroWeb.SessionFormComponent do
     allowed0 = socket.assigns[:tool_picker_allowed] || %{}
     inv = Map.get(socket.assigns[:tool_inventory_by_provider] || %{}, provider, [])
     all_names = Enum.map(inv, & &1.name)
-    current = case Map.get(allowed0, provider) do
-      l when is_list(l) -> l
-      _ -> all_names
-    end
-    desired = if name in current, do: Enum.reject(current, &(&1 == name)), else: Enum.uniq([name | current])
+
+    current =
+      case Map.get(allowed0, provider) do
+        l when is_list(l) -> l
+        _ -> all_names
+      end
+
+    desired =
+      if name in current,
+        do: Enum.reject(current, &(&1 == name)),
+        else: Enum.uniq([name | current])
+
     {:noreply, assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))}
   end
 
@@ -331,10 +398,13 @@ defmodule TheMaestroWeb.SessionFormComponent do
     inv = Map.get(socket.assigns[:tool_inventory_by_provider] || %{}, provider, [])
     target = names_for_source(inv, Map.get(params, "source", "all"))
     current_all_names = Enum.map(inv, & &1.name)
-    current = case Map.get(allowed0, provider) do
-      l when is_list(l) -> l
-      _ -> current_all_names
-    end
+
+    current =
+      case Map.get(allowed0, provider) do
+        l when is_list(l) -> l
+        _ -> current_all_names
+      end
+
     desired = Enum.uniq(current ++ target)
     {:noreply, assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))}
   end
@@ -345,71 +415,94 @@ defmodule TheMaestroWeb.SessionFormComponent do
     inv = Map.get(socket.assigns[:tool_inventory_by_provider] || %{}, provider, [])
     target = names_for_source(inv, Map.get(params, "source", "all"))
     current_all_names = Enum.map(inv, & &1.name)
-    current = case Map.get(allowed0, provider) do
-      l when is_list(l) -> l
-      _ -> current_all_names
-    end
+
+    current =
+      case Map.get(allowed0, provider) do
+        l when is_list(l) -> l
+        _ -> current_all_names
+      end
+
     desired = Enum.reject(current, &(&1 in target))
     {:noreply, assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))}
   end
 
   defp to_provider(p) when is_atom(p), do: p
+
   defp to_provider(p) when is_binary(p) do
     case Enum.find(TheMaestro.Provider.list_providers(), fn pr -> Atom.to_string(pr) == p end) do
       nil -> :openai
       atom -> atom
     end
   end
+
   defp to_provider(_), do: :openai
 
-  defp names_for_source(inv, "builtin"), do: inv |> Enum.filter(&(&1.source == :builtin)) |> Enum.map(& &1.name)
-  defp names_for_source(inv, "mcp"), do: inv |> Enum.filter(&(&1.source == :mcp)) |> Enum.map(& &1.name)
+  defp names_for_source(inv, "builtin"),
+    do: inv |> Enum.filter(&(&1.source == :builtin)) |> Enum.map(& &1.name)
+
+  defp names_for_source(inv, "mcp"),
+    do: inv |> Enum.filter(&(&1.source == :mcp)) |> Enum.map(& &1.name)
+
   defp names_for_source(inv, _), do: Enum.map(inv, & &1.name)
 
   # Inventory building and warming helpers
   defp build_tool_inventory_for_servers(server_ids) do
     %{
-      openai: TheMaestro.Tools.Inventory.list_for_provider_with_servers(server_ids, :openai),
-      anthropic: TheMaestro.Tools.Inventory.list_for_provider_with_servers(server_ids, :anthropic),
-      gemini: TheMaestro.Tools.Inventory.list_for_provider_with_servers(server_ids, :gemini)
+      openai: Inventory.list_for_provider_with_servers(server_ids, :openai),
+      anthropic: Inventory.list_for_provider_with_servers(server_ids, :anthropic),
+      gemini: Inventory.list_for_provider_with_servers(server_ids, :gemini)
     }
   end
 
   defp warm_mcp_tools_cache(server_ids) do
-    Enum.each(server_ids, fn sid ->
-      case TheMaestro.MCP.ToolsCache.get(sid, 60 * 60_000) do
-        {:ok, _} -> :ok
-        _ ->
-          server = TheMaestro.MCP.get_server!(sid)
-          case TheMaestro.MCP.Client.discover_server(server) do
-            {:ok, %{tools: tools}} ->
-              ttl_ms =
-                case server.metadata do
-                  %{} = md -> ((md["tool_cache_ttl_minutes"] || 60) |> to_int()) * 60_000
-                  _ -> 60 * 60_000
-                end
-              _ = TheMaestro.MCP.ToolsCache.put(sid, tools, ttl_ms)
-              :ok
-            _ -> :ok
-          end
-      end
-    end)
+    Enum.each(server_ids, &warm_single_cache/1)
   end
 
+  defp warm_single_cache(sid) do
+    case ToolsCache.get(sid, 60 * 60_000) do
+      {:ok, _} -> :ok
+      _ -> discover_and_cache_tools(sid)
+    end
+  end
+
+  defp discover_and_cache_tools(sid) do
+    server = MCP.get_server!(sid)
+
+    case MCP.Client.discover_server(server) do
+      {:ok, %{tools: tools}} -> cache_discovered_tools(sid, server, tools)
+      _ -> :ok
+    end
+  end
+
+  defp cache_discovered_tools(sid, server, tools) do
+    ttl_ms = calculate_cache_ttl(server.metadata)
+    _ = ToolsCache.put(sid, tools, ttl_ms)
+    :ok
+  end
+
+  defp calculate_cache_ttl(%{} = metadata),
+    do: to_int(metadata["tool_cache_ttl_minutes"] || 60) * 60_000
+
   defp to_int(n) when is_integer(n), do: n
+
   defp to_int(n) when is_binary(n) do
     case Integer.parse(n) do
       {i, _} -> i
       _ -> 60
     end
   end
+
   defp to_int(_), do: 60
 
   defp encode_tools_json(%{} = allowed) do
     if map_size(allowed) == 0 do
       ""
     else
-      m = Enum.into(allowed, %{}, fn {prov, list} -> {Atom.to_string(prov), Enum.map(list, &to_string/1)} end)
+      m =
+        Enum.into(allowed, %{}, fn {prov, list} ->
+          {Atom.to_string(prov), Enum.map(list, &to_string/1)}
+        end)
+
       Jason.encode!(%{"allowed" => m})
     end
   end

@@ -91,101 +91,141 @@ defmodule TheMaestro.Chat do
     {auth_type, auth_name} = auth_meta_from_session(session)
     provider = provider_from_session(session)
 
-    tid =
-      case thread_id do
-        t when is_binary(t) and t != "" ->
-          t
+    tid = resolve_thread_id(session_id, thread_id)
+    canonical = get_canonical_chat(tid)
 
-        _ ->
-          {:ok, t} = ensure_thread(session_id)
-          t
-      end
+    case append_user_message(session_id, tid, canonical, user_text) do
+      {:error, :duplicate_turn} ->
+        {:error, :duplicate_turn}
 
-    canonical =
-      case Conversations.latest_snapshot_for_thread(tid) do
-        %{combined_chat: canon} -> canon
-        _ -> %{"messages" => []}
-      end
-
-    {updated, persisted?} =
-      case needs_append_user?(canonical, user_text) do
-        true ->
-          updated =
-            put_in(
-              canonical,
-              ["messages"],
-              (canonical["messages"] || []) ++ [user_msg(user_text)]
-            )
-
-          {:ok, _} =
-            Conversations.create_chat_entry(%{
-              session_id: session_id,
-              turn_index: Conversations.next_turn_index(session_id),
-              actor: "user",
-              provider: nil,
-              request_headers: %{},
-              response_headers: %{},
-              combined_chat: updated,
-              thread_id: tid,
-              edit_version: 0
-            })
-
-          {updated, true}
-
-        false ->
-          # Duplicate user turn detected; do not persist or start a new provider stream
-          {:duplicate, false}
-      end
-
-    if updated == :duplicate do
-      {:error, :duplicate_turn}
-    else
-      model = pick_model_for_session(session, provider)
-
-      t0_ms = Keyword.get(opts, :t0_ms, System.monotonic_time(:millisecond))
-
-      opts =
-        opts
-        |> Keyword.put_new(:t0_ms, t0_ms)
-        |> put_sandbox_owner()
-
-      if Keyword.get(opts, :start_stream?, true) do
-        {:ok, provider_msgs} = Conversations.Translator.to_provider(updated, provider)
-
-        with {:ok, stream_id} <-
-               SessionsManager.start_stream(
-                 session_id,
-                 provider,
-                 auth_name,
-                 provider_msgs,
-                 model,
-                 opts
-               ) do
-          {:ok,
-           %{
-             stream_id: stream_id,
-             provider: provider,
-             model: model,
-             auth_type: auth_type,
-             auth_name: auth_name,
-             thread_id: tid,
-             pending_canonical: updated
-           }}
-        end
-      else
-        # Dry-run path for tests: do not start provider streaming
-        {:ok,
-         %{
-           stream_id: "dry-" <> Ecto.UUID.generate(),
-           provider: provider,
-           model: model,
-           auth_type: auth_type,
-           auth_name: auth_name,
-           thread_id: tid,
-           pending_canonical: updated
-         }}
-      end
+      {:ok, updated} ->
+        build_turn_response(
+          session,
+          session_id,
+          tid,
+          updated,
+          provider,
+          auth_type,
+          auth_name,
+          opts
+        )
     end
+  end
+
+  defp resolve_thread_id(session_id, thread_id) do
+    case thread_id do
+      t when is_binary(t) and t != "" ->
+        t
+
+      _ ->
+        {:ok, t} = ensure_thread(session_id)
+        t
+    end
+  end
+
+  defp get_canonical_chat(tid) do
+    case Conversations.latest_snapshot_for_thread(tid) do
+      %{combined_chat: canon} -> canon
+      _ -> %{"messages" => []}
+    end
+  end
+
+  defp append_user_message(session_id, tid, canonical, user_text) do
+    case needs_append_user?(canonical, user_text) do
+      true ->
+        updated =
+          put_in(canonical, ["messages"], (canonical["messages"] || []) ++ [user_msg(user_text)])
+
+        {:ok, _} =
+          Conversations.create_chat_entry(%{
+            session_id: session_id,
+            turn_index: Conversations.next_turn_index(session_id),
+            actor: "user",
+            provider: nil,
+            request_headers: %{},
+            response_headers: %{},
+            combined_chat: updated,
+            thread_id: tid,
+            edit_version: 0
+          })
+
+        {:ok, updated}
+
+      false ->
+        {:error, :duplicate_turn}
+    end
+  end
+
+  defp build_turn_response(
+         session,
+         session_id,
+         tid,
+         updated,
+         provider,
+         auth_type,
+         auth_name,
+         opts
+       ) do
+    model = pick_model_for_session(session, provider)
+    t0_ms = Keyword.get(opts, :t0_ms, System.monotonic_time(:millisecond))
+
+    opts =
+      opts
+      |> Keyword.put_new(:t0_ms, t0_ms)
+      |> put_sandbox_owner()
+
+    if Keyword.get(opts, :start_stream?, true) do
+      start_stream_response(session_id, tid, updated, provider, auth_type, auth_name, model, opts)
+    else
+      dry_run_response(tid, updated, provider, auth_type, auth_name, model)
+    end
+  end
+
+  defp start_stream_response(
+         session_id,
+         tid,
+         updated,
+         provider,
+         auth_type,
+         auth_name,
+         model,
+         opts
+       ) do
+    {:ok, provider_msgs} = Conversations.Translator.to_provider(updated, provider)
+
+    with {:ok, stream_id} <-
+           SessionsManager.start_stream(
+             session_id,
+             provider,
+             auth_name,
+             provider_msgs,
+             model,
+             opts
+           ) do
+      {:ok,
+       %{
+         stream_id: stream_id,
+         provider: provider,
+         model: model,
+         auth_type: auth_type,
+         auth_name: auth_name,
+         thread_id: tid,
+         pending_canonical: updated
+       }}
+    end
+  end
+
+  defp dry_run_response(tid, updated, provider, auth_type, auth_name, model) do
+    {:ok,
+     %{
+       stream_id: "dry-" <> Ecto.UUID.generate(),
+       provider: provider,
+       model: model,
+       auth_type: auth_type,
+       auth_name: auth_name,
+       thread_id: tid,
+       pending_canonical: updated
+     }}
   end
 
   @doc "Subscribe the current process to session PubSub topic."

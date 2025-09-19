@@ -323,8 +323,12 @@ defmodule TheMaestro.SuppliedContext do
   defp ensure_cache_table do
     case :ets.whereis(@cache_table) do
       :undefined ->
-        :ets.new(@cache_table, [:named_table, :set, :public, read_concurrency: true])
-        :ok
+        try do
+          :ets.new(@cache_table, [:named_table, :set, :public, read_concurrency: true])
+          :ok
+        rescue
+          ArgumentError -> :ok
+        end
 
       _ ->
         :ok

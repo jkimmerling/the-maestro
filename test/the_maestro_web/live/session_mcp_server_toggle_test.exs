@@ -4,6 +4,7 @@ defmodule TheMaestroWeb.SessionMCPServerToggleTest do
   import Phoenix.LiveViewTest
   import TheMaestro.ConversationsFixtures
   alias TheMaestro.{Conversations, MCP}
+  alias TheMaestro.MCP.ToolsCache
 
   setup do
     s = session_fixture(%{working_dir: "."})
@@ -26,12 +27,16 @@ defmodule TheMaestroWeb.SessionMCPServerToggleTest do
     ]
 
     # Warm the cache so list_for_provider_with_servers will surface items without discover
-    :ok = TheMaestro.MCP.ToolsCache.put(server.id, tools, 60_000)
+    :ok = ToolsCache.put(server.id, tools, 60_000)
 
     %{session: s, server: server}
   end
 
-  test "toggling server checkbox adds and removes MCP tools", %{conn: conn, session: s, server: server} do
+  test "toggling server checkbox adds and removes MCP tools", %{
+    conn: conn,
+    session: s,
+    server: server
+  } do
     {:ok, view, _html} = live(conn, ~p"/sessions/#{s.id}/chat")
 
     # Open config

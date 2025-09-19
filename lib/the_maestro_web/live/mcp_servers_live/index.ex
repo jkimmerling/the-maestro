@@ -90,22 +90,7 @@ defmodule TheMaestroWeb.MCPServersLive.Index do
 
     if updated.is_enabled do
       # Warm tools cache when enabling a server
-      Task.start(fn ->
-        case MCP.Client.discover_server(updated) do
-          {:ok, %{tools: tools}} ->
-            ttl_ms =
-              case updated.metadata do
-                %{} = md -> (md["tool_cache_ttl_minutes"] || 60) * 60_000
-                _ -> 60 * 60_000
-              end
-
-            _ = TheMaestro.MCP.ToolsCache.put(updated.id, tools, ttl_ms)
-            :ok
-
-          _ ->
-            :ok
-        end
-      end)
+      Task.start(fn -> warm_server_cache(updated) end)
     end
 
     {:noreply, reload_servers(socket)}
@@ -116,19 +101,29 @@ defmodule TheMaestroWeb.MCPServersLive.Index do
 
     case MCPClient.discover_server(server) do
       {:ok, %{tools: tools}} ->
-        ttl_ms =
-          case server.metadata do
-            %{} = md -> ((md["tool_cache_ttl_minutes"] || 60) |> to_int()) * 60_000
-            _ -> 60 * 60_000
-          end
-
-        _ = TheMaestro.MCP.ToolsCache.put(server.id, tools, ttl_ms)
+        cache_server_tools(server, tools)
         {:noreply, socket |> put_flash(:info, format_test_success(server, tools))}
 
       {:error, reason} ->
         {:noreply, socket |> put_flash(:error, format_test_error(server, reason))}
     end
   end
+
+  defp warm_server_cache(server) do
+    case MCP.Client.discover_server(server) do
+      {:ok, %{tools: tools}} -> cache_server_tools(server, tools)
+      _ -> :ok
+    end
+  end
+
+  defp cache_server_tools(server, tools) do
+    ttl_ms = calculate_cache_ttl(server.metadata)
+    _ = MCP.ToolsCache.put(server.id, tools, ttl_ms)
+    :ok
+  end
+
+  defp calculate_cache_ttl(%{} = metadata),
+    do: to_int(metadata["tool_cache_ttl_minutes"] || 60) * 60_000
 
   defp to_int(n) when is_integer(n), do: n
 

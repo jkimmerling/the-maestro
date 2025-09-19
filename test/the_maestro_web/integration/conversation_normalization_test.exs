@@ -42,9 +42,6 @@ defmodule TheMaestroWeb.ConversationNormalizationTest do
 
   defp message_count(session_id), do: latest_messages(session_id) |> length()
 
-  defp get_text(%{"content" => [%{"text" => t} | _]}), do: t
-  defp get_text(_), do: ""
-
   # Wait/poll helper with small deadline for async finalize
   defp eventually(fun, timeout \\ 1_000, step \\ 50) do
     deadline = System.monotonic_time(:millisecond) + timeout

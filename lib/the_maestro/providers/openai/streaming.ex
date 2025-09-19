@@ -387,9 +387,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
     end
   end
 
-  defp instruction_shape(v) when is_binary(v), do: :string
-  defp instruction_shape(v) when is_list(v), do: :list
-  defp instruction_shape(_), do: :unknown
+  defp instruction_shape(_v), do: :string
 
   # legacy collapsed form no longer used
 

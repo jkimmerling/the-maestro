@@ -10,43 +10,14 @@ defmodule Mix.Tasks.E2e.Anthropic.Mcp do
   """
 
   alias TheMaestro.{Auth, Chat, Conversations, MCP}
-  alias TheMaestro.Conversations.Translator
-  alias TheMaestro.Providers.Anthropic
 
   @impl true
   def run(args) do
     Mix.Task.run("app.start")
 
-    {opts, _, _} = OptionParser.parse(args, switches: [anthropic: :string])
-    session_name = opts[:anthropic] || System.get_env("ANTHROPIC_SESSION_NAME")
-
-    unless is_binary(session_name) and session_name != "" do
-      Mix.raise("Provide --anthropic <saved_auth_name> or ANTHROPIC_SESSION_NAME env var")
-    end
-
-    # Ensure a session exists
-    sa =
-      Auth.get_by_provider_and_name(:anthropic, :oauth, session_name) ||
-        Auth.get_by_provider_and_name(:anthropic, :api_key, session_name)
-
-    unless sa, do: Mix.raise("No saved_authentication for anthropic name=#{session_name}")
-
-    session =
-      case Conversations.latest_session_for_auth_id(sa.id) do
-        existing when not is_nil(existing) ->
-          existing
-
-        _ ->
-          {:ok, created} =
-            Conversations.create_session(%{
-              auth_id: sa.id,
-              model_id: "claude-3-5-sonnet-latest",
-              working_dir: File.cwd!()
-            })
-
-          created
-      end
-
+    session_name = get_session_name(args)
+    sa = get_saved_auth!(session_name)
+    session = get_or_create_session(sa)
     session_id = session.id
 
     ensure_mcps!(session_id)
@@ -215,6 +186,43 @@ defmodule Mix.Tasks.E2e.Anthropic.Mcp do
       true ->
         Process.sleep(100)
         do_wait_until(fun, target, deadline)
+    end
+  end
+
+  defp get_session_name(args) do
+    {opts, _, _} = OptionParser.parse(args, switches: [anthropic: :string])
+    session_name = opts[:anthropic] || System.get_env("ANTHROPIC_SESSION_NAME")
+
+    unless is_binary(session_name) and session_name != "" do
+      Mix.raise("Provide --anthropic <saved_auth_name> or ANTHROPIC_SESSION_NAME env var")
+    end
+
+    session_name
+  end
+
+  defp get_saved_auth!(session_name) do
+    sa =
+      Auth.get_by_provider_and_name(:anthropic, :oauth, session_name) ||
+        Auth.get_by_provider_and_name(:anthropic, :api_key, session_name)
+
+    unless sa, do: Mix.raise("No saved_authentication for anthropic name=#{session_name}")
+    sa
+  end
+
+  defp get_or_create_session(sa) do
+    case Conversations.latest_session_for_auth_id(sa.id) do
+      existing when not is_nil(existing) ->
+        existing
+
+      _ ->
+        {:ok, created} =
+          Conversations.create_session(%{
+            auth_id: sa.id,
+            model_id: "claude-3-5-sonnet-latest",
+            working_dir: File.cwd!()
+          })
+
+        created
     end
   end
 end

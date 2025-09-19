@@ -51,17 +51,15 @@ defmodule TheMaestroWeb.DashboardSessionModalTest do
     assert p_idx < memory_idx
 
     # Initially collapsed
-    assert html =~ ~r/id=\"section-system-prompts-content\"[^>]*class=\"[^"]*hidden/
-    assert html =~ ~r/id=\"section-persona-content\"[^>]*class=\"[^"]*hidden/
-    assert html =~ ~r/id=\"section-memory-content\"[^>]*class=\"[^"]*hidden/
+    assert has_element?(view, "#section-system-prompts-content.hidden")
+    assert has_element?(view, "#section-persona-content.hidden")
+    assert has_element?(view, "#section-memory-content.hidden")
 
     # Toggle prompt section hidden -> visible -> hidden
     view |> element("#toggle-prompt") |> render_click()
-    html2 = render(view)
-    refute html2 =~ ~r/id=\"section-system-prompts-content\"[^>]*class=\"[^"]*hidden/
+    refute has_element?(view, "#section-system-prompts-content.hidden")
     view |> element("#toggle-prompt") |> render_click()
-    html3 = render(view)
-    assert html3 =~ ~r/id=\"section-system-prompts-content\"[^>]*class=\"[^"]*hidden/
+    assert has_element?(view, "#section-system-prompts-content.hidden")
   end
 
   test "chat history picker lists existing threads even if attached", %{conn: conn} do
@@ -121,6 +119,6 @@ defmodule TheMaestroWeb.DashboardSessionModalTest do
     assert is_integer(new_button_idx), "New MCP button not found"
 
     # Helper text appears under selector
-    assert html =~ "Select one or more connectors to preload for this session"
+    assert html =~ "Select one or more connectors to use for this session"
   end
 end

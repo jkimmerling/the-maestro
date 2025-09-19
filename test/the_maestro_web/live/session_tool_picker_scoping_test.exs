@@ -4,6 +4,7 @@ defmodule TheMaestroWeb.SessionToolPickerScopingTest do
   import Phoenix.LiveViewTest
   import TheMaestro.ConversationsFixtures
   alias TheMaestro.{Conversations, MCP}
+  alias TheMaestro.MCP.ToolsCache
 
   setup do
     s = session_fixture(%{working_dir: "."})
@@ -24,7 +25,7 @@ defmodule TheMaestroWeb.SessionToolPickerScopingTest do
       %{"name" => "get-library-docs", "description" => "Docs", "inputSchema" => %{}}
     ]
 
-    :ok = TheMaestro.MCP.ToolsCache.put(server.id, tools, 60_000)
+    :ok = ToolsCache.put(server.id, tools, 60_000)
 
     %{session: s, server: server}
   end
@@ -41,17 +42,25 @@ defmodule TheMaestroWeb.SessionToolPickerScopingTest do
     assert has_element?(view, "#tool-openai-get-library-docs-mcp input[checked]")
 
     # Click None in left (builtin) picker; should not uncheck MCP tools
-    view |> element("#tool-picker-openai button[phx-click='tool_picker:select_none']") |> render_click()
+    view
+    |> element("#tool-picker-openai button[phx-click='tool_picker:select_none']")
+    |> render_click()
+
     assert has_element?(view, "#tool-openai-resolve-library-id-mcp input[checked]")
     assert has_element?(view, "#tool-openai-get-library-docs-mcp input[checked]")
 
     # Click All in left picker (no-op for MCP)
-    view |> element("#tool-picker-openai button[phx-click='tool_picker:select_all']") |> render_click()
+    view
+    |> element("#tool-picker-openai button[phx-click='tool_picker:select_all']")
+    |> render_click()
+
     assert has_element?(view, "#tool-openai-resolve-library-id-mcp input[checked]")
     assert has_element?(view, "#tool-openai-get-library-docs-mcp input[checked]")
 
     # Now click None in right (MCP) picker; should not uncheck builtins
-    view |> element("#tool-picker-openai-mcp button[phx-click='tool_picker:select_none']") |> render_click()
+    view
+    |> element("#tool-picker-openai-mcp button[phx-click='tool_picker:select_none']")
+    |> render_click()
 
     # Builtin tool checkboxes should remain checked (shell/apply_patch)
     assert has_element?(view, "#tool-openai-shell input[checked]")

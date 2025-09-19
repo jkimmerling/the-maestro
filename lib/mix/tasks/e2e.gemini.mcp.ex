@@ -24,7 +24,6 @@ defmodule Mix.Tasks.E2e.Gemini.Mcp do
   """
 
   alias TheMaestro.{Auth, Chat, Conversations, MCP}
-  alias TheMaestro.Conversations.Translator
 
   @impl true
   def run(args) do
