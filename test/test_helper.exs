@@ -3,6 +3,9 @@ ExUnit.start()
 # Start Redis mock for tests before application starts
 {:ok, _redis_mock} = TheMaestro.RedisMock.start_link()
 
+# Route Redis calls through the test adapter
+Application.put_env(:the_maestro, :redis_adapter, TheMaestro.RedisMock)
+
 # Ensure application is started for tests
 {:ok, _} = Application.ensure_all_started(:the_maestro)
 

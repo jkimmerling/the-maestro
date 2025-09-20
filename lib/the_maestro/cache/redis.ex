@@ -7,7 +7,7 @@ defmodule TheMaestro.Cache.Redis do
   """
 
   require Logger
-  alias Redix
+  alias TheMaestro.Cache.RedisClient
 
   @type key_term :: term()
 
@@ -29,7 +29,7 @@ defmodule TheMaestro.Cache.Redis do
     key = key_for(key_term)
     conn = TheMaestro.Redis
 
-    case Redix.command(conn, ["GET", key]) do
+    case RedisClient.command(conn, ["GET", key]) do
       {:ok, nil} ->
         set_and_return(conn, key, ttl_ms, fun)
 
@@ -63,14 +63,14 @@ defmodule TheMaestro.Cache.Redis do
     value = fun.()
     payload = :erlang.term_to_binary(%{v: value, at_ms: now_ms()})
     ttl_sec = max(div(ttl_ms, 1000), 1)
-    _ = Redix.command(conn, ["SETEX", key, Integer.to_string(ttl_sec), payload])
+    _ = RedisClient.command(conn, ["SETEX", key, Integer.to_string(ttl_sec), payload])
     value
   end
 
   defp scan_delete(conn, cursor, prefix) do
-    case Redix.command(conn, ["SCAN", cursor, "MATCH", prefix <> ":*", "COUNT", "1000"]) do
+    case RedisClient.command(conn, ["SCAN", cursor, "MATCH", prefix <> ":*", "COUNT", "1000"]) do
       {:ok, [next, keys]} when is_list(keys) ->
-        if keys != [], do: Redix.command(conn, ["DEL" | keys])
+        if keys != [], do: RedisClient.command(conn, ["DEL" | keys])
         if next == "0", do: :ok, else: scan_delete(conn, next, prefix)
 
       {:error, reason} ->

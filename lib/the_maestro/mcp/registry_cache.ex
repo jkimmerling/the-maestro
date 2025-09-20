@@ -1,13 +1,15 @@
 defmodule TheMaestro.MCP.RegistryCache do
   @moduledoc false
 
+  alias TheMaestro.Cache.RedisClient, as: RedisClient
+
   @ttl_ms 300_000
   @prefix "the_maestro:mcp_registry"
 
   def get(session_id, mcps_hash) when is_binary(session_id) do
     key = cache_key(session_id)
 
-    case Redix.command(TheMaestro.Redis, ["GET", key]) do
+    case RedisClient.command(TheMaestro.Redis, ["GET", key]) do
       {:ok, nil} ->
         :miss
 
@@ -29,13 +31,13 @@ defmodule TheMaestro.MCP.RegistryCache do
     key = cache_key(session_id)
     payload = Jason.encode!(%{"hash" => mcps_hash, "decls" => decls, "at_ms" => now_ms()})
     ttl_sec = div(@ttl_ms, 1000)
-    _ = Redix.command(TheMaestro.Redis, ["SETEX", key, Integer.to_string(ttl_sec), payload])
+    _ = RedisClient.command(TheMaestro.Redis, ["SETEX", key, Integer.to_string(ttl_sec), payload])
     :ok
   end
 
   def invalidate(session_id) when is_binary(session_id) do
     key = cache_key(session_id)
-    _ = Redix.command(TheMaestro.Redis, ["DEL", key])
+    _ = RedisClient.command(TheMaestro.Redis, ["DEL", key])
     :ok
   end
 

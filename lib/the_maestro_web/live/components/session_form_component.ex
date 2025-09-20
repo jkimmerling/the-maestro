@@ -262,9 +262,10 @@ defmodule TheMaestroWeb.SessionFormComponent do
       
     <!-- MCPs Container -->
       <div class="md:col-span-2 mt-4">
-        <label class="text-xs font-semibold uppercase tracking-wide">MCP Servers</label>
+        <h3 class="text-sm font-bold">MCPs</h3>
+        <div class="text-[11px] uppercase tracking-wide opacity-70 mt-1">Servers</div>
         <div class="w-full md:w-[90%] mx-auto mt-2">
-          <div class="space-y-2" id="mcp-server-list">
+          <div class="space-y-2" id="mcp-server-checkboxes">
             <%= for {label, id} <- (@mcp_server_options || []) do %>
               <% server_id = to_string(id) %>
               <% is_selected = server_id in Enum.map(@session_mcp_selected_ids || [], &to_string/1) %>
@@ -396,7 +397,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
 
           <div class="mt-4 flex justify-between items-center">
             <p class="text-[11px] text-slate-400">
-              Check the box next to each server to enable its tools. Expand servers to customize tool selection.
+              Select one or more connectors to use for this session
             </p>
             <button type="button" class="btn btn-xs" phx-click="open_mcp_modal">
               <.icon name="hero-plus" class="h-4 w-4" />
@@ -703,14 +704,8 @@ defmodule TheMaestroWeb.SessionFormComponent do
 
   # Helper to get available tools for a server directly from cache (even if not selected)
   defp get_available_tools_for_server(_inventory_by_provider, provider, server_id) do
-    # Get tools directly from cache for this specific server
-    case Inventory.list_for_provider_with_servers([server_id], provider) do
-      tools when is_list(tools) ->
-        Enum.filter(tools, &(&1.source == :mcp))
-
-      _ ->
-        []
-    end
+    Inventory.list_for_provider_with_servers([server_id], provider)
+    |> Enum.filter(&(&1.source == :mcp))
   end
 
   # Helper to add all tools from a server to the allowed list

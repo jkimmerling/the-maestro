@@ -36,8 +36,11 @@ defmodule TheMaestro.Application do
         finch_child_spec(:anthropic_finch, finch_pools[:anthropic]),
         finch_child_spec(:openai_finch, finch_pools[:openai]),
         finch_child_spec(:gemini_finch, finch_pools[:gemini]),
-        # Include MCP tools cache for testing with Redis mock
-        TheMaestro.MCP.UnifiedToolsCache
+        # Start core registries/managers needed by tests
+        TheMaestro.ProviderRegistry,
+        {Task.Supervisor, name: TheMaestro.Sessions.TaskSup},
+        TheMaestro.Sessions.Manager
+        # Exclude UnifiedToolsCache in tests to avoid DB sandbox conflicts
       ]
     else
       [

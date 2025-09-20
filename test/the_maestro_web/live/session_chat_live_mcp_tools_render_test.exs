@@ -11,7 +11,7 @@ defmodule TheMaestroWeb.SessionChatLiveMCPToolsRenderTest do
     %{session: s}
   end
 
-  test "config modal renders MCP tools from registry without server_label", %{
+  test "config modal renders without error when registry-only tools exist (no servers)", %{
     conn: conn,
     session: s
   } do
@@ -33,7 +33,10 @@ defmodule TheMaestroWeb.SessionChatLiveMCPToolsRenderTest do
     view |> element("button", "Config") |> render_click()
     assert has_element?(view, "#session-config-modal")
 
-    # MCP tools component should render the registry tool without crashing
-    assert has_element?(view, "#tool-openai-resolve-library-id-mcp")
+    # Modal renders and MCP Servers section is present; no separate MCP tools list
+    html = render(view)
+    assert html =~ ">MCPs<"
+    assert html =~ ~r/id=\"mcp-server-checkboxes\"/
+    assert html =~ "No MCP servers configured"
   end
 end

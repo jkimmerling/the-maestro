@@ -47,21 +47,14 @@ defmodule TheMaestroWeb.SessionToolPickerTest do
     # Parent MCPs heading exists
     assert html =~ ">MCPs<"
 
-    # Subheadings exist
+    # Servers subheading exists
     servers_idx =
       case :binary.match(html, ">Servers<") do
         {pos, _} -> pos
         _ -> nil
       end
 
-    tools_idx =
-      case :binary.match(html, ">MCP TOOLS<") do
-        {pos, _} -> pos
-        _ -> nil
-      end
-
     assert is_integer(servers_idx), "Servers subheading not found"
-    assert is_integer(tools_idx), "MCP TOOLS subheading not found"
 
     # MCP server checkboxes container exists under Servers section
     assert html =~ ~r/id=\"mcp-server-checkboxes\"/

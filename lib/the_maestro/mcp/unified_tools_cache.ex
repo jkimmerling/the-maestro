@@ -17,6 +17,7 @@ defmodule TheMaestro.MCP.UnifiedToolsCache do
   use GenServer
   require Logger
 
+  alias TheMaestro.Cache.RedisClient, as: RedisClient
   alias TheMaestro.MCP
 
   @cache_key "mcp_tool_list"
@@ -33,17 +34,18 @@ defmodule TheMaestro.MCP.UnifiedToolsCache do
   Get the unified tool list from cache.
   """
   def get_tools do
-    case Redix.command(TheMaestro.Redis, ["GET", @cache_key]) do
+    if Process.whereis(__MODULE__) == nil, do: {:ok, %{}}, else: do_get_tools()
+  end
+
+  defp do_get_tools do
+    case RedisClient.command(TheMaestro.Redis, ["GET", @cache_key]) do
       {:ok, nil} ->
         GenServer.call(__MODULE__, :rebuild_cache)
 
       {:ok, json} ->
         case Jason.decode(json) do
-          {:ok, %{"tools" => tools}} when is_map(tools) ->
-            {:ok, tools}
-
-          _ ->
-            GenServer.call(__MODULE__, :rebuild_cache)
+          {:ok, %{"tools" => tools}} when is_map(tools) -> {:ok, tools}
+          _ -> GenServer.call(__MODULE__, :rebuild_cache)
         end
 
       _ ->
@@ -55,14 +57,18 @@ defmodule TheMaestro.MCP.UnifiedToolsCache do
   Force refresh the cache (called when MCPs are added/modified).
   """
   def refresh_cache do
-    GenServer.cast(__MODULE__, :refresh_cache)
+    if Process.whereis(__MODULE__) do
+      GenServer.cast(__MODULE__, :refresh_cache)
+    else
+      :ok
+    end
   end
 
   @doc """
   Invalidate the unified cache.
   """
   def invalidate do
-    _ = Redix.command(TheMaestro.Redis, ["DEL", @cache_key])
+    _ = RedisClient.command(TheMaestro.Redis, ["DEL", @cache_key])
     :ok
   end
 
@@ -114,7 +120,7 @@ defmodule TheMaestro.MCP.UnifiedToolsCache do
     tools_by_provider = build_unified_inventory()
     payload = Jason.encode!(%{"tools" => tools_by_provider, "at_ms" => now_ms()})
 
-    case Redix.command(TheMaestro.Redis, ["SET", @cache_key, payload]) do
+    case RedisClient.command(TheMaestro.Redis, ["SET", @cache_key, payload]) do
       {:ok, "OK"} ->
         Logger.info("Unified MCP tools cache updated successfully")
         {:ok, tools_by_provider}

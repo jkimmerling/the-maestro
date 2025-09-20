@@ -9,6 +9,7 @@ defmodule TheMaestro.MCP do
 
   alias TheMaestro.Conversations.Session
   alias TheMaestro.MCP.{Servers, SessionServer}
+  alias TheMaestro.MCP.UnifiedToolsCache
   alias TheMaestro.Repo
 
   @doc """
@@ -99,7 +100,7 @@ defmodule TheMaestro.MCP do
 
     # Refresh unified tools cache when a new MCP server is created
     case result do
-      {:ok, _server} -> TheMaestro.MCP.UnifiedToolsCache.refresh_cache()
+      {:ok, _server} -> UnifiedToolsCache.refresh_cache()
       _ -> :ok
     end
 
@@ -117,7 +118,7 @@ defmodule TheMaestro.MCP do
 
     # Refresh unified tools cache when an MCP server is updated
     case result do
-      {:ok, _server} -> TheMaestro.MCP.UnifiedToolsCache.refresh_cache()
+      {:ok, _server} -> UnifiedToolsCache.refresh_cache()
       _ -> :ok
     end
 

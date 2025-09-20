@@ -336,16 +336,12 @@ defmodule TheMaestroWeb.MCPServersLive.FormComponent do
     end)
   end
 
-  defp to_int(n) when is_integer(n), do: n
-
   defp to_int(n) when is_binary(n) do
     case Integer.parse(n) do
       {i, _} -> i
       _ -> 60
     end
   end
-
-  defp to_int(_), do: 60
 
   defp parse_metadata(value) when value in [nil, ""] do
     {:ok, %{}}
