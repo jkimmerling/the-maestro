@@ -1,8 +1,6 @@
 defmodule TheMaestroWeb.SessionFormComponent do
   use TheMaestroWeb, :live_component
 
-  alias TheMaestro.MCP
-  alias TheMaestro.MCP.ToolsCache
   alias TheMaestro.Tools.Inventory
 
   @moduledoc """
@@ -53,6 +51,8 @@ defmodule TheMaestroWeb.SessionFormComponent do
     |> assign(:tool_picker_allowed, allowed)
     |> assign(:session_mcp_selected_ids, assigns[:session_mcp_selected_ids] || [])
     |> assign(:mcp_warming, assigns[:mcp_warming] || false)
+    |> assign(:mcp_expanded_servers, assigns[:mcp_expanded_servers] || MapSet.new())
+    |> assign(:mcp_server_tools, assigns[:mcp_server_tools] || %{})
   end
 
   defp build_initial_inventory(%{mode: :edit, config_form: %{"session_id" => sid}})
@@ -67,6 +67,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
   defp build_initial_inventory(%{mode: :create, session_mcp_selected_ids: ids}) do
     ids = Enum.map(List.wrap(ids), &to_string/1)
 
+    # Build inventory from cache (Inventory module now handles stale data automatically)
     %{
       openai: Inventory.list_for_provider_with_servers(ids, :openai),
       anthropic: Inventory.list_for_provider_with_servers(ids, :anthropic),
@@ -259,53 +260,144 @@ defmodule TheMaestroWeb.SessionFormComponent do
       
     <!-- MCPs Container -->
       <div class="md:col-span-2 mt-4">
-        <label class="text-xs font-semibold uppercase tracking-wide">MCPs</label>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-start mt-2">
-          <!-- Left column: Servers (checkboxes) -->
-          <div>
-            <div class="text-xs font-semibold uppercase tracking-wide">Servers</div>
-            <div class="mt-2 space-y-1" id="mcp-server-checkboxes">
-              <label
-                :for={{label, id} <- @mcp_server_options || []}
-                class="flex items-center gap-2 text-sm"
-                id={"mcp-server-" <> to_string(id)}
-              >
-                <input
-                  type="checkbox"
-                  phx-click="toggle_mcp_server"
-                  phx-target={@myself}
-                  phx-value-id={id}
-                  checked={to_string(id) in Enum.map(@session_mcp_selected_ids || [], &to_string/1)}
-                />
-                <span class="truncate">{label}</span>
-              </label>
-            </div>
-            <p class="mt-2 text-[11px] text-slate-400">
-              Select one or more connectors to use for this session. Disabled entries appear with a badge.
-            </p>
-            <button type="button" class="btn btn-xs mt-2" phx-click="open_mcp_modal">
-              <.icon name="hero-plus" class="h-4 w-4" />
-              <span class="ml-1">New</span>
-            </button>
+        <label class="text-xs font-semibold uppercase tracking-wide">MCP Servers</label>
+        <div class="w-full md:w-[90%] mx-auto mt-2">
+          <div class="space-y-2" id="mcp-server-list">
+            <%= for {label, id} <- (@mcp_server_options || []) do %>
+              <% server_id = to_string(id) %>
+              <% is_selected = server_id in Enum.map(@session_mcp_selected_ids || [], &to_string/1) %>
+              <% is_expanded = MapSet.member?(@mcp_expanded_servers, server_id) %>
+              <% server_tools = get_server_tools(@tool_inventory_by_provider, @provider, label) %>
+              <% available_tools = get_available_tools_for_server(@tool_inventory_by_provider, @provider, server_id) %>
+              <% selected_tools = get_selected_tools(@tool_picker_allowed, @provider, server_tools) %>
+              <% some_tools_selected = length(selected_tools) > 0 && length(selected_tools) < length(server_tools) %>
+
+              <div class="border border-base-300 rounded-lg p-3" id={"mcp-server-" <> server_id}>
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <!-- Expand/Collapse Arrow -->
+                    <button
+                      type="button"
+                      class="btn btn-xs btn-ghost p-0 w-6 h-6"
+                      phx-click="toggle_mcp_expand"
+                      phx-target={@myself}
+                      phx-value-id={server_id}
+                      disabled={length(server_tools) == 0}
+                    >
+                      <.icon
+                        name={if is_expanded, do: "hero-chevron-down", else: "hero-chevron-right"}
+                        class="h-4 w-4"
+                      />
+                    </button>
+
+                    <!-- Server Checkbox -->
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        phx-click="toggle_mcp_server"
+                        phx-target={@myself}
+                        phx-value-id={server_id}
+                        checked={is_selected}
+                        indeterminate={some_tools_selected}
+                        class={[
+                          some_tools_selected && "indeterminate:bg-blue-500"
+                        ]}
+                      />
+                      <span class="text-sm font-medium">{label}</span>
+                    </label>
+                  </div>
+
+                  <!-- Tool Count Badge -->
+                  <div class="flex items-center gap-2">
+                    <%= if is_selected do %>
+                      <span class="badge badge-sm">
+                        {length(selected_tools)}/{length(server_tools)} tools
+                      </span>
+                    <% else %>
+                      <span class="badge badge-sm badge-outline">
+                        {length(available_tools)} tools available
+                      </span>
+                    <% end %>
+                  </div>
+                </div>
+
+                <!-- Expandable Tools Section -->
+                <div
+                  class={[
+                    "mt-3 ml-8 space-y-1 transition-all duration-200",
+                    !is_expanded && "hidden"
+                  ]}
+                  id={"mcp-server-tools-" <> server_id}
+                >
+                  <%= if length(server_tools) > 0 do %>
+                    <div class="flex justify-end mb-2 gap-2">
+                      <button
+                        type="button"
+                        class="btn btn-xs"
+                        phx-click="mcp_select_all_tools"
+                        phx-target={@myself}
+                        phx-value-id={server_id}
+                        phx-value-provider={@provider}
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-xs"
+                        phx-click="mcp_select_no_tools"
+                        phx-target={@myself}
+                        phx-value-id={server_id}
+                        phx-value-provider={@provider}
+                      >
+                        Select None
+                      </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-1">
+                      <%= for tool <- server_tools do %>
+                        <label class="flex items-start gap-2 p-1 hover:bg-base-200 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            phx-click="tool_picker:toggle"
+                            phx-target={@myself}
+                            phx-value-provider={@provider}
+                            phx-value-name={tool.name}
+                            checked={tool.name in selected_tools}
+                            class="mt-0.5"
+                          />
+                          <div class="flex-1 min-w-0">
+                            <div class="font-mono text-xs truncate">{tool.name}</div>
+                            <%= if tool.description do %>
+                              <div class="text-[11px] text-slate-400 truncate">
+                                {tool.description}
+                              </div>
+                            <% end %>
+                          </div>
+                        </label>
+                      <% end %>
+                    </div>
+                  <% else %>
+                    <div class="text-xs text-slate-400 italic">No tools available</div>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+
+            <%= if @mcp_server_options == [] do %>
+              <div class="text-sm text-slate-400 italic py-4 text-center">
+                No MCP servers configured
+              </div>
+            <% end %>
           </div>
-          <!-- Right column: MCP TOOLS -->
-          <div>
-            <.live_component
-              module={TheMaestroWeb.ToolPickerComponent}
-              id={
-                if @mode == :edit, do: "session-tool-picker-mcp", else: "new-session-tool-picker-mcp"
-              }
-              provider={@provider}
-              session_id={if @mode == :edit, do: @config_form["session_id"], else: nil}
-              allowed_by_provider={@tool_picker_allowed || %{}}
-              inventory_by_provider={@tool_inventory_by_provider || %{}}
-              show_groups={[:mcp]}
-              warming={@mcp_warming}
-              dom_id_suffix="mcp"
-              title="MCP TOOLS"
-              top_margin={false}
-              target={@myself}
-            />
+
+          <div class="mt-4 flex justify-between items-center">
+            <p class="text-[11px] text-slate-400">
+              Check the box next to each server to enable its tools. Expand servers to customize tool selection.
+            </p>
+            <button type="button" class="btn btn-xs" phx-click="open_mcp_modal">
+              <.icon name="hero-plus" class="h-4 w-4" />
+              <span class="ml-1">Add Server</span>
+            </button>
           </div>
         </div>
       </div>
@@ -346,32 +438,107 @@ defmodule TheMaestroWeb.SessionFormComponent do
   def handle_event("toggle_mcp_server", %{"id" => id}, socket) do
     id = to_string(id)
     selected0 = socket.assigns[:session_mcp_selected_ids] || []
-    selected = if id in selected0, do: Enum.reject(selected0, &(&1 == id)), else: [id | selected0]
+    was_selected = id in selected0
+    selected = if was_selected, do: Enum.reject(selected0, &(&1 == id)), else: [id | selected0]
     selected = Enum.uniq(Enum.map(selected, &to_string/1))
 
-    comp_id = socket.assigns.id
-
-    Task.start(fn ->
-      warm_mcp_tools_cache(selected)
-      inv = build_tool_inventory_for_servers(selected)
-
-      Phoenix.LiveView.send_update(__MODULE__,
-        id: comp_id,
-        tool_inventory_by_provider: inv,
-        mcp_warming: false
-      )
-    end)
-
+    # Build inventory immediately from cache (will use stale data if available)
     inv = build_tool_inventory_for_servers(selected)
 
     send(self(), {:session_mcp_selected_ids, selected})
+
+    # When toggling server, also update tool selection
+    socket =
+      if was_selected do
+        # Deselecting server - remove all its tools from allowed list
+        socket
+        |> remove_server_tools_from_allowed(id, inv)
+      else
+        # Selecting server - add all its tools to allowed list
+        socket
+        |> add_all_server_tools_to_allowed(id, inv)
+      end
 
     {:noreply,
      assign(socket,
        session_mcp_selected_ids: selected,
        tool_inventory_by_provider: inv,
-       mcp_warming: true
+       mcp_warming: false
      )}
+  end
+
+  def handle_event("toggle_mcp_expand", %{"id" => id}, socket) do
+    id = to_string(id)
+    expanded = socket.assigns[:mcp_expanded_servers] || MapSet.new()
+
+    expanded =
+      if MapSet.member?(expanded, id) do
+        MapSet.delete(expanded, id)
+      else
+        MapSet.put(expanded, id)
+      end
+
+    {:noreply, assign(socket, :mcp_expanded_servers, expanded)}
+  end
+
+  def handle_event("mcp_select_all_tools", %{"id" => server_id, "provider" => prov_param}, socket) do
+    provider = to_provider(prov_param) || socket.assigns[:provider] || :openai
+    allowed0 = socket.assigns[:tool_picker_allowed] || %{}
+    inv = Map.get(socket.assigns[:tool_inventory_by_provider] || %{}, provider, [])
+
+    # Get server info to find tools for this specific server
+    server =
+      Enum.find(socket.assigns[:mcp_server_options] || [], fn {_label, id} ->
+        to_string(id) == server_id
+      end)
+
+    if server do
+      {label, _id} = server
+      # get_server_tools now handles label cleaning internally
+      server_tools = get_server_tools(socket.assigns.tool_inventory_by_provider, provider, label)
+      tool_names = Enum.map(server_tools, & &1.name)
+
+      current =
+        case Map.get(allowed0, provider) do
+          l when is_list(l) -> l
+          _ -> Enum.map(inv, & &1.name)
+        end
+
+      desired = Enum.uniq(current ++ tool_names)
+      {:noreply, assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("mcp_select_no_tools", %{"id" => server_id, "provider" => prov_param}, socket) do
+    provider = to_provider(prov_param) || socket.assigns[:provider] || :openai
+    allowed0 = socket.assigns[:tool_picker_allowed] || %{}
+    inv = Map.get(socket.assigns[:tool_inventory_by_provider] || %{}, provider, [])
+
+    # Get server info to find tools for this specific server
+    server =
+      Enum.find(socket.assigns[:mcp_server_options] || [], fn {_label, id} ->
+        to_string(id) == server_id
+      end)
+
+    if server do
+      {label, _id} = server
+      # get_server_tools now handles label cleaning internally
+      server_tools = get_server_tools(socket.assigns.tool_inventory_by_provider, provider, label)
+      tool_names = Enum.map(server_tools, & &1.name)
+
+      current =
+        case Map.get(allowed0, provider) do
+          l when is_list(l) -> l
+          _ -> Enum.map(inv, & &1.name)
+        end
+
+      desired = Enum.reject(current, &(&1 in tool_names))
+      {:noreply, assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("tool_picker:toggle", %{"provider" => prov_param, "name" => name}, socket) do
@@ -447,7 +614,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
 
   defp names_for_source(inv, _), do: Enum.map(inv, & &1.name)
 
-  # Inventory building and warming helpers
+  # Inventory building helper
   defp build_tool_inventory_for_servers(server_ids) do
     %{
       openai: Inventory.list_for_provider_with_servers(server_ids, :openai),
@@ -455,46 +622,6 @@ defmodule TheMaestroWeb.SessionFormComponent do
       gemini: Inventory.list_for_provider_with_servers(server_ids, :gemini)
     }
   end
-
-  defp warm_mcp_tools_cache(server_ids) do
-    Enum.each(server_ids, &warm_single_cache/1)
-  end
-
-  defp warm_single_cache(sid) do
-    case ToolsCache.get(sid, 60 * 60_000) do
-      {:ok, _} -> :ok
-      _ -> discover_and_cache_tools(sid)
-    end
-  end
-
-  defp discover_and_cache_tools(sid) do
-    server = MCP.get_server!(sid)
-
-    case MCP.Client.discover_server(server) do
-      {:ok, %{tools: tools}} -> cache_discovered_tools(sid, server, tools)
-      _ -> :ok
-    end
-  end
-
-  defp cache_discovered_tools(sid, server, tools) do
-    ttl_ms = calculate_cache_ttl(server.metadata)
-    _ = ToolsCache.put(sid, tools, ttl_ms)
-    :ok
-  end
-
-  defp calculate_cache_ttl(%{} = metadata),
-    do: to_int(metadata["tool_cache_ttl_minutes"] || 60) * 60_000
-
-  defp to_int(n) when is_integer(n), do: n
-
-  defp to_int(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      _ -> 60
-    end
-  end
-
-  defp to_int(_), do: 60
 
   defp encode_tools_json(%{} = allowed) do
     if map_size(allowed) == 0 do
@@ -506,6 +633,107 @@ defmodule TheMaestroWeb.SessionFormComponent do
         end)
 
       Jason.encode!(%{"allowed" => m})
+    end
+  end
+
+  # Helper to get tools for a specific MCP server
+  defp get_server_tools(inventory_by_provider, provider, server_label) do
+    inv = Map.get(inventory_by_provider || %{}, provider, [])
+
+    # Extract the display_name part from labels like "context7 · stdio"
+    # to match against the server_label stored in inventory items
+    clean_label =
+      case String.split(server_label, " · ") do
+        [display_name | _] -> display_name
+        _ -> server_label
+      end
+
+    Enum.filter(inv, fn item ->
+      item.source == :mcp && Map.get(item, :server_label) == clean_label
+    end)
+  end
+
+  # Helper to get selected tool names
+  defp get_selected_tools(allowed_by_provider, provider, server_tools) do
+    case Map.get(allowed_by_provider || %{}, provider) do
+      list when is_list(list) ->
+        tool_names = Enum.map(server_tools, & &1.name)
+        Enum.filter(list, &(&1 in tool_names))
+
+      _ ->
+        # If no explicit selection, all tools are selected by default
+        Enum.map(server_tools, & &1.name)
+    end
+  end
+
+  # Helper to get available tools for a server directly from cache (even if not selected)
+  defp get_available_tools_for_server(_inventory_by_provider, provider, server_id) do
+    # Get tools directly from cache for this specific server
+    case Inventory.list_for_provider_with_servers([server_id], provider) do
+      tools when is_list(tools) ->
+        Enum.filter(tools, &(&1.source == :mcp))
+      _ ->
+        []
+    end
+  end
+
+  # Helper to add all tools from a server to the allowed list
+  defp add_all_server_tools_to_allowed(socket, server_id, inv) do
+    provider = socket.assigns[:provider] || :openai
+    allowed0 = socket.assigns[:tool_picker_allowed] || %{}
+
+    # Find the server label for this ID
+    server =
+      Enum.find(socket.assigns[:mcp_server_options] || [], fn {_label, id} ->
+        to_string(id) == server_id
+      end)
+
+    if server do
+      {label, _id} = server
+      # get_server_tools now handles label cleaning internally
+      server_tools = get_server_tools(inv, provider, label)
+      tool_names = Enum.map(server_tools, & &1.name)
+
+      current =
+        case Map.get(allowed0, provider) do
+          l when is_list(l) -> l
+          _ -> Enum.map(inv[provider] || [], & &1.name)
+        end
+
+      desired = Enum.uniq(current ++ tool_names)
+      assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))
+    else
+      socket
+    end
+  end
+
+  # Helper to remove all tools from a server from the allowed list
+  defp remove_server_tools_from_allowed(socket, server_id, inv) do
+    provider = socket.assigns[:provider] || :openai
+    allowed0 = socket.assigns[:tool_picker_allowed] || %{}
+
+    # Find the server label for this ID
+    server =
+      Enum.find(socket.assigns[:mcp_server_options] || [], fn {_label, id} ->
+        to_string(id) == server_id
+      end)
+
+    if server do
+      {label, _id} = server
+      # get_server_tools now handles label cleaning internally
+      server_tools = get_server_tools(inv, provider, label)
+      tool_names = Enum.map(server_tools, & &1.name)
+
+      current =
+        case Map.get(allowed0, provider) do
+          l when is_list(l) -> l
+          _ -> Enum.map(inv[provider] || [], & &1.name)
+        end
+
+      desired = Enum.reject(current, &(&1 in tool_names))
+      assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))
+    else
+      socket
     end
   end
 end

@@ -69,13 +69,45 @@ defmodule TheMaestro.Tools.Inventory do
           60 * 60_000
       end
 
+    # Use get_with_freshness to get data even if stale
     tools =
-      case ToolsCache.get(server_id, ttl_ms) do
-        {:ok, t} -> t
-        _ -> []
+      case ToolsCache.get_with_freshness(server_id, ttl_ms) do
+        {:ok, t, :fresh} ->
+          t
+        {:ok, t, :stale} ->
+          # Return stale data and trigger background refresh
+          Task.start(fn -> warm_cache_for_server(server_id) end)
+          t
+        :miss ->
+          # No cache at all, trigger background discovery
+          Task.start(fn -> warm_cache_for_server(server_id) end)
+          []
       end
 
     {label, tools}
+  end
+
+  defp warm_cache_for_server(server_id) do
+    server = MCP.get_server!(server_id)
+
+    case MCP.Client.discover_server(server) do
+      {:ok, %{tools: tools}} ->
+        ttl_ms =
+          case server.metadata do
+            %{} = md ->
+              (md["tool_cache_ttl_minutes"] || md[:tool_cache_ttl_minutes] || 60)
+              |> to_int()
+              |> Kernel.*(60_000)
+            _ ->
+              60 * 60_000
+          end
+
+        ToolsCache.put(server_id, tools, ttl_ms)
+      _ ->
+        :ok
+    end
+  rescue
+    _ -> :ok
   end
 
   defp to_int(n) when is_integer(n), do: n

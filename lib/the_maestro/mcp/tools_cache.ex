@@ -37,6 +37,29 @@ defmodule TheMaestro.MCP.ToolsCache do
   end
 
   @doc """
+  Get cached tools for `server_id` with freshness info.
+  Returns {:ok, tools, :fresh | :stale} | :miss.
+  This always returns the data if it exists, regardless of staleness.
+  """
+  def get_with_freshness(server_id, ttl_ms \\ nil) when is_binary(server_id) do
+    key = cache_key(server_id)
+    ttl = ttl_ms || @default_ttl_ms
+
+    case Redix.command(TheMaestro.Redis, ["GET", key]) do
+      {:ok, nil} -> :miss
+      {:ok, json} ->
+        case Jason.decode(json) do
+          {:ok, %{"tools" => tools, "at_ms" => at}} when is_list(tools) ->
+            freshness = if fresh?(at, ttl), do: :fresh, else: :stale
+            {:ok, tools, freshness}
+          _ ->
+            :miss
+        end
+      _ -> :miss
+    end
+  end
+
+  @doc """
   Put tools list for `server_id` with the given TTL in ms.
   """
   def put(server_id, tools, ttl_ms \\ nil) when is_binary(server_id) and is_list(tools) do
@@ -62,5 +85,5 @@ defmodule TheMaestro.MCP.ToolsCache do
     now_ms() - at_ms < ttl_ms
   end
 
-  defp now_ms, do: System.monotonic_time(:millisecond)
+  defp now_ms, do: System.system_time(:millisecond)
 end
