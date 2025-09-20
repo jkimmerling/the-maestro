@@ -5,7 +5,9 @@ defmodule TheMaestroWeb.SessionChatLive do
   alias TheMaestro.Conversations
   alias TheMaestro.MCP
   alias TheMaestro.SuppliedContext
+  alias TheMaestro.Tools.Inventory
   require Logger
+  alias TheMaestroWeb.MCPServersLive.FormComponent
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -180,13 +182,32 @@ defmodule TheMaestroWeb.SessionChatLive do
       "working_dir" => socket.assigns.session.working_dir
     }
 
-    {:noreply,
-     socket
-     |> assign(:config_form, form0)
-     |> assign(:config_models, [])
-     |> load_auth_options(form0)
-     |> load_persona_options()
-     |> assign(:show_config, true)}
+    socket =
+      socket
+      |> assign(:config_form, form0)
+      |> assign(:config_models, [])
+      |> load_auth_options(form0)
+      |> load_persona_options()
+      |> assign(:mcp_server_options, TheMaestro.MCP.server_options(include_disabled?: true))
+      |> assign(:tool_picker_allowed, load_allowed(socket.assigns.session))
+      |> assign(:tool_picker_allowed_map, load_allowed(socket.assigns.session))
+      |> assign(:tool_inventory_by_provider, build_tool_inventory(socket.assigns.session.id))
+      |> assign(:ui_sections, %{prompt: true, persona: true, memory: true})
+      |> assign(
+        :session_mcp_selected_ids,
+        Enum.map(
+          TheMaestro.MCP.list_session_servers(socket.assigns.session.id),
+          & &1.mcp_server_id
+        )
+      )
+      |> refresh_prompt_state()
+      |> ensure_prompt_builder()
+      |> assign(:prompt_picker_provider, to_provider_atom(form0["provider"]) || :openai)
+      |> assign(:prompt_picker_selection, %{})
+      |> assign(:show_mcp_modal, false)
+      |> assign(:mcp_warming, false)
+
+    {:noreply, assign(socket, :show_config, true)}
   end
 
   @impl true
@@ -200,8 +221,190 @@ defmodule TheMaestroWeb.SessionChatLive do
     socket = assign(socket, :config_form, form)
     socket = maybe_reload_auth_options(socket, params, form)
     socket = maybe_reload_models(socket, params)
+    socket = maybe_prompt_builder_for_provider(socket, params)
     socket = maybe_mirror_persona(socket, params, form)
     {:noreply, socket}
+  end
+
+  # Collapsible sections toggle — robust when keys are missing
+  def handle_event("toggle_section", %{"name" => name}, socket) do
+    sections = socket.assigns[:ui_sections] || %{}
+
+    updated =
+      case name do
+        "prompt" -> Map.put(sections, :prompt, !Map.get(sections, :prompt, true))
+        "persona" -> Map.put(sections, :persona, !Map.get(sections, :persona, true))
+        "memory" -> Map.put(sections, :memory, !Map.get(sections, :memory, true))
+        _ -> sections
+      end
+
+    {:noreply, assign(socket, :ui_sections, updated)}
+  end
+
+  # ===== Prompt picker events within the Session Config modal =====
+  def handle_event("prompt_picker:tab", %{"provider" => provider_param}, socket) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    {:noreply, assign(socket, :prompt_picker_provider, provider)}
+  end
+
+  def handle_event("prompt_picker:add", params, socket) do
+    provider =
+      to_provider_atom(Map.get(params, "provider")) || socket.assigns[:prompt_picker_provider] ||
+        :openai
+
+    prompt_id = Map.get(params, "prompt_id", "") |> to_string |> String.trim()
+
+    selection = Map.put(socket.assigns[:prompt_picker_selection] || %{}, provider, "")
+    {:noreply, do_add_prompt(socket, provider, prompt_id, selection)}
+  end
+
+  # moved below to keep handle_event/3 clauses contiguous
+
+  # moved below to keep handle_event/3 clauses contiguous
+
+  def handle_event(
+        "prompt_picker:remove",
+        %{"provider" => provider_param, "id" => prompt_id},
+        socket
+      ) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    list = Map.get(builder, provider, [])
+
+    case Enum.split_with(list, &(&1.id == prompt_id)) do
+      {[entry], rest} ->
+        if entry.prompt.immutable do
+          {:noreply,
+           put_flash(socket, :error, "#{entry.prompt.name} is immutable and cannot be removed.")}
+        else
+          updated_builder = Map.put(builder, provider, rest)
+
+          {:noreply,
+           socket
+           |> assign(:session_prompt_builder, updated_builder)
+           |> merge_builder_into_catalog(updated_builder)}
+        end
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event(
+        "prompt_picker:toggle",
+        %{"provider" => provider_param, "id" => prompt_id},
+        socket
+      ) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    list = Map.get(builder, provider, [])
+
+    case Enum.find(list, &(&1.id == prompt_id)) do
+      nil ->
+        {:noreply, socket}
+
+      entry ->
+        desired = !entry.enabled
+
+        if entry.prompt.immutable and not desired do
+          {:noreply,
+           socket
+           |> put_flash(:error, "#{entry.prompt.name} is immutable and must remain enabled.")}
+        else
+          updated_list = update_prompt_enabled_status(list, prompt_id, desired)
+
+          updated_builder = Map.put(builder, provider, updated_list)
+
+          {:noreply,
+           socket
+           |> assign(:session_prompt_builder, updated_builder)
+           |> merge_builder_into_catalog(updated_builder)}
+        end
+    end
+  end
+
+  def handle_event(
+        "prompt_picker:reorder",
+        %{"provider" => provider_param, "ordered_ids" => ordered_ids},
+        socket
+      ) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    list = Map.get(builder, provider, [])
+    ordered_ids = List.wrap(ordered_ids) |> Enum.map(&to_string/1)
+
+    case reorder_entries(list, ordered_ids) do
+      {:ok, reordered} ->
+        updated_builder = Map.put(builder, provider, reordered)
+        {:noreply, socket |> assign(:session_prompt_builder, updated_builder)}
+
+      :error ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event(
+        "prompt_picker:move_up",
+        %{"provider" => provider_param, "id" => prompt_id},
+        socket
+      ) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    list = Map.get(builder, provider, [])
+    {new_list, changed?} = move_up_guarded(list, prompt_id)
+
+    if changed? do
+      updated_builder = Map.put(builder, provider, new_list)
+
+      {:noreply,
+       socket
+       |> assign(:session_prompt_builder, updated_builder)
+       |> merge_builder_into_catalog(updated_builder)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event(
+        "prompt_picker:move_down",
+        %{"provider" => provider_param, "id" => prompt_id},
+        socket
+      ) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    list = Map.get(builder, provider, [])
+    {new_list, changed?} = move_down_guarded(list, prompt_id)
+
+    if changed? do
+      updated_builder = Map.put(builder, provider, new_list)
+
+      {:noreply,
+       socket
+       |> assign(:session_prompt_builder, updated_builder)
+       |> merge_builder_into_catalog(updated_builder)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("prompt_picker:refresh", %{"provider" => provider_param}, socket) do
+    provider =
+      to_provider_atom(provider_param) || socket.assigns[:prompt_picker_provider] || :openai
+
+    socket = socket |> refresh_prompt_state() |> merge_builder_into_catalog()
+    {:noreply, assign(socket, :prompt_picker_provider, provider)}
   end
 
   # ==== Persona modal ====
@@ -278,6 +481,17 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
+  # MCP modal show/hide
+  def handle_event("open_mcp_modal", _params, socket) do
+    {:noreply, assign(socket, :show_mcp_modal, true)}
+  end
+
+  def handle_event("close_mcp_modal", _params, socket) do
+    {:noreply, assign(socket, :show_mcp_modal, false)}
+  end
+
+  # MCP server toggling handled in SessionFormComponent
+
   @impl true
   def handle_event("save_config", params, socket) do
     case build_session_update_attrs(socket, params) do
@@ -310,11 +524,73 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
+  defp provider_mismatch_flash(socket, selection, prompt) do
+    socket
+    |> assign(:prompt_picker_selection, selection)
+    |> put_flash(:error, "#{prompt.name} belongs to #{prompt.provider} prompts.")
+  end
+
+  defp do_add_prompt(socket, _provider, "", selection),
+    do: assign(socket, :prompt_picker_selection, selection)
+
+  defp do_add_prompt(socket, provider, prompt_id, selection) do
+    builder = socket.assigns[:session_prompt_builder] || empty_builder()
+    current = Map.get(builder, provider, [])
+
+    if Enum.any?(current, &(&1.id == prompt_id)) do
+      socket
+      |> assign(:prompt_picker_selection, selection)
+      |> put_flash(:info, "Prompt already present for #{provider}")
+    else
+      handle_fetch_prompt(socket, builder, provider, current, prompt_id, selection)
+    end
+  end
+
+  defp handle_fetch_prompt(socket, builder, provider, current, prompt_id, selection) do
+    case fetch_prompt(socket, prompt_id) do
+      {nil, updated_socket} ->
+        updated_socket
+        |> assign(:prompt_picker_selection, selection)
+        |> put_flash(:error, "Prompt could not be loaded. Try refreshing.")
+
+      {prompt, updated_socket} ->
+        case prompt.provider do
+          ^provider ->
+            add_prompt_to_builder(updated_socket, builder, provider, current, prompt, selection)
+
+          :shared ->
+            add_prompt_to_builder(updated_socket, builder, provider, current, prompt, selection)
+
+          _ ->
+            provider_mismatch_flash(updated_socket, selection, prompt)
+        end
+    end
+  end
+
+  defp add_prompt_to_builder(socket, builder, provider, current, prompt, selection) do
+    entry = %{id: prompt.id, prompt: prompt, enabled: true, overrides: %{}, source: :manual}
+    updated_builder = Map.put(builder, provider, current ++ [entry])
+
+    socket
+    |> assign(:session_prompt_builder, updated_builder)
+    |> assign(:prompt_picker_selection, selection)
+    |> assign(:prompt_picker_provider, provider)
+    |> merge_builder_into_catalog(updated_builder)
+  end
+
   defp build_session_update_attrs(socket, params) do
     with {:ok, persona} <- decode_persona(socket, params),
          {:ok, memory} <- decode_memory(socket, params),
          {:ok, tools} <- decode_tools(socket, params),
          {:ok, mcps} <- decode_mcps(socket, params) do
+      specs_map = prompt_specs_from_builder(socket.assigns[:session_prompt_builder] || %{})
+
+      tools2 =
+        merge_allowed(
+          tools,
+          socket.assigns[:tool_picker_allowed_map] || socket.assigns[:tool_picker_allowed] || %{}
+        )
+
       {:ok,
        %{
          "auth_id" => params["auth_id"] || socket.assigns.session.auth_id,
@@ -322,8 +598,11 @@ defmodule TheMaestroWeb.SessionChatLive do
          "working_dir" => params["working_dir"] || socket.assigns.session.working_dir,
          "persona" => persona,
          "memory" => memory,
-         "tools" => tools,
-         "mcps" => mcps
+         "tools" => tools2,
+         "mcps" => mcps,
+         "mcp_server_ids" =>
+           Map.get(params, "mcp_server_ids", socket.assigns[:session_mcp_selected_ids] || []),
+         "system_prompt_ids_by_provider" => specs_map
        }}
     end
   end
@@ -340,7 +619,11 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp decode_tools(socket, params) do
-    default = Jason.encode!(socket.assigns.session.tools || %{})
+    # Use tool_picker_allowed_map if available (from component state), otherwise fall back to session tools
+    default_tools =
+      socket.assigns[:tool_picker_allowed_map] || socket.assigns.session.tools || %{}
+
+    default = Jason.encode!(default_tools)
     safe_decode(params["tools_json"] || default)
   end
 
@@ -351,6 +634,133 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   defp legacy_session_mcps(session) do
     MCP.session_connector_map(session)
+  end
+
+  # Tool picker events handled in SessionFormComponent
+
+  defp load_allowed(%{tools: %{"allowed" => m}}), do: stringify_provider_keys(m)
+  defp load_allowed(_), do: %{}
+
+  defp stringify_provider_keys(%{} = m) do
+    Enum.into(m, %{}, fn {k, v} ->
+      {to_provider_atom(k) || :openai, List.wrap(v) |> Enum.map(&to_string/1)}
+    end)
+  end
+
+  defp build_tool_inventory(session_id) do
+    %{
+      openai: Inventory.list_for_provider(session_id, :openai),
+      anthropic: Inventory.list_for_provider(session_id, :anthropic),
+      gemini: Inventory.list_for_provider(session_id, :gemini)
+    }
+  end
+
+  defp merge_allowed(%{} = tools, %{} = allowed_by_provider) do
+    allowed_str =
+      allowed_by_provider
+      |> Enum.map(fn {prov, list} ->
+        {Atom.to_string(prov), Enum.map(List.wrap(list), &to_string/1)}
+      end)
+      |> Enum.into(%{})
+
+    if map_size(allowed_str) == 0 do
+      tools
+    else
+      Map.update(tools, "allowed", allowed_str, fn existing ->
+        Map.merge(existing || %{}, allowed_str)
+      end)
+    end
+  end
+
+  # ----- System Prompt Picker wiring (reuse Dashboard patterns) -----
+  defp refresh_prompt_state(socket) do
+    providers = [:openai, :anthropic, :gemini]
+
+    library =
+      Enum.reduce(providers, %{}, fn provider, acc ->
+        prompts =
+          SuppliedContext.list_system_prompts(provider,
+            include_shared: true,
+            only_defaults: false,
+            group_by_family: false
+          )
+
+        Map.put(acc, provider, prompts)
+      end)
+
+    catalog =
+      library
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.reduce(%{}, fn prompt, acc -> Map.put(acc, prompt.id, prompt) end)
+
+    socket
+    |> assign(:prompt_library, library)
+    |> assign(:prompt_catalog, catalog)
+  end
+
+  defp ensure_prompt_builder(socket) do
+    builder = socket.assigns[:session_prompt_builder] || %{}
+    providers = [:openai, :anthropic, :gemini]
+
+    complete? = builder != %{} and Enum.all?(providers, &Map.has_key?(builder, &1))
+
+    if complete? do
+      socket
+    else
+      session_id = socket.assigns.session.id
+
+      built =
+        Enum.reduce(providers, %{}, fn provider, acc ->
+          entries = build_provider_entries(session_id, provider)
+          Map.put(acc, provider, entries)
+        end)
+
+      assign(socket, :session_prompt_builder, built)
+      |> merge_builder_into_catalog(built)
+    end
+  end
+
+  defp maybe_prompt_builder_for_provider(socket, params) do
+    if Map.has_key?(params, "provider") do
+      prov = to_provider_atom(params["provider"]) || :openai
+
+      assign(socket, :prompt_picker_provider, prov)
+      |> ensure_prompt_builder()
+    else
+      socket
+    end
+  end
+
+  defp merge_builder_into_catalog(socket, builder) do
+    updated_catalog =
+      builder
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.reduce(socket.assigns[:prompt_catalog] || %{}, fn entry, acc ->
+        Map.put(acc, entry.id, entry.prompt)
+      end)
+
+    assign(socket, :prompt_catalog, updated_catalog)
+  end
+
+  defp merge_builder_into_catalog(socket) do
+    builder = socket.assigns[:session_prompt_builder] || %{}
+    merge_builder_into_catalog(socket, builder)
+  end
+
+  defp prompt_specs_from_builder(builder) do
+    Enum.reduce(builder, %{}, fn {provider, entries}, acc ->
+      specs = Enum.map(entries, &to_spec/1)
+      if specs == [], do: acc, else: Map.put(acc, Atom.to_string(provider), specs)
+    end)
+  end
+
+  defp to_spec(entry) do
+    overrides = entry.overrides || %{}
+    enabled = if entry.prompt.immutable, do: true, else: !!entry.enabled
+
+    %{"id" => entry.id, "enabled" => enabled, "overrides" => overrides}
   end
 
   defp maybe_restart_stream(socket, updated, apply_behavior) do
@@ -437,7 +847,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     canonical = (latest && latest.combined_chat) || %{"messages" => []}
 
-    updated =
+    _updated =
       put_in(canonical, ["messages"], (canonical["messages"] || []) ++ [user_msg(user_text)])
 
     # Ensure we have a thread to attach this turn to
@@ -451,48 +861,39 @@ defmodule TheMaestroWeb.SessionChatLive do
           {new_tid, assign(socket, :current_thread_id, new_tid)}
       end
 
-    # Persist user snapshot turn
-    {:ok, _} =
-      Conversations.create_chat_entry(%{
-        session_id: session.id,
-        turn_index: Conversations.next_turn_index(session.id),
-        actor: "user",
-        provider: nil,
-        request_headers: %{},
-        response_headers: %{},
-        combined_chat: updated,
-        thread_id: tid,
-        edit_version: 0
-      })
-
-    # Optimistically update UI conversation
-    ui_messages =
-      (socket.assigns.messages || []) ++
-        [%{"role" => "user", "content" => [%{"type" => "text", "text" => user_text}]}]
-
     t0 = System.monotonic_time(:millisecond)
 
-    {:ok, result} =
-      TheMaestro.Chat.start_turn(session.id, tid, user_text, t0_ms: t0)
+    case TheMaestro.Chat.start_turn(session.id, tid, user_text, t0_ms: t0) do
+      {:ok, result} ->
+        ui_messages =
+          (socket.assigns.messages || []) ++
+            [%{"role" => "user", "content" => [%{"type" => "text", "text" => user_text}]}]
 
-    socket
-    |> assign(:message, "")
-    |> assign(:messages, ui_messages)
-    |> assign(:streaming?, true)
-    |> assign(:partial_answer, "")
-    |> assign(:stream_id, result.stream_id)
-    |> assign(:stream_task, nil)
-    |> assign(:pending_canonical, result.pending_canonical)
-    |> assign(:followup_history, [])
-    |> assign(:used_provider, result.provider)
-    |> assign(:used_model, result.model)
-    |> assign(:used_auth_type, result.auth_type)
-    |> assign(:used_auth_name, result.auth_name)
-    |> assign(:used_usage, nil)
-    |> assign(:tool_calls, [])
-    |> assign(:used_t0_ms, t0)
-    |> assign(:event_buffer, [])
-    |> assign(:retry_attempts, 0)
+        socket
+        |> assign(:message, "")
+        |> assign(:messages, ui_messages)
+        |> assign(:streaming?, true)
+        |> assign(:partial_answer, "")
+        |> assign(:stream_id, result.stream_id)
+        |> assign(:stream_task, nil)
+        |> assign(:pending_canonical, result.pending_canonical)
+        |> assign(:followup_history, [])
+        |> assign(:used_provider, result.provider)
+        |> assign(:used_model, result.model)
+        |> assign(:used_auth_type, result.auth_type)
+        |> assign(:used_auth_name, result.auth_name)
+        |> assign(:used_usage, nil)
+        |> assign(:tool_calls, [])
+        |> assign(:used_t0_ms, t0)
+        |> assign(:event_buffer, [])
+        |> assign(:retry_attempts, 0)
+
+      {:error, :duplicate_turn} ->
+        # Ignore duplicate submits of identical user text at tail
+        socket
+        |> put_flash(:info, "Ignored duplicate message")
+        |> assign(:message, "")
+    end
   end
 
   defp user_msg(text), do: %{"role" => "user", "content" => [%{"type" => "text", "text" => text}]}
@@ -505,6 +906,70 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   require Logger
 
+  # Reuse provider atom helper locally (single definition kept)
+
+  defp fetch_prompt(socket, prompt_id) do
+    catalog = socket.assigns[:prompt_catalog] || %{}
+
+    case Map.get(catalog, prompt_id) do
+      %{} = prompt ->
+        {prompt, socket}
+
+      _ ->
+        try do
+          prompt = TheMaestro.SuppliedContext.get_item!(prompt_id)
+          new_catalog = Map.put(catalog, prompt_id, prompt)
+          {prompt, assign(socket, :prompt_catalog, new_catalog)}
+        rescue
+          Ecto.NoResultsError -> {nil, socket}
+        end
+    end
+  end
+
+  defp reorder_entries(entries, ordered_ids) do
+    current_ids = Enum.map(entries, & &1.id) |> MapSet.new()
+    desired_ids = MapSet.new(ordered_ids)
+
+    if current_ids == desired_ids do
+      by_id = Map.new(entries, &{&1.id, &1})
+      {:ok, Enum.map(ordered_ids, &Map.fetch!(by_id, &1))}
+    else
+      :error
+    end
+  end
+
+  defp move_up_guarded(entries, prompt_id) do
+    idx = Enum.find_index(entries, &(&1.id == prompt_id))
+
+    cond do
+      is_nil(idx) or idx == 0 -> {entries, false}
+      Enum.at(entries, idx).prompt.immutable -> {entries, false}
+      idx <= Enum.take_while(entries, & &1.prompt.immutable) |> length() -> {entries, false}
+      true -> swap(entries, idx, idx - 1)
+    end
+  end
+
+  defp move_down_guarded(entries, prompt_id) do
+    idx = Enum.find_index(entries, &(&1.id == prompt_id))
+    last = length(entries) - 1
+
+    if is_nil(idx) or idx == last do
+      {entries, false}
+    else
+      entry = Enum.at(entries, idx)
+      if entry.prompt.immutable, do: {entries, false}, else: swap(entries, idx, idx + 1)
+    end
+  end
+
+  defp swap(list, i, j) when i == j, do: {list, false}
+
+  defp swap(list, i, j) do
+    a = Enum.at(list, i)
+    b = Enum.at(list, j)
+    new = list |> List.replace_at(i, b) |> List.replace_at(j, a)
+    {new, true}
+  end
+
   @impl true
   def handle_info(
         {:session_stream,
@@ -512,13 +977,39 @@ defmodule TheMaestroWeb.SessionChatLive do
            session_id: sid,
            stream_id: id,
            event: %TheMaestro.Domain.StreamEvent{type: :thinking}
-         }},
+         } = envelope},
         %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       ) do
+    handle_thinking_event(envelope, socket)
+  end
+
+  # moved below to keep handle_info/2 clauses contiguous
+
+  # Handle MCP server create/cancel from modal
+  @impl true
+  def handle_info({FormComponent, {:saved, server}}, socket) do
+    selected = Enum.uniq([server.id | socket.assigns[:session_mcp_selected_ids] || []])
+
     {:noreply,
      socket
-     |> push_event(%{kind: "ai", type: "thinking", at: now_ms()})
-     |> assign(thinking?: true)}
+     |> assign(:mcp_server_options, TheMaestro.MCP.server_options(include_disabled?: true))
+     |> assign(:session_mcp_selected_ids, selected)
+     |> assign(:show_mcp_modal, false)}
+  end
+
+  @impl true
+  def handle_info({FormComponent, {:canceled, _}}, socket) do
+    {:noreply, assign(socket, :show_mcp_modal, false)}
+  end
+
+  @impl true
+  def handle_info({:session_mcp_selected_ids, ids}, socket) when is_list(ids) do
+    {:noreply, assign(socket, :session_mcp_selected_ids, Enum.map(ids, &to_string/1))}
+  end
+
+  @impl true
+  def handle_info({:tool_picker_allowed, allowed}, socket) when is_map(allowed) do
+    {:noreply, assign(socket, :tool_picker_allowed_map, allowed)}
   end
 
   @impl true
@@ -723,6 +1214,34 @@ defmodule TheMaestroWeb.SessionChatLive do
      })}
   end
 
+  @impl true
+  def handle_info(:refresh_mcp_inventory, socket) do
+    selected = socket.assigns[:session_mcp_selected_ids] || []
+
+    {:noreply,
+     socket
+     |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers(selected))
+     |> assign(:mcp_warming, false)}
+  end
+
+  defp handle_thinking_event(
+         %TheMaestro.Domain.StreamEnvelope{
+           session_id: sid,
+           stream_id: id,
+           event: %TheMaestro.Domain.StreamEvent{type: :thinking}
+         },
+         %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
+       ) do
+    {:noreply,
+     socket
+     |> push_event(%{kind: "ai", type: "thinking", at: now_ms()})
+     |> assign(thinking?: true)}
+  end
+
+  defp handle_thinking_event(_envelope, socket) do
+    {:noreply, socket}
+  end
+
   # ===== Event logging helpers =====
   defp now_ms, do: System.system_time(:millisecond)
 
@@ -895,6 +1414,11 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
+  # Provide an empty builder map keyed by providers
+  defp empty_builder do
+    %{openai: [], anthropic: [], gemini: []}
+  end
+
   defp maybe_mirror_persona(socket, params, form) do
     if Map.has_key?(params, "persona_id") do
       case get_persona_for_form(form) do
@@ -916,15 +1440,25 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
+  defp build_tool_inventory_for_servers(server_ids) do
+    %{
+      openai: Inventory.list_for_provider_with_servers(server_ids, :openai),
+      anthropic: Inventory.list_for_provider_with_servers(server_ids, :anthropic),
+      gemini: Inventory.list_for_provider_with_servers(server_ids, :gemini)
+    }
+  end
+
   defp append_assistant_message(messages, final_text, meta) do
-    messages ++
-      [
-        %{
-          "role" => "assistant",
-          "content" => [%{"type" => "text", "text" => final_text}],
-          "_meta" => meta
-        }
-      ]
+    assistant_msg = build_assistant_message(final_text, meta)
+    messages ++ [assistant_msg]
+  end
+
+  defp build_assistant_message(text, meta) do
+    %{
+      "role" => "assistant",
+      "content" => [%{"type" => "text", "text" => text}],
+      "_meta" => meta
+    }
   end
 
   defp dedup_delta(current, chunk) when is_binary(current) and is_binary(chunk) do
@@ -1179,106 +1713,108 @@ defmodule TheMaestroWeb.SessionChatLive do
       </.modal>
 
       <.modal :if={@show_config} id="session-config-modal">
-        <.form
-          for={%{}}
-          phx-change="validate_config"
-          phx-submit="save_config"
-          id="session-config-form"
-        >
-          <h3 class="text-lg font-bold mb-2">Session Config</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs">Provider (filter)</label>
-              <select name="provider" class="input">
-                <%= for p <- ["openai", "anthropic", "gemini"] do %>
-                  <option value={p} selected={@config_form["provider"] == p}>{p}</option>
-                <% end %>
-              </select>
-            </div>
-            <div>
-              <label class="text-xs">Saved Auth</label>
-              <select name="auth_id" class="input">
-                <%= for {label, id} <- (@config_form["auth_options"] || []) do %>
-                  <option value={id} selected={to_string(id) == to_string(@config_form["auth_id"])}>
-                    {label}
-                  </option>
-                <% end %>
-              </select>
-            </div>
-            <div>
-              <label class="text-xs">Model</label>
-              <select name="model_id" class="input">
-                <%= for m <- (@config_models || []) do %>
-                  <option value={m} selected={m == @config_form["model_id"]}>{m}</option>
-                <% end %>
-              </select>
-            </div>
-            <div>
-              <label class="text-xs">Working Dir</label>
-              <input
-                type="text"
-                name="working_dir"
-                value={@config_form["working_dir"] || @session.working_dir}
-                class="input"
-              />
-            </div>
-            <div>
-              <label class="text-xs">Persona</label>
-              <div class="flex gap-2 items-center">
-                <select name="persona_id" class="input">
-                  <option value="">(custom JSON)</option>
-                  <%= for {label, id} <- (@config_persona_options || []) do %>
-                    <option
-                      value={id}
-                      selected={to_string(id) == to_string(@config_form["persona_id"])}
-                    >
-                      {label}
-                    </option>
-                  <% end %>
-                </select>
-                <button type="button" class="btn btn-xs" phx-click="open_persona_modal">
-                  Add Persona…
-                </button>
+        <div class="flex flex-col max-h-[80vh]">
+          <.form
+            for={%{}}
+            phx-change="validate_config"
+            phx-submit="save_config"
+            id="session-config-form"
+            class="flex flex-col max-h-[80vh] min-h-0"
+          >
+            <h3 class="text-lg font-bold mb-2">Session Config</h3>
+            <div class="flex-1 overflow-y-auto min-h-0 pr-1">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label class="text-xs">Provider (filter)</label>
+                  <select name="provider" class="input">
+                    <%= for p <- ["openai", "anthropic", "gemini"] do %>
+                      <option value={p} selected={@config_form["provider"] == p}>{p}</option>
+                    <% end %>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs">Saved Auth</label>
+                  <select name="auth_id" class="input">
+                    <%= for {label, id} <- (@config_form["auth_options"] || []) do %>
+                      <option
+                        value={id}
+                        selected={to_string(id) == to_string(@config_form["auth_id"])}
+                      >
+                        {label}
+                      </option>
+                    <% end %>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs">Model</label>
+                  <select name="model_id" class="input">
+                    <%= for m <- (@config_models || []) do %>
+                      <option value={m} selected={m == @config_form["model_id"]}>{m}</option>
+                    <% end %>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs">Working Dir</label>
+                  <input
+                    type="text"
+                    name="working_dir"
+                    value={@config_form["working_dir"] || @session.working_dir}
+                    class="input"
+                  />
+                </div>
+                <!-- Shared sections via component to keep parity with Create modal -->
+                <div class="md:col-span-2">
+                  <.live_component
+                    module={TheMaestroWeb.SessionFormComponent}
+                    id="session-config-form-body"
+                    mode={:edit}
+                    provider={@prompt_picker_provider || :openai}
+                    prompt_picker_provider={@prompt_picker_provider || :openai}
+                    session_prompt_builder={@session_prompt_builder || %{}}
+                    prompt_library={@prompt_library || %{}}
+                    prompt_picker_selection={@prompt_picker_selection || %{}}
+                    ui_sections={@ui_sections || %{prompt: true, persona: true, memory: true}}
+                    config_persona_options={@config_persona_options || []}
+                    config_form={Map.put(@config_form || %{}, "session_id", @session.id)}
+                    mcp_server_options={@mcp_server_options || []}
+                    session_mcp_selected_ids={@session_mcp_selected_ids || []}
+                    tool_picker_allowed={@tool_picker_allowed_map || @tool_picker_allowed || %{}}
+                  />
+                </div>
+              </div>
+              <div class="mt-3">
+                <label class="text-xs">When saving while streaming</label>
+                <div class="flex gap-3 text-sm">
+                  <label>
+                    <input type="radio" name="apply" value="now" checked /> Apply now (restart stream)
+                  </label>
+                  <label><input type="radio" name="apply" value="defer" /> Apply on next turn</label>
+                </div>
               </div>
             </div>
-            <div class="md:col-span-2">
-              <label class="text-xs">Persona (JSON)</label>
-              <textarea name="persona_json" rows="3" class="textarea-terminal"><%= @config_form["persona_json"] || Jason.encode!(@session.persona || %{}) %></textarea>
-            </div>
-            <div class="md:col-span-2">
-              <label class="text-xs">Memory (JSON)</label>
-              <textarea name="memory_json" rows="3" class="textarea-terminal"><%= @config_form["memory_json"] || Jason.encode!(@session.memory || %{}) %></textarea>
-              <div class="mt-1">
-                <button type="button" class="btn btn-xs" phx-click="open_memory_modal">
-                  Open Advanced Editor…
+            <div class="sticky bottom-0 z-30 mt-3 border-t border-base-300 bg-base-100 pt-3">
+              <div class="flex justify-end gap-2">
+                <button
+                  class="btn btn-blue"
+                  type="button"
+                  phx-click={JS.dispatch("submit", to: "#session-config-form")}
+                >
+                  Save
                 </button>
+                <button class="btn" type="button" phx-click="close_config">Cancel</button>
               </div>
             </div>
-            <div class="md:col-span-2">
-              <label class="text-xs">Tools (JSON)</label>
-              <textarea name="tools_json" rows="3" class="textarea-terminal"><%= @config_form["tools_json"] || Jason.encode!(@session.tools || %{}) %></textarea>
-            </div>
-            <div class="md:col-span-2">
-              <label class="text-xs">MCPs (JSON)</label>
-              <textarea name="mcps_json" rows="3" class="textarea-terminal"><%=
-                @config_form["mcps_json"] || Jason.encode!(legacy_session_mcps(@session))
-              %></textarea>
-            </div>
-          </div>
-          <div class="mt-3">
-            <label class="text-xs">When saving while streaming</label>
-            <div class="flex gap-3 text-sm">
-              <label>
-                <input type="radio" name="apply" value="now" checked /> Apply now (restart stream)
-              </label>
-              <label><input type="radio" name="apply" value="defer" /> Apply on next turn</label>
-            </div>
-          </div>
-          <div class="mt-4 flex gap-2">
-            <button class="btn btn-blue" type="submit">Save</button>
-            <button class="btn" type="button" phx-click="close_config">Cancel</button>
-          </div>
-        </.form>
+          </.form>
+          <.modal :if={@show_mcp_modal} id="session-mcp-modal">
+            <.live_component
+              module={TheMaestroWeb.MCPServersLive.FormComponent}
+              id="session-mcp-form"
+              title="New MCP Server"
+              server={%TheMaestro.MCP.Servers{}}
+              action={:new}
+            />
+          </.modal>
+        </div>
       </.modal>
 
       <.modal :if={@show_persona_modal} id="persona-modal">
@@ -1392,4 +1928,44 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp compute_summary(_), do: nil
+
+  defp update_prompt_enabled_status(list, prompt_id, desired) do
+    Enum.map(list, fn
+      %{id: ^prompt_id} = e -> %{e | enabled: desired}
+      e -> e
+    end)
+  end
+
+  defp build_provider_entries(session_id, provider) do
+    case TheMaestro.SystemPrompts.list_session_prompts(session_id, provider) do
+      [] -> build_default_entries(provider)
+      items when is_list(items) -> build_session_entries(items)
+    end
+  end
+
+  defp build_default_entries(provider) do
+    stack = TheMaestro.SystemPrompts.default_stack(provider)
+
+    Enum.map(stack.prompts, fn %{prompt: p, overrides: ov} ->
+      %{
+        id: p.id,
+        prompt: p,
+        enabled: true,
+        overrides: ov || %{},
+        source: stack.source
+      }
+    end)
+  end
+
+  defp build_session_entries(items) do
+    Enum.map(items, fn spi ->
+      %{
+        id: spi.supplied_context_item_id,
+        prompt: spi.prompt,
+        enabled: spi.enabled,
+        overrides: spi.overrides || %{},
+        source: :session
+      }
+    end)
+  end
 end

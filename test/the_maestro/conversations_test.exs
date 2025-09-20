@@ -2,6 +2,10 @@ defmodule TheMaestro.ConversationsTest do
   use TheMaestro.DataCase
 
   alias TheMaestro.Conversations
+  alias TheMaestro.{Repo, SystemPrompts}
+  alias TheMaestro.SuppliedContext.SuppliedContextItem
+
+  import Ecto.Query
 
   describe "sessions" do
     alias TheMaestro.Conversations.Session
@@ -55,6 +59,44 @@ defmodule TheMaestro.ConversationsTest do
       assert {:ok, %Session{} = session} = Conversations.update_session(session, update_attrs)
       assert session.name == "some updated name"
       assert session.last_used_at == ~U[2025-09-02 15:30:00Z]
+    end
+
+    test "create_session/1 attaches default system prompts" do
+      session = session_fixture()
+
+      assert {:ok, %{source: :session, prompts: prompts}} =
+               SystemPrompts.resolve_for_session(session.id, :openai)
+
+      assert length(prompts) > 0
+      assert Enum.all?(prompts, fn %{prompt: prompt} -> prompt.provider in [:openai, :shared] end)
+    end
+
+    test "update_session/2 accepts explicit system prompt selections" do
+      session = session_fixture()
+
+      default_prompt =
+        Repo.one!(
+          from i in SuppliedContextItem,
+            where: i.type == :system_prompt and i.provider == :openai and i.is_default == true,
+            limit: 1
+        )
+
+      {:ok, new_version} =
+        SystemPrompts.create_version(default_prompt, %{
+          text: "updated prompt",
+          version: default_prompt.version + 1,
+          is_default: false
+        })
+
+      {:ok, _session} =
+        Conversations.update_session(session, %{
+          "system_prompts" => %{"openai" => [%{"id" => new_version.id}]}
+        })
+
+      assert {:ok, %{prompts: [%{prompt: prompt}]}} =
+               SystemPrompts.resolve_for_session(session.id, :openai)
+
+      assert prompt.id == new_version.id
     end
 
     test "update_session/2 with invalid data keeps required fields and succeeds" do

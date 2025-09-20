@@ -1,6 +1,6 @@
 defmodule Mix.Tasks.E2e.Anthropic.Mcp do
   use Mix.Task
-  @shortdoc "E2E: Anthropic + Context7 MCP tools exposure + function call"
+  @shortdoc "E2E: Anthropic + MCP tools + system blocks + no-duplicates"
 
   @moduledoc """
   Validates Anthropic integration with MCP tool exposure and function calling.
@@ -15,36 +15,9 @@ defmodule Mix.Tasks.E2e.Anthropic.Mcp do
   def run(args) do
     Mix.Task.run("app.start")
 
-    {opts, _, _} = OptionParser.parse(args, switches: [anthropic: :string])
-    session_name = opts[:anthropic] || System.get_env("ANTHROPIC_SESSION_NAME")
-
-    unless is_binary(session_name) and session_name != "" do
-      Mix.raise("Provide --anthropic <saved_auth_name> or ANTHROPIC_SESSION_NAME env var")
-    end
-
-    # Ensure a session exists
-    sa =
-      Auth.get_by_provider_and_name(:anthropic, :oauth, session_name) ||
-        Auth.get_by_provider_and_name(:anthropic, :api_key, session_name)
-
-    unless sa, do: Mix.raise("No saved_authentication for anthropic name=#{session_name}")
-
-    session =
-      case Conversations.latest_session_for_auth_id(sa.id) do
-        existing when not is_nil(existing) ->
-          existing
-
-        _ ->
-          {:ok, created} =
-            Conversations.create_session(%{
-              auth_id: sa.id,
-              model_id: "claude-3-5-sonnet-latest",
-              working_dir: File.cwd!()
-            })
-
-          created
-      end
-
+    session_name = get_session_name(args)
+    sa = get_saved_auth!(session_name)
+    session = get_or_create_session(sa)
     session_id = session.id
 
     ensure_mcps!(session_id)
@@ -52,16 +25,29 @@ defmodule Mix.Tasks.E2e.Anthropic.Mcp do
     System.put_env("HTTP_DEBUG", "1")
     Chat.subscribe(session_id)
 
+    # Telemetry shape capture (real request)
+    {:ok, cap} = Agent.start_link(fn -> nil end)
+    handler_id = attach_anthropic_shape_handler(cap)
+
     prompt =
       "please use the context7 mcp to resolve \"elixir ecto\" and then get docs for \"changesets\""
 
+    pre = message_count(session_id)
     {:ok, turn} = Chat.start_turn(session_id, nil, prompt)
 
     final = collect_turn_outcome(session_id, turn.stream_id)
     validate_outcome!(final)
+    validate_normalization!(session_id, pre)
+
+    meta = wait_for_meta(cap)
+
+    unless is_integer(meta[:system_blocks]) and meta[:system_blocks] >= 0,
+      do: Mix.raise("Anthropic system blocks missing or wrong shape")
+
+    :telemetry.detach(handler_id)
 
     Mix.shell().info(
-      "E2E OK: Anthropic + Context7 MCP: function call observed; stream finalized."
+      "E2E OK: Anthropic — tools visible, function call observed, no-duplicates verified."
     )
   end
 
@@ -131,4 +117,112 @@ defmodule Mix.Tasks.E2e.Anthropic.Mcp do
   defp validate_outcome!(%{finalized?: true, saw_fc?: true}), do: :ok
   defp validate_outcome!(%{finalized?: false}), do: Mix.raise("Stream did not finalize")
   defp validate_outcome!(%{saw_fc?: false}), do: Mix.raise("Model did not call any tool")
+
+  # ===== Instruction/system blocks assertion =====
+  defp attach_anthropic_shape_handler(agent) do
+    id = "e2e-anthropic-shape-" <> Integer.to_string(System.unique_integer([:positive]))
+
+    :telemetry.attach(
+      id,
+      [:providers, :anthropic, :request_built],
+      fn _ev, _meas, meta, a ->
+        Agent.update(a, fn _ -> meta end)
+      end,
+      agent
+    )
+
+    id
+  end
+
+  defp wait_for_meta(agent, deadline_ms \\ 10_000) do
+    t0 = System.monotonic_time(:millisecond)
+    do_wait_meta(agent, t0 + deadline_ms)
+  end
+
+  defp do_wait_meta(agent, deadline) do
+    meta = Agent.get(agent, & &1)
+
+    cond do
+      is_map(meta) ->
+        meta
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        %{}
+
+      true ->
+        Process.sleep(100)
+        do_wait_meta(agent, deadline)
+    end
+  end
+
+  # ===== Normalization assertion =====
+  defp message_count(session_id) do
+    case Conversations.latest_snapshot(session_id) do
+      %{combined_chat: %{"messages" => msgs}} -> length(msgs)
+      _ -> 0
+    end
+  end
+
+  defp validate_normalization!(session_id, pre) do
+    afterc = wait_until(fn -> message_count(session_id) end, pre + 2)
+    unless afterc == pre + 2, do: Mix.raise("Conversation not normalized (+2 expected)")
+  end
+
+  defp wait_until(fun, target, deadline_ms \\ 5_000) do
+    t0 = System.monotonic_time(:millisecond)
+    do_wait_until(fun, target, t0 + deadline_ms)
+  end
+
+  defp do_wait_until(fun, target, deadline) do
+    val = fun.()
+
+    cond do
+      val == target ->
+        val
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        val
+
+      true ->
+        Process.sleep(100)
+        do_wait_until(fun, target, deadline)
+    end
+  end
+
+  defp get_session_name(args) do
+    {opts, _, _} = OptionParser.parse(args, switches: [anthropic: :string])
+    session_name = opts[:anthropic] || System.get_env("ANTHROPIC_SESSION_NAME")
+
+    unless is_binary(session_name) and session_name != "" do
+      Mix.raise("Provide --anthropic <saved_auth_name> or ANTHROPIC_SESSION_NAME env var")
+    end
+
+    session_name
+  end
+
+  defp get_saved_auth!(session_name) do
+    sa =
+      Auth.get_by_provider_and_name(:anthropic, :oauth, session_name) ||
+        Auth.get_by_provider_and_name(:anthropic, :api_key, session_name)
+
+    unless sa, do: Mix.raise("No saved_authentication for anthropic name=#{session_name}")
+    sa
+  end
+
+  defp get_or_create_session(sa) do
+    case Conversations.latest_session_for_auth_id(sa.id) do
+      existing when not is_nil(existing) ->
+        existing
+
+      _ ->
+        {:ok, created} =
+          Conversations.create_session(%{
+            auth_id: sa.id,
+            model_id: "claude-3-5-sonnet-latest",
+            working_dir: File.cwd!()
+          })
+
+        created
+    end
+  end
 end

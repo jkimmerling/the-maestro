@@ -9,6 +9,8 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
   alias TheMaestro.MCP.Registry, as: MCPRegistry
   alias TheMaestro.Providers.Http.{ReqClientFactory, StreamingAdapter}
   alias TheMaestro.SavedAuthentication
+  alias TheMaestro.SystemPrompts
+  alias TheMaestro.SystemPrompts.Defaults, as: PromptDefaults
   alias TheMaestro.Types
 
   @impl true
@@ -36,24 +38,43 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
           "stream" => true
         }
 
+        system_blocks = resolve_system_blocks(decl_session_id)
+
         # Claude Code parity: add system prompt for OAuth tokens
         # Attach Claude Code tools and metadata for OAuth sessions so tool_use is allowed
         body =
           case auth_type do
             :oauth ->
               base_body
-              |> Map.put("system", anthropic_system_blocks())
               |> Map.put("messages", transform_messages_for_claude_code(messages))
               |> Map.put("metadata", %{"user_id" => compute_user_id(session_id)})
               |> Map.put("tools", function_declarations_for_session(decl_session_id))
+              |> maybe_put_system(system_blocks)
 
             _ ->
               base_body
               |> Map.put("tools", function_declarations_for_session(decl_session_id))
+              |> maybe_put_system(system_blocks)
           end
 
         url = if auth_type == :oauth, do: "/v1/messages?beta=true", else: "/v1/messages"
         body = sanitize_cache_control(body, :disable)
+
+        :telemetry.execute(
+          [
+            :providers,
+            :anthropic,
+            :request_built
+          ],
+          %{},
+          %{
+            auth_type: auth_type,
+            model: model,
+            system_blocks: length(Map.get(body, "system", [])),
+            tools_count: length(Map.get(body, "tools", []))
+          }
+        )
+
         maybe_log_request(:initial, req, url, body)
         StreamingAdapter.stream_request(req, method: :post, url: url, json: body)
       end
@@ -87,18 +108,20 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
         decl_session_id =
           Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_id, auth_type)
 
+        system_blocks = resolve_system_blocks(decl_session_id)
+
         body =
           case auth_type do
             :oauth ->
               %{
                 "model" => model,
                 "messages" => transform_messages_for_claude_code(messages),
-                "system" => anthropic_system_blocks(),
                 "max_tokens" => Keyword.get(opts, :max_tokens, 512),
                 "tools" => function_declarations_for_session(decl_session_id),
                 "metadata" => %{"user_id" => compute_user_id(session_id)},
                 "stream" => true
               }
+              |> maybe_put_system(system_blocks)
 
             _ ->
               %{
@@ -109,10 +132,27 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
                 "metadata" => %{"user_id" => compute_user_id(session_id)},
                 "stream" => true
               }
+              |> maybe_put_system(system_blocks)
           end
 
         url = if auth_type == :oauth, do: "/v1/messages?beta=true", else: "/v1/messages"
         body = sanitize_cache_control(body, :disable)
+
+        :telemetry.execute(
+          [
+            :providers,
+            :anthropic,
+            :request_built
+          ],
+          %{},
+          %{
+            auth_type: auth_type,
+            model: model,
+            system_blocks: length(Map.get(body, "system", [])),
+            tools_count: length(Map.get(body, "tools", []))
+          }
+        )
+
         maybe_log_request(:followup, req, url, body)
         StreamingAdapter.stream_request(req, method: :post, url: url, json: body)
       end
@@ -121,11 +161,38 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
 
   # Merge MCP tools with built-ins; MCP wins on collision
   defp function_declarations_for_session(session_id) do
-    mcp_tools = MCPRegistry.to_anthropic_decls(session_id)
-    builtins = anthropic_tools()
+    allowed = allowed_names_for(session_id, :anthropic)
+
+    mcp_tools = MCPRegistry.to_anthropic_decls(session_id) |> maybe_filter_tools(allowed)
+    builtins = anthropic_tools() |> maybe_filter_tools(allowed)
     names = MapSet.new(Enum.map(mcp_tools, & &1["name"]))
     builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
     mcp_tools ++ builtins_filtered
+  end
+
+  defp maybe_filter_tools(list, :absent), do: list
+
+  defp maybe_filter_tools(list, {:present, names}) when is_list(list) do
+    allowed = MapSet.new(names)
+    Enum.filter(list, fn %{"name" => n} -> MapSet.member?(allowed, n) end)
+  end
+
+  # Read persisted allowed tool names for the provider; returns :absent when not set
+  defp allowed_names_for(session_id, provider) when is_binary(session_id) and is_atom(provider) do
+    prov = Atom.to_string(provider)
+
+    case TheMaestro.Conversations.get_session!(session_id) do
+      %TheMaestro.Conversations.Session{tools: %{"allowed" => %{} = m}} ->
+        case Map.fetch(m, prov) do
+          {:ok, list} when is_list(list) -> {:present, Enum.map(list, &to_string/1)}
+          _ -> :absent
+        end
+
+      _ ->
+        :absent
+    end
+  rescue
+    _ -> :absent
   end
 
   # Resolve the Conversations session UUID for MCP registry lookups
@@ -521,15 +588,40 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
     "user_" <> String.slice(hash, 0, 64) <> "_account_cli_session_" <> Ecto.UUID.generate()
   end
 
-  # Shape system as Claude Code expects: content blocks (no cache_control)
-  defp anthropic_system_blocks do
-    [
-      %{
-        "type" => "text",
-        "text" => "You are Claude Code, Anthropic's official CLI for Claude."
-      }
-    ]
+  defp resolve_system_blocks(nil), do: fallback_system_blocks()
+
+  defp resolve_system_blocks(session_id) when is_binary(session_id) do
+    case SystemPrompts.resolve_for_session(session_id, :anthropic) do
+      {:ok, resolved} ->
+        blocks =
+          SystemPrompts.render_for_provider(:anthropic, %{
+            prompts: Map.get(resolved, :prompts, [])
+          })
+
+        if blocks == [] do
+          Logger.warning(
+            "anthropic system prompts empty for session #{session_id}; using defaults"
+          )
+
+          fallback_system_blocks()
+        else
+          blocks
+        end
+    end
+  rescue
+    exception ->
+      Logger.error("anthropic system prompts resolution raised #{inspect(exception)}")
+      fallback_system_blocks()
   end
+
+  defp resolve_system_blocks(_), do: fallback_system_blocks()
+
+  defp fallback_system_blocks, do: PromptDefaults.anthropic_default_blocks()
+
+  defp maybe_put_system(map, blocks) when is_list(blocks) and blocks != [],
+    do: Map.put(map, "system", blocks)
+
+  defp maybe_put_system(map, _), do: map
 
   # Convert string-based messages to content blocks for Claude Code OAuth (no cache_control)
   # credo:disable-for-next-line Credo.Check.Refactor.Nesting

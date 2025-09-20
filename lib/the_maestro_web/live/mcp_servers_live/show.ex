@@ -159,7 +159,7 @@ defmodule TheMaestroWeb.MCPServersLive.Show do
                             binding.session.saved_authentication.name) || "None"}
                 </p>
               </div>
-              <.link navigate={~p"/sessions/#{binding.session_id}/edit"} class="btn btn-xs btn-soft">
+              <.link navigate={~p"/dashboard"} class="btn btn-xs btn-soft">
                 Manage Session
               </.link>
             </div>

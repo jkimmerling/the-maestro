@@ -14,6 +14,9 @@ The Maestro is an Elixir/Phoenix 1.8 application that orchestrates multi-provide
 8. [Deployment](#deployment)
 9. [Troubleshooting](#troubleshooting)
 10. [Additional References](#additional-references)
+11. [System Prompts (Defaults & Seeding)](#system-prompts-defaults--seeding)
+12. [Tools Picker & Allowlist](#tools-picker--allowlist)
+13. [Visual Baselines (Playwright)](#visual-baselines-playwright)
 
 ## Project Goals
 
@@ -29,10 +32,74 @@ Install the toolchain versions below before running any mix tasks:
 - Elixir `~> 1.15` (OTP 26 compatible)
 - Erlang/OTP 26 or newer
 - PostgreSQL 14+ running locally with a `postgres/postgres` superuser (override via `config/dev.exs`)
+- **Redis 6.2+** for caching MCP tools and session data (see [Redis Configuration](#redis-configuration) below)
 - Optional: `direnv` or your preferred env manager for exporting API credentials
 - macOS/Linux: ensure `inotify-tools`/`fswatch`-equivalent file watchers are available for asset rebuilds
 
 > **Tip:** Tailwind and esbuild binaries are downloaded automatically by `mix assets.setup`; no global Node.js installation is required.
+
+### Redis Configuration
+
+The Maestro requires Redis for caching MCP (Model Context Protocol) tools and other session data. The unified cache system ensures MCP tools persist across configuration changes and UI interactions.
+
+#### Installation
+
+**macOS (using Homebrew):**
+```bash
+brew install redis
+brew services start redis
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get update
+sudo apt-get install redis-server
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+```
+
+**Docker:**
+```bash
+docker run -d -p 6379:6379 redis:6.2-alpine
+```
+
+#### Configuration
+
+By default, The Maestro connects to Redis at `localhost:6379` with no authentication. You can customize this in `config/dev.exs`:
+
+```elixir
+config :the_maestro, redis: [
+  host: "localhost",
+  port: 6379,
+  password: nil,  # Set if Redis requires authentication
+  database: 0
+]
+```
+
+For production environments, configure Redis connection via environment variables:
+
+```bash
+export REDIS_HOST=your-redis-host
+export REDIS_PORT=6379
+export REDIS_PASSWORD=your-secure-password
+```
+
+#### Verifying Redis Connection
+
+After starting Redis, verify it's working:
+
+```bash
+redis-cli ping
+# Should return: PONG
+
+# Check if MCP tools cache is populated (after running the app):
+redis-cli GET mcp_tool_list
+```
+
+The MCP tools cache is automatically populated when:
+- The application starts (via UnifiedToolsCache GenServer)
+- MCP servers are added or modified
+- Every hour (automatic refresh)
 
 ## Quick Start
 
@@ -66,6 +133,7 @@ Install the toolchain versions below before running any mix tasks:
 
 - Rebuild once: `mix assets.build`
 - Continuous rebuild: handled automatically by dev watchers configured in `config/dev.exs`
+- Install SortableJS once for LiveView prompt drag-and-drop: `npm install --prefix assets sortablejs`
 
 ## Development Workflow
 
@@ -132,6 +200,22 @@ Integration coverage is mandatory.
 
 LiveView integration tests rely on `Phoenix.LiveViewTest` and `LazyHTML`; ensure selectors align with DOM IDs defined in templates. Add new tests for every feature or fix—unit tests alone are insufficient.
 
+### Tools gating E2E (OpenAI)
+
+Validate that OpenAI tool exposure respects the per-provider allowlist:
+
+```bash
+OPENAI_SESSION_NAME=<saved_auth_name> mix e2e.openai.tools
+```
+The task disallows all tools (expects no function calls, telemetry tools_count=0), then allows `shell` (expects a tool call, telemetry tools_count=1).
+
+Parity tasks for Anthropic and Gemini validate telemetry counts:
+
+```bash
+ANTHROPIC_SESSION_NAME=<name> mix e2e.anthropic.tools
+GEMINI_SESSION_NAME=<name> mix e2e.gemini.tools
+```
+
 ## Deployment
 
 1. Collect production secrets:
@@ -180,3 +264,69 @@ For Phoenix framework fundamentals and releases, consult HexDocs:
 - Phoenix Deployment – https://hexdocs.pm/phoenix/deployment.html
 - Mix Tasks Reference – https://hexdocs.pm/mix/Mix.Tasks.html
 
+## System Prompts (Defaults & Seeding)
+
+The Maestro ships with canonical, provider-specific base prompts stored in the database (`supplied_context_items`) and resolved at runtime by the `TheMaestro.SystemPrompts` context. These defaults are seeded with deterministic IDs and can be reordered or extended per session in the UI.
+
+Where things live
+
+- Seeder entrypoint: `priv/repo/seeds/system_prompts.exs` (included by `priv/repo/seeds.exs`)
+- Seeder implementation: `lib/the_maestro/system_prompts/seeder.ex`
+- Resolver/renderer: `lib/the_maestro/system_prompts.ex` and `lib/the_maestro/system_prompts/renderer/*`
+
+How to seed (fresh or re-run)
+
+- As part of a full setup (creates DB, runs migrations, and seeds):
+  - `mix setup`
+- Seed only the system prompts (safe to run multiple times; upserts by ID):
+  - `mix run priv/repo/seeds/system_prompts.exs`
+
+## Tools Picker & Allowlist
+
+The Session “Config” modal includes a Tool Picker that lists built-in tools per provider plus MCP‑discovered tools for the current session. Use the checkboxes or “All/None” shortcuts to persist an allowlist under `session.tools["allowed"][provider]`.
+
+- Edit modal: immediate persistence on Save; if saving while streaming, choose apply now/next turn
+- Create modal: selections persist on creation; MCP tools populate after attaching connectors
+
+Runtime enforcement filters tool declarations before each provider request. If no allowlist exists for a provider, all tools are exposed by default.
+
+## Visual Baselines (Playwright)
+
+We ship Playwright scaffolding for basic visual baselines (dashboard create session modal, session edit modal, supplied context index).
+
+Install locally and capture/update baselines:
+
+```bash
+# CRITICAL: install locally only; do not commit lockfiles from here
+npm ci --prefix playwright
+npx --prefix playwright playwright install --with-deps
+
+# Run with the app running at APP_BASE_URL (defaults http://localhost:4000)
+APP_BASE_URL=http://localhost:4000 npx --prefix playwright playwright test
+```
+
+CI includes a disabled `visuals` job you can enable once baselines are established and credentials are set where needed.
+- Seed everything in `priv/repo/seeds.exs` (includes system prompts):
+  - `mix run priv/repo/seeds.exs`
+
+Verify defaults in IEx
+
+```elixir
+iex -S mix
+TheMaestro.SystemPrompts.list_provider_defaults(:openai)
+TheMaestro.SystemPrompts.list_provider_defaults(:anthropic)
+TheMaestro.SystemPrompts.list_provider_defaults(:gemini)
+```
+
+Using defaults in the UI
+
+- Open the Dashboard → Create Session → System Prompts section.
+- Use the per-provider tabs (OpenAI/Anthropic/Gemini) to view and reorder defaults.
+- Drag-and-drop (or keyboard arrows provided) reorders prompt segments; immutable items are locked at the top.
+- Saving the session persists the prompt stack for that session; all UIs resolve the same context at runtime.
+
+Notes
+
+- Seeds are deterministic: IDs and family IDs do not change between runs. The seeder performs an upsert with updated fields and labels.
+- Some Anthropic defaults are marked immutable (identity); toggling is blocked by the context validations.
+- OpenAI OAuth (chatgpt.com) expects a final-hop string instruction; we normalize at the provider boundary while keeping structured segments internally.

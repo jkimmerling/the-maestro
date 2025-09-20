@@ -16,6 +16,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   alias TheMaestro.Providers.Http.ReqClientFactory
   alias TheMaestro.Providers.Http.StreamingAdapter
   alias TheMaestro.SavedAuthentication
+  alias TheMaestro.SystemPrompts
+  alias TheMaestro.SystemPrompts.Defaults, as: PromptDefaults
   alias TheMaestro.Types
 
   @dialyzer {:nowarn_function, resolve_decl_session_id: 2}
@@ -45,12 +47,30 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
       {:error, :missing_model}
     else
       model_path = normalize_model_for_api(model, :genlang)
+      system_instruction = resolve_system_instruction(Keyword.get(opts, :decl_session_id))
 
-      payload = %{
-        "model" => model_path,
-        "contents" => ensure_gemini_contents(messages),
-        "stream" => true
-      }
+      payload =
+        %{
+          "model" => model_path,
+          "contents" => ensure_gemini_contents(messages),
+          "stream" => true
+        }
+        |> maybe_put_system_instruction(system_instruction)
+
+      :telemetry.execute(
+        [
+          :providers,
+          :gemini,
+          :request_built
+        ],
+        %{},
+        %{
+          auth_type: :api_key,
+          model: model_path,
+          system_instruction?: not is_nil(system_instruction),
+          tools_count: 0
+        }
+      )
 
       StreamingAdapter.stream_request(req,
         method: :post,
@@ -94,13 +114,14 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     Logger.debug("Gemini OAuth project resolved: #{inspect(project)}")
     m0 = strip_models_prefix(model)
     m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
-    base_contents = ensure_gemini_contents(messages)
-    env_msg = build_env_context_message(session_name)
-    base_contents = [env_msg | base_contents]
-    {contents, sys_inst} = split_system_instruction(base_contents)
+
+    contents =
+      [build_env_context_message(session_name) | ensure_gemini_contents(messages)]
 
     decl_session_id =
       Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
+
+    system_instruction = resolve_system_instruction(decl_session_id)
 
     request =
       %{
@@ -108,7 +129,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
         "generationConfig" => %{"temperature" => 0, "topP" => 1},
         "session_id" => session_uuid
       }
-      |> maybe_put_system_instruction(sys_inst)
+      |> maybe_put_system_instruction(system_instruction)
       |> maybe_put_tools(function_declarations_for_session(decl_session_id))
 
     payload = %{
@@ -119,6 +140,28 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     }
 
     req = maybe_http_debug(req, payload)
+
+    tools_count =
+      case get_in(request, ["tools"]) do
+        [%{"function_declarations" => decls}] when is_list(decls) -> length(decls)
+        [%{"functionDeclarations" => decls}] when is_list(decls) -> length(decls)
+        _ -> 0
+      end
+
+    :telemetry.execute(
+      [
+        :providers,
+        :gemini,
+        :request_built
+      ],
+      %{},
+      %{
+        auth_type: :oauth,
+        model: m,
+        system_instruction?: not is_nil(get_in(request, ["systemInstruction"])),
+        tools_count: tools_count
+      }
+    )
 
     StreamingAdapter.stream_request(req,
       method: :post,
@@ -164,60 +207,94 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
           {:ok, Enumerable.t()} | {:error, term()}
   def stream_tool_followup(session_name, contents, opts \\ []) when is_list(contents) do
     with {:ok, :oauth} <- detect_auth_type(session_name),
-         {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name) do
-      model = Keyword.get(opts, :model) || "gemini-2.5-pro"
-      session_uuid = Ecto.UUID.generate()
-
-      case CodeAssist.ensure_project(session_name) do
-        {:ok, project} when is_binary(project) and project != "" ->
-          m0 = strip_models_prefix(model)
-          m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
-
-          decl_session_id =
-            Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
-
-          request =
-            %{
-              "contents" => contents,
-              "generationConfig" => %{"temperature" => 0, "topP" => 1},
-              "session_id" => session_uuid
-            }
-            |> maybe_put_tools(function_declarations_for_session(decl_session_id))
-
-          payload = %{
-            "model" => m,
-            "project" => project,
-            "user_prompt_id" => session_uuid,
-            "request" => request
-          }
-
-          req = maybe_http_debug(req, payload)
-
-          StreamingAdapter.stream_request(
-            req,
-            method: :post,
-            url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
-            json: payload,
-            timeout: Keyword.get(opts, :timeout, :infinity)
-          )
-
-        {:error, :project_required} ->
-          {:error, :project_required}
-
-        _ ->
-          {:error, :missing_user_project}
+         {:ok, req} <- ReqClientFactory.create_client(:gemini, :oauth, session: session_name),
+         {:ok, project} <- CodeAssist.ensure_project(session_name) do
+      if is_binary(project) and project != "" do
+        do_stream_tool_followup(session_name, contents, opts, req, project)
+      else
+        {:error, :invalid_project}
       end
-    else
-      {:ok, :api_key} -> {:error, :tool_followup_not_supported_for_api_key}
-      other -> other
+    end
+  end
+
+  defp do_stream_tool_followup(session_name, contents, opts, req, project) do
+    model = normalize_model(Keyword.get(opts, :model) || "gemini-2.5-pro")
+    session_uuid = Ecto.UUID.generate()
+
+    decl_session_id =
+      Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
+
+    request = build_followup_request(contents, session_uuid, decl_session_id)
+    payload = build_followup_payload(model, project, session_uuid, request)
+    req = maybe_http_debug(req, payload)
+
+    emit_followup_telemetry(request, model)
+
+    StreamingAdapter.stream_request(
+      req,
+      method: :post,
+      url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+      json: payload,
+      timeout: Keyword.get(opts, :timeout, :infinity)
+    )
+  end
+
+  defp normalize_model(model) do
+    m0 = strip_models_prefix(model)
+    if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
+  end
+
+  defp build_followup_request(contents, session_uuid, decl_session_id) do
+    system_instruction = resolve_system_instruction(decl_session_id)
+
+    %{
+      "contents" => contents,
+      "generationConfig" => %{"temperature" => 0, "topP" => 1},
+      "session_id" => session_uuid
+    }
+    |> maybe_put_system_instruction(system_instruction)
+    |> maybe_put_tools(function_declarations_for_session(decl_session_id))
+  end
+
+  defp build_followup_payload(model, project, session_uuid, request) do
+    %{
+      "model" => model,
+      "project" => project,
+      "user_prompt_id" => session_uuid,
+      "request" => request
+    }
+  end
+
+  defp emit_followup_telemetry(request, model) do
+    tools_count = count_tools(request)
+
+    :telemetry.execute(
+      [:providers, :gemini, :request_built],
+      %{},
+      %{
+        auth_type: :oauth_followup,
+        model: model,
+        system_instruction?: not is_nil(get_in(request, ["systemInstruction"])),
+        tools_count: tools_count
+      }
+    )
+  end
+
+  defp count_tools(request) do
+    case get_in(request, ["tools"]) do
+      [%{"function_declarations" => decls}] when is_list(decls) -> length(decls)
+      [%{"functionDeclarations" => decls}] when is_list(decls) -> length(decls)
+      _ -> 0
     end
   end
 
   # -- Tools exposure for Gemini --
   # Merge built-ins with MCP-declared tools for this session.
   defp function_declarations_for_session(session_id) do
-    mcp_tools = MCPRegistry.to_gemini_decls(session_id)
-    builtins = built_in_function_declarations()
+    allowed = allowed_names_for(session_id, :gemini)
+
+    mcp_tools = MCPRegistry.to_gemini_decls(session_id) |> maybe_filter_tools(allowed)
+    builtins = built_in_function_declarations() |> maybe_filter_tools(allowed)
     # prefer MCP if name collides
     names = MapSet.new(Enum.map(mcp_tools, & &1["name"]))
     builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
@@ -228,6 +305,31 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     )
 
     decls
+  end
+
+  defp maybe_filter_tools(list, :absent), do: list
+
+  defp maybe_filter_tools(list, {:present, names}) when is_list(list) do
+    allowed = MapSet.new(names)
+    Enum.filter(list, fn %{"name" => n} -> MapSet.member?(allowed, n) end)
+  end
+
+  # Read persisted allowed tool names for the provider; returns :absent when not set
+  defp allowed_names_for(session_id, provider) when is_binary(session_id) and is_atom(provider) do
+    prov = Atom.to_string(provider)
+
+    case TheMaestro.Conversations.get_session!(session_id) do
+      %TheMaestro.Conversations.Session{tools: %{"allowed" => %{} = m}} ->
+        case Map.fetch(m, prov) do
+          {:ok, list} when is_list(list) -> {:present, Enum.map(list, &to_string/1)}
+          _ -> :absent
+        end
+
+      _ ->
+        :absent
+    end
+  rescue
+    _ -> :absent
   end
 
   # Resolve the Conversations session UUID for use by MCP.Registry.
@@ -340,35 +442,33 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     }
   end
 
-  # Extract first "system" message as systemInstruction and remove it from contents
-  defp split_system_instruction(messages) do
-    msgs =
-      if is_list(messages) and Enum.all?(messages, &is_map/1) and
-           Enum.any?(messages, &Map.has_key?(&1, "parts")) do
-        messages
-      else
-        normalize_messages(messages)
-      end
+  defp resolve_system_instruction(nil), do: PromptDefaults.gemini_system_instruction()
 
-    {sys_msgs, rest} = Enum.split_with(msgs, fn m -> m["role"] == "system" end)
+  defp resolve_system_instruction(session_id) when is_binary(session_id) do
+    case SystemPrompts.resolve_for_session(session_id, :gemini) do
+      {:ok, resolved} ->
+        instruction =
+          SystemPrompts.render_for_provider(:gemini, %{prompts: Map.get(resolved, :prompts, [])})
 
-    sys_text =
-      sys_msgs
-      |> Enum.flat_map(fn m -> m["parts"] || [] end)
-      |> Enum.map(fn p -> p["text"] || "" end)
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.join("\n\n")
+        parts = Map.get(instruction, "parts") || []
 
-    sys_inst =
-      case String.trim(sys_text) do
-        "" -> nil
-        txt -> %{"role" => "user", "parts" => [%{"text" => txt}]}
-      end
+        if parts == [] do
+          Logger.warning(
+            "gemini system instruction empty for session #{session_id}; using defaults"
+          )
 
-    {rest, sys_inst}
+          PromptDefaults.gemini_system_instruction()
+        else
+          instruction
+        end
+    end
+  rescue
+    exception ->
+      Logger.error("gemini system prompts resolution raised #{inspect(exception)}")
+      PromptDefaults.gemini_system_instruction()
   end
 
-  defp maybe_put_system_instruction(map, nil), do: map
+  defp resolve_system_instruction(_), do: PromptDefaults.gemini_system_instruction()
 
   defp maybe_put_system_instruction(map, sys_inst),
     do: Map.put(map, "systemInstruction", sys_inst)

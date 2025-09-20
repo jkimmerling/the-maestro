@@ -86,7 +86,7 @@ defmodule TheMaestroWeb.MCPServersLive.Index do
 
   def handle_event("toggle_enabled", %{"id" => id}, socket) do
     server = MCP.get_server!(id)
-    {:ok, _} = MCP.update_server(server, %{is_enabled: !server.is_enabled})
+    {:ok, _updated} = MCP.update_server(server, %{is_enabled: !server.is_enabled})
 
     {:noreply, reload_servers(socket)}
   end

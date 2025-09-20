@@ -58,7 +58,6 @@ defmodule TheMaestro.Tools.WriteFile do
       {:ok, resolved} -> {:ok, resolved}
       {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
       {:error, :missing} -> {:error, "missing file path"}
-      {:error, other} -> {:error, format_error(other)}
     end
   end
 
@@ -99,6 +98,4 @@ defmodule TheMaestro.Tools.WriteFile do
   defp format_error(reason) when is_atom(reason) do
     :file.format_error(reason) |> List.to_string()
   end
-
-  defp format_error(reason), do: to_string(reason)
 end

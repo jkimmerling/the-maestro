@@ -16,9 +16,12 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
   alias TheMaestro.Providers.Http.StreamingAdapter
   alias TheMaestro.SavedAuthentication
   alias TheMaestro.Streaming.OpenAIHandler
+  alias TheMaestro.SystemPrompts
+  alias TheMaestro.SystemPrompts.Defaults, as: PromptDefaults
   alias TheMaestro.Types
 
   @dialyzer {:nowarn_function, resolve_decl_session_id: 1}
+  @dialyzer {:nowarn_function, normalize_instructions_for_chatgpt: 1}
 
   @type mode :: :chatgpt_personal | :enterprise
 
@@ -89,6 +92,10 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
       version = Application.spec(:the_maestro, :vsn) |> to_string()
       session_id_hdr = Keyword.get(opts, :session_uuid) || Ecto.UUID.generate()
 
+      decl_session_id = Keyword.get(opts, :decl_session_id)
+      instructions = resolve_instruction_items(decl_session_id)
+      instructions = normalize_instructions_for_chatgpt(instructions)
+
       req =
         req0
         |> Req.Request.put_header("openai-beta", "responses=experimental")
@@ -102,7 +109,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
 
       payload = %{
         "model" => model,
-        "instructions" => load_instructions(),
+        "instructions" => instructions,
         "input" => input_items,
         "tools" => tools_for_session(Keyword.get(opts, :decl_session_id) || session_name),
         "tool_choice" => "auto",
@@ -110,6 +117,21 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         "stream" => true,
         "prompt_cache_key" => session_id_hdr
       }
+
+      :telemetry.execute(
+        [
+          :providers,
+          :openai,
+          :request_built
+        ],
+        %{},
+        %{
+          mode: :enterprise,
+          model: model,
+          instructions_shape: instruction_shape(instructions),
+          tools_count: length(Map.get(payload, "tools", []))
+        }
+      )
 
       adapter.stream_request(req,
         method: :post,
@@ -131,6 +153,10 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
       # Headers required by ChatGPT backend for responses API
       session_id_hdr = Keyword.get(opts, :session_uuid) || Ecto.UUID.generate()
 
+      decl_session_id = Keyword.get(opts, :decl_session_id)
+      instructions = resolve_instruction_items(decl_session_id)
+      instructions = normalize_instructions_for_chatgpt(instructions)
+
       req =
         req0
         |> Req.Request.put_header("openai-beta", "responses=experimental")
@@ -140,8 +166,6 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         |> Req.Request.put_header("session_id", session_id_hdr)
         |> Req.Request.put_header("originator", "codex_cli_rs")
         |> Req.Request.put_header("chatgpt-account-id", account_id)
-
-      instructions = load_instructions()
 
       env_msg = build_env_context_message(session_name)
       input_items = [env_msg | itemize_messages_for_responses(messages)]
@@ -158,6 +182,21 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         "prompt_cache_key" => session_id_hdr,
         "text" => %{"verbosity" => "medium"}
       }
+
+      :telemetry.execute(
+        [
+          :providers,
+          :openai,
+          :request_built
+        ],
+        %{},
+        %{
+          mode: :oauth,
+          model: model,
+          instructions_shape: instruction_shape(instructions),
+          tools_count: length(Map.get(payload, "tools", []))
+        }
+      )
 
       maybe_log_payload(:openai_oauth_initial, payload)
 
@@ -179,14 +218,57 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
     "TheMaestro/1.0 (Conversation Test)"
   end
 
-  defp load_instructions do
-    path =
-      System.get_env("CODEX_PROMPT_PATH") ||
-        "source/codex/codex-rs/core/prompt.md"
+  defp resolve_instruction_items(nil), do: fallback_instruction_items()
 
-    case File.read(path) do
-      {:ok, contents} -> contents
-      _ -> ""
+  defp resolve_instruction_items(session_id) when is_binary(session_id) do
+    case SystemPrompts.resolve_for_session(session_id, :openai) do
+      {:ok, resolved} ->
+        instructions =
+          SystemPrompts.render_for_provider(:openai, %{prompts: Map.get(resolved, :prompts, [])})
+
+        if instructions == [] do
+          Logger.warning(
+            "openai instructions resolved empty for session #{session_id}; using defaults"
+          )
+
+          fallback_instruction_items()
+        else
+          instructions
+        end
+    end
+  rescue
+    exception ->
+      Logger.error("openai instructions resolution raised #{inspect(exception)}")
+
+      fallback_instruction_items()
+  end
+
+  defp resolve_instruction_items(_), do: fallback_instruction_items()
+
+  defp fallback_instruction_items, do: PromptDefaults.openai_segments()
+
+  # ChatGPT backend is stricter than the public Responses API and expects
+  # instructions as a single string. Our renderer emits a list of segments.
+  # To maximize compatibility, collapse segments into a single string for
+  # the chatgpt.com backend while keeping list-of-segments for enterprise.
+  defp normalize_instructions_for_chatgpt(value) do
+    cond do
+      is_list(value) ->
+        value
+        |> Enum.map(fn
+          %{"text" => t} when is_binary(t) -> t
+          %{:text => t} when is_binary(t) -> t
+          bin when is_binary(bin) -> bin
+          _ -> nil
+        end)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join("\n\n")
+
+      is_binary(value) ->
+        value
+
+      true ->
+        ""
     end
   end
 
@@ -305,18 +387,47 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
     end
   end
 
+  defp instruction_shape(_v), do: :string
+
   # legacy collapsed form no longer used
 
   # Build OpenAI Responses tool list for this session merging built-ins + MCP
   defp tools_for_session(session_id) do
     decl_session_id = resolve_decl_session_id(session_id)
-    mcp = MCPRegistry.to_openai_decls(decl_session_id)
-    builtins = [shell_tool_function(), apply_patch_function_tool()]
+    allowed = allowed_names_for(decl_session_id, :openai)
+
+    mcp = MCPRegistry.to_openai_decls(decl_session_id) |> maybe_filter_tools(allowed)
+    builtins = [shell_tool_function(), apply_patch_function_tool()] |> maybe_filter_tools(allowed)
 
     # prefer MCP when names collide
     names = MapSet.new(Enum.map(mcp, & &1["name"]))
     builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
     mcp ++ builtins_filtered
+  end
+
+  defp maybe_filter_tools(list, :absent), do: list
+
+  defp maybe_filter_tools(list, {:present, names}) when is_list(list) do
+    allowed = MapSet.new(names)
+    Enum.filter(list, fn %{"name" => n} -> MapSet.member?(allowed, n) end)
+  end
+
+  # Read persisted allowed tool names for the provider; returns :absent when not set
+  defp allowed_names_for(session_id, provider) when is_binary(session_id) and is_atom(provider) do
+    prov = Atom.to_string(provider)
+
+    case TheMaestro.Conversations.get_session!(session_id) do
+      %TheMaestro.Conversations.Session{tools: %{"allowed" => %{} = m}} ->
+        case Map.fetch(m, prov) do
+          {:ok, list} when is_list(list) -> {:present, Enum.map(list, &to_string/1)}
+          _ -> :absent
+        end
+
+      _ ->
+        :absent
+    end
+  rescue
+    _ -> :absent
   end
 
   # -- follow-up builders (extracted to reduce complexity) --
@@ -333,15 +444,35 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         |> Req.Request.put_header("accept", "text/event-stream")
         |> Req.Request.put_header("version", version)
 
+      instructions =
+        resolve_instruction_items(Keyword.get(opts, :decl_session_id))
+        |> normalize_instructions_for_chatgpt()
+
       payload =
         followup_payload_common(
           Keyword.get(opts, :model, "gpt-4o"),
           items,
           tools_for_session(Keyword.get(opts, :decl_session_id) || session_name),
           session_id_hdr,
+          instructions,
           parallel?: true,
           store?: nil
         )
+
+      :telemetry.execute(
+        [
+          :providers,
+          :openai,
+          :request_built
+        ],
+        %{},
+        %{
+          mode: :enterprise_followup,
+          model: Keyword.get(opts, :model, "gpt-4o"),
+          instructions_shape: instruction_shape(instructions),
+          tools_count: length(Map.get(payload, "tools", []))
+        }
+      )
 
       {:ok, req, "/v1/responses", payload, Keyword.get(opts, :timeout, :infinity)}
     end
@@ -364,16 +495,36 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         |> Req.Request.put_header("originator", "codex_cli_rs")
         |> Req.Request.put_header("chatgpt-account-id", account_id)
 
+      instructions =
+        resolve_instruction_items(Keyword.get(opts, :decl_session_id))
+        |> normalize_instructions_for_chatgpt()
+
       payload =
         followup_payload_common(
           Keyword.get(opts, :model, "gpt-5"),
           items,
           tools_for_session(Keyword.get(opts, :decl_session_id) || session_name),
           session_id_hdr,
+          instructions,
           parallel?: false,
           store?: false
         )
         |> Map.put("text", %{"verbosity" => "medium"})
+
+      :telemetry.execute(
+        [
+          :providers,
+          :openai,
+          :request_built
+        ],
+        %{},
+        %{
+          mode: :oauth_followup,
+          model: Keyword.get(opts, :model, "gpt-5"),
+          instructions_shape: instruction_shape(instructions),
+          tools_count: length(Map.get(payload, "tools", []))
+        }
+      )
 
       if System.get_env("DEBUG_STREAM_EVENTS") == "1" do
         IO.puts("\n📌 Follow-up headers: session_id=" <> session_id_hdr)
@@ -388,10 +539,10 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
     end
   end
 
-  defp followup_payload_common(model, items, tools, cache_key, opts) do
+  defp followup_payload_common(model, items, tools, cache_key, instructions, opts) do
     %{
       "model" => model,
-      "instructions" => load_instructions(),
+      "instructions" => instructions,
       "input" => items,
       "tools" => tools,
       "tool_choice" => "auto",

@@ -7,8 +7,9 @@ defmodule TheMaestro.Conversations do
   alias Ecto.Changeset
   alias Ecto.Multi
 
+  alias TheMaestro.Auth.SavedAuthentication
   alias TheMaestro.Conversations.{ChatEntry, Session}
-  alias TheMaestro.{MCP, Repo}
+  alias TheMaestro.{MCP, Provider, Repo, SystemPrompts}
 
   @doc """
   Returns the list of sessions.
@@ -69,11 +70,13 @@ defmodule TheMaestro.Conversations do
 
   """
   def create_session(attrs) do
+    {system_prompt_spec, attrs} = extract_system_prompts(attrs, :defaults)
     {mcp_ids, attrs} = extract_mcp_server_ids(attrs)
 
     Multi.new()
     |> Multi.insert(:session, Session.changeset(%Session{}, attrs))
     |> maybe_attach_mcp_servers(:session, mcp_ids)
+    |> maybe_apply_system_prompts(:session, system_prompt_spec)
     |> Repo.transaction()
     |> case do
       {:ok, %{session: _session, session_mcp_servers: updated_session}} ->
@@ -100,11 +103,13 @@ defmodule TheMaestro.Conversations do
 
   """
   def update_session(%Session{} = session, attrs) do
+    {system_prompt_spec, attrs} = extract_system_prompts(attrs, :keep)
     {mcp_ids, attrs} = extract_mcp_server_ids(attrs)
 
     Multi.new()
     |> Multi.update(:session, Session.changeset(session, attrs))
     |> maybe_attach_mcp_servers(:session, mcp_ids)
+    |> maybe_apply_system_prompts(:session, system_prompt_spec)
     |> Repo.transaction()
     |> case do
       {:ok, %{session: _session, session_mcp_servers: reloaded}} ->
@@ -210,6 +215,174 @@ defmodule TheMaestro.Conversations do
     end)
   end
 
+  defp extract_system_prompts(attrs, fallback) when is_map(attrs) do
+    {value, attrs} = pop_system_prompt_spec(attrs)
+    map = value |> Kernel.||(%{}) |> normalize_system_prompt_map()
+    if map == %{}, do: {fallback, attrs}, else: {{:explicit, map, fallback}, attrs}
+  end
+
+  defp pop_system_prompt_spec(attrs) do
+    cond do
+      Map.has_key?(attrs, :system_prompts) ->
+        Map.pop(attrs, :system_prompts)
+
+      Map.has_key?(attrs, "system_prompts") ->
+        Map.pop(attrs, "system_prompts")
+
+      Map.has_key?(attrs, :system_prompt_ids_by_provider) ->
+        Map.pop(attrs, :system_prompt_ids_by_provider)
+
+      Map.has_key?(attrs, "system_prompt_ids_by_provider") ->
+        Map.pop(attrs, "system_prompt_ids_by_provider")
+
+      true ->
+        {nil, attrs}
+    end
+  end
+
+  defp maybe_apply_system_prompts(multi, _session_key, :keep), do: multi
+
+  defp maybe_apply_system_prompts(multi, session_key, spec) do
+    Multi.run(multi, :session_prompts, fn _repo, changes ->
+      session = Map.fetch!(changes, session_key)
+
+      case apply_system_prompts(session, spec) do
+        {:ok, result} -> {:ok, result}
+        {:error, reason} -> {:error, reason}
+      end
+    end)
+  end
+
+  # :keep is handled by maybe_apply_system_prompts/3 before calling this function
+
+  defp apply_system_prompts(session, :defaults) do
+    case session_provider(session) do
+      {:ok, provider} ->
+        SystemPrompts.set_session_defaults(session, provider, transaction?: false)
+
+      {:error, _} ->
+        {:ok, :no_provider}
+    end
+  end
+
+  defp apply_system_prompts(session, {:explicit, map, fallback}) do
+    result =
+      Enum.reduce_while(map, {:ok, []}, fn {provider, specs}, {:ok, acc} ->
+        case SystemPrompts.set_session_prompts(session, provider, specs, transaction?: false) do
+          {:ok, list} -> {:cont, {:ok, [{provider, list} | acc]}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+
+    case result do
+      {:ok, _} -> maybe_apply_system_prompts_fallback(session, map, fallback)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp maybe_apply_system_prompts_fallback(_session, _map, :keep), do: {:ok, :explicit}
+
+  defp maybe_apply_system_prompts_fallback(session, map, :defaults) do
+    case session_provider(session) do
+      {:ok, provider} ->
+        if Map.has_key?(map, provider) do
+          {:ok, :explicit}
+        else
+          SystemPrompts.set_session_defaults(session, provider, transaction?: false)
+        end
+
+      {:error, _} ->
+        {:ok, :explicit}
+    end
+  end
+
+  defp session_provider(%Session{auth_id: nil}), do: {:error, :no_auth}
+
+  defp session_provider(%Session{auth_id: auth_id}) do
+    case Repo.get(SavedAuthentication, auth_id) do
+      %SavedAuthentication{provider: provider} ->
+        case to_provider_atom(provider) do
+          nil -> {:error, :unknown_provider}
+          provider_atom -> {:ok, provider_atom}
+        end
+
+      _ ->
+        {:error, :no_auth}
+    end
+  end
+
+  defp normalize_system_prompt_map(map) when is_map(map) do
+    Enum.reduce(map, %{}, fn {provider, specs}, acc ->
+      case {to_provider_atom(provider), normalize_system_prompt_specs(specs)} do
+        {nil, _} -> acc
+        {_, []} -> acc
+        {prov, list} -> Map.put(acc, prov, list)
+      end
+    end)
+  end
+
+  defp normalize_system_prompt_map(_), do: %{}
+
+  defp normalize_system_prompt_specs(list) when is_list(list) do
+    list
+    |> Enum.map(&normalize_system_prompt_spec/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp normalize_system_prompt_specs(_), do: []
+
+  defp normalize_system_prompt_spec(%{id: id} = spec),
+    do:
+      normalize_system_prompt_spec(%{
+        "id" => id,
+        "enabled" => Map.get(spec, :enabled),
+        "overrides" => Map.get(spec, :overrides)
+      })
+
+  defp normalize_system_prompt_spec(%{"id" => id} = spec) when is_binary(id) do
+    %{
+      id: id,
+      enabled: Map.get(spec, :enabled, Map.get(spec, "enabled", true)),
+      overrides: ensure_map(Map.get(spec, :overrides, Map.get(spec, "overrides", %{})))
+    }
+  end
+
+  defp normalize_system_prompt_spec(%{"prompt_id" => id} = spec) when is_binary(id) do
+    normalize_system_prompt_spec(%{
+      "id" => id,
+      "enabled" => Map.get(spec, :enabled, Map.get(spec, "enabled", true)),
+      "overrides" => Map.get(spec, :overrides, Map.get(spec, "overrides", %{}))
+    })
+  end
+
+  defp normalize_system_prompt_spec(id) when is_binary(id) do
+    %{id: id, enabled: true, overrides: %{}}
+  end
+
+  defp normalize_system_prompt_spec(_), do: nil
+
+  defp ensure_map(nil), do: %{}
+  defp ensure_map(map) when is_map(map), do: map
+  defp ensure_map(_), do: %{}
+
+  defp to_provider_atom(p) when is_atom(p) do
+    providers = Provider.list_providers()
+    if p in providers, do: p, else: nil
+  end
+
+  defp to_provider_atom(p) when is_binary(p) do
+    providers = Provider.list_providers()
+    provider_strings = Enum.map(providers, &Atom.to_string/1)
+
+    if p in provider_strings do
+      String.to_existing_atom(p)
+    else
+      nil
+    end
+  end
+
+  defp to_provider_atom(_), do: nil
+
   # ===== Chat History APIs =====
 
   @doc """
@@ -278,47 +451,48 @@ defmodule TheMaestro.Conversations do
       )
       |> Map.new()
 
+    if map_size(counts_by_session) == 0,
+      do: [],
+      else: build_chat_history_summary(counts_by_session)
+  end
+
+  defp build_chat_history_summary(counts_by_session) when is_map(counts_by_session) do
     session_ids = Map.keys(counts_by_session)
 
-    if session_ids == [] do
-      []
-    else
-      latest_entries =
-        Repo.all(
-          from e in ChatEntry,
-            where: e.session_id in ^session_ids,
-            order_by: [desc: e.inserted_at],
-            distinct: e.session_id,
-            select:
-              {e.session_id,
-               %{
-                 id: e.id,
-                 inserted_at: e.inserted_at,
-                 actor: e.actor,
-                 provider: e.provider,
-                 turn_index: e.turn_index
-               }}
-        )
-        |> Map.new()
-
-      Repo.all(from s in Session, where: s.id in ^session_ids, preload: [:saved_authentication])
-      |> Enum.sort_by(
-        fn session ->
-          case Map.get(latest_entries, session.id) do
-            %{inserted_at: dt} -> dt
-            _ -> session.inserted_at
-          end
-        end,
-        fn a, b -> DateTime.compare(a, b) != :lt end
+    latest_entries =
+      Repo.all(
+        from e in ChatEntry,
+          where: e.session_id in ^session_ids,
+          order_by: [desc: e.inserted_at],
+          distinct: e.session_id,
+          select:
+            {e.session_id,
+             %{
+               id: e.id,
+               inserted_at: e.inserted_at,
+               actor: e.actor,
+               provider: e.provider,
+               turn_index: e.turn_index
+             }}
       )
-      |> Enum.map(fn session ->
-        %{
-          session: session,
-          message_count: Map.fetch!(counts_by_session, session.id),
-          latest_entry: Map.get(latest_entries, session.id)
-        }
-      end)
-    end
+      |> Map.new()
+
+    sessions =
+      Repo.all(from s in Session, where: s.id in ^session_ids, preload: [:saved_authentication])
+
+    sessions
+    |> Enum.sort_by(&latest_dt(&1, latest_entries), fn a, b -> DateTime.compare(a, b) != :lt end)
+    |> Enum.map(fn session ->
+      %{
+        session: session,
+        message_count: Map.fetch!(counts_by_session, session.id),
+        latest_entry: Map.get(latest_entries, session.id)
+      }
+    end)
+  end
+
+  defp latest_dt(session, latest_entries) do
+    Map.get(latest_entries, session.id, %{inserted_at: session.inserted_at}).inserted_at
   end
 
   @doc """
@@ -328,6 +502,20 @@ defmodule TheMaestro.Conversations do
     Repo.all(
       from e in ChatEntry,
         where: is_nil(e.session_id) and not is_nil(e.thread_id),
+        group_by: [e.thread_id],
+        order_by: [desc: max(e.inserted_at)],
+        select: %{thread_id: e.thread_id, label: max(e.thread_label)}
+    )
+  end
+
+  @doc """
+  Returns a list of thread ids and labels regardless of session attachment.
+  Useful for pickers that allow reattaching an existing conversation to a new session.
+  """
+  def list_threads do
+    Repo.all(
+      from e in ChatEntry,
+        where: not is_nil(e.thread_id),
         group_by: [e.thread_id],
         order_by: [desc: max(e.inserted_at)],
         select: %{thread_id: e.thread_id, label: max(e.thread_label)}

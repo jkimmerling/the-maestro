@@ -21,19 +21,39 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Form do
           prompt="Choose a value"
           options={Ecto.Enum.values(TheMaestro.SuppliedContext.SuppliedContextItem, :type)}
         />
+        <.input
+          field={@form[:provider]}
+          type="select"
+          label="Provider"
+          prompt="Choose a value"
+          options={Ecto.Enum.values(SuppliedContextItem, :provider)}
+        />
+        <.input
+          field={@form[:render_format]}
+          type="select"
+          label="Render Format"
+          prompt="Choose a value"
+          options={Ecto.Enum.values(SuppliedContextItem, :render_format)}
+        />
         <.input field={@form[:name]} type="text" label="Name" />
         <.input field={@form[:text]} type="textarea" label="Text" />
         <.input field={@form[:version]} type="number" label="Version" />
+        <.input field={@form[:position]} type="number" label="Position" />
+        <.input field={@form[:is_default]} type="checkbox" label="Default" />
+        <.input field={@form[:immutable]} type="checkbox" label="Immutable" />
+        <.input field={@form[:source_ref]} type="text" label="Source Reference" />
+        <.input field={@form[:editor]} type="text" label="Editor" />
+        <.input field={@form[:change_note]} type="textarea" label="Change Note" />
         <div>
-          <label for="supplied_context_item_tags" class="block text-sm font-medium">
-            Tags (JSON)
+          <label for="supplied_context_item_labels" class="block text-sm font-medium">
+            Labels (JSON)
           </label>
           <textarea
-            id="supplied_context_item_tags"
-            name="supplied_context_item[tags]"
+            id="supplied_context_item_labels"
+            name="supplied_context_item[labels]"
             class="w-full textarea"
           >
-            <%= Jason.encode!(@form[:tags].value || %{}) %>
+            <%= encode_json(@form[:labels].value) %>
           </textarea>
         </div>
         <div>
@@ -45,7 +65,7 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Form do
             name="supplied_context_item[metadata]"
             class="w-full textarea"
           >
-            <%= Jason.encode!(@form[:metadata].value || %{}) %>
+            <%= encode_json(@form[:metadata].value) %>
           </textarea>
         </div>
         <footer>
@@ -88,17 +108,20 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Form do
 
   @impl true
   def handle_event("validate", %{"supplied_context_item" => supplied_context_item_params}, socket) do
+    params = decode_json_fields(supplied_context_item_params)
+
     changeset =
       SuppliedContext.change_supplied_context_item(
         socket.assigns.supplied_context_item,
-        supplied_context_item_params
+        params
       )
 
     {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
   end
 
   def handle_event("save", %{"supplied_context_item" => supplied_context_item_params}, socket) do
-    save_supplied_context_item(socket, socket.assigns.live_action, supplied_context_item_params)
+    params = decode_json_fields(supplied_context_item_params)
+    save_supplied_context_item(socket, socket.assigns.live_action, params)
   end
 
   defp save_supplied_context_item(socket, :edit, supplied_context_item_params) do
@@ -140,4 +163,41 @@ defmodule TheMaestroWeb.SuppliedContextItemLive.Form do
 
   defp return_path("show", supplied_context_item),
     do: ~p"/supplied_context/#{supplied_context_item}"
+
+  defp encode_json(value) do
+    value
+    |> case do
+      nil -> %{}
+      map when is_map(map) -> map
+      other -> other
+    end
+    |> Jason.encode!()
+  end
+
+  defp decode_json_fields(params) do
+    params
+    |> decode_json_field("labels")
+    |> decode_json_field("metadata")
+  end
+
+  defp decode_json_field(params, key) do
+    case Map.get(params, key) do
+      value when is_binary(value) ->
+        trimmed = String.trim(value)
+
+        Map.put(params, key, parse_json_or_empty(trimmed))
+
+      _ ->
+        params
+    end
+  end
+
+  defp parse_json_or_empty(""), do: %{}
+
+  defp parse_json_or_empty(str) do
+    case Jason.decode(str) do
+      {:ok, map} when is_map(map) -> map
+      _ -> str
+    end
+  end
 end

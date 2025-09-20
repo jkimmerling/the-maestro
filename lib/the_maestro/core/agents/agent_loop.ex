@@ -401,8 +401,8 @@ defmodule TheMaestro.AgentLoop do
                    {:ok, payload} <- TheMaestro.Tools.WriteFile.run(json, base_cwd: base_cwd) do
                 payload
               else
-                {:error, reason} -> TheMaestro.Tools.ExecOutput.format("write_file error: #{reason}", 1, 0.0)
-                _ -> TheMaestro.Tools.ExecOutput.format("write_file error", 1, 0.0)
+                {:error, reason} ->
+                  TheMaestro.Tools.ExecOutput.format("write_file error: #{reason}", 1, 0.0)
               end
 
             _ ->
@@ -577,7 +577,8 @@ defmodule TheMaestro.AgentLoop do
               _ -> {:ok, %{"output" => payload_json}}
             end
 
-          {:error, reason} -> {:error, reason}
+          {:error, reason} ->
+            {:error, reason}
         end
 
       _ ->

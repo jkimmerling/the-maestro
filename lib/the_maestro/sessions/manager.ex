@@ -163,13 +163,22 @@ defmodule TheMaestro.Sessions.Manager do
         result =
           case provider do
             :openai ->
-              OpenAI.Streaming.stream_tool_followup(session_name, items, model: model)
+              OpenAI.Streaming.stream_tool_followup(session_name, items,
+                model: model,
+                decl_session_id: session_id
+              )
 
             :anthropic ->
-              Anthropic.Streaming.stream_tool_followup(session_name, items, model: model)
+              Anthropic.Streaming.stream_tool_followup(session_name, items,
+                model: model,
+                decl_session_id: session_id
+              )
 
             :gemini ->
-              Gemini.Streaming.stream_tool_followup(session_name, items, model: model)
+              Gemini.Streaming.stream_tool_followup(session_name, items,
+                model: model,
+                decl_session_id: session_id
+              )
           end
 
         case result do
@@ -448,14 +457,23 @@ defmodule TheMaestro.Sessions.Manager do
             |> maybe_append_tool_history(meta)
 
           _ ->
-            # Use the new function to include complete tool data
-            latest.combined_chat
-            |> append_assistant_with_tools(
-              text,
-              req_meta,
-              current_tool_calls,
-              Map.to_list(tool_responses)
-            )
+            canon0 = latest.combined_chat || %{"messages" => []}
+
+            canon1 =
+              if assistant_needs_append?(canon0, text) do
+                # Include complete tool data on the appended assistant message
+                canon0
+                |> append_assistant_with_tools(
+                  text,
+                  req_meta,
+                  current_tool_calls,
+                  Map.to_list(tool_responses)
+                )
+              else
+                canon0
+              end
+
+            canon1
             |> Map.put("events", events || [])
             |> maybe_append_tool_history(meta)
         end
@@ -763,6 +781,18 @@ defmodule TheMaestro.Sessions.Manager do
 
     user_items ++ fc_items ++ out_items
   end
+
+  defp assistant_needs_append?(%{"messages" => msgs}, text) when is_list(msgs) do
+    case List.last(msgs) do
+      %{"role" => "assistant", "content" => [%{"type" => "text", "text" => t} | _]} ->
+        String.trim(to_string(t)) != String.trim(to_string(text))
+
+      _ ->
+        true
+    end
+  end
+
+  defp assistant_needs_append?(_, _), do: true
 
   defp build_anthropic_items(latest_entry, partial_answer, calls, outputs) do
     canon = (latest_entry && latest_entry.combined_chat) || %{"messages" => []}

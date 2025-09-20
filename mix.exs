@@ -77,6 +77,7 @@ defmodule TheMaestro.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:toml, "~> 0.7.0"},
+      {:redix, "~> 1.3"},
 
       # Development and testing tools
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
