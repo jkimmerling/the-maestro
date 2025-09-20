@@ -32,10 +32,74 @@ Install the toolchain versions below before running any mix tasks:
 - Elixir `~> 1.15` (OTP 26 compatible)
 - Erlang/OTP 26 or newer
 - PostgreSQL 14+ running locally with a `postgres/postgres` superuser (override via `config/dev.exs`)
+- **Redis 6.2+** for caching MCP tools and session data (see [Redis Configuration](#redis-configuration) below)
 - Optional: `direnv` or your preferred env manager for exporting API credentials
 - macOS/Linux: ensure `inotify-tools`/`fswatch`-equivalent file watchers are available for asset rebuilds
 
 > **Tip:** Tailwind and esbuild binaries are downloaded automatically by `mix assets.setup`; no global Node.js installation is required.
+
+### Redis Configuration
+
+The Maestro requires Redis for caching MCP (Model Context Protocol) tools and other session data. The unified cache system ensures MCP tools persist across configuration changes and UI interactions.
+
+#### Installation
+
+**macOS (using Homebrew):**
+```bash
+brew install redis
+brew services start redis
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get update
+sudo apt-get install redis-server
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+```
+
+**Docker:**
+```bash
+docker run -d -p 6379:6379 redis:6.2-alpine
+```
+
+#### Configuration
+
+By default, The Maestro connects to Redis at `localhost:6379` with no authentication. You can customize this in `config/dev.exs`:
+
+```elixir
+config :the_maestro, redis: [
+  host: "localhost",
+  port: 6379,
+  password: nil,  # Set if Redis requires authentication
+  database: 0
+]
+```
+
+For production environments, configure Redis connection via environment variables:
+
+```bash
+export REDIS_HOST=your-redis-host
+export REDIS_PORT=6379
+export REDIS_PASSWORD=your-secure-password
+```
+
+#### Verifying Redis Connection
+
+After starting Redis, verify it's working:
+
+```bash
+redis-cli ping
+# Should return: PONG
+
+# Check if MCP tools cache is populated (after running the app):
+redis-cli GET mcp_tool_list
+```
+
+The MCP tools cache is automatically populated when:
+- The application starts (via UnifiedToolsCache GenServer)
+- MCP servers are added or modified
+- Every hour (automatic refresh)
 
 ## Quick Start
 

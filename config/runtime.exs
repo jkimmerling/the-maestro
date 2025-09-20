@@ -168,4 +168,7 @@ config :the_maestro,
 
 # Redis cache configuration
 config :the_maestro, :redis_url, System.get_env("REDIS_URL") || "redis://localhost:6379/0"
-config :the_maestro, :redis_cache_prefix, System.get_env("REDIS_CACHE_PREFIX") || "the_maestro:prompts"
+
+config :the_maestro,
+       :redis_cache_prefix,
+       System.get_env("REDIS_CACHE_PREFIX") || "the_maestro:prompts"

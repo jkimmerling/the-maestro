@@ -10,9 +10,8 @@ defmodule TheMaestro.Tools.Inventory do
   """
 
   alias TheMaestro.Conversations
-  alias TheMaestro.MCP
   alias TheMaestro.MCP.Registry, as: MCPRegistry
-  alias TheMaestro.MCP.ToolsCache
+  alias TheMaestro.MCP.UnifiedToolsCache
 
   @type provider :: :openai | :anthropic | :gemini
   @type item :: %{name: String.t(), source: :builtin | :mcp, description: String.t() | nil}
@@ -29,97 +28,56 @@ defmodule TheMaestro.Tools.Inventory do
   end
 
   @doc """
-  Build inventory for a provider using a set of MCP server ids (strings),
-  without requiring a persisted session. Uses the MCP ToolsCache; does not
-  perform live discovery on cache hit. On cache miss/stale, returns only
-  built-ins.
+  Build inventory for a provider using the unified cache.
+  Returns all available MCP tools from the unified cache for the specified provider.
   """
   @spec list_for_provider_with_servers([String.t()], provider()) :: [item()]
-  def list_for_provider_with_servers(server_ids, provider)
+  def list_for_provider_with_servers(_server_ids, provider)
       when provider in [:openai, :anthropic, :gemini] do
     builtins = builtins_for(provider)
 
+    # Get tools from unified cache
     mcp_items =
-      server_ids
-      |> Enum.flat_map(fn sid ->
-        {label, tools} = server_tools_or_cache(sid)
-
-        tools
-        |> Enum.flat_map(&map_hermes_item(&1, provider, label))
-      end)
-
-    # Prefer MCP on name collision
-    names = MapSet.new(Enum.map(mcp_items, & &1.name))
-    filtered_builtins = Enum.reject(builtins, fn %{name: n} -> MapSet.member?(names, n) end)
-    mcp_items ++ filtered_builtins
-  end
-
-  defp server_tools_or_cache(server_id) do
-    server = MCP.get_server!(server_id)
-    label = server.display_name || server.name || "MCP"
-
-    ttl_ms =
-      case server.metadata do
-        %{} = md ->
-          (md["tool_cache_ttl_minutes"] || md[:tool_cache_ttl_minutes] || 60)
-          |> to_int()
-          |> Kernel.*(60_000)
+      case UnifiedToolsCache.get_tools() do
+        {:ok, tools_by_provider} ->
+          provider_key = Atom.to_string(provider)
+          Map.get(tools_by_provider, provider_key, [])
 
         _ ->
-          60 * 60_000
-      end
-
-    # Use get_with_freshness to get data even if stale
-    tools =
-      case ToolsCache.get_with_freshness(server_id, ttl_ms) do
-        {:ok, t, :fresh} ->
-          t
-        {:ok, t, :stale} ->
-          # Return stale data and trigger background refresh
-          Task.start(fn -> warm_cache_for_server(server_id) end)
-          t
-        :miss ->
-          # No cache at all, trigger background discovery
-          Task.start(fn -> warm_cache_for_server(server_id) end)
           []
       end
 
-    {label, tools}
+    # Prefer MCP on name collision
+    names =
+      MapSet.new(
+        Enum.map(mcp_items, fn
+          %{"name" => name} when is_binary(name) -> name
+          %{name: name} when is_binary(name) -> name
+          _ -> nil
+        end)
+        |> Enum.reject(&is_nil/1)
+      )
+
+    filtered_builtins = Enum.reject(builtins, fn %{name: n} -> MapSet.member?(names, n) end)
+
+    # Convert tools from cache format (string keys) to inventory format (atom keys)
+    normalized_mcp_items = Enum.map(mcp_items, &normalize_tool_format/1) |> Enum.reject(&is_nil/1)
+    normalized_mcp_items ++ filtered_builtins
   end
 
-  defp warm_cache_for_server(server_id) do
-    server = MCP.get_server!(server_id)
-
-    case MCP.Client.discover_server(server) do
-      {:ok, %{tools: tools}} ->
-        ttl_ms =
-          case server.metadata do
-            %{} = md ->
-              (md["tool_cache_ttl_minutes"] || md[:tool_cache_ttl_minutes] || 60)
-              |> to_int()
-              |> Kernel.*(60_000)
-            _ ->
-              60 * 60_000
-          end
-
-        ToolsCache.put(server_id, tools, ttl_ms)
-      _ ->
-        :ok
-    end
+  # Convert tool from unified cache format (string keys) to inventory format (atom keys)
+  defp normalize_tool_format(%{"name" => name, "source" => source, "description" => desc} = tool) do
+    %{
+      name: name,
+      source: if(is_binary(source), do: String.to_existing_atom(source), else: source),
+      description: desc,
+      server_label: tool["server_label"]
+    }
   rescue
-    _ -> :ok
+    _ -> nil
   end
 
-  defp to_int(n) when is_integer(n), do: n
-
-  defp to_int(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      _ -> 60
-    end
-  end
-
-  defp to_int(_), do: 60
+  defp normalize_tool_format(_), do: nil
 
   # Return the list of names currently allowed for this session/provider, if present.
   # If no allowed list is persisted for the provider, returns :absent.
@@ -172,69 +130,6 @@ defmodule TheMaestro.Tools.Inventory do
         _ -> []
       end
     end)
-  end
-
-  # ---- Map Hermes tool into inventory item with provider-specific name ----
-  defp map_hermes_item(%{"name" => name} = t, :openai, label) do
-    [
-      %{
-        name: sanitize_gemini_name(name),
-        source: :mcp,
-        description: t["description"] || t["title"],
-        server_label: label
-      }
-    ]
-  rescue
-    _ -> []
-  end
-
-  defp map_hermes_item(%{"name" => name} = t, :anthropic, label) do
-    [
-      %{
-        name: sanitize_anthropic_name(name),
-        source: :mcp,
-        description: t["description"] || t["title"],
-        server_label: label
-      }
-    ]
-  rescue
-    _ -> []
-  end
-
-  defp map_hermes_item(%{"name" => name} = t, :gemini, label) do
-    [
-      %{
-        name: sanitize_gemini_name(name),
-        source: :mcp,
-        description: t["description"] || t["title"],
-        server_label: label
-      }
-    ]
-  rescue
-    _ -> []
-  end
-
-  defp map_hermes_item(_other, _provider, _label), do: []
-
-  # Reuse same sanitizers as Registry for consistency (re-implemented here)
-  defp sanitize_gemini_name(name) when is_binary(name) do
-    sanitized = String.replace(name, ~r/[^A-Za-z0-9_.-]/u, "_")
-    if String.length(sanitized) <= 63, do: sanitized, else: ellipsize_middle(sanitized, 63)
-  end
-
-  defp sanitize_anthropic_name(name) when is_binary(name) do
-    sanitized = String.replace(name, ~r/[^A-Za-z0-9_.-]/u, "_")
-    if String.length(sanitized) <= 63, do: sanitized, else: ellipsize_middle(sanitized, 63)
-  end
-
-  defp ellipsize_middle(s, max) when is_integer(max) and max > 3 do
-    len = String.length(s)
-
-    if len <= max,
-      do: s,
-      else:
-        String.slice(s, 0, div(max - 3, 2)) <>
-          "..." <> String.slice(s, len - (max - 3 - div(max - 3, 2)), max - 3 - div(max - 3, 2))
   end
 
   defp builtins_for(:openai) do

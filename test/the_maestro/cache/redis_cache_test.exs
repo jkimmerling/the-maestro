@@ -6,6 +6,7 @@ defmodule TheMaestro.Cache.RedisCacheTest do
   test "invalidate_prompt_cache deletes cached keys" do
     # Ensure Redis connection is available; otherwise skip
     conn = TheMaestro.Redis
+
     case :erlang.function_exported(Redix, :command, 2) do
       true ->
         key = RedisCache.key_for({:list_system_prompts, :openai, false, true, false})

@@ -30,7 +30,9 @@ defmodule TheMaestro.Cache.Redis do
     conn = TheMaestro.Redis
 
     case Redix.command(conn, ["GET", key]) do
-      {:ok, nil} -> set_and_return(conn, key, ttl_ms, fun)
+      {:ok, nil} ->
+        set_and_return(conn, key, ttl_ms, fun)
+
       {:ok, bin} when is_binary(bin) ->
         with {:ok, %{:v => value, :at_ms => at_ms}} <- decode_payload(bin),
              true <- fresh?(at_ms, ttl_ms) do
@@ -38,7 +40,9 @@ defmodule TheMaestro.Cache.Redis do
         else
           _ -> set_and_return(conn, key, ttl_ms, fun)
         end
-      _ -> fun.()
+
+      _ ->
+        fun.()
     end
   end
 
@@ -72,6 +76,10 @@ defmodule TheMaestro.Cache.Redis do
       {:error, reason} ->
         Logger.error("Redis SCAN error: #{inspect(reason)}")
         :ok
+
+      other ->
+        Logger.error("Redis SCAN unexpected response: #{inspect(other)}")
+        :ok
     end
   end
 
@@ -80,6 +88,7 @@ defmodule TheMaestro.Cache.Redis do
   defp fresh?(_, _), do: false
 
   defp decode_payload(<<131, _::binary>> = bin), do: {:ok, :erlang.binary_to_term(bin)}
+
   defp decode_payload(bin) when is_binary(bin) do
     case Jason.decode(bin) do
       {:ok, %{"v" => v, "at_ms" => at}} -> {:ok, %{v: v, at_ms: at}}

@@ -144,7 +144,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           />
         </div>
       </div>
-
+      
     <!-- Persona (collapsible) -->
       <div class="md:col-span-2 mt-4" id="section-persona">
         <div class="flex items-center justify-between">
@@ -202,7 +202,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           <% end %>
         </div>
       </div>
-
+      
     <!-- Memory (collapsible) -->
       <div class="md:col-span-2 mt-4" id="section-memory">
         <div class="flex items-center justify-between">
@@ -245,7 +245,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           <% end %>
         </div>
       </div>
-
+      
     <!-- Built-in Tools -->
       <div class="md:col-span-2 mt-4">
         <.live_component
@@ -259,7 +259,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           show_groups={[:builtin]}
         />
       </div>
-
+      
     <!-- MCPs Container -->
       <div class="md:col-span-2 mt-4">
         <label class="text-xs font-semibold uppercase tracking-wide">MCP Servers</label>
@@ -270,9 +270,11 @@ defmodule TheMaestroWeb.SessionFormComponent do
               <% is_selected = server_id in Enum.map(@session_mcp_selected_ids || [], &to_string/1) %>
               <% is_expanded = MapSet.member?(@mcp_expanded_servers, server_id) %>
               <% server_tools = get_server_tools(@tool_inventory_by_provider, @provider, label) %>
-              <% available_tools = get_available_tools_for_server(@tool_inventory_by_provider, @provider, server_id) %>
+              <% available_tools =
+                get_available_tools_for_server(@tool_inventory_by_provider, @provider, server_id) %>
               <% selected_tools = get_selected_tools(@tool_picker_allowed, @provider, server_tools) %>
-              <% some_tools_selected = length(selected_tools) > 0 && length(selected_tools) < length(server_tools) %>
+              <% some_tools_selected =
+                length(selected_tools) > 0 && length(selected_tools) < length(server_tools) %>
 
               <div class="border border-base-300 rounded-lg p-3" id={"mcp-server-" <> server_id}>
                 <div class="flex items-center justify-between">
@@ -291,8 +293,8 @@ defmodule TheMaestroWeb.SessionFormComponent do
                         class="h-4 w-4"
                       />
                     </button>
-
-                    <!-- Server Checkbox -->
+                    
+    <!-- Server Checkbox -->
                     <label class="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -308,8 +310,8 @@ defmodule TheMaestroWeb.SessionFormComponent do
                       <span class="text-sm font-medium">{label}</span>
                     </label>
                   </div>
-
-                  <!-- Tool Count Badge -->
+                  
+    <!-- Tool Count Badge -->
                   <div class="flex items-center gap-2">
                     <%= if is_selected do %>
                       <span class="badge badge-sm">
@@ -322,8 +324,8 @@ defmodule TheMaestroWeb.SessionFormComponent do
                     <% end %>
                   </div>
                 </div>
-
-                <!-- Expandable Tools Section -->
+                
+    <!-- Expandable Tools Section -->
                 <div
                   class={[
                     "mt-3 ml-8 space-y-1 transition-all duration-200",
@@ -403,7 +405,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           </div>
         </div>
       </div>
-
+      
     <!-- Hidden fields kept in-sync for saving on both modals -->
       <input
         type="hidden"
@@ -551,7 +553,9 @@ defmodule TheMaestroWeb.SessionFormComponent do
     allowed0 = socket.assigns[:tool_picker_allowed] || %{}
     inv = Map.get(socket.assigns[:tool_inventory_by_provider] || %{}, provider, [])
 
-    Logger.info("Provider: #{inspect(provider)} --- Allowed: #{inspect(allowed0)} --- Inv: #{inspect(inv)}")
+    Logger.info(
+      "Provider: #{inspect(provider)} --- Allowed: #{inspect(allowed0)} --- Inv: #{inspect(inv)}"
+    )
 
     # Get the current selection, defaulting to all tools in inventory if not explicitly set
     # This ensures that when MCP servers are selected, their tools appear selected by default
@@ -561,12 +565,12 @@ defmodule TheMaestroWeb.SessionFormComponent do
           Logger.info("l when is_list(l), l: #{inspect(l)}")
           # Explicit selection exists, use it
           l
+
         _ ->
           # No explicit selection, default to all tools currently in inventory
           # This happens when MCP server is first selected
           Logger.info("No explicit selection")
           Enum.map(inv, & &1.name)
-
       end
 
     # Toggle the specific tool
@@ -575,7 +579,9 @@ defmodule TheMaestroWeb.SessionFormComponent do
         do: Enum.reject(current, &(&1 == name)),
         else: Enum.uniq([name | current])
 
-    Logger.info("name: #{name} -- current: #{inspect(current)} -- name in current: #{inspect(name in current)}")
+    Logger.info(
+      "name: #{name} -- current: #{inspect(current)} -- name in current: #{inspect(name in current)}"
+    )
 
     # Update the allowed tools
     updated_allowed = Map.put(allowed0, provider, desired)
@@ -701,6 +707,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
     case Inventory.list_for_provider_with_servers([server_id], provider) do
       tools when is_list(tools) ->
         Enum.filter(tools, &(&1.source == :mcp))
+
       _ ->
         []
     end

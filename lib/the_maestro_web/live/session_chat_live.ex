@@ -223,7 +223,6 @@ defmodule TheMaestroWeb.SessionChatLive do
     socket = maybe_reload_models(socket, params)
     socket = maybe_prompt_builder_for_provider(socket, params)
     socket = maybe_mirror_persona(socket, params, form)
-    socket = maybe_update_mcp_selection(socket, params)
     {:noreply, socket}
   end
 
@@ -586,7 +585,11 @@ defmodule TheMaestroWeb.SessionChatLive do
          {:ok, mcps} <- decode_mcps(socket, params) do
       specs_map = prompt_specs_from_builder(socket.assigns[:session_prompt_builder] || %{})
 
-      tools2 = merge_allowed(tools, socket.assigns[:tool_picker_allowed_map] || socket.assigns[:tool_picker_allowed] || %{})
+      tools2 =
+        merge_allowed(
+          tools,
+          socket.assigns[:tool_picker_allowed_map] || socket.assigns[:tool_picker_allowed] || %{}
+        )
 
       {:ok,
        %{
@@ -617,7 +620,9 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   defp decode_tools(socket, params) do
     # Use tool_picker_allowed_map if available (from component state), otherwise fall back to session tools
-    default_tools = socket.assigns[:tool_picker_allowed_map] || socket.assigns.session.tools || %{}
+    default_tools =
+      socket.assigns[:tool_picker_allowed_map] || socket.assigns.session.tools || %{}
+
     default = Jason.encode!(default_tools)
     safe_decode(params["tools_json"] || default)
   end
@@ -1435,18 +1440,6 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
-  defp maybe_update_mcp_selection(socket, params) do
-    # Component owns MCP selection state; ignore change echo from form params
-    socket
-  end
-
-  defp normalize_mcp_ids(nil), do: []
-
-  defp normalize_mcp_ids(ids) when is_list(ids),
-    do: ids |> Enum.map(&to_string/1) |> Enum.reject(&(&1 == "")) |> Enum.uniq()
-
-  defp normalize_mcp_ids(id), do: normalize_mcp_ids([id])
-
   defp build_tool_inventory_for_servers(server_ids) do
     %{
       openai: Inventory.list_for_provider_with_servers(server_ids, :openai),
@@ -1454,44 +1447,6 @@ defmodule TheMaestroWeb.SessionChatLive do
       gemini: Inventory.list_for_provider_with_servers(server_ids, :gemini)
     }
   end
-
-  defp warm_mcp_tools_cache(server_ids) do
-    Enum.each(server_ids, &warm_single_server_cache/1)
-  end
-
-  defp warm_single_server_cache(sid) do
-    case MCP.ToolsCache.get(sid, 60 * 60_000) do
-      {:ok, _} ->
-        :ok
-
-      _ ->
-        server = MCP.get_server!(sid)
-
-        case MCP.Client.discover_server(server) do
-          {:ok, %{tools: tools}} ->
-            ttl_ms = compute_tools_cache_ttl(server.metadata)
-            _ = MCP.ToolsCache.put(sid, tools, ttl_ms)
-            :ok
-
-          _ ->
-            :ok
-        end
-    end
-  end
-
-  defp compute_tools_cache_ttl(%{} = metadata),
-    do: to_int(metadata["tool_cache_ttl_minutes"] || 60) * 60_000
-
-  defp to_int(n) when is_integer(n), do: n
-
-  defp to_int(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      _ -> 60
-    end
-  end
-
-  defp to_int(_), do: 60
 
   defp append_assistant_message(messages, final_text, meta) do
     assistant_msg = build_assistant_message(final_text, meta)

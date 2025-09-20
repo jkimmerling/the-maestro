@@ -195,6 +195,7 @@ defmodule TheMaestroWeb.DashboardLive do
       session_id
       |> Conversations.get_session_with_auth!()
       |> Conversations.preload_session_mcp()
+
     cs = Conversations.change_session(session)
     builder = build_default_prompt_builder()
 
@@ -209,7 +210,10 @@ defmodule TheMaestroWeb.DashboardLive do
     {:noreply,
      socket
      |> assign(:session_provider, session.saved_authentication.provider)
-     |> assign(:session_auth_options, build_auth_options_for(session.saved_authentication.provider))
+     |> assign(
+       :session_auth_options,
+       build_auth_options_for(session.saved_authentication.provider)
+     )
      |> assign(:session_model_options, [])
      |> assign(:auth_options, build_auth_options())
      |> assign(:orphan_threads, orphan_thread_options())
@@ -353,6 +357,7 @@ defmodule TheMaestroWeb.DashboardLive do
       session_id ->
         # Update existing session
         session = Conversations.get_session!(session_id)
+
         with {:ok, params2} <- build_session_params(socket, params),
              {:ok, _updated_session} <- Conversations.update_session(session, params2) do
           {:noreply,
@@ -1145,7 +1150,7 @@ defmodule TheMaestroWeb.DashboardLive do
 
         <.modal :if={@show_session_modal} id="session-modal">
           <h3 class="text-2xl font-bold text-blue-400 mb-6 glow">
-            <%= if assigns[:session_editing_id], do: "EDIT SESSION", else: "CREATE NEW SESSION" %>
+            {if assigns[:session_editing_id], do: "EDIT SESSION", else: "CREATE NEW SESSION"}
           </h3>
           <.form
             for={@session_form}
@@ -1385,46 +1390,6 @@ defmodule TheMaestroWeb.DashboardLive do
     }
   end
 
-  defp warm_mcp_tools_cache(server_ids) do
-    Enum.each(server_ids, &warm_single_server_cache/1)
-  end
-
-  defp warm_single_server_cache(sid) do
-    case MCP.ToolsCache.get(sid, 60 * 60_000) do
-      {:ok, _} -> :ok
-      _ -> discover_and_cache_server_tools(sid)
-    end
-  end
-
-  defp discover_and_cache_server_tools(sid) do
-    server = MCP.get_server!(sid)
-
-    case MCP.Client.discover_server(server) do
-      {:ok, %{tools: tools}} -> cache_server_tools(sid, server, tools)
-      _ -> :ok
-    end
-  end
-
-  defp cache_server_tools(sid, server, tools) do
-    ttl_ms = calculate_server_cache_ttl(server.metadata)
-    _ = MCP.ToolsCache.put(sid, tools, ttl_ms)
-    :ok
-  end
-
-  defp calculate_server_cache_ttl(%{} = metadata),
-    do: to_int(metadata["tool_cache_ttl_minutes"] || 60) * 60_000
-
-  defp to_int(n) when is_integer(n), do: n
-
-  defp to_int(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      _ -> 60
-    end
-  end
-
-  defp to_int(_), do: 60
-
   defp load_allowed_from_session(%{tools: %{"allowed" => m}}), do: stringify_provider_keys(m)
   defp load_allowed_from_session(_), do: %{}
 
@@ -1433,5 +1398,4 @@ defmodule TheMaestroWeb.DashboardLive do
       {to_provider_atom(k) || :openai, List.wrap(v) |> Enum.map(&to_string/1)}
     end)
   end
-
 end

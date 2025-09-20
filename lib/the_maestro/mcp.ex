@@ -92,18 +92,36 @@ defmodule TheMaestro.MCP do
   Create an MCP server entry.
   """
   def create_server(attrs) when is_map(attrs) do
-    %Servers{}
-    |> Servers.changeset(attrs)
-    |> Repo.insert()
+    result =
+      %Servers{}
+      |> Servers.changeset(attrs)
+      |> Repo.insert()
+
+    # Refresh unified tools cache when a new MCP server is created
+    case result do
+      {:ok, _server} -> TheMaestro.MCP.UnifiedToolsCache.refresh_cache()
+      _ -> :ok
+    end
+
+    result
   end
 
   @doc """
   Update an MCP server entry.
   """
   def update_server(%Servers{} = server, attrs) do
-    server
-    |> Servers.changeset(attrs)
-    |> Repo.update()
+    result =
+      server
+      |> Servers.changeset(attrs)
+      |> Repo.update()
+
+    # Refresh unified tools cache when an MCP server is updated
+    case result do
+      {:ok, _server} -> TheMaestro.MCP.UnifiedToolsCache.refresh_cache()
+      _ -> :ok
+    end
+
+    result
   end
 
   @doc """

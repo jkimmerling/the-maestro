@@ -6,16 +6,22 @@ defmodule TheMaestro.MCP.RegistryCache do
 
   def get(session_id, mcps_hash) when is_binary(session_id) do
     key = cache_key(session_id)
+
     case Redix.command(TheMaestro.Redis, ["GET", key]) do
-      {:ok, nil} -> :miss
+      {:ok, nil} ->
+        :miss
+
       {:ok, json} ->
-        with {:ok, %{"hash" => ^mcps_hash, "decls" => decls, "at_ms" => at}} <- Jason.decode(json),
+        with {:ok, %{"hash" => ^mcps_hash, "decls" => decls, "at_ms" => at}} <-
+               Jason.decode(json),
              true <- fresh?(at) do
           {:ok, decls}
         else
           _ -> :stale
         end
-      _ -> :miss
+
+      _ ->
+        :miss
     end
   end
 

@@ -5,7 +5,6 @@ defmodule TheMaestroWeb.MCPServersLive.FormComponent do
   alias TheMaestro.MCP
   alias TheMaestro.MCP.Import
   alias TheMaestro.MCP.Servers
-  alias TheMaestro.MCP.ToolsCache
 
   @impl true
   def update(assigns, socket) do
@@ -230,9 +229,6 @@ defmodule TheMaestroWeb.MCPServersLive.FormComponent do
       {:ok, server} ->
         notify_parent({:saved, server})
 
-        # Prefetch and cache tools for this server so pickers respond instantly
-        Task.start(fn -> cache_discovered_tools(server) end)
-
         {:noreply,
          socket
          |> put_flash(:info, "Updated #{server.display_name}.")
@@ -339,22 +335,6 @@ defmodule TheMaestroWeb.MCPServersLive.FormComponent do
       end
     end)
   end
-
-  defp cache_discovered_tools(server) do
-    case MCP.Client.discover_server(server) do
-      {:ok, %{tools: tools}} -> do_cache_tools(server, tools)
-      _ -> :ok
-    end
-  end
-
-  defp do_cache_tools(server, tools) do
-    ttl_ms = calc_tool_cache_ttl(server.metadata)
-    _ = ToolsCache.put(server.id, tools, ttl_ms)
-    :ok
-  end
-
-  defp calc_tool_cache_ttl(%{} = metadata),
-    do: to_int(metadata["tool_cache_ttl_minutes"] || 60) * 60_000
 
   defp to_int(n) when is_integer(n), do: n
 

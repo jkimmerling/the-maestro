@@ -3,7 +3,6 @@ defmodule TheMaestroWeb.MCPHubLiveTest do
 
   import Phoenix.LiveViewTest
   import TheMaestro.MCPFixtures
-  import TheMaestro.ConversationsFixtures
 
   alias TheMaestro.MCP
 
@@ -159,50 +158,6 @@ defmodule TheMaestroWeb.MCPHubLiveTest do
       assert html =~ "global-nav-dropdown"
       assert html =~ "MCP Hub"
       assert html =~ "Context Library"
-    end
-  end
-
-  describe "session MCP modal" do
-    test "creates a server from session edit modal and auto-selects it", %{conn: conn} do
-      session = session_fixture()
-
-      {:ok, view, _} = live(conn, ~p"/sessions/#{session.id}/edit")
-
-      assert view
-             |> element("button[phx-click=\"open_mcp_modal\"]", "New MCP Server")
-             |> render_click()
-
-      assert has_element?(view, "#session-edit-mcp")
-
-      form_params = %{
-        "server" => %{
-          "display_name" => "New CLI",
-          "name" => "new-cli",
-          "transport" => "stdio",
-          "command" => "./bin/new-cli",
-          "is_enabled" => "true",
-          "args_raw" => "",
-          "headers_raw" => "",
-          "env_raw" => "",
-          "tags_raw" => "",
-          "metadata_raw" => ""
-        }
-      }
-
-      view
-      |> form("#mcp-server-form", form_params)
-      |> render_submit()
-
-      created = MCP.get_server_by_name("new-cli")
-      assert created
-
-      html = render(view)
-      assert html =~ "New CLI"
-
-      assert has_element?(
-               view,
-               "select[name=\"session[mcp_server_ids][]\"] option[selected][value=\"#{created.id}\"]"
-             )
     end
   end
 end
