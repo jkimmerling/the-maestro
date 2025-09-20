@@ -1,4 +1,6 @@
 defmodule TheMaestroWeb.SessionFormComponent do
+  require Logger
+
   use TheMaestroWeb, :live_component
 
   alias TheMaestro.Tools.Inventory
@@ -142,7 +144,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           />
         </div>
       </div>
-      
+
     <!-- Persona (collapsible) -->
       <div class="md:col-span-2 mt-4" id="section-persona">
         <div class="flex items-center justify-between">
@@ -200,7 +202,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           <% end %>
         </div>
       </div>
-      
+
     <!-- Memory (collapsible) -->
       <div class="md:col-span-2 mt-4" id="section-memory">
         <div class="flex items-center justify-between">
@@ -243,7 +245,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           <% end %>
         </div>
       </div>
-      
+
     <!-- Built-in Tools -->
       <div class="md:col-span-2 mt-4">
         <.live_component
@@ -257,7 +259,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           show_groups={[:builtin]}
         />
       </div>
-      
+
     <!-- MCPs Container -->
       <div class="md:col-span-2 mt-4">
         <label class="text-xs font-semibold uppercase tracking-wide">MCP Servers</label>
@@ -401,7 +403,7 @@ defmodule TheMaestroWeb.SessionFormComponent do
           </div>
         </div>
       </div>
-      
+
     <!-- Hidden fields kept in-sync for saving on both modals -->
       <input
         type="hidden"
@@ -458,6 +460,9 @@ defmodule TheMaestroWeb.SessionFormComponent do
         socket
         |> add_all_server_tools_to_allowed(id, inv)
       end
+
+    # Notify parent about tool selection changes
+    send(self(), {:tool_picker_allowed, socket.assigns.tool_picker_allowed})
 
     {:noreply,
      assign(socket,
@@ -545,20 +550,40 @@ defmodule TheMaestroWeb.SessionFormComponent do
     provider = to_provider(prov_param) || socket.assigns[:provider] || :openai
     allowed0 = socket.assigns[:tool_picker_allowed] || %{}
     inv = Map.get(socket.assigns[:tool_inventory_by_provider] || %{}, provider, [])
-    all_names = Enum.map(inv, & &1.name)
 
+    Logger.info("Provider: #{inspect(provider)} --- Allowed: #{inspect(allowed0)} --- Inv: #{inspect(inv)}")
+
+    # Get the current selection, defaulting to all tools in inventory if not explicitly set
+    # This ensures that when MCP servers are selected, their tools appear selected by default
     current =
       case Map.get(allowed0, provider) do
-        l when is_list(l) -> l
-        _ -> all_names
+        l when is_list(l) ->
+          Logger.info("l when is_list(l), l: #{inspect(l)}")
+          # Explicit selection exists, use it
+          l
+        _ ->
+          # No explicit selection, default to all tools currently in inventory
+          # This happens when MCP server is first selected
+          Logger.info("No explicit selection")
+          Enum.map(inv, & &1.name)
+
       end
 
+    # Toggle the specific tool
     desired =
       if name in current,
         do: Enum.reject(current, &(&1 == name)),
         else: Enum.uniq([name | current])
 
-    {:noreply, assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))}
+    Logger.info("name: #{name} -- current: #{inspect(current)} -- name in current: #{inspect(name in current)}")
+
+    # Update the allowed tools
+    updated_allowed = Map.put(allowed0, provider, desired)
+
+    # Notify parent to persist the state
+    send(self(), {:tool_picker_allowed, updated_allowed})
+
+    {:noreply, assign(socket, :tool_picker_allowed, updated_allowed)}
   end
 
   def handle_event("tool_picker:select_all", %{"provider" => prov_param} = params, socket) do
@@ -575,7 +600,9 @@ defmodule TheMaestroWeb.SessionFormComponent do
       end
 
     desired = Enum.uniq(current ++ target)
-    {:noreply, assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))}
+    updated_allowed = Map.put(allowed0, provider, desired)
+    send(self(), {:tool_picker_allowed, updated_allowed})
+    {:noreply, assign(socket, :tool_picker_allowed, updated_allowed)}
   end
 
   def handle_event("tool_picker:select_none", %{"provider" => prov_param} = params, socket) do
@@ -592,7 +619,9 @@ defmodule TheMaestroWeb.SessionFormComponent do
       end
 
     desired = Enum.reject(current, &(&1 in target))
-    {:noreply, assign(socket, :tool_picker_allowed, Map.put(allowed0, provider, desired))}
+    updated_allowed = Map.put(allowed0, provider, desired)
+    send(self(), {:tool_picker_allowed, updated_allowed})
+    {:noreply, assign(socket, :tool_picker_allowed, updated_allowed)}
   end
 
   defp to_provider(p) when is_atom(p), do: p

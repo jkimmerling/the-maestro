@@ -1000,6 +1000,11 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   @impl true
+  def handle_info({:tool_picker_allowed, allowed}, socket) when is_map(allowed) do
+    {:noreply, assign(socket, :tool_picker_allowed_map, allowed)}
+  end
+
+  @impl true
   def handle_info(
         {:session_stream,
          %TheMaestro.Domain.StreamEnvelope{
