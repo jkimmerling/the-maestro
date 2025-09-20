@@ -42,7 +42,7 @@ defmodule TheMaestroWeb.Router do
 
     # Sessions LiveViews
     live "/sessions/:id/chat", SessionChatLive, :chat
-    live "/sessions/:id/edit", SessionEditLive, :edit
+    # live "/sessions/:id/edit", SessionEditLive, :edit  # Now handled by modal in dashboard
   end
 
   # Other scopes may use custom stacks.

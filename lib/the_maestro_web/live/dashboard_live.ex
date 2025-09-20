@@ -175,6 +175,7 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:session_form, to_form(cs))
      |> assign(:mcp_server_options, MCP.server_options())
      |> assign(:session_mcp_selected_ids, [])
+     |> assign(:session_editing_id, nil)
      |> assign(:ui_sections, %{prompt: true, persona: true, memory: true})
      |> assign(:session_form_params, %{})
      |> assign(:show_mcp_modal, false)
@@ -187,6 +188,41 @@ defmodule TheMaestroWeb.DashboardLive do
      |> assign(:show_session_modal, false)
      |> assign(:show_session_dir_picker, false)
      |> assign(:show_mcp_modal, false)}
+  end
+
+  def handle_event("open_edit_session_modal", %{"session-id" => session_id}, socket) do
+    session =
+      session_id
+      |> Conversations.get_session_with_auth!()
+      |> Conversations.preload_session_mcp()
+    cs = Conversations.change_session(session)
+    builder = build_default_prompt_builder()
+
+    mcp_selected_ids =
+      case session.mcp_servers do
+        list when is_list(list) -> list |> Enum.map(& &1.id) |> Enum.map(&to_string/1)
+        _ -> []
+      end
+
+    tool_picker_allowed = load_allowed_from_session(session)
+
+    {:noreply,
+     socket
+     |> assign(:session_provider, session.saved_authentication.provider)
+     |> assign(:session_auth_options, build_auth_options_for(session.saved_authentication.provider))
+     |> assign(:session_model_options, [])
+     |> assign(:auth_options, build_auth_options())
+     |> assign(:orphan_threads, orphan_thread_options())
+     |> assign(:session_form, to_form(cs))
+     |> assign(:mcp_server_options, MCP.server_options())
+     |> assign(:session_prompt_builder, builder)
+     |> assign(:session_editing_id, session_id)
+     |> assign(:session_mcp_selected_ids, mcp_selected_ids)
+     |> assign(:tool_picker_allowed_map, tool_picker_allowed)
+     |> assign(:ui_sections, %{prompt: true, persona: true, memory: true})
+     |> assign(:session_form_params, %{})
+     |> assign(:show_mcp_modal, false)
+     |> assign(:show_session_modal, true)}
   end
 
   # Target-aware validate to avoid clobbering model list when provider also present
@@ -276,38 +312,72 @@ defmodule TheMaestroWeb.DashboardLive do
   def handle_event("session_save", %{"session" => params}, socket) do
     socket = ensure_prompt_builder(socket)
 
-    with {:ok, params2} <- build_session_params(socket, params),
-         {:ok, session} <- Conversations.create_session(params2) do
-      case Map.get(params, "attach_thread_id") do
-        tid when is_binary(tid) and tid != "" ->
-          _ = Conversations.attach_thread_to_session(tid, session.id)
-          :ok
+    case socket.assigns[:session_editing_id] do
+      nil ->
+        # Create new session
+        with {:ok, params2} <- build_session_params(socket, params),
+             {:ok, session} <- Conversations.create_session(params2) do
+          case Map.get(params, "attach_thread_id") do
+            tid when is_binary(tid) and tid != "" ->
+              _ = Conversations.attach_thread_to_session(tid, session.id)
+              :ok
 
-        _ ->
-          :ok
-      end
+            _ ->
+              :ok
+          end
 
-      {:noreply,
-       socket
-       |> put_flash(:info, "Session created")
-       |> assign(:show_session_modal, false)
-       |> assign(:show_session_dir_picker, false)
-       |> assign(:show_mcp_modal, false)
-       |> assign(:sessions, Conversations.list_sessions_with_auth())
-       |> assign(:session_form_params, %{})
-       |> assign(:session_mcp_selected_ids, [])
-       |> assign(:session_prompt_builder, build_default_prompt_builder())
-       |> assign(:prompt_picker_selection, %{})
-       |> assign(:prompt_picker_provider, :openai)}
-    else
-      {:error, %Ecto.Changeset{} = cs} ->
-        selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
+          {:noreply,
+           socket
+           |> put_flash(:info, "Session created")
+           |> assign(:show_session_modal, false)
+           |> assign(:show_session_dir_picker, false)
+           |> assign(:show_mcp_modal, false)
+           |> assign(:sessions, Conversations.list_sessions_with_auth())
+           |> assign(:session_form_params, %{})
+           |> assign(:session_mcp_selected_ids, [])
+           |> assign(:session_editing_id, nil)
+           |> assign(:session_prompt_builder, build_default_prompt_builder())
+           |> assign(:prompt_picker_selection, %{})
+           |> assign(:prompt_picker_provider, :openai)}
+        else
+          {:error, %Ecto.Changeset{} = cs} ->
+            selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
 
-        {:noreply,
-         socket
-         |> assign(:session_form, to_form(cs))
-         |> assign(:session_form_params, params)
-         |> assign(:session_mcp_selected_ids, selected)}
+            {:noreply,
+             socket
+             |> assign(:session_form, to_form(cs))
+             |> assign(:session_form_params, params)
+             |> assign(:session_mcp_selected_ids, selected)}
+        end
+
+      session_id ->
+        # Update existing session
+        session = Conversations.get_session!(session_id)
+        with {:ok, params2} <- build_session_params(socket, params),
+             {:ok, _updated_session} <- Conversations.update_session(session, params2) do
+          {:noreply,
+           socket
+           |> put_flash(:info, "Session updated")
+           |> assign(:show_session_modal, false)
+           |> assign(:show_session_dir_picker, false)
+           |> assign(:show_mcp_modal, false)
+           |> assign(:sessions, Conversations.list_sessions_with_auth())
+           |> assign(:session_form_params, %{})
+           |> assign(:session_mcp_selected_ids, [])
+           |> assign(:session_editing_id, nil)
+           |> assign(:session_prompt_builder, build_default_prompt_builder())
+           |> assign(:prompt_picker_selection, %{})
+           |> assign(:prompt_picker_provider, :openai)}
+        else
+          {:error, %Ecto.Changeset{} = cs} ->
+            selected = normalize_mcp_ids(Map.get(params, "mcp_server_ids"))
+
+            {:noreply,
+             socket
+             |> assign(:session_form, to_form(cs))
+             |> assign(:session_form_params, params)
+             |> assign(:session_mcp_selected_ids, selected)}
+        end
     end
   end
 
@@ -748,7 +818,7 @@ defmodule TheMaestroWeb.DashboardLive do
 
   defp to_provider_atom(_), do: nil
 
-  defp build_auth_options_for(provider) when is_atom(provider) do
+  defp build_auth_options_for(provider) do
     Auth.list_saved_authentications_by_provider(provider)
     |> Enum.map(fn sa -> {"#{sa.name} — #{sa.provider}/#{sa.auth_type}", sa.id} end)
   end
@@ -1052,12 +1122,13 @@ defmodule TheMaestroWeb.DashboardLive do
                     >
                       CHAT
                     </.link>
-                    <.link
+                    <button
                       class="text-blue-400 hover:text-blue-300"
-                      navigate={~p"/sessions/#{s.id}/edit"}
+                      phx-click="open_edit_session_modal"
+                      phx-value-session-id={s.id}
                     >
                       <.icon name="hero-pencil-square" class="h-4 w-4" />
-                    </.link>
+                    </button>
                   </div>
                   <button
                     class="text-red-400 hover:text-red-300"
@@ -1073,7 +1144,9 @@ defmodule TheMaestroWeb.DashboardLive do
         </section>
 
         <.modal :if={@show_session_modal} id="session-modal">
-          <h3 class="text-2xl font-bold text-blue-400 mb-6 glow">CREATE NEW SESSION</h3>
+          <h3 class="text-2xl font-bold text-blue-400 mb-6 glow">
+            <%= if assigns[:session_editing_id], do: "EDIT SESSION", else: "CREATE NEW SESSION" %>
+          </h3>
           <.form
             for={@session_form}
             id="session-modal-form"
@@ -1351,4 +1424,14 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   defp to_int(_), do: 60
+
+  defp load_allowed_from_session(%{tools: %{"allowed" => m}}), do: stringify_provider_keys(m)
+  defp load_allowed_from_session(_), do: %{}
+
+  defp stringify_provider_keys(%{} = m) do
+    Enum.into(m, %{}, fn {k, v} ->
+      {to_provider_atom(k) || :openai, List.wrap(v) |> Enum.map(&to_string/1)}
+    end)
+  end
+
 end

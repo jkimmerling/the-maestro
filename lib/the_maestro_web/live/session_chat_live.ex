@@ -190,6 +190,7 @@ defmodule TheMaestroWeb.SessionChatLive do
       |> load_persona_options()
       |> assign(:mcp_server_options, TheMaestro.MCP.server_options(include_disabled?: true))
       |> assign(:tool_picker_allowed, load_allowed(socket.assigns.session))
+      |> assign(:tool_picker_allowed_map, load_allowed(socket.assigns.session))
       |> assign(:tool_inventory_by_provider, build_tool_inventory(socket.assigns.session.id))
       |> assign(:ui_sections, %{prompt: true, persona: true, memory: true})
       |> assign(
@@ -585,7 +586,7 @@ defmodule TheMaestroWeb.SessionChatLive do
          {:ok, mcps} <- decode_mcps(socket, params) do
       specs_map = prompt_specs_from_builder(socket.assigns[:session_prompt_builder] || %{})
 
-      tools2 = merge_allowed(tools, socket.assigns[:tool_picker_allowed] || %{})
+      tools2 = merge_allowed(tools, socket.assigns[:tool_picker_allowed_map] || socket.assigns[:tool_picker_allowed] || %{})
 
       {:ok,
        %{
@@ -615,7 +616,9 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp decode_tools(socket, params) do
-    default = Jason.encode!(socket.assigns.session.tools || %{})
+    # Use tool_picker_allowed_map if available (from component state), otherwise fall back to session tools
+    default_tools = socket.assigns[:tool_picker_allowed_map] || socket.assigns.session.tools || %{}
+    default = Jason.encode!(default_tools)
     safe_decode(params["tools_json"] || default)
   end
 
@@ -1805,22 +1808,24 @@ defmodule TheMaestroWeb.SessionChatLive do
                   />
                 </div>
                 <!-- Shared sections via component to keep parity with Create modal -->
-                <.live_component
-                  module={TheMaestroWeb.SessionFormComponent}
-                  id="session-config-form-body"
-                  mode={:edit}
-                  provider={@prompt_picker_provider || :openai}
-                  prompt_picker_provider={@prompt_picker_provider || :openai}
-                  session_prompt_builder={@session_prompt_builder || %{}}
-                  prompt_library={@prompt_library || %{}}
-                  prompt_picker_selection={@prompt_picker_selection || %{}}
-                  ui_sections={@ui_sections || %{prompt: true, persona: true, memory: true}}
-                  config_persona_options={@config_persona_options || []}
-                  config_form={Map.put(@config_form || %{}, "session_id", @session.id)}
-                  mcp_server_options={@mcp_server_options || []}
-                  session_mcp_selected_ids={@session_mcp_selected_ids || []}
-                  tool_picker_allowed={@tool_picker_allowed || %{}}
-                />
+                <div class="md:col-span-2">
+                  <.live_component
+                    module={TheMaestroWeb.SessionFormComponent}
+                    id="session-config-form-body"
+                    mode={:edit}
+                    provider={@prompt_picker_provider || :openai}
+                    prompt_picker_provider={@prompt_picker_provider || :openai}
+                    session_prompt_builder={@session_prompt_builder || %{}}
+                    prompt_library={@prompt_library || %{}}
+                    prompt_picker_selection={@prompt_picker_selection || %{}}
+                    ui_sections={@ui_sections || %{prompt: true, persona: true, memory: true}}
+                    config_persona_options={@config_persona_options || []}
+                    config_form={Map.put(@config_form || %{}, "session_id", @session.id)}
+                    mcp_server_options={@mcp_server_options || []}
+                    session_mcp_selected_ids={@session_mcp_selected_ids || []}
+                    tool_picker_allowed={@tool_picker_allowed_map || @tool_picker_allowed || %{}}
+                  />
+                </div>
               </div>
               <div class="mt-3">
                 <label class="text-xs">When saving while streaming</label>
