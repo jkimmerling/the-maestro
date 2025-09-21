@@ -9,6 +9,7 @@ defmodule TheMaestro.Conversations do
 
   alias TheMaestro.Auth.SavedAuthentication
   alias TheMaestro.Conversations.{ChatEntry, Session}
+  alias TheMaestro.Conversations.ToolChangeLog
   alias TheMaestro.{MCP, Provider, Repo, SystemPrompts}
 
   @doc """
@@ -136,6 +137,14 @@ defmodule TheMaestro.Conversations do
 
   """
   def delete_session(%Session{} = session) do
+    # best-effort Redis cleanup for plans/todos/images
+    try do
+      TheMaestro.Plans.clear_all(session.id)
+      TheMaestro.Todos.clear_all(session.id)
+      TheMaestro.Images.clear_all(session.id)
+    rescue
+      _ -> :ok
+    end
     Repo.delete(session)
   end
 
@@ -144,6 +153,14 @@ defmodule TheMaestro.Conversations do
   """
   def delete_session_only(%Session{} = session) do
     Repo.transaction(fn ->
+      # best-effort Redis cleanup for plans/todos/images
+      try do
+        TheMaestro.Plans.clear_all(session.id)
+        TheMaestro.Todos.clear_all(session.id)
+        TheMaestro.Images.clear_all(session.id)
+      rescue
+        _ -> :ok
+      end
       from(e in ChatEntry, where: e.session_id == ^session.id)
       |> Repo.update_all(set: [session_id: nil])
 
@@ -164,6 +181,14 @@ defmodule TheMaestro.Conversations do
   """
   def delete_session_and_chat(%Session{} = session) do
     Repo.transaction(fn ->
+      # best-effort Redis cleanup for plans/todos/images
+      try do
+        TheMaestro.Plans.clear_all(session.id)
+        TheMaestro.Todos.clear_all(session.id)
+        TheMaestro.Images.clear_all(session.id)
+      rescue
+        _ -> :ok
+      end
       # Delete all chat entries that reference this session
       from(e in ChatEntry, where: e.session_id == ^session.id)
       |> Repo.delete_all()
@@ -416,6 +441,24 @@ defmodule TheMaestro.Conversations do
   Gets a single chat entry.
   """
   def get_chat_entry!(id), do: Repo.get!(ChatEntry, id)
+
+  def create_tool_change_log(attrs) do
+    %ToolChangeLog{}
+    |> ToolChangeLog.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def link_logs_to_chat_entry!(session_id, since_ms, chat_entry_id) when is_binary(session_id) do
+    # Approximate monotonic t0 to wall clock
+    dt =
+      DateTime.utc_now()
+      |> DateTime.add(-div(System.monotonic_time(:millisecond) - since_ms, 1000), :second)
+
+    from(l in ToolChangeLog,
+      where: l.session_id == ^session_id and is_nil(l.chat_entry_id) and l.inserted_at >= ^dt
+    )
+    |> Repo.update_all(set: [chat_entry_id: chat_entry_id])
+  end
 
   @doc """
   Creates a chat entry.

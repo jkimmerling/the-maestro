@@ -2,6 +2,9 @@ defmodule TheMaestroWeb.ToolPickerComponentRenderTest do
   use TheMaestroWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
+  import TheMaestro.MCPFixtures
+
+  alias TheMaestro.Tools.Inventory
 
   defmodule HostLive do
     use TheMaestroWeb, :live_view
@@ -106,5 +109,52 @@ defmodule TheMaestroWeb.ToolPickerComponentRenderTest do
     assert has_element?(view, "#tool-openai-ctx7-resolve")
     assert has_element?(view, "#tool-openai-ctx7-docs")
     assert has_element?(view, "#tool-openai-misc")
+  end
+
+  test "renders MCP tools resolved through inventory", %{conn: _conn} do
+    server =
+      server_fixture(%{
+        display_name: "Context7",
+        name: "context7",
+        transport: "stdio"
+      })
+
+    cache_fun = fn ->
+      {:ok,
+       %{
+         "openai" => [
+           %{
+             "name" => "resolve-library-id",
+             "description" => "Resolve library id",
+             "source" => "mcp",
+             "server_label" => "Context7"
+           },
+           %{
+             "name" => "get-library-docs",
+             "description" => "Get docs",
+             "source" => "mcp",
+             "server_label" => "Context7"
+           }
+         ]
+       }}
+    end
+
+    inventory =
+      Inventory.list_for_provider_with_servers([server.id], :openai, cache_fetch_fun: cache_fun)
+
+    html =
+      render_component(TheMaestroWeb.ToolPickerComponent,
+        id: "picker",
+        provider: :openai,
+        session_id: "fake-session",
+        allowed_by_provider: %{},
+        inventory_by_provider: %{openai: inventory, anthropic: [], gemini: []},
+        show_groups: [:mcp],
+        title: "MCP TOOLS"
+      )
+
+    assert html =~ ">Context7<"
+    assert html =~ "tool-openai-resolve-library-id"
+    assert html =~ "tool-openai-get-library-docs"
   end
 end

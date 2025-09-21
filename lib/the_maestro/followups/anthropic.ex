@@ -19,7 +19,7 @@ defmodule TheMaestro.Followups.Anthropic do
   @spec build([map()], [call()], String.t(), keyword()) :: {[map()], list()}
   def build(original_messages, calls, prior_answer_text \\ "", opts \\ []) do
     base_cwd = Keyword.get(opts, :base_cwd, File.cwd!())
-    outputs = compute_outputs(calls, Keyword.get(opts, :outputs), base_cwd)
+    outputs = compute_outputs(calls, Keyword.get(opts, :outputs), base_cwd, Keyword.get(opts, :session_id))
     tool_uses = build_tool_uses(calls)
     tool_results = build_tool_results(outputs)
     assistant_blocks = build_assistant_blocks(prior_answer_text, tool_uses)
@@ -34,11 +34,18 @@ defmodule TheMaestro.Followups.Anthropic do
     {anth_messages, outputs}
   end
 
-  defp compute_outputs(_calls, provided, _cwd) when is_list(provided), do: provided
+  defp compute_outputs(_calls, provided, _cwd, _sid) when is_list(provided), do: provided
 
-  defp compute_outputs(calls, nil, base_cwd) do
+  defp compute_outputs(calls, nil, base_cwd, session_id) do
     Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
-      case Runtime.exec(name, args, base_cwd) do
+      exec_result =
+        if is_binary(session_id) and session_id != "" do
+          Runtime.exec(session_id, name, args, base_cwd)
+        else
+          Runtime.exec(name, args, base_cwd)
+        end
+
+      case exec_result do
         {:ok, payload} -> {id, {:ok, payload}}
         {:error, reason} -> {id, {:error, to_string(reason)}}
       end

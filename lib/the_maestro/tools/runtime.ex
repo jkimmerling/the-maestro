@@ -40,12 +40,47 @@ defmodule TheMaestro.Tools.Runtime do
       Logger.debug("[tools] exec session_id=#{session_id} name=#{inspect(name)} cwd=#{base_cwd}")
     end
 
-    dispatch_with_session(
-      session_id,
-      to_string(name) |> String.downcase(),
-      args_json || "{}",
-      base_cwd
-    )
+    do_name = to_string(name) |> String.downcase()
+
+    case do_name do
+      "apply_patch" ->
+        case safe_decode(args_json || "{}") do
+          {:ok, %{"input" => patch}} when is_binary(patch) ->
+            case TheMaestro.Tools.ApplyPatch.Runner.apply(patch, base_cwd: base_cwd) do
+              {:ok, %{details: details} = result} ->
+                Enum.each(details, fn d ->
+                  _ =
+                    TheMaestro.Conversations.create_tool_change_log(%{
+                      session_id: session_id,
+                      provider: nil,
+                      tool_name: "apply_patch",
+                      file_path: to_string(d.file_path || ""),
+                      change_type: to_string(d.change_type || "update"),
+                      diff: to_string(d.diff || ""),
+                      summary: Map.new(d.summary || %{}),
+                      metadata: %{}
+                    })
+                end)
+
+                summary = TheMaestro.Tools.ApplyPatch.Runner.format_summary(result, base_cwd)
+                {:ok, TheMaestro.Tools.ExecOutput.format(summary, 0, 0.0)}
+
+              {:error, reason} ->
+                {:error, reason}
+            end
+
+          _ ->
+            {:error, "invalid apply_patch arguments"}
+        end
+
+      _ ->
+        dispatch_with_session(
+          session_id,
+          do_name,
+          args_json || "{}",
+          base_cwd
+        )
+    end
   end
 
   # Split per-tool to keep complexity low
@@ -128,39 +163,176 @@ defmodule TheMaestro.Tools.Runtime do
 
   # Same as dispatch/3 but with MCP fallback using the session registry
   defp dispatch_with_session(session_id, name, args_json, base_cwd) do
-    case do_dispatch_known(name, args_json, base_cwd) do
-      {:unknown, ^name} ->
-        # Try MCP registry resolution
-        case MCPRegistry.resolve(session_id, name) do
-          {:ok, %{server: server_key, mcp_tool_name: tool}} ->
-            case safe_decode(args_json) do
-              {:ok, args} -> MCPClient.call_tool(session_id, server_key, tool, args)
-              {:error, reason} -> {:error, reason}
+    case name do
+      "edit" ->
+        case safe_decode(args_json) do
+          {:ok, args} ->
+            case TheMaestro.Tools.Edit.run(args, base_cwd: base_cwd) do
+              {:ok, payload, %{prev: prev, new: newc, path: path}} ->
+                log_edit_change(session_id, path, prev, newc)
+                {:ok, payload}
+
+              {:error, r} ->
+                {:error, r}
             end
 
-          :error ->
-            {:error, "unsupported tool: #{name}"}
+          {:error, r} ->
+            {:error, r}
         end
 
-      other ->
-        other
+      "multi_edit" ->
+        case safe_decode(args_json) do
+          {:ok, args} ->
+            case TheMaestro.Tools.MultiEdit.run(args, base_cwd: base_cwd) do
+              {:ok, payload, %{prev: prev, new: newc, path: path}} ->
+                log_edit_change(session_id, path, prev, newc)
+                {:ok, payload}
+
+              {:error, r} ->
+                {:error, r}
+            end
+
+          {:error, r} ->
+            {:error, r}
+        end
+
+      name when name in ["todo_write", "todowrite"] ->
+        case safe_decode(args_json) do
+          {:ok, args} ->
+            thread_id =
+              case TheMaestro.Conversations.latest_snapshot(session_id) do
+                %TheMaestro.Conversations.ChatEntry{thread_id: tid} -> tid
+                _ -> nil
+              end
+
+            TheMaestro.Tools.TodoWrite.run(args,
+              base_cwd: base_cwd,
+              session_id: session_id,
+              thread_id: thread_id
+            )
+
+          {:error, r} -> {:error, r}
+        end
+
+      _ ->
+        case do_dispatch_known(name, args_json, base_cwd) do
+          {:unknown, ^name} ->
+            # Try MCP registry resolution
+            case MCPRegistry.resolve(session_id, name) do
+              {:ok, %{server: server_key, mcp_tool_name: tool}} ->
+                case safe_decode(args_json) do
+                  {:ok, args} -> MCPClient.call_tool(session_id, server_key, tool, args)
+                  {:error, reason} -> {:error, reason}
+                end
+
+              :error ->
+                {:error, "unsupported tool: #{name}"}
+            end
+
+          other ->
+            other
+        end
     end
   end
 
   defp do_dispatch_known(name, args_json, base_cwd) do
     case name do
-      "read" -> dispatch("read", args_json, base_cwd)
-      "bash" -> dispatch("bash", args_json, base_cwd)
-      "shell" -> dispatch("shell", args_json, base_cwd)
-      "run_shell_command" -> dispatch("run_shell_command", args_json, base_cwd)
-      "list_directory" -> dispatch("list_directory", args_json, base_cwd)
-      "apply_patch" -> dispatch("apply_patch", args_json, base_cwd)
-      "write_file" -> dispatch("write_file", args_json, base_cwd)
-      "write" -> dispatch("write_file", args_json, base_cwd)
-      "create_file" -> dispatch("write_file", args_json, base_cwd)
-      "glob" -> dispatch("glob", args_json, base_cwd)
-      "grep" -> dispatch("grep", args_json, base_cwd)
-      _ -> {:unknown, name}
+      "notebook_edit" ->
+        case safe_decode(args_json) do
+          {:ok, args} ->
+            case TheMaestro.Tools.NotebookEdit.run(args, base_cwd: base_cwd) do
+              {:ok, payload} -> {:ok, payload}
+              {:error, r} -> {:error, r}
+            end
+          {:error, r} -> {:error, r}
+        end
+      "notebookedit" ->
+        do_dispatch_known("notebook_edit", args_json, base_cwd)
+      # TitleCase → lowercase alias handling for provider parity
+      # Claude Code emits names like "MultiEdit", "WebSearch", "WebFetch".
+      # Normalize to our snake_case routes.
+      "multiedit" ->
+        do_dispatch_known("multi_edit", args_json, base_cwd)
+      "websearch" ->
+        do_dispatch_known("web_search", args_json, base_cwd)
+      "webfetch" ->
+        do_dispatch_known("web_fetch", args_json, base_cwd)
+      "read" ->
+        dispatch("read", args_json, base_cwd)
+
+      "edit" ->
+        case safe_decode(args_json) do
+          {:ok, args} ->
+            case TheMaestro.Tools.Edit.run(args, base_cwd: base_cwd) do
+              {:ok, payload, %{prev: prev, new: newc, path: path}} ->
+                log_edit_change(nil, path, prev, newc)
+                {:ok, payload}
+
+              {:error, r} ->
+                {:error, r}
+            end
+
+          {:error, r} ->
+            {:error, r}
+        end
+
+      "multi_edit" ->
+        case safe_decode(args_json) do
+          {:ok, args} ->
+            case TheMaestro.Tools.MultiEdit.run(args, base_cwd: base_cwd) do
+              {:ok, payload, %{prev: prev, new: newc, path: path}} ->
+                log_edit_change(nil, path, prev, newc)
+                {:ok, payload}
+
+              {:error, r} ->
+                {:error, r}
+            end
+
+          {:error, r} ->
+            {:error, r}
+        end
+
+      "bash" ->
+        dispatch("bash", args_json, base_cwd)
+
+      "shell" ->
+        dispatch("shell", args_json, base_cwd)
+
+      "run_shell_command" ->
+        dispatch("run_shell_command", args_json, base_cwd)
+
+      "list_directory" ->
+        dispatch("list_directory", args_json, base_cwd)
+
+      "apply_patch" ->
+        dispatch("apply_patch", args_json, base_cwd)
+
+      "write_file" ->
+        dispatch("write_file", args_json, base_cwd)
+
+      "write" ->
+        dispatch("write_file", args_json, base_cwd)
+
+      "create_file" ->
+        dispatch("write_file", args_json, base_cwd)
+
+      "glob" ->
+        dispatch("glob", args_json, base_cwd)
+
+      "grep" ->
+        dispatch("grep", args_json, base_cwd)
+
+      "todo_write" ->
+        case safe_decode(args_json) do
+          {:ok, args} -> TheMaestro.Tools.TodoWrite.run(args, base_cwd: base_cwd)
+          {:error, r} -> {:error, r}
+        end
+
+      "todowrite" ->
+        do_dispatch_known("todo_write", args_json, base_cwd)
+
+      _ ->
+        {:unknown, name}
     end
   end
 
@@ -362,6 +534,24 @@ defmodule TheMaestro.Tools.Runtime do
   end
 
   defp return_outside_workspace, do: {:error, "requested path outside workspace"}
+
+  defp log_edit_change(session_id, path, prev, newc) do
+    {diff, sum} = TheMaestro.Tools.UnifiedDiff.diff(prev || "", newc || "")
+
+    attrs = %{
+      session_id: session_id,
+      provider: nil,
+      tool_name: "edit",
+      file_path: to_string(path || ""),
+      change_type: "update",
+      diff: diff,
+      summary: sum,
+      metadata: %{}
+    }
+
+    _ = TheMaestro.Conversations.create_tool_change_log(attrs)
+    :ok
+  end
 
   # ===== Grep implementation =====
   defp exec_grep(args, base_cwd) do

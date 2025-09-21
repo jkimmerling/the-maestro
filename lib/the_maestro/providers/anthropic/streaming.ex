@@ -259,6 +259,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
 
   # ===== Tool definitions (Anthropic format) =====
   defp anthropic_tools do
+    # Keep provider-owned definitions for Anthropic due to input_schema differences.
     [
       task_tool(),
       bash_tool(),

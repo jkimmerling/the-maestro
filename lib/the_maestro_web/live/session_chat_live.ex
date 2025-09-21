@@ -18,6 +18,10 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
     TheMaestro.Chat.subscribe(session.id)
+    if connected?(socket) do
+      TheMaestroWeb.Endpoint.subscribe(TheMaestro.Events.topic(:plans, session.id))
+      TheMaestroWeb.Endpoint.subscribe(TheMaestro.Events.topic(:images, session.id))
+    end
 
     # Determine current thread (latest) for display
     tid = Conversations.latest_thread_id(session.id)
@@ -40,6 +44,8 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:pending_tool_calls, [])
      |> assign(:followup_history, [])
      |> assign(:summary, compute_summary(current_messages_for(session.id, tid)))
+     |> assign(:plans, TheMaestro.Plans.list(session.id, tid))
+     |> assign(:images, TheMaestro.Images.list(session.id, tid))
      |> assign(:editing_latest, false)
      |> assign(:latest_json, nil)
      |> assign(:show_config, false)
@@ -129,6 +135,8 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:current_thread_label, Conversations.thread_label(tid))
      |> assign(:messages, msgs)
      |> assign(:summary, compute_summary(msgs))
+     |> assign(:plans, TheMaestro.Plans.list(socket.assigns.session.id, tid))
+     |> assign(:images, TheMaestro.Images.list(socket.assigns.session.id, tid))
      |> put_flash(:info, "Started new chat thread")}
   end
 
@@ -148,12 +156,14 @@ defmodule TheMaestroWeb.SessionChatLive do
       tid when is_binary(tid) ->
         {:ok, _} = Conversations.delete_thread_entries(tid)
 
-        {:noreply,
-         socket
-         |> assign(:show_clear_confirm, false)
-         |> assign(:messages, [])
-         |> assign(:summary, nil)
-         |> put_flash(:info, "Cleared current chat thread")}
+         {:noreply,
+          socket
+          |> assign(:show_clear_confirm, false)
+          |> assign(:messages, [])
+          |> assign(:summary, nil)
+          |> assign(:plans, TheMaestro.Plans.list(socket.assigns.session.id, socket.assigns.current_thread_id))
+          |> assign(:images, TheMaestro.Images.list(socket.assigns.session.id, socket.assigns.current_thread_id))
+          |> put_flash(:info, "Cleared current chat thread")}
 
       _ ->
         {:noreply, assign(socket, :show_clear_confirm, false)}
@@ -169,6 +179,26 @@ defmodule TheMaestroWeb.SessionChatLive do
 
       _ ->
         {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_info(%{event: "plans:updated", payload: %{session_id: sid, thread_id: tid}}, socket) do
+    if sid == socket.assigns.session.id and (is_nil(tid) or tid == socket.assigns.current_thread_id) do
+      {:noreply,
+       assign(socket, :plans, TheMaestro.Plans.list(socket.assigns.session.id, socket.assigns.current_thread_id))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_info(%{event: "images:attached", payload: %{session_id: sid, thread_id: tid}}, socket) do
+    if sid == socket.assigns.session.id and (is_nil(tid) or tid == socket.assigns.current_thread_id) do
+      {:noreply,
+       assign(socket, :images, TheMaestro.Images.list(socket.assigns.session.id, socket.assigns.current_thread_id))}
+    else
+      {:noreply, socket}
     end
   end
 
@@ -1644,6 +1674,46 @@ defmodule TheMaestroWeb.SessionChatLive do
                 <% end %>
               </div>
             <% end %>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div class="terminal-card terminal-border-amber p-3">
+                <div class="text-xs opacity-80">plan</div>
+                <%= if Enum.empty?(@plans || []) do %>
+                  <div class="text-sm opacity-60">No plan yet</div>
+                <% else %>
+                  <ul class="ml-4 text-sm text-amber-200">
+                    <%= for item <- @plans do %>
+                      <li>
+                        <span class={[
+                          "mr-2 inline-block px-1 rounded text-xs",
+                          case (item[:status] || item["status"]) do
+                            "completed" -> "bg-green-700"
+                            "in_progress" -> "bg-blue-700"
+                            _ -> "bg-amber-700"
+                          end
+                        ]}>
+                          {item[:status] || item["status"]}
+                        </span>
+                        {item[:step] || item["step"]}
+                      </li>
+                    <% end %>
+                  </ul>
+                <% end %>
+              </div>
+
+              <div class="terminal-card terminal-border-amber p-3">
+                <div class="text-xs opacity-80">images</div>
+                <%= if Enum.empty?(@images || []) do %>
+                  <div class="text-sm opacity-60">No images</div>
+                <% else %>
+                  <ul class="ml-4 text-sm text-amber-200 break-all">
+                    <%= for it <- @images do %>
+                      <li>{it[:path] || it["path"]}</li>
+                    <% end %>
+                  </ul>
+                <% end %>
+              </div>
+            </div>
           </div>
 
           <.form for={%{}} phx-submit="send" class="mt-6">
