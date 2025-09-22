@@ -1,0 +1,151 @@
+# Story | Epic | Overhaul — Chat Turn Frame Timeline
+- Owner: Codex
+- Start: 2025-09-21  Target End: 2025-09-28
+- Links: [Issue](), [PR](), [Design Doc]()
+
+## Goals
+- Persist every stream event (user, assistant text, thinking, tool calls/results, usage, final) as ordered frames per turn; reasoning content stored and folded by default.
+- Share the same frame timeline through contexts for LiveView, REST, and future CLI clients without duplicating business logic.
+- Stream frames over PubSub in strict order with stable keys so UI layers can append without overwriting interim state.
+- Remove legacy `messages` rendering. Frames are the canonical source of truth across the app.
+
+## Tasks
+- [x] Domain frame schema
+  - [x] Promote `CombinedChat` to version `v2` with per-thread turn frame stores.
+  - [x] Implement `TurnFrame` value object (id/idx/at_ms/role/kind/payload/thought flags).
+  - [x] Add helper APIs for fetching/inserting frames within canonical chat snapshots.
+- [x] Streaming manager & persistence
+  - [x] Extend `Sessions.Manager` accumulators to build frames for incoming stream events.
+  - [x] Emit PubSub envelopes enriched with frame metadata and persist frames on finalize.
+  - [x] Add mid-turn flush (batch) controlled by config (`:frame_flush, batch_size`).
+- [ ] Provider adapters & orchestration
+  - [x] Map provider-specific events to normalized frame kinds; thinking captured when providers emit it.
+  - [x] Ensure reasoning content is surfaced consistently across providers (fill gaps where a provider omits it).
+  - [x] Ensure tool outputs are summarized + reference artifacts for large payloads where available.
+- [x] Backend APIs
+  - [x] Add context functions to list frames per thread/turn and to subscribe to turn-specific PubSub topics.
+  - [x] Document REST timeline endpoints and schemas (`docs/proposed_api_endpoints.md`).
+  - [x] Update REST controller responses to return stream metadata + timeline endpoint.
+  - [ ] Document CLI usage for consuming frames and toggling thought/tool visibility.
+- [x] LiveView timeline UI
+  - [x] Replace `@messages` with a LiveStream-backed `@frames` assign keyed by frame id.
+  - [x] Render timeline components (user, assistant text, collapsible thinking, expandable tool cards, final/usage footers).
+  - [x] Default-collapse thinking/tool result bodies with accessible toggles and maintain scroll behavior.
+  - [x] Aggregate assistant_text deltas into a single growing bubble to avoid per-token spam.
+- [ ] Docs & ops
+  - [ ] Update playbooks/runbooks and this doc as work completes; capture performance telemetry.
+- [ ] Testing & quality
+  - [x] Add domain/unit tests for frame serialization.
+  - [x] Write integration test covering turn frames publish + persistence.
+  - [ ] Add benchmark harness (mix task) for high-volume frame streaming.
+
+## Dev Notes
+- TurnFrame envelope stores `%{frame_id, idx, at_ms, role, kind, payload, thought?: boolean, collapsed?: boolean}` with `payload["content"]` holding assistant reasoning when available; thinking frames default to `collapsed?: true` so UIs can fold/unfold safely.
+- CombinedChat v2 structure: `%{"version" => "v2", "threads" => %{thread_id => %{turns: [%{turn_index: int, frames: [frame_map], final_message_id: nil | String.t()}]}}}`; `events` kept for analytics only.
+- Sessions.Manager flow appends frames (idx incrementing per turn) on every stream event, publishes on `turn:<session_id>:<stream_id>`, and checkpoints frames mid-turn when the batch size threshold is hit.
+- Content dedup: overlap-aware delta trimming; duplicate chunks dropped; final text cannot repeat.
+- LiveView aggregates assistant_text frames into a single bubble; “final” is its own frame and always renders last.
+- Provider handlers need explicit mapping: SSE “thinking”/“response.output_text” → `assistant_thinking` + `assistant_text` frames (with `payload["content"]` for thoughts); `tool_call`/`tool_use` → `function_call` frame; tool responses → `tool_result` frame with `payload["preview"]` and optional artifact pointers; `usage` events → `usage` frame; final assistant completion flagged with `kind: "final"`.
+- LiveView timeline should rely on `Phoenix.LiveView.stream/4` (`stream(socket, :frames, ...)`) and list comprehension keyed by `frame_id`, ensuring stable ordering by `idx`/`at_ms` to avoid DOM churn.
+- Thought/tool UI affordances: show active thinking pill (“Thinking… elapsed 3.2s”) while streaming; once complete, rename summary to “Thoughts” with a `<details>` block revealing the stored reasoning text; tool frames display a compact header (“Tool Result • grep”) with default-hidden `<details>` for raw output.
+- Context API additions (`Chat.list_turn_frames/2`, `Chat.subscribe_turn/2`, `Chat.latest_turn_frames/2`) keep LiveView, REST, and CLI aligned; CLI can request folded vs. unfolded render hints.
+- Observability: log frame counts, tool payload sizes, reasoning length; add perf counters and a simple benchmark harness.
+- Backfill strategy lazily synthesizes frames for legacy entries by wrapping stored user/assistant messages into two frames per turn and marking `backfilled?: true` in payload so UI can show “(legacy)” badge and skip reasoning toggles.
+
+## Implementation Plan (File-by-File)
+- `lib/the_maestro/domain/combined_chat.ex`
+  - Line 9: expand `@enforce_keys` to `[:version, :messages, :threads]`.
+  - Line 10: set struct default `threads: %{}`.
+  - Line 12: update type spec to include `threads: map()`.
+  - Lines 19-24: update `from_map/1` to pull `"threads"` (default `%{}`) and normalize legacy `events`.
+  - After line 29: add helpers `threads_for/2`, `put_turn_frames/5`, `append_frame/6`, `list_frames/2` returning updated structs.
+- `lib/the_maestro/domain/turn_frame.ex`
+  - Add new module defining struct `%TurnFrame{frame_id, idx, at_ms, role, kind, payload, thought?, collapsed?, backfilled?}` with `new/1`, `to_map/1`, `from_map/1` helpers.
+- `lib/the_maestro/domain/stream_event.ex`
+  - Line 19: extend type union to include `:tool_call`, `:tool_result`, `:mcp_call`, `:mcp_result`, `:web_search_call`, `:final`.
+  - Line 12: add `thought_content` field defaulting to `nil`.
+  - Update `new/1` to populate `thought_content` from raw map and pass through new types.
+- `lib/the_maestro/domain/stream_envelope.ex`
+  - Lines 6-15: add fields `frame`, `frame_idx`, `thread_id`, `turn_index`; require `:at_ms` in `@enforce_keys`.
+- `priv/repo/migrations/` (new file)
+  - Generate `promote_combined_chat_v2` migration to ensure stored JSON has `"version": "v2"`, inject empty `"threads"` map when absent, and preserve legacy `messages` arrays.
+- `lib/the_maestro/conversations.ex`
+  - Lines 886-905: update normalization helpers to promote legacy payloads into `CombinedChat.new/1` with thread tracking and to stash frames under `threads[thread_id].turns`.
+  - Add public APIs `list_turn_frames/2`, `latest_turn_frames/2`, `append_turn_frame/4`, `put_turn_frames/4` delegating to Repo updates with optimistic locking.
+  - Ensure `create_chat_entry/1` and `update_chat_entry/2` accept `combined_chat` maps containing `threads` and invoke helpers to maintain ordering by `turn_index`.
+- `lib/the_maestro/chat.ex`
+  - Extend `start_turn/4` return map with `turn_index`, `frames_topic`, and `pending_frames` placeholder.
+  - Add functions `subscribe_turn/2`, `list_turn_frames/2`, `latest_turn_frames/2`, `append_turn_frame/4` delegating to `Conversations`.
+  - In `append_user_message/4`, seed new turn frames with a user `TurnFrame` and persist initial snapshot via context helper.
+- `lib/the_maestro/sessions/manager.ex`
+  - Extend state accumulator to track `frames`, `frame_idx`, and `turn_index` per stream; initialize user frame when turn starts.
+  - In stream handlers (`handle_cast` for `:acc_content`, `:acc_calls`, `:acc_usage`, thinking events), build `TurnFrame` structs, update accumulators, and broadcast via `publish_both/3` including `frame` payload.
+  - Enhance `publish_both/3` to broadcast to `"turn:#{session_id}:#{stream_id}"` with enriched envelope containing `frame`, `frame_idx`, `thread_id`, `turn_index`.
+  - Update `finalize_and_persist/3` to persist accumulated frames into `CombinedChat` threads, store tool history summaries in `payload`, and preserve final assistant text in legacy `messages`.
+  - Add periodic flush via configurable `@frame_flush_ms` and handle `:flush_frames` message to persist incremental updates when streams are long-running.
+- `lib/the_maestro/streaming/openai_handler.ex`, `streaming/anthropic_handler.ex`, `streaming/gemini_handler.ex`
+  - Map provider-specific deltas to new event kinds, extract reasoning text into `metadata[:thought_content]`, sanitize tool arguments, and emit `:tool_result` frames on tool outputs.
+- `lib/the_maestro/streaming/message.ex`
+  - Update type union to include new kinds and add `thought_content` field.
+- `lib/the_maestro/utils/streaming.ex`
+  - Adjust `to_domain_event/1` to populate `thought_content`, map new event kinds, and copy sanitized payload details.
+- `lib/the_maestro_web/controllers/chat_controller.ex`
+  - Augment `create/2` JSON response with `turn_index`, `frames_topic`, `frames_url`.
+  - Add `show_frames/2` action returning ordered frames for a turn; include feature flag guard and pagination params.
+- `lib/the_maestro_web/router.ex`
+  - Under API scope, add GET route `"/sessions/:id/threads/:thread_id/turns/:turn_index/frames"` to `ChatController.show_frames/2`; protect with flag plug.
+- `lib/the_maestro_web/live/session_chat_live.ex`
+  - Replace `@messages` assign with LiveView stream `@streams.frames`; subscribe to turn topic when streaming starts.
+  - Update `handle_info/2` clauses to append frames and manage thinking states based on frame payload rather than standalone assigns.
+  - Rewrite `render/1` timeline portion to iterate over frames, using helper components for each `kind`, and ensure tool/thought payloads are collapsed by default.
+- `lib/the_maestro_web/live/components/chat_frames_component.ex`
+  - New component encapsulating per-frame rendering (user bubble, assistant message, thinking pill with `<details>`, tool cards, usage footer, final highlight).
+- `assets/js/app.js`
+  - Add `FrameToggle` hook to manage expand/collapse state, remembering user preference per frame id and preventing scroll jumps.
+- `config/config.exs`
+  - Add `config :the_maestro, :chat_full_timeline, false` with overrides in `config/dev.exs` and `config/runtime.exs`.
+- `test/the_maestro/domain/turn_frame_test.exs`
+  - New unit tests covering `TurnFrame.new/1`, `to_map/1`, `from_map/1`, and JSON serialization.
+- `test/the_maestro/streaming/*_handler_test.exs`
+  - Extend fixtures with thinking/tool events, assert sanitized `thought_content`, and verify new event kinds.
+- `test/the_maestro/sessions/manager_test.exs`
+  - Add coverage for frame accumulation order, partial flush, persistence into CombinedChat, and PubSub broadcast metadata.
+- `test/the_maestro_web/integration/openai_frame_timeline_test.exs`
+  - Full turn simulation asserting persisted frames, REST endpoint output, and LiveView DOM containing collapsed tool/thought sections.
+- `test/the_maestro_web/live/session_chat_live_test.exs`
+  - Update assertions for `@streams.frames`, verify LiveView renders timeline correctly, toggles work, and legacy backfill path hides reasoning toggle.
+- `lib/mix/tasks/chat_frames_benchmark.ex`
+  - Optional mix task generating synthetic frame streams to profile throughput and flush cadence.
+
+## Blockers
+- 2025-09-21 None identified; need confirmation that provider APIs expose reasoning deltas consistently before coding.
+
+## Deviations From Plan
+- 2025-09-21 Baseline scope established; record changes once implementation diverges (e.g., alternate persistence cadence or AI provider gaps).
+
+## Tests Created and Ran
+- Test plan:
+  - Success paths: OpenAI thinking → tool call → result → final, Gemini functionCall/functionResponse chain, Anthropic tool_use/tool_result, LiveView frame streaming.
+  - Edge/failure paths: duplicate frame IDs, oversized tool outputs (summaries + artifact refs), legacy snapshot without frames (backfill), feature flag disabled (frames suppressed).
+- Implemented:
+  - [x] Unit
+  - [x] Integration (Phoenix.ConnCase, Phoenix.LiveViewTest)
+  - [ ] E2E
+- Files:
+  - `test/the_maestro/domain/turn_frame_test.exs`
+  - `test/the_maestro/streaming/openai_handler_test.exs`
+  - `test/the_maestro/streaming/anthropic_handler_test.exs`
+  - `test/the_maestro/streaming/gemini_handler_test.exs`
+  - `test/the_maestro/sessions/manager_test.exs`
+  - `test/the_maestro_web/integration/openai_frame_timeline_test.exs`
+  - `test/the_maestro_web/live/session_chat_live_timeline_test.exs`
+  - `test/the_maestro_web/live/session_chat_live_ordering_test.exs`
+  - `test/the_maestro/sessions/stream_dedup_test.exs`
+- Commands and results:
+  - `mix test test/the_maestro/domain/turn_frame_test.exs`
+  - `mix test test/the_maestro_web/integration/openai_frame_timeline_test.exs`
+  - `mix test test/the_maestro_web/live/session_chat_live_timeline_test.exs`
+  - `mix test test/the_maestro_web/live/session_chat_live_ordering_test.exs`
+  - `mix test test/the_maestro/sessions/stream_dedup_test.exs`
+  - `mix precommit`
+  - CI link: pending

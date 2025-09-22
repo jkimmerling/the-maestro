@@ -23,7 +23,8 @@ defmodule TheMaestroWeb.ChatController do
             stream_id: sid,
             provider: Atom.to_string(provider),
             model: model,
-            thread_id: tid
+            thread_id: tid,
+            frames_topic: "turn:" <> session_id <> ":" <> sid
           })
 
         {:error, reason} ->

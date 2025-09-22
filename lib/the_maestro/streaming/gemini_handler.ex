@@ -107,7 +107,25 @@ defmodule TheMaestro.Streaming.GeminiHandler do
 
   # Handle different types of content parts
   defp handle_content_part(%{"text" => text}, messages) when is_binary(text) and text != "" do
-    [content_message(text) | messages]
+    case detect_reasoning_json(text) do
+      {:complete, reasoning, answer} ->
+        base = [
+          content_message("Thinking: #{reasoning}\n\n", %{reasoning: true, thinking: true})
+          | messages
+        ]
+
+        if is_binary(answer) and answer != "" do
+          [content_message(answer) | base]
+        else
+          base
+        end
+
+      {:incomplete} ->
+        messages
+
+      {:not_reasoning} ->
+        [content_message(text) | messages]
+    end
   end
 
   defp handle_content_part(%{"functionCall" => function_call}, messages) do
@@ -132,5 +150,34 @@ defmodule TheMaestro.Streaming.GeminiHandler do
   # Generate a unique call ID for function calls
   defp generate_call_id do
     ("call_" <> :crypto.strong_rand_bytes(8)) |> Base.url_encode64(padding: false)
+  end
+
+  # Reasoning JSON detection (heuristic)
+  defp detect_reasoning_json(text) do
+    trimmed = String.trim(to_string(text || ""))
+
+    cond do
+      looks_like_reasoning_json?(trimmed) -> parse_reasoning_json(trimmed)
+      String.starts_with?(trimmed, "{") -> {:incomplete}
+      true -> {:not_reasoning}
+    end
+  end
+
+  defp looks_like_reasoning_json?(s),
+    do: String.starts_with?(s, "{") and String.contains?(s, "\"reasoning\"")
+
+  defp parse_reasoning_json(s) do
+    case Jason.decode(s) do
+      {:ok, %{"reasoning" => reasoning} = parsed} ->
+        answer = Map.get(parsed, "answer") || Map.get(parsed, "response")
+
+        answer_text =
+          if is_list(answer), do: Enum.join(answer, " "), else: to_string(answer || "")
+
+        {:complete, reasoning, answer_text}
+
+      _ ->
+        {:incomplete}
+    end
   end
 end

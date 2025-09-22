@@ -157,8 +157,24 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
   # Handle text content deltas
   defp handle_text_delta(event) do
     case get_in(event, ["delta", "text"]) do
-      nil -> []
-      text -> [content_message(text)]
+      nil ->
+        []
+
+      text ->
+        case detect_reasoning_json(text) do
+          {:complete, reasoning, answer} ->
+            base = [
+              content_message("Thinking: #{reasoning}\n\n", %{reasoning: true, thinking: true})
+            ]
+
+            maybe_add_answer(base, answer)
+
+          {:incomplete} ->
+            []
+
+          {:not_reasoning} ->
+            [content_message(text)]
+        end
     end
   end
 
@@ -239,6 +255,49 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
       [usage_msg]
     else
       []
+    end
+  end
+
+  # Reasoning JSON detection (parity with OpenAI handler)
+  defp maybe_add_answer(messages, answer) when is_binary(answer) and answer != "" do
+    [content_message(answer) | messages]
+  end
+
+  defp maybe_add_answer(messages, _), do: messages
+
+  defp detect_reasoning_json(text) do
+    trimmed = String.trim(to_string(text || ""))
+
+    cond do
+      String.starts_with?(trimmed, "{") and String.contains?(trimmed, "\"reasoning\"") ->
+        case parse_reasoning_json(trimmed) do
+          {:ok, reasoning, answer} -> {:complete, reasoning, answer}
+          {:error, _} -> {:incomplete}
+        end
+
+      String.starts_with?(trimmed, "{") ->
+        {:incomplete}
+
+      true ->
+        {:not_reasoning}
+    end
+  end
+
+  defp parse_reasoning_json(text) do
+    case Jason.decode(text) do
+      {:ok, %{"reasoning" => reasoning} = parsed} ->
+        answer = Map.get(parsed, "answer") || Map.get(parsed, "response")
+
+        answer_text =
+          if is_list(answer), do: Enum.join(answer, " "), else: to_string(answer || "")
+
+        {:ok, reasoning, answer_text}
+
+      {:ok, _} ->
+        {:error, :not_reasoning}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

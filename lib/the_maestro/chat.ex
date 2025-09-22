@@ -20,6 +20,7 @@ defmodule TheMaestro.Chat do
   @type session_id :: String.t()
   @type thread_id :: String.t()
   @type stream_id :: String.t()
+  @type frame :: map()
 
   # ----- Session & snapshots -----
 
@@ -200,7 +201,7 @@ defmodule TheMaestro.Chat do
              auth_name,
              provider_msgs,
              model,
-             opts
+             Keyword.put(opts, :thread_id, tid)
            ) do
       {:ok,
        %{
@@ -240,10 +241,67 @@ defmodule TheMaestro.Chat do
     PubSub.unsubscribe(TheMaestro.PubSub, topic(session_id))
   end
 
+  @doc "Subscribe the current process to a specific turn timeline topic."
+  @spec subscribe_turn(session_id, stream_id) :: :ok | {:error, term()}
+  def subscribe_turn(session_id, stream_id)
+      when is_binary(session_id) and is_binary(stream_id) do
+    PubSub.subscribe(TheMaestro.PubSub, turn_topic(session_id, stream_id))
+  end
+
   @doc "Cancel any in-flight stream for a session."
   @spec cancel_turn(session_id) :: :ok
   def cancel_turn(session_id) when is_binary(session_id) do
     SessionsManager.cancel(session_id)
+  end
+
+  # ----- Timeline frames (v2) -----
+  @doc "List frames for a thread's turn index; :latest fetches the latest turn."
+  @spec list_turn_frames(thread_id, non_neg_integer() | :latest) ::
+          {:ok, [frame]} | {:error, term()}
+  def list_turn_frames(thread_id, turn_index \\ :latest) when is_binary(thread_id) do
+    case Conversations.latest_snapshot_for_thread(thread_id) do
+      nil ->
+        {:ok, []}
+
+      entry ->
+        alias TheMaestro.Domain.CombinedChat
+        cc = CombinedChat.from_map(entry.combined_chat)
+
+        idx =
+          case turn_index do
+            :latest -> entry.turn_index
+            i when is_integer(i) and i >= 0 -> i
+            _ -> entry.turn_index
+          end
+
+        {:ok, fallback_frames(cc, thread_id, idx)}
+    end
+  end
+
+  @doc "Get frames for the latest turn of a thread."
+  @spec latest_turn_frames(thread_id) :: {:ok, [frame]}
+  def latest_turn_frames(thread_id) when is_binary(thread_id) do
+    list_turn_frames(thread_id, :latest)
+  end
+
+  defp fallback_frames(cc, thread_id, idx) do
+    alias TheMaestro.Domain.CombinedChat
+    frames = CombinedChat.get_turn_frames(cc, thread_id, idx)
+
+    if frames == [] do
+      turns =
+        case (cc.threads || %{})[thread_id] do
+          %{"turns" => t} when is_list(t) -> t
+          _ -> []
+        end
+
+      case List.last(turns) do
+        %{"frames" => fs} when is_list(fs) -> fs
+        _ -> []
+      end
+    else
+      frames
+    end
   end
 
   @doc """
@@ -271,6 +329,7 @@ defmodule TheMaestro.Chat do
   # ----- Helpers -----
 
   defp topic(session_id), do: "session:" <> session_id
+  defp turn_topic(session_id, stream_id), do: "turn:" <> session_id <> ":" <> stream_id
 
   defp to_provider_atom(p) when is_atom(p), do: p
 

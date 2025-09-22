@@ -26,7 +26,9 @@ defmodule TheMaestro.Sessions.Manager do
             tool_calls: list(),
             usage: map() | nil,
             events: list(),
-            meta: map()
+            meta: map(),
+            frames: list(),
+            frame_idx: non_neg_integer()
           }
         }
 
@@ -90,7 +92,9 @@ defmodule TheMaestro.Sessions.Manager do
       session_name: session_name,
       model: model,
       t0_ms: t0_ms,
-      sandbox_owner: owner_pid
+      sandbox_owner: owner_pid,
+      thread_id: Keyword.get(opts, :thread_id),
+      last_flushed_idx: 0
     }
 
     {:ok, task} =
@@ -108,25 +112,69 @@ defmodule TheMaestro.Sessions.Manager do
 
         case result do
           {:ok, stream} ->
+            # Emit a user_text frame sourced from the last snapshot (before thinking)
+            case Conversations.latest_snapshot(session_id) do
+              %Conversations.ChatEntry{} = latest_entry ->
+                if ut = last_user_text_from(latest_entry) do
+                  if is_binary(ut) and ut != "" do
+                    GenServer.cast(
+                      __MODULE__,
+                      {:frame_event, session_id, stream_id, :user_text, ut}
+                    )
+                  end
+                end
+
+              _ ->
+                :ok
+            end
+
             publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
               type: :thinking,
               raw: %{thinking: true}
             })
 
+            GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :thinking, nil})
+
             for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
               publish_both(session_id, stream_id, msg)
 
               case msg do
-                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
-                when is_binary(chunk) ->
-                  GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk, raw: raw} ->
+                  reason? =
+                    is_map(raw) and
+                      (raw[:thinking] || raw["thinking"] || (raw[:reasoning] || raw["reasoning"]))
+
+                  if reason? do
+                    payload =
+                      if is_binary(chunk) and chunk != "", do: %{"content" => chunk}, else: nil
+
+                    GenServer.cast(
+                      __MODULE__,
+                      {:frame_event, session_id, stream_id, :thinking, payload}
+                    )
+                  else
+                    if is_binary(chunk) do
+                      GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+
+                      GenServer.cast(
+                        __MODULE__,
+                        {:frame_event, session_id, stream_id, :content, chunk}
+                      )
+                    end
+                  end
 
                 %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
                 when is_list(calls) ->
                   GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
 
+                  GenServer.cast(
+                    __MODULE__,
+                    {:frame_event, session_id, stream_id, :function_call, calls}
+                  )
+
                 %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
                   GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
+                  GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :usage, usage})
 
                 _ ->
                   :ok
@@ -150,7 +198,15 @@ defmodule TheMaestro.Sessions.Manager do
     entry = %{
       task: task,
       stream_id: stream_id,
-      acc: %{text: "", tool_calls: [], usage: nil, events: [], meta: meta}
+      acc: %{
+        text: "",
+        tool_calls: [],
+        usage: nil,
+        events: [],
+        meta: meta,
+        frames: [],
+        frame_idx: 0
+      }
     }
 
     {:reply, {:ok, stream_id}, put_in(st, [session_id], entry)}
@@ -233,72 +289,124 @@ defmodule TheMaestro.Sessions.Manager do
 
   @impl true
   def handle_cast({:acc_content, session_id, _stream_id, chunk}, st) do
-    st =
-      update_in(st, [session_id, :acc], fn acc ->
-        if acc do
-          meta = acc.meta || %{}
-          last_chunk = meta[:last_content_chunk]
-          # Guard against duplicated large chunks (e.g., after SSE retry)
-          if duplicate_large_chunk?(acc.text, last_chunk, chunk) do
-            acc
-          else
-            events = acc.events ++ [%{type: :content, at: now_ms(), size: byte_size(chunk)}]
-            new_meta = Map.put(meta, :last_content_chunk, chunk)
-            %{acc | text: acc.text <> chunk, events: events, meta: new_meta}
-          end
-        else
-          acc
-        end
-      end)
+    case Map.get(st, session_id) do
+      %{acc: acc} ->
+        acc2 =
+          if acc do
+            meta = acc.meta || %{}
+            base_text = acc.text || ""
+            delta = compute_delta(base_text, chunk)
 
-    {:noreply, st}
+            if delta == "" do
+              %{acc | meta: Map.put(meta, :last_delta, "")}
+            else
+              events = acc.events ++ [%{type: :content, at: now_ms(), size: byte_size(delta)}]
+              new_meta = Map.put(meta, :last_delta, delta)
+              %{acc | text: base_text <> delta, events: events, meta: new_meta}
+            end
+          else
+            acc
+          end
+
+        {:noreply, put_in(st, [session_id, :acc], acc2)}
+
+      _ ->
+        {:noreply, st}
+    end
   end
 
   def handle_cast({:acc_calls, session_id, _stream_id, calls}, st) do
-    st =
-      update_in(st, [session_id, :acc], fn acc ->
-        if acc do
-          new =
-            Enum.map(calls, fn
-              %{id: cid, function: %{name: name, arguments: args}} ->
-                %{"id" => cid, "name" => name, "arguments" => args || ""}
+    case Map.get(st, session_id) do
+      %{acc: acc} ->
+        acc2 =
+          if acc do
+            new =
+              Enum.map(calls, fn
+                %{id: cid, function: %{name: name, arguments: args}} ->
+                  %{"id" => cid, "name" => name, "arguments" => args || ""}
 
-              %TheMaestro.Domain.ToolCall{id: cid, name: name, arguments: args} ->
-                %{"id" => cid, "name" => name, "arguments" => args || ""}
+                %TheMaestro.Domain.ToolCall{id: cid, name: name, arguments: args} ->
+                  %{"id" => cid, "name" => name, "arguments" => args || ""}
 
-              %{id: cid, name: name, arguments: args} ->
-                %{"id" => cid, "name" => name, "arguments" => args || ""}
+                %{id: cid, name: name, arguments: args} ->
+                  %{"id" => cid, "name" => name, "arguments" => args || ""}
 
-              %{"id" => cid, "name" => name, "arguments" => args} ->
-                %{"id" => cid, "name" => name, "arguments" => args || ""}
-            end)
+                %{"id" => cid, "name" => name, "arguments" => args} ->
+                  %{"id" => cid, "name" => name, "arguments" => args || ""}
+              end)
 
-          %{
+            %{
+              acc
+              | tool_calls: (acc.tool_calls || []) ++ new,
+                events: acc.events ++ [%{type: :function_call, at: now_ms(), count: length(new)}]
+            }
+          else
             acc
-            | tool_calls: (acc.tool_calls || []) ++ new,
-              events: acc.events ++ [%{type: :function_call, at: now_ms(), count: length(new)}]
-          }
-        else
-          acc
-        end
-      end)
+          end
 
-    {:noreply, st}
+        {:noreply, put_in(st, [session_id, :acc], acc2)}
+
+      _ ->
+        {:noreply, st}
+    end
   end
 
   def handle_cast({:acc_usage, session_id, _stream_id, usage}, st) do
-    st =
-      update_in(st, [session_id, :acc], fn acc ->
-        if acc,
-          do: %{
+    case Map.get(st, session_id) do
+      %{acc: acc} ->
+        acc2 =
+          if acc do
+            %{
+              acc
+              | usage: usage_to_map(usage),
+                events: acc.events ++ [%{type: :usage, at: now_ms(), usage: usage_to_map(usage)}]
+            }
+          else
             acc
-            | usage: usage_to_map(usage),
-              events: acc.events ++ [%{type: :usage, at: now_ms(), usage: usage_to_map(usage)}]
-          },
-          else: acc
-      end)
+          end
 
-    {:noreply, st}
+        {:noreply, put_in(st, [session_id, :acc], acc2)}
+
+      _ ->
+        {:noreply, st}
+    end
+  end
+
+  def handle_cast({:frame_event, session_id, stream_id, type, payload}, st) do
+    case Map.get(st, session_id) do
+      %{stream_id: ^stream_id, acc: acc} ->
+        if type == :content do
+          meta = acc.meta || %{}
+          base_text = acc.text || ""
+
+          delta =
+            case meta[:last_delta] do
+              d when is_binary(d) -> d
+              _ -> compute_delta(base_text, to_string(payload || ""))
+            end
+
+          if delta == "" do
+            st = put_in(st, [session_id, :acc, :meta, :last_delta], "")
+            {:noreply, st}
+          else
+            {frame, acc2} = build_frame(acc, :content, delta)
+            publish_turn_frame(session_id, stream_id, frame)
+            st = put_in(st, [session_id, :acc], acc2)
+            st = put_in(st, [session_id, :acc, :meta, :last_delta], "")
+            st = maybe_flush_frames(session_id, st)
+            {:noreply, st}
+          end
+        else
+          {frame, acc2} = build_frame(acc, type, payload)
+          publish_turn_frame(session_id, stream_id, frame)
+          st = put_in(st, [session_id, :acc], acc2)
+          st = maybe_flush_frames(session_id, st)
+          {:noreply, st}
+        end
+
+      _ ->
+        {:noreply, st}
+    end
   end
 
   def handle_cast({:stream_done, session_id, stream_id}, st) do
@@ -402,6 +510,7 @@ defmodule TheMaestro.Sessions.Manager do
   defp to_stream_event(%{} = m), do: StreamEvent.new!(m)
 
   defp topic(session_id), do: "session:" <> session_id
+  defp turn_topic(session_id, stream_id), do: "turn:" <> session_id <> ":" <> stream_id
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 
@@ -423,133 +532,282 @@ defmodule TheMaestro.Sessions.Manager do
 
   defp maybe_allow_sandbox(_), do: :ok
 
-  # Consider chunks >= 200 bytes and skip if identical to the last chunk
-  # or if the accumulated text already ends with the incoming chunk.
-  defp duplicate_large_chunk?(acc_text, last_chunk, chunk) do
+  # Compute the delta to append, trimming any overlap where the new chunk
+  # repeats existing trailing text from previous chunks.
+  defp compute_delta(acc_text, chunk) do
+    chunk = to_string(chunk || "")
+    acc_text = to_string(acc_text || "")
+
     cond do
-      not is_binary(chunk) -> false
-      byte_size(chunk) < 200 -> false
-      is_binary(last_chunk) and last_chunk == chunk -> true
-      is_binary(acc_text) and String.ends_with?(acc_text, chunk) -> true
-      true -> false
+      chunk == "" ->
+        ""
+
+      # Exact duplicate inside a trailing window
+      contains_in_tail?(acc_text, chunk, 8000) ->
+        ""
+
+      true ->
+        overlap = overlap_len(acc_text, chunk, 4096)
+
+        if overlap <= 0 do
+          chunk
+        else
+          :binary.part(chunk, overlap, byte_size(chunk) - overlap)
+        end
+    end
+  end
+
+  defp contains_in_tail?(acc_text, chunk, win) do
+    if acc_text == "" do
+      false
+    else
+      tail =
+        if byte_size(acc_text) > win,
+          do: binary_part(acc_text, byte_size(acc_text) - win, win),
+          else: acc_text
+
+      String.contains?(tail, chunk)
+    end
+  end
+
+  defp overlap_len(acc_text, chunk, max_overlap) do
+    max_len = min(min(byte_size(acc_text), byte_size(chunk)), max_overlap)
+
+    if max_len <= 0 do
+      0
+    else
+      # Try largest overlap first
+      find_overlap(acc_text, chunk, max_len)
+    end
+  end
+
+  defp find_overlap(_acc_text, _chunk, len) when len <= 0, do: 0
+
+  defp find_overlap(acc_text, chunk, len) do
+    suffix = :binary.part(acc_text, byte_size(acc_text) - len, len)
+    prefix = :binary.part(chunk, 0, len)
+    if suffix == prefix, do: len, else: find_overlap(acc_text, chunk, len - 1)
+  end
+
+  defp publish_turn_frame(session_id, stream_id, frame_map) when is_map(frame_map) do
+    PubSub.broadcast(
+      TheMaestro.PubSub,
+      turn_topic(session_id, stream_id),
+      {:turn_frame, frame_map}
+    )
+
+    :ok
+  end
+
+  defp build_frame(%{frame_idx: idx, frames: frames} = acc, type, payload) do
+    alias TheMaestro.Domain.TurnFrame
+
+    base = %{
+      id: Ecto.UUID.generate(),
+      idx: idx,
+      at_ms: now_ms(),
+      role: role_for(type),
+      kind: kind_for(type),
+      payload: payload_to_map(type, payload),
+      thought?: type in [:thinking],
+      collapsed?: type in [:thinking, :function_call]
+    }
+
+    frame = TurnFrame.new!(base) |> TurnFrame.to_map()
+    acc2 = %{acc | frame_idx: idx + 1, frames: frames ++ [frame]}
+    {frame, acc2}
+  end
+
+  defp kind_for(:thinking), do: "assistant_thinking"
+  defp kind_for(:content), do: "assistant_text"
+  defp kind_for(:user_text), do: "user_text"
+  defp kind_for(:function_call), do: "function_call"
+  defp kind_for(:usage), do: "usage"
+  defp kind_for(:tool_result), do: "tool_result"
+  defp kind_for(:finalized), do: "final"
+  defp kind_for(_), do: "event"
+
+  defp payload_to_map(:content, chunk) when is_binary(chunk), do: %{"delta" => chunk}
+
+  defp payload_to_map(:function_call, calls) when is_list(calls),
+    do: %{"calls" => Enum.map(calls, &map_call/1)}
+
+  defp payload_to_map(:usage, usage), do: usage_to_map(usage)
+  defp payload_to_map(:thinking, _), do: %{}
+  defp payload_to_map(:user_text, text) when is_binary(text), do: %{"text" => text}
+
+  defp payload_to_map(:finalized, %{} = m),
+    do: %{
+      "content" => Map.get(m, :content) || Map.get(m, "content"),
+      "meta" => Map.get(m, :meta) || Map.get(m, "meta")
+    }
+
+  defp payload_to_map(_t, p) when is_map(p), do: p
+  defp payload_to_map(_t, _), do: %{}
+
+  defp map_call(%TheMaestro.Domain.ToolCall{id: id, name: name, arguments: args}),
+    do: %{"id" => id, "name" => name, "arguments" => args}
+
+  defp map_call(%{"id" => id, "name" => name, "arguments" => args}),
+    do: %{"id" => id, "name" => name, "arguments" => to_string(args || "")}
+
+  defp map_call(%{id: id, name: name, arguments: args}),
+    do: %{"id" => id, "name" => name, "arguments" => to_string(args || "")}
+
+  defp map_call(other), do: %{"repr" => inspect(other)}
+
+  defp maybe_put_frames(canon, thread_id, turn_index, frames) do
+    if is_binary(thread_id) and is_integer(turn_index) do
+      alias TheMaestro.Domain.CombinedChat
+
+      canon
+      |> CombinedChat.from_map()
+      |> CombinedChat.put_turn_frames(thread_id, turn_index, frames)
+      |> CombinedChat.to_map()
+    else
+      canon
     end
   end
 
   defp finalize_and_persist(session_id, stream_id, st) do
-    with %{acc: %{text: text, usage: usage, meta: meta, events: events}} <-
-           Map.get(st, session_id),
-         %Conversations.ChatEntry{} = latest <- Conversations.latest_snapshot(session_id) do
-      session = Conversations.get_session_with_auth!(session_id)
-      provider = meta.provider
-      model = meta.model
-      {auth_type, auth_name} = auth_meta_from_session(session)
-      latency = max(now_ms() - (meta.t0_ms || now_ms()), 0)
+    case Map.get(st, session_id) do
+      %{acc: %{text: text, usage: usage, meta: meta, events: events}} ->
+        maybe_allow_sandbox(meta[:sandbox_owner])
 
-      req_meta = %{
-        "provider" => Atom.to_string(provider),
-        "model" => model,
-        "auth_type" => to_string(auth_type),
-        "auth_name" => auth_name,
-        "usage" => usage || %{},
-        "latency_ms" => latency
-      }
+        case Conversations.latest_snapshot(session_id) do
+          %Conversations.ChatEntry{} = latest ->
+            session = Conversations.get_session_with_auth!(session_id)
+            provider = meta.provider
+            model = meta.model
+            {auth_type, auth_name} = auth_meta_from_session(session)
+            latency = max(now_ms() - (meta.t0_ms || now_ms()), 0)
 
-      # Extract complete tool call and response data from current session and history
-      current_tool_calls = Map.get(st[session_id].acc, :tool_calls, [])
-      tool_history = (meta && meta[:tool_history_acc]) || []
+            req_meta = %{
+              "provider" => Atom.to_string(provider),
+              "model" => model,
+              "auth_type" => to_string(auth_type),
+              "auth_name" => auth_name,
+              "usage" => usage || %{},
+              "latency_ms" => latency
+            }
 
-      # Convert tool history to call_id -> response mapping
-      tool_responses =
-        Enum.flat_map(tool_history, fn history_entry ->
-          outputs = history_entry[:outputs] || history_entry["outputs"] || []
+            # Extract complete tool call and response data from current session and history
+            current_tool_calls = Map.get(st[session_id].acc, :tool_calls, [])
+            tool_history = (meta && meta[:tool_history_acc]) || []
 
-          # Create mapping from call_id to response
-          Enum.map(outputs, fn output ->
-            call_id = output[:id] || output["id"]
-            response_data = output[:output] || output["output"]
-            {call_id, response_data}
-          end)
-        end)
-        |> Map.new()
+            # Convert tool history to call_id -> response mapping
+            tool_responses =
+              Enum.flat_map(tool_history, fn history_entry ->
+                outputs = history_entry[:outputs] || history_entry["outputs"] || []
 
-      updated2 =
-        case String.trim(to_string(text || "")) do
-          "" ->
-            # No assistant text to append; only update events timeline
-            (latest.combined_chat || %{"messages" => []})
-            |> Map.put("events", events || [])
-            |> maybe_append_tool_history(meta)
+                # Create mapping from call_id to response
+                Enum.map(outputs, fn output ->
+                  call_id = output[:id] || output["id"]
+                  response_data = output[:output] || output["output"]
+                  {call_id, response_data}
+                end)
+              end)
+              |> Map.new()
 
-          _ ->
-            canon0 = latest.combined_chat || %{"messages" => []}
+            updated2 =
+              case String.trim(to_string(text || "")) do
+                "" ->
+                  # No assistant text to append; only update events timeline
+                  (latest.combined_chat || %{"messages" => []})
+                  |> Map.put("events", events || [])
+                  |> maybe_append_tool_history(meta)
 
-            canon1 =
-              if assistant_needs_append?(canon0, text) do
-                # Include complete tool data on the appended assistant message
-                canon0
-                |> append_assistant_with_tools(
-                  text,
-                  req_meta,
-                  current_tool_calls,
-                  Map.to_list(tool_responses)
-                )
-              else
-                canon0
+                _ ->
+                  canon0 = latest.combined_chat || %{"messages" => []}
+
+                  canon1 =
+                    if assistant_needs_append?(canon0, text) do
+                      # Include complete tool data on the appended assistant message
+                      canon0
+                      |> append_assistant_with_tools(
+                        text,
+                        req_meta,
+                        current_tool_calls,
+                        Map.to_list(tool_responses)
+                      )
+                    else
+                      canon0
+                    end
+
+                  canon1
+                  |> Map.put("events", events || [])
+                  |> maybe_append_tool_history(meta)
               end
 
-            canon1
-            |> Map.put("events", events || [])
-            |> maybe_append_tool_history(meta)
-        end
+            turn_idx = Conversations.next_turn_index(session_id)
 
-      {:ok, entry} =
-        Conversations.create_chat_entry(%{
-          session_id: session_id,
-          turn_index: Conversations.next_turn_index(session_id),
-          actor: "assistant",
-          provider: Atom.to_string(provider),
-          request_headers: %{
-            "provider" => Atom.to_string(provider),
-            "model" => model,
-            "auth_type" => to_string(auth_type),
-            "auth_name" => auth_name
-          },
-          response_headers: %{
-            "usage" => usage || %{},
-            "tools" => Map.get(st[session_id].acc, :tool_calls, []),
-            "tool_history" => (meta && meta[:tool_history_acc]) || []
-          },
-          combined_chat: updated2,
-          edit_version: 0,
-          thread_id: latest.thread_id
-        })
+            {:ok, entry} =
+              Conversations.create_chat_entry(%{
+                session_id: session_id,
+                turn_index: turn_idx,
+                actor: "assistant",
+                provider: Atom.to_string(provider),
+                request_headers: %{
+                  "provider" => Atom.to_string(provider),
+                  "model" => model,
+                  "auth_type" => to_string(auth_type),
+                  "auth_name" => auth_name
+                },
+                response_headers: %{
+                  "usage" => usage || %{},
+                  "tools" => Map.get(st[session_id].acc, :tool_calls, []),
+                  "tool_history" => (meta && meta[:tool_history_acc]) || []
+                },
+                combined_chat:
+                  maybe_put_frames(
+                    updated2,
+                    latest.thread_id,
+                    turn_idx,
+                    Map.get(st[session_id].acc, :frames, [])
+                  ),
+                edit_version: 0,
+                thread_id: latest.thread_id
+              })
 
-      _ =
-        Conversations.update_session(session, %{
-          latest_chat_entry_id: entry.id,
-          last_used_at: DateTime.utc_now()
-        })
+            _ =
+              Conversations.update_session(session, %{
+                latest_chat_entry_id: entry.id,
+                last_used_at: DateTime.utc_now()
+              })
 
-      _ =
-        case Map.get(st[session_id].acc.meta, :t0_ms) do
-          ms when is_integer(ms) ->
-            Conversations.link_logs_to_chat_entry!(session_id, ms, entry.id)
+            _ =
+              case Map.get(st[session_id].acc.meta, :t0_ms) do
+                ms when is_integer(ms) ->
+                  Conversations.link_logs_to_chat_entry!(session_id, ms, entry.id)
+
+                _ ->
+                  :ok
+              end
+
+            alias TheMaestro.Domain.{StreamEvent, Usage}
+            usage_struct = if usage, do: Usage.new!(usage), else: nil
+
+            publish_both(session_id, stream_id, %StreamEvent{
+              type: :finalized,
+              content: text,
+              usage: usage_struct,
+              raw: %{meta: req_meta}
+            })
+
+            {final_frame, _} =
+              build_frame(Map.get(st[session_id], :acc), :finalized, %{
+                content: text,
+                meta: req_meta
+              })
+
+            publish_turn_frame(session_id, stream_id, final_frame)
 
           _ ->
             :ok
         end
 
-      alias TheMaestro.Domain.{StreamEvent, Usage}
-      usage_struct = if usage, do: Usage.new!(usage), else: nil
-
-      publish_both(session_id, stream_id, %StreamEvent{
-        type: :finalized,
-        content: text,
-        usage: usage_struct,
-        raw: %{meta: req_meta}
-      })
-    else
-      _ -> :ok
+      _ ->
+        :ok
     end
   end
 
@@ -642,6 +900,23 @@ defmodule TheMaestro.Sessions.Manager do
 
       outputs = exec_tools(session_id, calls_to_run, base_cwd)
 
+      Enum.each(outputs, fn {id, result} ->
+        preview =
+          case result do
+            {:ok, payload} when is_binary(payload) -> String.slice(payload, 0, 200)
+            {:ok, payload} -> to_string(payload) |> String.slice(0, 200)
+            {:error, reason} -> to_string(reason)
+          end
+
+        GenServer.cast(__MODULE__, {
+          :frame_event,
+          session_id,
+          stream_id,
+          :tool_result,
+          %{"tool_call_id" => id, "preview" => preview}
+        })
+      end)
+
       items =
         case provider do
           :openai -> build_openai_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
@@ -724,14 +999,16 @@ defmodule TheMaestro.Sessions.Manager do
           end
         end)
 
-      # reset accumulators for follow-up turn (keep meta and t0)
+      # reset accumulators for follow-up turn (keep frames/meta)
       st =
         put_in(st, [session_id, :acc], %{
           text: "",
           tool_calls: [],
           usage: nil,
           events: acc.events,
-          meta: acc.meta
+          meta: acc.meta,
+          frames: acc.frames || [],
+          frame_idx: acc.frame_idx || 0
         })
 
       st
@@ -778,6 +1055,9 @@ defmodule TheMaestro.Sessions.Manager do
   defp usage_to_map(%TheMaestro.Domain.Usage{} = u), do: Map.from_struct(u)
   defp usage_to_map(%{} = m), do: m
   defp usage_to_map(nil), do: nil
+
+  defp role_for(:user_text), do: "user"
+  defp role_for(_), do: "assistant"
 
   defp build_openai_items(last_user_text, _partial_answer, calls, outputs) do
     # Mimic Codex: include the last user message to keep the model on task,
@@ -1005,4 +1285,31 @@ defmodule TheMaestro.Sessions.Manager do
   defp normalize_status(s) when s in ["in_progress", :in_progress], do: "in_progress"
   defp normalize_status(s) when s in ["completed", :completed], do: "completed"
   defp normalize_status(_), do: "pending"
+
+  defp maybe_flush_frames(session_id, st) do
+    case Map.get(st, session_id) do
+      %{acc: %{frames: frames, meta: meta}} ->
+        batch = Application.get_env(:the_maestro, :frame_flush, []) |> Keyword.get(:batch_size, 0)
+        last = meta[:last_flushed_idx] || 0
+
+        if is_integer(batch) and batch > 0 and length(frames) - last >= batch do
+          case Conversations.latest_snapshot(session_id) do
+            %Conversations.ChatEntry{thread_id: tid, turn_index: tix, combined_chat: canon} =
+                latest
+            when is_binary(tid) ->
+              updated = maybe_put_frames(canon, tid, tix, frames)
+              _ = Conversations.update_chat_entry(latest, %{combined_chat: updated})
+              put_in(st, [session_id, :acc, :meta, :last_flushed_idx], length(frames))
+
+            _ ->
+              st
+          end
+        else
+          st
+        end
+
+      _ ->
+        st
+    end
+  end
 end

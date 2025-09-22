@@ -27,6 +27,17 @@ defmodule TheMaestroWeb.SessionChatLive do
     # Determine current thread (latest) for display
     tid = Conversations.latest_thread_id(session.id)
 
+    frames0 =
+      case tid do
+        t when is_binary(t) ->
+          case TheMaestro.Chat.latest_turn_frames(t) do
+            {:ok, list} -> list
+          end
+
+        _ ->
+          []
+      end
+
     {:ok,
      socket
      |> assign(:page_title, "Chat")
@@ -34,7 +45,6 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:current_thread_id, tid)
      |> assign(:current_thread_label, (tid && Conversations.thread_label(tid)) || nil)
      |> assign(:message, "")
-     |> assign(:messages, current_messages_for(session.id, tid))
      |> assign(:streaming?, false)
      |> assign(:partial_answer, "")
      |> assign(:stream_id, nil)
@@ -44,7 +54,7 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:tool_calls, [])
      |> assign(:pending_tool_calls, [])
      |> assign(:followup_history, [])
-     |> assign(:summary, compute_summary(current_messages_for(session.id, tid)))
+     |> assign(:summary, nil)
      |> assign(:plans, TheMaestro.Plans.list(session.id, tid))
      |> assign(:images, TheMaestro.Images.list(session.id, tid))
      |> assign(:editing_latest, false)
@@ -57,7 +67,11 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:show_persona_modal, false)
      |> assign(:persona_form, %{})
      |> assign(:show_memory_modal, false)
-     |> assign(:memory_editor_text, nil)}
+     |> assign(:memory_editor_text, nil)
+     |> assign(:used_t0_ms, 0)
+     |> assign(:has_frames, frames0 != [])
+     |> stream_configure(:frames, dom_id: &__MODULE__.frame_dom_id/1)
+     |> stream(:frames, frames0)}
   end
 
   @impl true
@@ -128,14 +142,11 @@ defmodule TheMaestroWeb.SessionChatLive do
   def handle_event("new_thread", _params, socket) do
     {:ok, tid} = Conversations.new_thread(socket.assigns.session)
 
-    msgs = current_messages_for(socket.assigns.session.id, tid)
-
     {:noreply,
      socket
      |> assign(:current_thread_id, tid)
      |> assign(:current_thread_label, Conversations.thread_label(tid))
-     |> assign(:messages, msgs)
-     |> assign(:summary, compute_summary(msgs))
+     |> assign(:summary, nil)
      |> assign(:plans, TheMaestro.Plans.list(socket.assigns.session.id, tid))
      |> assign(:images, TheMaestro.Images.list(socket.assigns.session.id, tid))
      |> put_flash(:info, "Started new chat thread")}
@@ -160,8 +171,9 @@ defmodule TheMaestroWeb.SessionChatLive do
         {:noreply,
          socket
          |> assign(:show_clear_confirm, false)
-         |> assign(:messages, [])
          |> assign(:summary, nil)
+         |> assign(:assistant_agg_id, nil)
+         |> assign(:assistant_agg_text, "")
          |> assign(
            :plans,
            TheMaestro.Plans.list(socket.assigns.session.id, socket.assigns.current_thread_id)
@@ -801,7 +813,6 @@ defmodule TheMaestroWeb.SessionChatLive do
     :ok = TheMaestro.Chat.subscribe(session.id)
 
     tid = Conversations.latest_thread_id(session.id)
-    msgs = current_messages_for(session.id, tid)
 
     {:noreply,
      socket
@@ -810,7 +821,6 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:current_thread_id, tid)
      |> assign(:current_thread_label, (tid && Conversations.thread_label(tid)) || nil)
      |> assign(:message, "")
-     |> assign(:messages, msgs)
      |> assign(:streaming?, false)
      |> assign(:partial_answer, "")
      |> assign(:stream_id, nil)
@@ -820,7 +830,7 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:tool_calls, [])
      |> assign(:pending_tool_calls, [])
      |> assign(:followup_history, [])
-     |> assign(:summary, compute_summary(msgs))
+     |> assign(:summary, nil)
      |> assign(:editing_latest, false)
      |> assign(:latest_json, nil)
      |> assign(:show_config, false)
@@ -861,28 +871,31 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     case TheMaestro.Chat.start_turn(session.id, tid, user_text, t0_ms: t0) do
       {:ok, result} ->
-        ui_messages =
-          (socket.assigns.messages || []) ++
-            [%{"role" => "user", "content" => [%{"type" => "text", "text" => user_text}]}]
+        socket =
+          socket
+          |> assign(:message, "")
+          |> assign(:streaming?, true)
+          |> assign(:partial_answer, "")
+          |> assign(:stream_id, result.stream_id)
+          |> assign(:stream_task, nil)
+          |> assign(:pending_canonical, result.pending_canonical)
+          |> assign(:followup_history, [])
+          |> assign(:used_provider, result.provider)
+          |> assign(:used_model, result.model)
+          |> assign(:used_auth_type, result.auth_type)
+          |> assign(:used_auth_name, result.auth_name)
+          |> assign(:used_usage, nil)
+          |> assign(:tool_calls, [])
+          |> assign(:used_t0_ms, t0)
+          |> assign(:event_buffer, [])
+          |> assign(:retry_attempts, 0)
+          |> assign(:assistant_agg_id, nil)
+          |> assign(:assistant_agg_text, "")
+          |> assign(:thinking_agg_id, nil)
+          |> assign(:thinking_agg_text, "")
 
+        _ = TheMaestro.Chat.subscribe_turn(session.id, result.stream_id)
         socket
-        |> assign(:message, "")
-        |> assign(:messages, ui_messages)
-        |> assign(:streaming?, true)
-        |> assign(:partial_answer, "")
-        |> assign(:stream_id, result.stream_id)
-        |> assign(:stream_task, nil)
-        |> assign(:pending_canonical, result.pending_canonical)
-        |> assign(:followup_history, [])
-        |> assign(:used_provider, result.provider)
-        |> assign(:used_model, result.model)
-        |> assign(:used_auth_type, result.auth_type)
-        |> assign(:used_auth_name, result.auth_name)
-        |> assign(:used_usage, nil)
-        |> assign(:tool_calls, [])
-        |> assign(:used_t0_ms, t0)
-        |> assign(:event_buffer, [])
-        |> assign(:retry_attempts, 0)
 
       {:error, :duplicate_turn} ->
         # Ignore duplicate submits of identical user text at tail
@@ -903,6 +916,16 @@ defmodule TheMaestroWeb.SessionChatLive do
   require Logger
 
   # Reuse provider atom helper locally (single definition kept)
+
+  def frame_dom_id(item) when is_map(item) do
+    Map.get(item, :id) || Map.get(item, "id") || Ecto.UUID.generate()
+  end
+
+  defp rel_ms(at_ms, t0_ms) when is_integer(at_ms) and is_integer(t0_ms) do
+    max(at_ms - t0_ms, 0)
+  end
+
+  defp rel_ms(_at, _t0), do: 0
 
   defp fetch_prompt(socket, prompt_id) do
     catalog = socket.assigns[:prompt_catalog] || %{}
@@ -967,100 +990,41 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   @impl true
-  def handle_info(
-        {:session_stream,
+  def handle_info({:session_stream, %TheMaestro.Domain.StreamEnvelope{} = env}, socket) do
+    handle_stream(env, socket)
+  end
+
+  defp handle_stream(
          %TheMaestro.Domain.StreamEnvelope{
            session_id: sid,
            stream_id: id,
-           event: %TheMaestro.Domain.StreamEvent{type: :thinking}
-         } = envelope},
-        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
-      ) do
-    handle_thinking_event(envelope, socket)
+           event: %TheMaestro.Domain.StreamEvent{} = ev
+         } = env,
+         %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
+       ) do
+    handle_stream_by_type(ev.type, env, socket)
   end
 
-  @impl true
-  def handle_info(%{event: "plans:updated", payload: %{session_id: sid, thread_id: tid}}, socket) do
-    if sid == socket.assigns.session.id and
-         (is_nil(tid) or tid == socket.assigns.current_thread_id) do
-      {:noreply,
-       assign(
-         socket,
-         :plans,
-         TheMaestro.Plans.list(socket.assigns.session.id, socket.assigns.current_thread_id)
-       )}
-    else
-      {:noreply, socket}
+  defp handle_stream(%TheMaestro.Domain.StreamEnvelope{}, socket), do: {:noreply, socket}
+
+  defp handle_stream_by_type(type, env, socket) do
+    case type do
+      :thinking -> handle_stream_thinking(env, socket)
+      :content -> handle_stream_content(socket)
+      :function_call -> handle_stream_function_call(env, socket)
+      :error -> handle_stream_error(env, socket)
+      :usage -> handle_stream_usage(env, socket)
+      :finalized -> handle_stream_finalized(env, socket)
+      :done -> handle_stream_done(socket)
+      _ -> {:noreply, socket}
     end
   end
 
-  @impl true
-  def handle_info(
-        %{event: "images:attached", payload: %{session_id: sid, thread_id: tid}},
-        socket
-      ) do
-    if sid == socket.assigns.session.id and
-         (is_nil(tid) or tid == socket.assigns.current_thread_id) do
-      {:noreply,
-       assign(
-         socket,
-         :images,
-         TheMaestro.Images.list(socket.assigns.session.id, socket.assigns.current_thread_id)
-       )}
-    else
-      {:noreply, socket}
-    end
-  end
+  defp handle_stream_thinking(env, socket), do: handle_thinking_event(env, socket)
 
-  # moved below to keep handle_info/2 clauses contiguous
+  defp handle_stream_content(socket), do: {:noreply, assign(socket, :thinking?, false)}
 
-  # Handle MCP server create/cancel from modal
-  @impl true
-  def handle_info({FormComponent, {:saved, server}}, socket) do
-    selected = Enum.uniq([server.id | socket.assigns[:session_mcp_selected_ids] || []])
-
-    {:noreply,
-     socket
-     |> assign(:mcp_server_options, TheMaestro.MCP.server_options(include_disabled?: true))
-     |> assign(:session_mcp_selected_ids, selected)
-     |> assign(:show_mcp_modal, false)}
-  end
-
-  @impl true
-  def handle_info({FormComponent, {:canceled, _}}, socket) do
-    {:noreply, assign(socket, :show_mcp_modal, false)}
-  end
-
-  @impl true
-  def handle_info(
-        {:session_stream,
-         %TheMaestro.Domain.StreamEnvelope{
-           session_id: sid,
-           stream_id: id,
-           event: %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
-         }},
-        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
-      ) do
-    current = socket.assigns.partial_answer || ""
-    delta = dedup_delta(current, chunk)
-    new_partial = current <> delta
-
-    {:noreply,
-     socket
-     |> push_event(%{kind: "ai", type: "content", delta: delta, at: now_ms()})
-     |> assign(partial_answer: new_partial, thinking?: false)}
-  end
-
-  def handle_info(
-        {:session_stream,
-         %TheMaestro.Domain.StreamEnvelope{
-           session_id: sid,
-           stream_id: id,
-           event: %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
-         }},
-        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
-      )
-      when is_list(calls) do
+  defp handle_stream_function_call(%{event: %{tool_calls: calls}}, socket) when is_list(calls) do
     new =
       Enum.map(calls, fn
         %TheMaestro.Domain.ToolCall{id: cid, name: name, arguments: args} ->
@@ -1077,22 +1041,12 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:pending_tool_calls, (socket.assigns.pending_tool_calls || []) ++ new)}
   end
 
-  def handle_info(
-        {:session_stream,
-         %TheMaestro.Domain.StreamEnvelope{
-           session_id: sid,
-           stream_id: id,
-           event: %TheMaestro.Domain.StreamEvent{type: :error, error: err}
-         }},
-        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
-      ) do
+  defp handle_stream_error(%{event: %{error: err}}, socket) do
     Logger.error("stream error: #{inspect(err)}")
 
-    # Handle Anthropic overloads with bounded backoff retries
     attempts = socket.assigns[:retry_attempts] || 0
 
     if socket.assigns[:used_provider] == :anthropic and anth_overloaded?(err) and attempts < 2 do
-      # Cancel current stream task if running
       if task = socket.assigns.stream_task do
         Process.exit(task, :kill)
       end
@@ -1121,126 +1075,214 @@ defmodule TheMaestroWeb.SessionChatLive do
     end
   end
 
-  @impl true
-  def handle_info(
-        {:session_stream,
-         %TheMaestro.Domain.StreamEnvelope{
-           session_id: sid,
-           stream_id: id,
-           event: %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage}
-         }},
-        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
-      ) do
-    usage = if is_struct(usage), do: Map.from_struct(usage), else: usage
+  defp handle_stream_usage(%{event: %{usage: usage}}, socket) do
+    usage_map = if is_struct(usage), do: Map.from_struct(usage), else: usage
 
     {:noreply,
      socket
-     |> push_event(%{kind: "ai", type: "usage", usage: usage, at: now_ms()})
-     |> assign(:used_usage, usage)
-     |> assign(
-       :summary,
-       (fn ->
-          msgs = socket.assigns.messages || []
-          # Keep summary updated to reflect latest token totals
-          compute_summary(msgs)
-        end).()
-     )}
+     |> push_event(%{kind: "ai", type: "usage", usage: usage_map, at: now_ms()})
+     |> assign(:used_usage, usage_map)
+     |> assign(:summary, %{
+       provider: socket.assigns[:used_provider] || "",
+       model: socket.assigns[:used_model] || "",
+       auth_type: socket.assigns[:used_auth_type] || "",
+       auth_name: socket.assigns[:used_auth_name] || "",
+       avg_latency_ms: 0,
+       total_tokens: token_total(usage_map || %{})
+     })}
   end
 
-  def handle_info(
-        {:session_stream,
-         %TheMaestro.Domain.StreamEnvelope{
-           session_id: sid,
-           stream_id: id,
-           event: %TheMaestro.Domain.StreamEvent{
-             type: :finalized,
-             content: final_text,
-             usage: usage,
-             raw: raw
-           }
-         }},
-        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
-      ) do
+  defp handle_stream_finalized(%{event: %{usage: usage, raw: raw}}, socket) do
     usage_map = if is_struct(usage), do: Map.from_struct(usage), else: usage || %{}
     req_meta = (raw && Map.get(raw, :meta)) || %{}
-    meta = Map.put(req_meta, "usage", usage_map)
-    messages = append_assistant_message(socket.assigns.messages || [], final_text || "", meta)
 
     {:noreply,
      socket
-     |> assign(:streaming?, false)
-     |> assign(:partial_answer, "")
-     |> assign(:stream_task, nil)
-     |> assign(:stream_id, nil)
-     |> assign(:pending_canonical, nil)
-     |> assign(:followup_history, [])
-     |> assign(:thinking?, false)
-     |> assign(:used_usage, nil)
-     |> assign(:tool_calls, [])
-     |> assign(:pending_tool_calls, [])
-     |> assign(:summary, compute_summary(messages))
-     |> assign(:messages, messages)}
+     |> reset_stream_state()
+     |> assign(:summary, build_summary(req_meta, socket, usage_map))}
   end
 
-  def handle_info(
-        {:session_stream,
-         %TheMaestro.Domain.StreamEnvelope{
-           session_id: sid,
-           stream_id: id,
-           event: %TheMaestro.Domain.StreamEvent{type: :done}
-         }},
-        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
-      ) do
-    # Manager now owns finalization and tool follow-ups; we only mark UI state
-    {:noreply, push_event(socket, %{kind: "ai", type: "done", at: now_ms()})}
+  defp reset_stream_state(socket) do
+    socket
+    |> assign(:streaming?, false)
+    |> assign(:partial_answer, "")
+    |> assign(:stream_task, nil)
+    |> assign(:stream_id, nil)
+    |> assign(:pending_canonical, nil)
+    |> assign(:followup_history, [])
+    |> assign(:thinking?, false)
+    |> assign(:used_usage, nil)
+    |> assign(:tool_calls, [])
+    |> assign(:pending_tool_calls, [])
   end
 
-  def handle_info(
-        {:session_stream,
-         %TheMaestro.Domain.StreamEnvelope{session_id: sid, stream_id: other_id}},
-        %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
-      )
-      when other_id != id do
-    {:noreply, socket}
+  defp build_summary(req_meta, socket, usage_map) do
+    provider = pick_str(req_meta["provider"], socket.assigns[:used_provider])
+    model = pick_str(req_meta["model"], socket.assigns[:used_model])
+    auth_type = pick_str(req_meta["auth_type"], socket.assigns[:used_auth_type])
+    auth_name = pick_str(req_meta["auth_name"], socket.assigns[:used_auth_name])
+
+    avg_latency_ms =
+      case req_meta["latency_ms"] do
+        nil -> 0
+        v -> v
+      end
+
+    %{
+      provider: provider,
+      model: model,
+      auth_type: auth_type,
+      auth_name: auth_name,
+      avg_latency_ms: avg_latency_ms,
+      total_tokens: token_total(usage_map)
+    }
   end
 
-  def handle_info({:session_stream, %TheMaestro.Domain.StreamEnvelope{}}, socket),
-    do: {:noreply, socket}
+  defp pick_str(val, _fallback) when is_binary(val) and val != "", do: val
+  defp pick_str(_val, fallback) when is_binary(fallback), do: fallback
+  defp pick_str(_val, _fallback), do: ""
 
-  # Internal: retry the current provider call after a backoff
-  def handle_info({:retry_stream, _attempt}, socket), do: {:noreply, do_retry_stream(socket)}
-
-  # Internal tool signals (defensive: accept with or without ref wrapper)
-  def handle_info({:__shell_done__, {out, status}}, socket) do
-    {:noreply,
-     push_event(socket, %{
-       kind: "internal",
-       type: "shell_done",
-       exit_code: status,
-       out: out,
-       at: now_ms()
-     })}
-  end
-
-  def handle_info({ref, {:__shell_done__, {out, status}}}, socket) when is_reference(ref) do
-    {:noreply,
-     push_event(socket, %{
-       kind: "internal",
-       type: "shell_done",
-       exit_code: status,
-       out: out,
-       at: now_ms()
-     })}
-  end
+  defp handle_stream_done(socket),
+    do: {:noreply, push_event(socket, %{kind: "ai", type: "done", at: now_ms()})}
 
   @impl true
-  def handle_info(:refresh_mcp_inventory, socket) do
+  def handle_info(%{event: ev, payload: %{session_id: _sid, thread_id: _tid}} = msg, socket)
+      when is_binary(ev) do
+    handle_map_event(msg, socket)
+  end
+
+  defp handle_map_event(
+         %{event: "plans:updated", payload: %{session_id: sid, thread_id: tid}},
+         %{assigns: %{session: %{id: sid}, current_thread_id: ctid}} = socket
+       ) do
+    if is_nil(tid) or tid == ctid do
+      {:noreply, assign(socket, :plans, TheMaestro.Plans.list(socket.assigns.session.id, ctid))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp handle_map_event(
+         %{event: "images:attached", payload: %{session_id: sid, thread_id: tid}},
+         %{assigns: %{session: %{id: sid}, current_thread_id: ctid}} = socket
+       ) do
+    if is_nil(tid) or tid == ctid do
+      {:noreply, assign(socket, :images, TheMaestro.Images.list(socket.assigns.session.id, ctid))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp handle_map_event(_other, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_info(other, socket) do
+    handle_misc(other, socket)
+  end
+
+  defp handle_misc({:turn_frame, %{} = frame}, socket),
+    do: {:noreply, route_turn_frame(frame, socket)}
+
+  defp handle_misc({FormComponent, {:saved, server}}, socket) do
+    selected = Enum.uniq([server.id | socket.assigns[:session_mcp_selected_ids] || []])
+
+    {:noreply,
+     socket
+     |> assign(:mcp_server_options, TheMaestro.MCP.server_options(include_disabled?: true))
+     |> assign(:session_mcp_selected_ids, selected)
+     |> assign(:show_mcp_modal, false)}
+  end
+
+  defp handle_misc({FormComponent, {:canceled, _}}, socket),
+    do: {:noreply, assign(socket, :show_mcp_modal, false)}
+
+  defp handle_misc({:retry_stream, _attempt}, socket), do: {:noreply, do_retry_stream(socket)}
+
+  defp handle_misc({:__shell_done__, {out, status}}, socket), do: shell_done(out, status, socket)
+
+  defp handle_misc({ref, {:__shell_done__, {out, status}}}, socket) when is_reference(ref),
+    do: shell_done(out, status, socket)
+
+  defp handle_misc(:refresh_mcp_inventory, socket) do
     selected = socket.assigns[:session_mcp_selected_ids] || []
 
     {:noreply,
      socket
      |> assign(:tool_inventory_by_provider, build_tool_inventory_for_servers(selected))
      |> assign(:mcp_warming, false)}
+  end
+
+  defp handle_misc(_other, socket), do: {:noreply, socket}
+
+  defp shell_done(out, status, socket) do
+    {:noreply,
+     push_event(socket, %{
+       kind: "internal",
+       type: "shell_done",
+       exit_code: status,
+       out: out,
+       at: now_ms()
+     })}
+  end
+
+  defp maybe_flush_pending_assistant(socket) do
+    pending = Enum.reverse(socket.assigns[:pending_assistant_frames] || [])
+
+    Enum.reduce(pending, assign(socket, pending_assistant_frames: []), fn f, s ->
+      handle_assistant_text_frame(s, f)
+    end)
+  end
+
+  defp handle_assistant_text_frame(socket, frame) do
+    delta = get_in(frame, ["payload", "delta"]) || get_in(frame, ["payload", "text"]) || ""
+    agg_text = (socket.assigns[:assistant_agg_text] || "") <> to_string(delta)
+
+    case socket.assigns[:assistant_agg_id] do
+      nil ->
+        id = frame["id"] || Ecto.UUID.generate()
+        f1 = put_in(frame, ["payload", "text"], agg_text)
+
+        socket
+        |> assign(:assistant_agg_id, id)
+        |> assign(:assistant_agg_text, agg_text)
+        |> stream_insert(:frames, Map.put(f1, "id", id), at: -1)
+
+      id when is_binary(id) ->
+        f1 =
+          frame
+          |> Map.put("id", id)
+          |> put_in(["payload", "text"], agg_text)
+
+        socket
+        |> assign(:assistant_agg_text, agg_text)
+        |> stream_insert(:frames, f1, at: -1)
+    end
+  end
+
+  defp handle_thinking_frame(socket, frame) do
+    content = get_in(frame, ["payload", "content"]) || ""
+    agg_text = (socket.assigns[:thinking_agg_text] || "") <> to_string(content)
+
+    case socket.assigns[:thinking_agg_id] do
+      nil ->
+        id = frame["id"] || Ecto.UUID.generate()
+        f1 = put_in(frame, ["payload", "content"], agg_text)
+
+        socket
+        |> assign(:thinking_agg_id, id)
+        |> assign(:thinking_agg_text, agg_text)
+        |> stream_insert(:frames, Map.put(f1, "id", id), at: -1)
+
+      id when is_binary(id) ->
+        f1 =
+          frame
+          |> Map.put("id", id)
+          |> put_in(["payload", "content"], agg_text)
+
+        socket
+        |> assign(:thinking_agg_text, agg_text)
+        |> stream_insert(:frames, f1, at: -1)
+    end
   end
 
   defp handle_thinking_event(
@@ -1260,6 +1302,46 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp handle_thinking_event(_envelope, socket) do
     {:noreply, socket}
   end
+
+  defp route_turn_frame(%{"kind" => "assistant_thinking"} = frame, socket),
+    do: handle_thinking_frame(socket, frame)
+
+  defp route_turn_frame(
+         %{"kind" => "assistant_text"} = frame,
+         %{assigns: %{tool_pending?: true}} = socket
+       ) do
+    pending = [frame | socket.assigns[:pending_assistant_frames] || []]
+    assign(socket, pending_assistant_frames: pending)
+  end
+
+  defp route_turn_frame(%{"kind" => "assistant_text"} = frame, socket),
+    do: handle_assistant_text_frame(socket, frame)
+
+  defp route_turn_frame(%{"kind" => "function_call"} = frame, socket) do
+    socket
+    |> assign(:tool_pending?, true)
+    |> stream_insert(:frames, frame, at: -1)
+  end
+
+  defp route_turn_frame(%{"kind" => "tool_result"} = frame, socket) do
+    socket
+    |> stream_insert(:frames, frame, at: -1)
+    |> maybe_flush_pending_assistant()
+    |> assign(:tool_pending?, false)
+    |> assign(:thinking_agg_id, nil)
+    |> assign(:thinking_agg_text, "")
+  end
+
+  defp route_turn_frame(%{"kind" => "final"} = frame, socket) do
+    socket
+    |> stream_insert(:frames, frame, at: -1)
+    |> assign(:assistant_agg_id, nil)
+    |> assign(:assistant_agg_text, "")
+    |> assign(:thinking_agg_id, nil)
+    |> assign(:thinking_agg_text, "")
+  end
+
+  defp route_turn_frame(_frame, socket), do: socket
 
   # ===== Event logging helpers =====
   defp now_ms, do: System.system_time(:millisecond)
@@ -1467,49 +1549,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     }
   end
 
-  defp append_assistant_message(messages, final_text, meta) do
-    assistant_msg = build_assistant_message(final_text, meta)
-    messages ++ [assistant_msg]
-  end
-
-  defp build_assistant_message(text, meta) do
-    %{
-      "role" => "assistant",
-      "content" => [%{"type" => "text", "text" => text}],
-      "_meta" => meta
-    }
-  end
-
-  defp dedup_delta(current, chunk) when is_binary(current) and is_binary(chunk) do
-    cond do
-      chunk == "" ->
-        ""
-
-      String.starts_with?(chunk, current) ->
-        binary_part(chunk, byte_size(current), byte_size(chunk) - byte_size(current))
-
-      # snapshot smaller than what we have
-      String.starts_with?(current, chunk) ->
-        ""
-
-      true ->
-        chunk
-    end
-  end
-
-  defp current_messages_for(session_id, nil) do
-    case Conversations.latest_snapshot(session_id) do
-      %{combined_chat: %{"messages" => msgs}} -> msgs
-      _ -> []
-    end
-  end
-
-  defp current_messages_for(_session_id, thread_id) when is_binary(thread_id) do
-    case Conversations.latest_snapshot_for_thread(thread_id) do
-      %{combined_chat: %{"messages" => msgs}} -> msgs
-      _ -> []
-    end
-  end
+  # timeline-only UI; messages removed
 
   @impl true
   def render(assigns) do
@@ -1566,103 +1606,85 @@ defmodule TheMaestroWeb.SessionChatLive do
           </div>
 
           <div class="space-y-3">
-            <%= for msg <- @messages do %>
-              <div class={"terminal-card p-3 " <> if msg["role"] == "user", do: "terminal-border-amber", else: "terminal-border-blue"}>
-                <div class="text-xs opacity-80">
-                  {msg["role"]}
-                  <%= if m = msg["_meta"] do %>
-                    ( {m["provider"]}, {m["model"]}, {m["auth_type"]}
-                    <%= if u = m["usage"] do %>
-                      , total {compact_int(token_total(u))}
-                    <% end %>
-                    <%= if m["latency_ms"] do %>
-                      , {m["latency_ms"]}ms
-                    <% end %>
-                    )
-                  <% end %>
-                </div>
-                <div class="whitespace-pre-wrap text-sm text-amber-200">
-                  <.render_text chat={%{"messages" => [msg]}} />
-                </div>
-                <%= if m = msg["_meta"] do %>
-                  <details class="mt-1 opacity-80 text-xs">
-                    <summary>details</summary>
-                    <div>provider: {m["provider"]}</div>
-                    <div>model: {m["model"]}</div>
-                    <div>auth: {m["auth_type"]} ({m["auth_name"]})</div>
-                    <%= if u = m["usage"] do %>
-                      <div>
-                        tokens: prompt {compact_int(u["prompt_tokens"] || u[:prompt_tokens] || 0)}, completion {compact_int(
-                          u["completion_tokens"] || u[:completion_tokens] || 0
-                        )}, total {compact_int(token_total(u))}
+            <div id="frames" phx-update="stream" class="mt-4 space-y-2">
+              <div
+                :for={{id, f} <- @streams.frames}
+                id={id}
+                class="terminal-card terminal-border-blue p-3"
+              >
+                <%= case f["kind"] do %>
+                  <% "assistant_thinking" -> %>
+                    <details class="text-xs">
+                      <summary class="cursor-pointer opacity-80 flex items-center gap-1">
+                        <.icon name="hero-light-bulb" class="w-4 h-4" /> Thoughts
+                        <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                      </summary>
+                      <div class="whitespace-pre-wrap text-sm text-amber-200 mt-1">
+                        {get_in(f, ["payload", "content"]) || ""}
+                      </div>
+                    </details>
+                  <% "tool_result" -> %>
+                    <details class="text-xs">
+                      <summary class="cursor-pointer opacity-80 flex items-center gap-1">
+                        <.icon name="hero-wrench" class="w-4 h-4" /> Tool Result
+                        <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                      </summary>
+                      <div class="whitespace-pre-wrap text-sm text-amber-200 mt-1">
+                        {get_in(f, ["payload", "preview"]) || "(tool result)"}
+                      </div>
+                    </details>
+                  <% "assistant_text" -> %>
+                    <div class="text-xs opacity-80 flex items-center gap-1">
+                      <.icon name="hero-sparkles" class="w-4 h-4" /> assistant
+                      <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                    </div>
+                    <div class="whitespace-pre-wrap text-sm text-amber-200">
+                      {get_in(f, ["payload", "delta"]) || get_in(f, ["payload", "text"]) || ""}
+                    </div>
+                  <% "final" -> %>
+                    <div class="text-xs opacity-80 flex items-center gap-1">
+                      <.icon name="hero-check-badge" class="w-4 h-4" /> assistant (final)
+                      <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                    </div>
+                    <div class="whitespace-pre-wrap text-sm text-amber-200">
+                      {get_in(f, ["payload", "content"]) || ""}
+                    </div>
+                    <%= if m = get_in(f, ["payload", "meta"]) do %>
+                      <div class="mt-1 text-xs opacity-80">
+                        ({m["provider"]}, {m["model"]}, {m["auth_type"]}
+                        <%= if u = m["usage"] do %>
+                          , total {compact_int(token_total(u))}
+                        <% end %>)
                       </div>
                     <% end %>
-                    <%= if is_list(m["tools"]) and m["tools"] != [] do %>
-                      <div class="mt-1">tools:</div>
-                      <ul class="list-disc ml-4">
-                        <%= for t <- m["tools"] do %>
-                          <li>
-                            <code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 120)}
-                          </li>
-                        <% end %>
-                      </ul>
-                    <% end %>
-                    <%= if m["latency_ms"] do %>
-                      <div>latency: {m["latency_ms"]} ms</div>
-                    <% end %>
-                  </details>
-                <% end %>
-              </div>
-            <% end %>
-
-            <%= if @streaming? and is_list(@tool_calls) and @tool_calls != [] do %>
-              <div class="terminal-card terminal-border-amber p-3">
-                <div class="text-xs opacity-80">tool activity</div>
-                <ul class="list-disc ml-4 text-sm text-amber-200">
-                  <%= for t <- @tool_calls do %>
-                    <li><code>{t["name"]}</code> {String.slice(t["arguments"] || "", 0, 160)}</li>
-                  <% end %>
-                </ul>
-              </div>
-            <% end %>
-
-            <%= if @streaming? and @partial_answer == "" and @thinking? do %>
-              <div class="terminal-card terminal-border-blue p-3">
-                <div class="text-xs opacity-80">assistant</div>
-                <div class="opacity-80 italic text-sm text-amber-200">thinking…</div>
-              </div>
-            <% end %>
-
-            <%= if @streaming? and @partial_answer != "" do %>
-              <div class="terminal-card terminal-border-blue p-3">
-                <div class="text-xs opacity-80">
-                  assistant
-                  <%= if @used_provider do %>
-                    ( {Atom.to_string(@used_provider)}, {@used_model}, {to_string(
-                      @used_auth_type || ""
-                    )}
-                    <%= if u = @used_usage do %>
-                      , total {compact_int(token_total(u))}
-                    <% end %>
-                    )
-                  <% end %>
-                </div>
-                <div class="whitespace-pre-wrap text-sm text-amber-200">{@partial_answer}</div>
-                <%= if u = @used_usage do %>
-                  <details class="mt-1 opacity-80 text-xs">
-                    <summary>details</summary>
-                    <div>provider: {Atom.to_string(@used_provider)}</div>
-                    <div>model: {@used_model}</div>
-                    <div>auth: {to_string(@used_auth_type || "")} ({@used_auth_name})</div>
-                    <div>
-                      tokens: prompt {compact_int(u[:prompt_tokens] || u["prompt_tokens"] || 0)}, completion {compact_int(
-                        u[:completion_tokens] || u["completion_tokens"] || 0
-                      )}, total {compact_int(token_total(u))}
+                  <% "user_text" -> %>
+                    <div class="text-xs opacity-80 flex items-center gap-1">
+                      <.icon name="hero-user" class="w-4 h-4" /> user
+                      <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
                     </div>
-                  </details>
+                    <div class="whitespace-pre-wrap text-sm text-amber-200">
+                      {get_in(f, ["payload", "text"]) || ""}
+                    </div>
+                  <% "usage" -> %>
+                    <div class="text-xs opacity-80 flex items-center gap-1">
+                      <.icon name="hero-chart-bar" class="w-4 h-4" /> usage
+                      <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                    </div>
+                    <div class="text-xs opacity-70">
+                      {inspect(get_in(f, ["payload"]) || %{})}
+                    </div>
+                  <% _ -> %>
+                    <div class="text-xs opacity-80 flex items-center gap-1">
+                      <.icon name="hero-question-mark-circle" class="w-4 h-4" />
+                      {f["kind"]}
+                      <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                    </div>
+                    <div class="text-xs opacity-70">
+                      {inspect(get_in(f, ["payload"]) || %{})}
+                    </div>
                 <% end %>
               </div>
-            <% end %>
+            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div class="terminal-card terminal-border-amber p-3">
@@ -1910,33 +1932,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     """
   end
 
-  attr :chat, :map, required: true
-
-  defp render_text(assigns) do
-    messages = Map.get(assigns.chat, "messages", [])
-
-    text =
-      messages
-      |> Enum.map(fn %{"role" => role, "content" => parts} ->
-        role <>
-          ": " <>
-          (parts
-           |> Enum.map(fn
-             %{"type" => "text", "text" => t} -> t
-             %{"text" => t} -> t
-             t when is_binary(t) -> t
-             _ -> ""
-           end)
-           |> Enum.join("\n"))
-      end)
-      |> Enum.join("\n\n")
-
-    assigns = assign(assigns, :text, text)
-
-    ~H"""
-    {@text}
-    """
-  end
+  # legacy text renderer removed
 
   # ===== Helpers for summary/formatting =====
   defp token_total(u) do
@@ -1952,41 +1948,7 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp compact_int(n) when is_integer(n), do: Integer.to_string(n)
   defp compact_int(_), do: "0"
 
-  defp compute_summary(messages) when is_list(messages) do
-    assistants =
-      messages
-      |> Enum.filter(&(&1["role"] == "assistant"))
-
-    last = assistants |> List.last()
-
-    latencies =
-      assistants
-      |> Enum.map(fn m -> get_in(m, ["_meta", "latency_ms"]) end)
-      |> Enum.filter(&is_integer/1)
-
-    avg =
-      case latencies do
-        [] -> nil
-        list -> div(Enum.sum(list), length(list))
-      end
-
-    if last && last["_meta"] do
-      m = last["_meta"]
-
-      %{
-        provider: m["provider"],
-        model: m["model"],
-        auth_type: m["auth_type"],
-        auth_name: m["auth_name"],
-        avg_latency_ms: avg || 0,
-        total_tokens: token_total(m["usage"] || %{})
-      }
-    else
-      nil
-    end
-  end
-
-  defp compute_summary(_), do: nil
+  # summary is computed from usage/finalized events only
 
   defp update_prompt_enabled_status(list, prompt_id, desired) do
     Enum.map(list, fn

@@ -4,7 +4,7 @@ defmodule TheMaestro.Tools.GeminiEditToolTest do
   alias TheMaestro.Tools.GeminiEdit
 
   setup do
-    base = Path.join(File.cwd!(), "tmp/gemini_edit_test")
+    base = Path.join(File.cwd!(), "test_tmp/gemini_edit_test")
     File.rm_rf!(base)
     File.mkdir_p!(base)
     {:ok, base: base}

@@ -904,7 +904,14 @@ defmodule TheMaestro.Conversations do
     cc = e.combined_chat || %{}
 
     alias TheMaestro.Domain.CombinedChat
-    norm = CombinedChat.from_map(cc) |> CombinedChat.to_map()
+    norm0 = CombinedChat.from_map(cc) |> CombinedChat.to_map()
+
+    norm =
+      if is_binary(e.thread_id) do
+        CombinedChat.backfill_for_thread(norm0, e.thread_id)
+      else
+        norm0
+      end
 
     %ChatEntry{e | combined_chat: norm}
   end
