@@ -120,10 +120,17 @@ defmodule TheMaestro.Sessions.Manager do
               publish_both(session_id, stream_id, msg)
 
               case msg do
-                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
-                when is_binary(chunk) ->
-                  GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
-                  GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :content, chunk})
+                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk, raw: raw} ->
+                  reason? = is_map(raw) and ((raw[:thinking] || raw["thinking"]) || (raw[:reasoning] || raw["reasoning"]))
+                  if reason? do
+                    payload = if is_binary(chunk) and chunk != "", do: %{"content" => chunk}, else: nil
+                    GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :thinking, payload})
+                  else
+                    if is_binary(chunk) do
+                      GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+                      GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :content, chunk})
+                    end
+                  end
 
                 %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
                 when is_list(calls) ->

@@ -1052,18 +1052,11 @@ defmodule TheMaestroWeb.SessionChatLive do
          %TheMaestro.Domain.StreamEnvelope{
            session_id: sid,
            stream_id: id,
-           event: %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
+           event: %TheMaestro.Domain.StreamEvent{type: :content}
          }},
         %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       ) do
-    current = socket.assigns.partial_answer || ""
-    delta = dedup_delta(current, chunk)
-    new_partial = current <> delta
-
-    {:noreply,
-     socket
-     |> push_event(%{kind: "ai", type: "content", delta: delta, at: now_ms()})
-     |> assign(partial_answer: new_partial, thinking?: false)}
+    {:noreply, assign(socket, :thinking?, false)}
   end
 
   def handle_info(
@@ -1648,54 +1641,46 @@ defmodule TheMaestroWeb.SessionChatLive do
               </div>
             <% end %>
 
-            <%= if @streaming? and @partial_answer != "" do %>
-              <div class="terminal-card terminal-border-blue p-3">
-                <div class="text-xs opacity-80">
-                  assistant
-                  <%= if @used_provider do %>
-                    ( {Atom.to_string(@used_provider)}, {@used_model}, {to_string(
-                      @used_auth_type || ""
-                    )}
-                    <%= if u = @used_usage do %>
-                      , total {compact_int(token_total(u))}
-                    <% end %>
-                    )
-                  <% end %>
-                </div>
-                <div class="whitespace-pre-wrap text-sm text-amber-200">{@partial_answer}</div>
-                <%= if u = @used_usage do %>
-                  <details class="mt-1 opacity-80 text-xs">
-                    <summary>details</summary>
-                    <div>provider: {Atom.to_string(@used_provider)}</div>
-                    <div>model: {@used_model}</div>
-                    <div>auth: {to_string(@used_auth_type || "")} ({@used_auth_name})</div>
-                    <div>
-                      tokens: prompt {compact_int(u[:prompt_tokens] || u["prompt_tokens"] || 0)}, completion {compact_int(
-                        u[:completion_tokens] || u["completion_tokens"] || 0
-                      )}, total {compact_int(token_total(u))}
-                    </div>
-                  </details>
-                <% end %>
-              </div>
-            <% end %>
+            
 
             <div id="frames" phx-update="stream" class="mt-4 space-y-2">
               <div :for={{id, f} <- @streams.frames} id={id} class="terminal-card terminal-border-blue p-3">
-                <div class="text-xs opacity-80">{f["kind"]}</div>
-                <div class="whitespace-pre-wrap text-sm text-amber-200">
-                  <%= case f["kind"] do %>
-                    <% "assistant_text" -> %>
+                <%= case f["kind"] do %>
+                  <% "assistant_thinking" -> %>
+                    <details class="text-xs">
+                      <summary class="cursor-pointer opacity-80">Thoughts</summary>
+                      <div class="whitespace-pre-wrap text-sm text-amber-200 mt-1">
+                        {get_in(f, ["payload", "content"]) || ""}
+                      </div>
+                    </details>
+                  <% "tool_result" -> %>
+                    <details class="text-xs">
+                      <summary class="cursor-pointer opacity-80">Tool Result</summary>
+                      <div class="whitespace-pre-wrap text-sm text-amber-200 mt-1">
+                        {get_in(f, ["payload", "preview"]) || "(tool result)"}
+                      </div>
+                    </details>
+                  <% "assistant_text" -> %>
+                    <div class="text-xs opacity-80">assistant</div>
+                    <div class="whitespace-pre-wrap text-sm text-amber-200">
                       {get_in(f, ["payload", "delta"]) || get_in(f, ["payload", "text"]) || ""}
-                    <% "user_text" -> %>
+                    </div>
+                  <% "user_text" -> %>
+                    <div class="text-xs opacity-80">user</div>
+                    <div class="whitespace-pre-wrap text-sm text-amber-200">
                       {get_in(f, ["payload", "text"]) || ""}
-                    <% "tool_result" -> %>
-                      {get_in(f, ["payload", "preview"]) || "(tool result)"}
-                    <% "usage" -> %>
+                    </div>
+                  <% "usage" -> %>
+                    <div class="text-xs opacity-80">usage</div>
+                    <div class="text-xs opacity-70">
                       {inspect(get_in(f, ["payload"]) || %{})}
-                    <% _ -> %>
+                    </div>
+                  <% _ -> %>
+                    <div class="text-xs opacity-80">{f["kind"]}</div>
+                    <div class="text-xs opacity-70">
                       {inspect(get_in(f, ["payload"]) || %{})}
-                  <% end %>
-                </div>
+                    </div>
+                <% end %>
               </div>
             </div>
 

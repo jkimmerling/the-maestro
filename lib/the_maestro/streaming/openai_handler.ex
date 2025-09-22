@@ -336,7 +336,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     case detect_reasoning_json(new_accumulator) do
       {:complete, reasoning, answer} ->
         put_text_accumulator("")
-        base = [content_message("Thinking: #{reasoning}\n\n")]
+        base = [content_message("Thinking: #{reasoning}\n\n", %{reasoning: true})]
         maybe_add_answer(base, answer)
 
       {:incomplete} ->
@@ -565,7 +565,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
       [%{"type" => "text", "text" => text}] ->
         case parse_reasoning_json(text) do
           {:ok, reasoning, answer} ->
-            base = [content_message("Thinking: #{reasoning}\n\n")]
+            base = [content_message("Thinking: #{reasoning}\n\n", %{reasoning: true})]
             maybe_add_answer(base, answer)
 
           {:error, _} ->

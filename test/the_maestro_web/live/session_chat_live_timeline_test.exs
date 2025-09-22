@@ -42,7 +42,7 @@ defmodule TheMaestroWeb.Live.SessionChatLiveTimelineTest do
 
     send(view.pid, {:turn_frame, frame1})
 
-    assert has_element?(view, "#frames div", "assistant_text")
+    assert has_element?(view, "#frames div", "assistant")
     assert has_element?(view, "#frames div", "Hello")
   end
 end
