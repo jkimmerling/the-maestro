@@ -112,13 +112,7 @@ defmodule TheMaestro.Sessions.Manager do
 
         case result do
           {:ok, stream} ->
-            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
-              type: :thinking,
-              raw: %{thinking: true}
-            })
-            GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :thinking, nil})
-
-            # Emit a user_text frame sourced from the last snapshot
+            # Emit a user_text frame sourced from the last snapshot (before thinking)
             case Conversations.latest_snapshot(session_id) do
               %Conversations.ChatEntry{} = latest_entry ->
                 if ut = last_user_text_from(latest_entry) do
@@ -129,6 +123,12 @@ defmodule TheMaestro.Sessions.Manager do
 
               _ -> :ok
             end
+
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
+              type: :thinking,
+              raw: %{thinking: true}
+            })
+            GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :thinking, nil})
 
             for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
               publish_both(session_id, stream_id, msg)
@@ -873,14 +873,16 @@ defmodule TheMaestro.Sessions.Manager do
           end
         end)
 
-      # reset accumulators for follow-up turn (keep meta and t0)
+      # reset accumulators for follow-up turn (keep frames/meta)
       st =
         put_in(st, [session_id, :acc], %{
           text: "",
           tool_calls: [],
           usage: nil,
           events: acc.events,
-          meta: acc.meta
+          meta: acc.meta,
+          frames: acc.frames || [],
+          frame_idx: acc.frame_idx || 0
         })
 
       st

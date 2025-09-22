@@ -997,7 +997,39 @@ defmodule TheMaestroWeb.SessionChatLive do
 
   @impl true
   def handle_info({:turn_frame, %{} = frame}, socket) do
-    {:noreply, stream_insert(socket, :frames, frame, at: -1)}
+    kind = frame["kind"]
+
+    cond do
+      kind == "assistant_text" and (socket.assigns[:tool_pending?] || false) ->
+        pending = [frame | (socket.assigns[:pending_assistant_frames] || [])]
+        {:noreply, assign(socket, pending_assistant_frames: pending)}
+
+      kind == "function_call" ->
+        socket =
+          socket
+          |> assign(:tool_pending?, true)
+          |> stream_insert(:frames, frame, at: -1)
+
+        {:noreply, socket}
+
+      kind == "tool_result" ->
+        socket =
+          socket
+          |> stream_insert(:frames, frame, at: -1)
+          |> maybe_flush_pending_assistant()
+
+        {:noreply, assign(socket, :tool_pending?, false)}
+
+      true ->
+        {:noreply, stream_insert(socket, :frames, frame, at: -1)}
+    end
+  end
+
+  defp maybe_flush_pending_assistant(socket) do
+    pending = Enum.reverse(socket.assigns[:pending_assistant_frames] || [])
+    Enum.reduce(pending, assign(socket, pending_assistant_frames: []), fn f, s ->
+      stream_insert(s, :frames, f, at: -1)
+    end)
   end
 
   @impl true
