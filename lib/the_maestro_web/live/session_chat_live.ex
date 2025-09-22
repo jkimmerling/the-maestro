@@ -58,6 +58,7 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:persona_form, %{})
      |> assign(:show_memory_modal, false)
      |> assign(:memory_editor_text, nil)
+     |> assign(:used_t0_ms, 0)
      |> stream_configure(:frames, dom_id: &__MODULE__.frame_dom_id/1)
      |> stream(:frames, [])}
   end
@@ -914,6 +915,11 @@ defmodule TheMaestroWeb.SessionChatLive do
     Map.get(item, :id) || Map.get(item, "id") || Ecto.UUID.generate()
   end
 
+  defp rel_ms(at_ms, t0_ms) when is_integer(at_ms) and is_integer(t0_ms) do
+    max(at_ms - t0_ms, 0)
+  end
+  defp rel_ms(_at, _t0), do: 0
+
   defp fetch_prompt(socket, prompt_id) do
     catalog = socket.assigns[:prompt_catalog] || %{}
 
@@ -1488,22 +1494,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     }
   end
 
-  defp dedup_delta(current, chunk) when is_binary(current) and is_binary(chunk) do
-    cond do
-      chunk == "" ->
-        ""
-
-      String.starts_with?(chunk, current) ->
-        binary_part(chunk, byte_size(current), byte_size(chunk) - byte_size(current))
-
-      # snapshot smaller than what we have
-      String.starts_with?(current, chunk) ->
-        ""
-
-      true ->
-        chunk
-    end
-  end
+  # timeline-only UI; delta logic removed
 
   defp current_messages_for(session_id, nil) do
     case Conversations.latest_snapshot(session_id) do
@@ -1648,35 +1639,59 @@ defmodule TheMaestroWeb.SessionChatLive do
                 <%= case f["kind"] do %>
                   <% "assistant_thinking" -> %>
                     <details class="text-xs">
-                      <summary class="cursor-pointer opacity-80">Thoughts</summary>
+                      <summary class="cursor-pointer opacity-80 flex items-center gap-1">
+                        <.icon name="hero-light-bulb" class="w-4 h-4" />
+                        Thoughts
+                        <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                      </summary>
                       <div class="whitespace-pre-wrap text-sm text-amber-200 mt-1">
                         {get_in(f, ["payload", "content"]) || ""}
                       </div>
                     </details>
                   <% "tool_result" -> %>
                     <details class="text-xs">
-                      <summary class="cursor-pointer opacity-80">Tool Result</summary>
+                      <summary class="cursor-pointer opacity-80 flex items-center gap-1">
+                        <.icon name="hero-wrench" class="w-4 h-4" />
+                        Tool Result
+                        <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                      </summary>
                       <div class="whitespace-pre-wrap text-sm text-amber-200 mt-1">
                         {get_in(f, ["payload", "preview"]) || "(tool result)"}
                       </div>
                     </details>
                   <% "assistant_text" -> %>
-                    <div class="text-xs opacity-80">assistant</div>
+                    <div class="text-xs opacity-80 flex items-center gap-1">
+                      <.icon name="hero-sparkles" class="w-4 h-4" />
+                      assistant
+                      <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                    </div>
                     <div class="whitespace-pre-wrap text-sm text-amber-200">
                       {get_in(f, ["payload", "delta"]) || get_in(f, ["payload", "text"]) || ""}
                     </div>
                   <% "user_text" -> %>
-                    <div class="text-xs opacity-80">user</div>
+                    <div class="text-xs opacity-80 flex items-center gap-1">
+                      <.icon name="hero-user" class="w-4 h-4" />
+                      user
+                      <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                    </div>
                     <div class="whitespace-pre-wrap text-sm text-amber-200">
                       {get_in(f, ["payload", "text"]) || ""}
                     </div>
                   <% "usage" -> %>
-                    <div class="text-xs opacity-80">usage</div>
+                    <div class="text-xs opacity-80 flex items-center gap-1">
+                      <.icon name="hero-chart-bar" class="w-4 h-4" />
+                      usage
+                      <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                    </div>
                     <div class="text-xs opacity-70">
                       {inspect(get_in(f, ["payload"]) || %{})}
                     </div>
                   <% _ -> %>
-                    <div class="text-xs opacity-80">{f["kind"]}</div>
+                    <div class="text-xs opacity-80 flex items-center gap-1">
+                      <.icon name="hero-question-mark-circle" class="w-4 h-4" />
+                      {f["kind"]}
+                      <span class="opacity-60">· t+{rel_ms(f["at_ms"], @used_t0_ms)}ms</span>
+                    </div>
                     <div class="text-xs opacity-70">
                       {inspect(get_in(f, ["payload"]) || %{})}
                     </div>

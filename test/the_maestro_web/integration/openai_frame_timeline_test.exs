@@ -6,8 +6,6 @@ defmodule TheMaestroWeb.Integration.OpenAIFrameTimelineTest do
   alias TheMaestro.Conversations
 
   setup do
-    Application.put_env(:the_maestro, :chat_full_timeline, true)
-
     {:ok, saved_auth} =
       Auth.create_saved_authentication(%{
         provider: "openai",
@@ -56,22 +54,25 @@ defmodule TheMaestroWeb.Integration.OpenAIFrameTimelineTest do
 
     :ok = Chat.subscribe_turn(session.id, stream_id)
 
-    frames =
-      receive_frames([])
+    frames = receive_until_final([])
 
     assert frames != []
     assert Enum.any?(frames, &((&1["kind"] in ["assistant_text", "final", "usage", "assistant_thinking"])))
 
-    Process.sleep(50)
+    Process.sleep(20)
 
     {:ok, persisted} = Chat.latest_turn_frames(thread_id)
     assert length(persisted) >= 1
   end
 
-  defp receive_frames(acc) do
+  defp receive_until_final(acc) do
     receive do
       {:turn_frame, frame} ->
-        receive_frames([frame | acc])
+        if frame["kind"] == "final" do
+          Enum.reverse([frame | acc])
+        else
+          receive_until_final([frame | acc])
+        end
     after
       1_500 -> Enum.reverse(acc)
     end

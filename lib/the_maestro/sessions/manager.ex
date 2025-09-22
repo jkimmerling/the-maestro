@@ -116,6 +116,18 @@ defmodule TheMaestro.Sessions.Manager do
             })
             GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :thinking, nil})
 
+            # Emit a user_text frame sourced from the last snapshot
+            case Conversations.latest_snapshot(session_id) do
+              %Conversations.ChatEntry{} = latest_entry ->
+                if ut = last_user_text_from(latest_entry) do
+                  if is_binary(ut) and ut != "" do
+                    GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :user_text, ut})
+                  end
+                end
+
+              _ -> :ok
+            end
+
             for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
               publish_both(session_id, stream_id, msg)
 
@@ -317,13 +329,9 @@ defmodule TheMaestro.Sessions.Manager do
   def handle_cast({:frame_event, session_id, stream_id, type, payload}, st) do
     case Map.get(st, session_id) do
       %{stream_id: ^stream_id, acc: acc} ->
-        if timeline_enabled?() do
-          {frame, acc2} = build_frame(acc, type, payload)
-          publish_turn_frame(session_id, stream_id, frame)
-          {:noreply, put_in(st, [session_id, :acc], acc2)}
-        else
-          {:noreply, st}
-        end
+        {frame, acc2} = build_frame(acc, type, payload)
+        publish_turn_frame(session_id, stream_id, frame)
+        {:noreply, put_in(st, [session_id, :acc], acc2)}
 
       _ ->
         {:noreply, st}
@@ -480,8 +488,8 @@ defmodule TheMaestro.Sessions.Manager do
       role: "assistant",
       kind: kind_for(type),
       payload: payload_to_map(type, payload),
-      "thought?": type in [:thinking],
-      "collapsed?": type in [:thinking, :function_call]
+      thought?: type in [:thinking],
+      collapsed?: type in [:thinking, :function_call]
     }
 
     frame = TurnFrame.new!(base) |> TurnFrame.to_map()
@@ -491,6 +499,7 @@ defmodule TheMaestro.Sessions.Manager do
 
   defp kind_for(:thinking), do: "assistant_thinking"
   defp kind_for(:content), do: "assistant_text"
+  defp kind_for(:user_text), do: "user_text"
   defp kind_for(:function_call), do: "function_call"
   defp kind_for(:usage), do: "usage"
   defp kind_for(:tool_result), do: "tool_result"
@@ -503,6 +512,7 @@ defmodule TheMaestro.Sessions.Manager do
 
   defp payload_to_map(:usage, %{} = usage), do: usage
   defp payload_to_map(:thinking, _), do: %{}
+  defp payload_to_map(:user_text, text) when is_binary(text), do: %{"text" => text}
   defp payload_to_map(:finalized, %{} = m),
     do: %{"content" => Map.get(m, :content) || Map.get(m, "content"), "meta" => Map.get(m, :meta) || Map.get(m, "meta")}
 
@@ -625,10 +635,7 @@ defmodule TheMaestro.Sessions.Manager do
             "tool_history" => (meta && meta[:tool_history_acc]) || []
           },
           combined_chat:
-            maybe_put_frames(updated2, latest.thread_id,
-              Conversations.next_turn_index_for_thread(latest.thread_id),
-              Map.get(st[session_id].acc, :frames, [])
-            ),
+            maybe_put_frames(updated2, latest.thread_id, turn_idx, Map.get(st[session_id].acc, :frames, [])),
           edit_version: 0,
           thread_id: latest.thread_id
         })
@@ -658,12 +665,10 @@ defmodule TheMaestro.Sessions.Manager do
             raw: %{meta: req_meta}
           })
 
-          if timeline_enabled?() do
-            {final_frame, _} =
-              build_frame(Map.get(st[session_id], :acc), :finalized, %{content: text, meta: req_meta})
+          {final_frame, _} =
+            build_frame(Map.get(st[session_id], :acc), :finalized, %{content: text, meta: req_meta})
 
-            publish_turn_frame(session_id, stream_id, final_frame)
-          end
+          publish_turn_frame(session_id, stream_id, final_frame)
 
         _ ->
           :ok

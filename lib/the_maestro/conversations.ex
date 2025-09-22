@@ -907,7 +907,7 @@ defmodule TheMaestro.Conversations do
     norm0 = CombinedChat.from_map(cc) |> CombinedChat.to_map()
 
     norm =
-      if Application.get_env(:the_maestro, :chat_full_timeline, false) and is_binary(e.thread_id) do
+      if is_binary(e.thread_id) do
         CombinedChat.backfill_for_thread(norm0, e.thread_id)
       else
         norm0

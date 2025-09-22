@@ -271,8 +271,7 @@ defmodule TheMaestro.Chat do
             _ -> entry.turn_index
           end
 
-        frames = CombinedChat.get_turn_frames(cc, thread_id, idx)
-        {:ok, frames}
+        {:ok, fallback_frames(cc, thread_id, idx)}
     end
   end
 
@@ -280,6 +279,25 @@ defmodule TheMaestro.Chat do
   @spec latest_turn_frames(thread_id) :: {:ok, [frame]}
   def latest_turn_frames(thread_id) when is_binary(thread_id) do
     list_turn_frames(thread_id, :latest)
+  end
+
+  defp fallback_frames(cc, thread_id, idx) do
+    alias TheMaestro.Domain.CombinedChat
+    frames = CombinedChat.get_turn_frames(cc, thread_id, idx)
+    if frames == [] do
+      turns =
+        case (cc.threads || %{})[thread_id] do
+          %{"turns" => t} when is_list(t) -> t
+          _ -> []
+        end
+
+      case List.last(turns) do
+        %{"frames" => fs} when is_list(fs) -> fs
+        _ -> []
+      end
+    else
+      frames
+    end
   end
 
   @doc """
