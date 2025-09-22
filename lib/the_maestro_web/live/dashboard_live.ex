@@ -674,16 +674,6 @@ defmodule TheMaestroWeb.DashboardLive do
   end
 
   @impl true
-  def handle_info({:session_mcp_selected_ids, ids}, socket) when is_list(ids) do
-    {:noreply, assign(socket, :session_mcp_selected_ids, Enum.map(ids, &to_string/1))}
-  end
-
-  @impl true
-  def handle_info({:tool_picker_allowed, allowed}, socket) when is_map(allowed) do
-    {:noreply, assign(socket, :tool_picker_allowed_map, allowed)}
-  end
-
-  @impl true
   def handle_info({TheMaestroWeb.DirectoryPicker, :cancel, :new_session}, socket) do
     {:noreply, assign(socket, :show_session_dir_picker, false)}
   end

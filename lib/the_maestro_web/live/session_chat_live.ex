@@ -601,12 +601,8 @@ defmodule TheMaestroWeb.SessionChatLive do
          {:ok, tools} <- decode_tools(socket, params),
          {:ok, mcps} <- decode_mcps(socket, params) do
       specs_map = prompt_specs_from_builder(socket.assigns[:session_prompt_builder] || %{})
-
-      tools2 =
-        merge_allowed(
-          tools,
-          socket.assigns[:tool_picker_allowed_map] || socket.assigns[:tool_picker_allowed] || %{}
-        )
+      # Treat decoded tools_json as the single source of truth
+      tools2 = tools
 
       {:ok,
        %{
@@ -670,23 +666,6 @@ defmodule TheMaestroWeb.SessionChatLive do
       anthropic: Inventory.list_for_provider(session_id, :anthropic),
       gemini: Inventory.list_for_provider(session_id, :gemini)
     }
-  end
-
-  defp merge_allowed(%{} = tools, %{} = allowed_by_provider) do
-    allowed_str =
-      allowed_by_provider
-      |> Enum.map(fn {prov, list} ->
-        {Atom.to_string(prov), Enum.map(List.wrap(list), &to_string/1)}
-      end)
-      |> Enum.into(%{})
-
-    if map_size(allowed_str) == 0 do
-      tools
-    else
-      Map.update(tools, "allowed", allowed_str, fn existing ->
-        Map.merge(existing || %{}, allowed_str)
-      end)
-    end
   end
 
   # ----- System Prompt Picker wiring (reuse Dashboard patterns) -----
@@ -1050,16 +1029,6 @@ defmodule TheMaestroWeb.SessionChatLive do
   @impl true
   def handle_info({FormComponent, {:canceled, _}}, socket) do
     {:noreply, assign(socket, :show_mcp_modal, false)}
-  end
-
-  @impl true
-  def handle_info({:session_mcp_selected_ids, ids}, socket) when is_list(ids) do
-    {:noreply, assign(socket, :session_mcp_selected_ids, Enum.map(ids, &to_string/1))}
-  end
-
-  @impl true
-  def handle_info({:tool_picker_allowed, allowed}, socket) when is_map(allowed) do
-    {:noreply, assign(socket, :tool_picker_allowed_map, allowed)}
   end
 
   @impl true
