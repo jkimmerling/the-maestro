@@ -76,3 +76,4 @@ playwright/
 *.jsonl
 *.md
 scripts/
+source/

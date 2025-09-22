@@ -7,6 +7,7 @@ defmodule TheMaestro.Cache.RedisClient do
   """
 
   def command(conn, args), do: adapter().command(conn, args)
+
   defp adapter do
     Application.get_env(:the_maestro, :redis_adapter, Redix)
   end

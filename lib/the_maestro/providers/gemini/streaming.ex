@@ -10,7 +10,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   require Logger
 
   alias TheMaestro.Conversations
-  alias TheMaestro.MCP.Registry, as: MCPRegistry
+
   alias TheMaestro.Providers.Gemini.CodeAssist
   alias TheMaestro.Providers.Gemini.OAuth, as: GemOAuth
   alias TheMaestro.Providers.Http.ReqClientFactory
@@ -18,6 +18,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   alias TheMaestro.SavedAuthentication
   alias TheMaestro.SystemPrompts
   alias TheMaestro.SystemPrompts.Defaults, as: PromptDefaults
+  alias TheMaestro.Tools.ToolSurface
   alias TheMaestro.Types
 
   @dialyzer {:nowarn_function, resolve_decl_session_id: 2}
@@ -289,48 +290,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   end
 
   # -- Tools exposure for Gemini --
-  # Merge built-ins with MCP-declared tools for this session.
-  defp function_declarations_for_session(session_id) do
-    allowed = allowed_names_for(session_id, :gemini)
-
-    mcp_tools = MCPRegistry.to_gemini_decls(session_id) |> maybe_filter_tools(allowed)
-    builtins = built_in_function_declarations() |> maybe_filter_tools(allowed)
-    # prefer MCP if name collides
-    names = MapSet.new(Enum.map(mcp_tools, & &1["name"]))
-    builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
-    decls = mcp_tools ++ builtins_filtered
-
-    Logger.debug(
-      "[Gemini] Injected tools for session=#{session_id}: #{length(decls)} (mcp=#{length(mcp_tools)}, builtins=#{length(builtins_filtered)})"
-    )
-
-    decls
-  end
-
-  defp maybe_filter_tools(list, :absent), do: list
-
-  defp maybe_filter_tools(list, {:present, names}) when is_list(list) do
-    allowed = MapSet.new(names)
-    Enum.filter(list, fn %{"name" => n} -> MapSet.member?(allowed, n) end)
-  end
-
-  # Read persisted allowed tool names for the provider; returns :absent when not set
-  defp allowed_names_for(session_id, provider) when is_binary(session_id) and is_atom(provider) do
-    prov = Atom.to_string(provider)
-
-    case TheMaestro.Conversations.get_session!(session_id) do
-      %TheMaestro.Conversations.Session{tools: %{"allowed" => %{} = m}} ->
-        case Map.fetch(m, prov) do
-          {:ok, list} when is_list(list) -> {:present, Enum.map(list, &to_string/1)}
-          _ -> :absent
-        end
-
-      _ ->
-        :absent
-    end
-  rescue
-    _ -> :absent
-  end
+  defp function_declarations_for_session(session_id),
+    do: ToolSurface.resolve_for_provider_decl(:gemini, session_id)
 
   # Resolve the Conversations session UUID for use by MCP.Registry.
   # The first parameter to this module is actually the SavedAuthentication session name.
@@ -348,37 +309,6 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
         # fall back; MCP.Registry will return [] and we’ll inject built-ins only
         session_name
     end
-  end
-
-  defp built_in_function_declarations do
-    [
-      %{
-        "name" => "run_shell_command",
-        "description" =>
-          "Execute a shell command. Use for tasks like listing files (e.g., ls -la).",
-        "parameters" => %{
-          "type" => "object",
-          "properties" => %{
-            "command" => %{"type" => "string"},
-            "directory" => %{"type" => "string"}
-          },
-          "required" => ["command"]
-        }
-      },
-      %{
-        "name" => "list_directory",
-        "description" => "List files and folders for a given path.",
-        "parameters" => %{
-          "type" => "object",
-          "properties" => %{
-            "path" => %{"type" => "string"},
-            "ignore" => %{"type" => "array", "items" => %{"type" => "string"}},
-            "respect_git_ignore" => %{"type" => "boolean"}
-          },
-          "required" => ["path"]
-        }
-      }
-    ]
   end
 
   defp maybe_put_tools(req_map, decls) when is_list(decls) do

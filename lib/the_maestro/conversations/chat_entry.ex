@@ -19,6 +19,7 @@ defmodule TheMaestro.Conversations.ChatEntry do
     field :session_id, :binary_id
 
     timestamps(type: :utc_datetime)
+    has_many :tool_change_logs, TheMaestro.Conversations.ToolChangeLog
   end
 
   @doc false

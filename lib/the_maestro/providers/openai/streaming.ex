@@ -11,13 +11,14 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
 
   require Logger
   alias TheMaestro.Conversations
-  alias TheMaestro.MCP.Registry, as: MCPRegistry
+  # MCPRegistry no longer needed here; ToolSurface builds provider decls
   alias TheMaestro.Providers.Http.ReqClientFactory
   alias TheMaestro.Providers.Http.StreamingAdapter
   alias TheMaestro.SavedAuthentication
   alias TheMaestro.Streaming.OpenAIHandler
   alias TheMaestro.SystemPrompts
   alias TheMaestro.SystemPrompts.Defaults, as: PromptDefaults
+  alias TheMaestro.Tools.ToolSurface
   alias TheMaestro.Types
 
   @dialyzer {:nowarn_function, resolve_decl_session_id: 1}
@@ -391,44 +392,13 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
 
   # legacy collapsed form no longer used
 
-  # Build OpenAI Responses tool list for this session merging built-ins + MCP
+  # Build OpenAI Responses tool list for this session via ToolSurface (builtins ∪ MCP)
   defp tools_for_session(session_id) do
     decl_session_id = resolve_decl_session_id(session_id)
-    allowed = allowed_names_for(decl_session_id, :openai)
-
-    mcp = MCPRegistry.to_openai_decls(decl_session_id) |> maybe_filter_tools(allowed)
-    builtins = [shell_tool_function(), apply_patch_function_tool()] |> maybe_filter_tools(allowed)
-
-    # prefer MCP when names collide
-    names = MapSet.new(Enum.map(mcp, & &1["name"]))
-    builtins_filtered = Enum.reject(builtins, fn d -> MapSet.member?(names, d["name"]) end)
-    mcp ++ builtins_filtered
+    ToolSurface.resolve_for_provider_decl(:openai, decl_session_id)
   end
 
-  defp maybe_filter_tools(list, :absent), do: list
-
-  defp maybe_filter_tools(list, {:present, names}) when is_list(list) do
-    allowed = MapSet.new(names)
-    Enum.filter(list, fn %{"name" => n} -> MapSet.member?(allowed, n) end)
-  end
-
-  # Read persisted allowed tool names for the provider; returns :absent when not set
-  defp allowed_names_for(session_id, provider) when is_binary(session_id) and is_atom(provider) do
-    prov = Atom.to_string(provider)
-
-    case TheMaestro.Conversations.get_session!(session_id) do
-      %TheMaestro.Conversations.Session{tools: %{"allowed" => %{} = m}} ->
-        case Map.fetch(m, prov) do
-          {:ok, list} when is_list(list) -> {:present, Enum.map(list, &to_string/1)}
-          _ -> :absent
-        end
-
-      _ ->
-        :absent
-    end
-  rescue
-    _ -> :absent
-  end
+  # Legacy filters removed; ToolSurface applies allowlist
 
   # -- follow-up builders (extracted to reduce complexity) --
   defp build_followup_request(:enterprise, session_name, items, opts) do
@@ -576,54 +546,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
     end
   end
 
-  defp shell_tool_function do
-    %{
-      "type" => "function",
-      "name" => "shell",
-      "description" => "Runs a shell command and returns its output",
-      "strict" => false,
-      "parameters" => %{
-        "type" => "object",
-        "properties" => %{
-          "command" => %{
-            "type" => "array",
-            "items" => %{"type" => "string"},
-            "description" => "The command to execute"
-          },
-          "workdir" => %{
-            "type" => "string",
-            "description" => "The working directory to execute the command in"
-          },
-          "timeout_ms" => %{
-            "type" => "number",
-            "description" => "The timeout for the command in milliseconds"
-          }
-        },
-        "required" => ["command"],
-        "additionalProperties" => false
-      }
-    }
-  end
-
-  defp apply_patch_function_tool do
-    %{
-      "type" => "function",
-      "name" => "apply_patch",
-      "description" => "Use the `apply_patch` tool to edit files.",
-      "strict" => false,
-      "parameters" => %{
-        "type" => "object",
-        "properties" => %{
-          "input" => %{
-            "type" => "string",
-            "description" => "The entire contents of the apply_patch command"
-          }
-        },
-        "required" => ["input"],
-        "additionalProperties" => false
-      }
-    }
-  end
+  # Legacy tool builders removed; provider decls come from ToolSurface
 
   @spec chatgpt_account_id_from_id_token(binary() | nil) :: {:ok, binary()} | {:error, term()}
   defp chatgpt_account_id_from_id_token(nil), do: {:error, :missing_id_token}

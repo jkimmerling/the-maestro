@@ -252,12 +252,17 @@ defmodule TheMaestroWeb.DashboardLive do
          socket
          |> assign(:session_provider, params["provider"])
          |> assign(:session_auth_options, build_auth_options_for(provider))
-         |> assign(:session_model_options, [])
+         |> assign(:session_model_options, default_models_for_provider(provider))
          |> assign(:prompt_picker_provider, provider)
          |> ensure_prompt_builder()}
 
       "auth_id" ->
-        models = build_model_options(%{"auth_id" => params["auth_id"]})
+        models =
+          build_model_options(%{
+            "auth_id" => params["auth_id"],
+            "provider" => params["provider"]
+          })
+
         {:noreply, assign(socket, :session_model_options, models)}
 
       "mcp_server_ids" ->
@@ -774,7 +779,8 @@ defmodule TheMaestroWeb.DashboardLive do
 
   # agent options removed
 
-  defp build_model_options(%{"auth_id" => auth_id}) when is_binary(auth_id) and auth_id != "" do
+  defp build_model_options(%{"auth_id" => auth_id} = params)
+       when is_binary(auth_id) and auth_id != "" do
     with %{} = sa <- Auth.get_saved_authentication!(auth_id),
          provider <- to_provider_atom(sa.provider),
          {:ok, models} <- Provider.list_models(provider, sa.auth_type, sa.name),
@@ -782,30 +788,48 @@ defmodule TheMaestroWeb.DashboardLive do
            Enum.map(models, fn m -> {m.name || m.id, m.id} end) do
       list
     else
-      _ -> default_models_for(Auth.get_saved_authentication!(auth_id))
+      _ ->
+        params
+        |> Map.get("provider")
+        |> default_models_for_provider()
     end
   end
 
-  # fallback clause grouped with the primary build_model_options/1
+  defp build_model_options(%{"provider" => provider}) do
+    default_models_for_provider(provider)
+  end
+
   defp build_model_options(_), do: []
 
-  defp default_models_for(%{provider: provider}) do
+  defp default_models_for_provider(provider) do
     case to_provider_atom(provider) do
       :openai ->
-        [{"gpt-5", "gpt-5"}, {"gpt-4o", "gpt-4o"}]
+        [
+          {"GPT-5 (gpt-5)", "gpt-5"},
+          {"GPT-4o (gpt-4o)", "gpt-4o"}
+        ]
 
       :anthropic ->
-        [{"claude-3-5-sonnet", "claude-3-5-sonnet"}, {"claude-3-opus", "claude-3-opus"}]
+        [
+          {"Claude Opus 4.1 (claude-opus-4-1-20250805)", "claude-opus-4-1-20250805"},
+          {"Claude Opus 4 (claude-opus-4-20250514)", "claude-opus-4-20250514"},
+          {"Claude Sonnet 4 (claude-sonnet-4-20250514)", "claude-sonnet-4-20250514"},
+          {"Claude Sonnet 3.7 (claude-3-7-sonnet-20250219)", "claude-3-7-sonnet-20250219"},
+          {"Claude Sonnet 3.5 (claude-3-5-sonnet-20241022)", "claude-3-5-sonnet-20241022"},
+          {"Claude Haiku 3.5 (claude-3-5-haiku-20241022)", "claude-3-5-haiku-20241022"},
+          {"Claude Haiku 3 (claude-3-haiku-20240307)", "claude-3-haiku-20240307"}
+        ]
 
       :gemini ->
-        [{"gemini-2.5-pro", "gemini-2.5-pro"}, {"gemini-1.5-pro-latest", "gemini-1.5-pro-latest"}]
+        [
+          {"Gemini 2.5 Pro (gemini-2.5-pro)", "gemini-2.5-pro"},
+          {"Gemini 1.5 Pro (Latest)", "gemini-1.5-pro-latest"}
+        ]
 
       _ ->
         []
     end
   end
-
-  defp default_models_for(_), do: []
 
   # helpers mirrored from SessionChatLive
   # removed: stringify_provider_keys (unused)

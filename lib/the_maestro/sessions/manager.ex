@@ -61,6 +61,15 @@ defmodule TheMaestro.Sessions.Manager do
     GenServer.call(__MODULE__, {:cancel, session_id})
   end
 
+  # ---- Todo state (in-memory, session-scoped) ----
+  def set_todos(session_id, todos) when is_binary(session_id) and is_list(todos) do
+    GenServer.call(__MODULE__, {:set_todos, session_id, todos})
+  end
+
+  def get_todos(session_id) when is_binary(session_id) do
+    GenServer.call(__MODULE__, {:get_todos, session_id})
+  end
+
   @impl true
   def init(_), do: {:ok, %{}}
 
@@ -205,6 +214,21 @@ defmodule TheMaestro.Sessions.Manager do
   def handle_call({:cancel, session_id}, _from, st) do
     st = cancel_if_running(st, session_id)
     {:reply, :ok, st}
+  end
+
+  def handle_call({:set_todos, session_id, todos}, _from, st) do
+    st =
+      update_in(st, [session_id, :acc, :meta], fn meta ->
+        meta = meta || %{}
+        Map.put(meta, :todos, normalize_todos(todos))
+      end)
+
+    {:reply, :ok, st}
+  end
+
+  def handle_call({:get_todos, session_id}, _from, st) do
+    todos = get_in(st, [session_id, :acc, :meta, :todos]) || []
+    {:reply, todos, st}
   end
 
   @impl true
@@ -505,6 +529,15 @@ defmodule TheMaestro.Sessions.Manager do
           latest_chat_entry_id: entry.id,
           last_used_at: DateTime.utc_now()
         })
+
+      _ =
+        case Map.get(st[session_id].acc.meta, :t0_ms) do
+          ms when is_integer(ms) ->
+            Conversations.link_logs_to_chat_entry!(session_id, ms, entry.id)
+
+          _ ->
+            :ok
+        end
 
       alias TheMaestro.Domain.{StreamEvent, Usage}
       usage_struct = if usage, do: Usage.new!(usage), else: nil
@@ -955,4 +988,21 @@ defmodule TheMaestro.Sessions.Manager do
         {:oauth, "default"}
     end
   end
+
+  defp normalize_todos(list) when is_list(list) do
+    Enum.map(list, fn item ->
+      %{
+        content: to_string(item[:content] || item["content"] || ""),
+        activeForm: to_string(item[:activeForm] || item["activeForm"] || ""),
+        status: normalize_status(item[:status] || item["status"])
+      }
+    end)
+  end
+
+  defp normalize_todos(_), do: []
+
+  defp normalize_status(s) when s in ["pending", :pending], do: "pending"
+  defp normalize_status(s) when s in ["in_progress", :in_progress], do: "in_progress"
+  defp normalize_status(s) when s in ["completed", :completed], do: "completed"
+  defp normalize_status(_), do: "pending"
 end
