@@ -28,7 +28,7 @@ defmodule TheMaestroWeb.SessionChatLive do
     tid = Conversations.latest_thread_id(session.id)
 
     {:ok,
-     socket
+      socket
      |> assign(:page_title, "Chat")
      |> assign(:session, session)
      |> assign(:current_thread_id, tid)
@@ -57,7 +57,9 @@ defmodule TheMaestroWeb.SessionChatLive do
      |> assign(:show_persona_modal, false)
      |> assign(:persona_form, %{})
      |> assign(:show_memory_modal, false)
-     |> assign(:memory_editor_text, nil)}
+     |> assign(:memory_editor_text, nil)
+     |> stream_configure(:frames, dom_id: &__MODULE__.frame_dom_id/1)
+     |> stream(:frames, [])}
   end
 
   @impl true
@@ -865,24 +867,28 @@ defmodule TheMaestroWeb.SessionChatLive do
           (socket.assigns.messages || []) ++
             [%{"role" => "user", "content" => [%{"type" => "text", "text" => user_text}]}]
 
+        socket =
+          socket
+          |> assign(:message, "")
+          |> assign(:messages, ui_messages)
+          |> assign(:streaming?, true)
+          |> assign(:partial_answer, "")
+          |> assign(:stream_id, result.stream_id)
+          |> assign(:stream_task, nil)
+          |> assign(:pending_canonical, result.pending_canonical)
+          |> assign(:followup_history, [])
+          |> assign(:used_provider, result.provider)
+          |> assign(:used_model, result.model)
+          |> assign(:used_auth_type, result.auth_type)
+          |> assign(:used_auth_name, result.auth_name)
+          |> assign(:used_usage, nil)
+          |> assign(:tool_calls, [])
+          |> assign(:used_t0_ms, t0)
+          |> assign(:event_buffer, [])
+          |> assign(:retry_attempts, 0)
+
+        _ = TheMaestro.Chat.subscribe_turn(session.id, result.stream_id)
         socket
-        |> assign(:message, "")
-        |> assign(:messages, ui_messages)
-        |> assign(:streaming?, true)
-        |> assign(:partial_answer, "")
-        |> assign(:stream_id, result.stream_id)
-        |> assign(:stream_task, nil)
-        |> assign(:pending_canonical, result.pending_canonical)
-        |> assign(:followup_history, [])
-        |> assign(:used_provider, result.provider)
-        |> assign(:used_model, result.model)
-        |> assign(:used_auth_type, result.auth_type)
-        |> assign(:used_auth_name, result.auth_name)
-        |> assign(:used_usage, nil)
-        |> assign(:tool_calls, [])
-        |> assign(:used_t0_ms, t0)
-        |> assign(:event_buffer, [])
-        |> assign(:retry_attempts, 0)
 
       {:error, :duplicate_turn} ->
         # Ignore duplicate submits of identical user text at tail
@@ -903,6 +909,10 @@ defmodule TheMaestroWeb.SessionChatLive do
   require Logger
 
   # Reuse provider atom helper locally (single definition kept)
+
+  def frame_dom_id(item) when is_map(item) do
+    Map.get(item, :id) || Map.get(item, "id") || Ecto.UUID.generate()
+  end
 
   defp fetch_prompt(socket, prompt_id) do
     catalog = socket.assigns[:prompt_catalog] || %{}
@@ -977,6 +987,11 @@ defmodule TheMaestroWeb.SessionChatLive do
         %{assigns: %{session: %{id: sid}, stream_id: id}} = socket
       ) do
     handle_thinking_event(envelope, socket)
+  end
+
+  @impl true
+  def handle_info({:turn_frame, %{} = frame}, socket) do
+    {:noreply, stream_insert(socket, :frames, frame, at: -1)}
   end
 
   @impl true
@@ -1663,6 +1678,26 @@ defmodule TheMaestroWeb.SessionChatLive do
                 <% end %>
               </div>
             <% end %>
+
+            <div id="frames" phx-update="stream" class="mt-4 space-y-2">
+              <div :for={{id, f} <- @streams.frames} id={id} class="terminal-card terminal-border-blue p-3">
+                <div class="text-xs opacity-80">{f["kind"]}</div>
+                <div class="whitespace-pre-wrap text-sm text-amber-200">
+                  <%= case f["kind"] do %>
+                    <% "assistant_text" -> %>
+                      {get_in(f, ["payload", "delta"]) || get_in(f, ["payload", "text"]) || ""}
+                    <% "user_text" -> %>
+                      {get_in(f, ["payload", "text"]) || ""}
+                    <% "tool_result" -> %>
+                      {get_in(f, ["payload", "preview"]) || "(tool result)"}
+                    <% "usage" -> %>
+                      {inspect(get_in(f, ["payload"]) || %{})}
+                    <% _ -> %>
+                      {inspect(get_in(f, ["payload"]) || %{})}
+                  <% end %>
+                </div>
+              </div>
+            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div class="terminal-card terminal-border-amber p-3">

@@ -94,4 +94,77 @@ defmodule TheMaestro.Domain.CombinedChat do
 
   def get_turn_frames(%{} = map, thread_id, turn_index),
     do: get_turn_frames(from_map(map), thread_id, turn_index)
+
+  @doc "Backfill thread turns/frames from legacy messages if missing."
+  @spec backfill_for_thread(map() | t(), String.t()) :: map()
+  def backfill_for_thread(cc, thread_id) when is_binary(thread_id) do
+    cc = if match?(%__MODULE__{}, cc), do: cc, else: from_map(cc)
+
+    has_frames? = is_map(cc.threads) and is_map(cc.threads[thread_id])
+
+    if has_frames? do
+      to_map(cc)
+    else
+      turns = build_turns_from_messages(cc.messages || [])
+      cc
+      |> Map.put(:version, "v2")
+      |> Map.put(:threads, %{thread_id => %{"turns" => turns}})
+      |> to_map()
+  end
+  end
+
+  defp build_turns_from_messages(messages) when is_list(messages) do
+    Enum.reduce(messages, {[], %{turn_index: 0, frames: [], fidx: 0}}, fn m, {acc, cur} ->
+      role = to_string(m["role"] || m[:role] || "assistant")
+      text = message_text(m)
+
+      case role do
+        "user" -> add_user(acc, cur, text)
+        "assistant" -> {acc, add_frame(cur, "assistant", "assistant_text", %{"delta" => text})}
+        "tool" -> {acc, add_frame(cur, "tool", "tool_result", %{"preview" => text})}
+        _ -> {acc, add_frame(cur, role, "message", %{"text" => text})}
+      end
+    end)
+    |> then(fn {acc, cur} ->
+      acc = if cur.frames == [], do: acc, else: [%{"turn_index" => cur.turn_index, "frames" => cur.frames} | acc]
+      Enum.reverse(acc)
+    end)
+  end
+
+  alias TheMaestro.Domain.TurnFrame
+
+  defp frame(%{fidx: fidx}, role, kind, payload) do
+    TurnFrame.new!(%{
+      id: Ecto.UUID.generate(),
+      idx: fidx,
+      at_ms: System.monotonic_time(:millisecond),
+      role: role,
+      kind: kind,
+      payload: payload,
+      thought?: kind == "assistant_thinking",
+      collapsed?: kind in ["assistant_thinking", "function_call"]
+    })
+    |> TurnFrame.to_map()
+  end
+
+  defp message_text(m) do
+    content = List.wrap(m["content"] || m[:content] || [])
+    case List.first(content) do
+      %{"text" => t} -> to_string(t)
+      %{text: t} -> to_string(t)
+      _ -> ""
+    end
+  end
+
+  defp add_user(acc, cur, text) do
+    acc = if cur.frames == [], do: acc, else: [%{"turn_index" => cur.turn_index, "frames" => cur.frames} | acc]
+    new_tix = if cur.frames == [], do: cur.turn_index, else: cur.turn_index + 1
+    frame = frame(%{fidx: 0}, "user", "user_text", %{"text" => text})
+    {acc, %{turn_index: new_tix, frames: [frame], fidx: 1}}
+  end
+
+  defp add_frame(cur, role, kind, payload) do
+    frame = frame(cur, role, kind, payload)
+    %{cur | frames: cur.frames ++ [frame], fidx: cur.fidx + 1}
+  end
 end

@@ -60,7 +60,7 @@ defmodule TheMaestroWeb.Integration.OpenAIFrameTimelineTest do
       receive_frames([])
 
     assert frames != []
-    assert Enum.any?(frames, &((&1["kind"] in ["assistant_text", "final", "usage"])))
+    assert Enum.any?(frames, &((&1["kind"] in ["assistant_text", "final", "usage", "assistant_thinking"])))
 
     Process.sleep(50)
 
