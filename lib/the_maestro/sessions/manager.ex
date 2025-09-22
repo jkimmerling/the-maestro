@@ -26,7 +26,9 @@ defmodule TheMaestro.Sessions.Manager do
             tool_calls: list(),
             usage: map() | nil,
             events: list(),
-            meta: map()
+            meta: map(),
+            frames: list(),
+            frame_idx: non_neg_integer()
           }
         }
 
@@ -112,6 +114,7 @@ defmodule TheMaestro.Sessions.Manager do
               type: :thinking,
               raw: %{thinking: true}
             })
+            GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :thinking, nil})
 
             for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
               publish_both(session_id, stream_id, msg)
@@ -120,13 +123,16 @@ defmodule TheMaestro.Sessions.Manager do
                 %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
                 when is_binary(chunk) ->
                   GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+                  GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :content, chunk})
 
                 %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
                 when is_list(calls) ->
                   GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
+                  GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :function_call, calls})
 
                 %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
                   GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
+                  GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :usage, usage})
 
                 _ ->
                   :ok
@@ -150,7 +156,7 @@ defmodule TheMaestro.Sessions.Manager do
     entry = %{
       task: task,
       stream_id: stream_id,
-      acc: %{text: "", tool_calls: [], usage: nil, events: [], meta: meta}
+      acc: %{text: "", tool_calls: [], usage: nil, events: [], meta: meta, frames: [], frame_idx: 0}
     }
 
     {:reply, {:ok, stream_id}, put_in(st, [session_id], entry)}
@@ -301,6 +307,22 @@ defmodule TheMaestro.Sessions.Manager do
     {:noreply, st}
   end
 
+  def handle_cast({:frame_event, session_id, stream_id, type, payload}, st) do
+    case Map.get(st, session_id) do
+      %{stream_id: ^stream_id, acc: acc} ->
+        if timeline_enabled?() do
+          {frame, acc2} = build_frame(acc, type, payload)
+          publish_turn_frame(session_id, stream_id, frame)
+          {:noreply, put_in(st, [session_id, :acc], acc2)}
+        else
+          {:noreply, st}
+        end
+
+      _ ->
+        {:noreply, st}
+    end
+  end
+
   def handle_cast({:stream_done, session_id, stream_id}, st) do
     case Map.get(st, session_id) do
       %{stream_id: ^stream_id, acc: acc} ->
@@ -402,6 +424,7 @@ defmodule TheMaestro.Sessions.Manager do
   defp to_stream_event(%{} = m), do: StreamEvent.new!(m)
 
   defp topic(session_id), do: "session:" <> session_id
+  defp turn_topic(session_id, stream_id), do: "turn:" <> session_id <> ":" <> stream_id
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 
@@ -435,10 +458,83 @@ defmodule TheMaestro.Sessions.Manager do
     end
   end
 
+  defp publish_turn_frame(session_id, stream_id, frame_map) when is_map(frame_map) do
+    PubSub.broadcast(TheMaestro.PubSub, turn_topic(session_id, stream_id), {:turn_frame, frame_map})
+    :ok
+  end
+
+  defp build_frame(%{frame_idx: idx, frames: frames} = acc, type, payload) do
+    alias TheMaestro.Domain.TurnFrame
+
+    base = %{
+      id: Ecto.UUID.generate(),
+      idx: idx,
+      at_ms: now_ms(),
+      role: "assistant",
+      kind: kind_for(type),
+      payload: payload_to_map(type, payload),
+      "thought?": type in [:thinking],
+      "collapsed?": type in [:thinking, :function_call]
+    }
+
+    frame = TurnFrame.new!(base) |> TurnFrame.to_map()
+    acc2 = %{acc | frame_idx: idx + 1, frames: frames ++ [frame]}
+    {frame, acc2}
+  end
+
+  defp kind_for(:thinking), do: "assistant_thinking"
+  defp kind_for(:content), do: "assistant_text"
+  defp kind_for(:function_call), do: "function_call"
+  defp kind_for(:usage), do: "usage"
+  defp kind_for(:tool_result), do: "tool_result"
+  defp kind_for(:finalized), do: "final"
+  defp kind_for(_), do: "event"
+
+  defp payload_to_map(:content, chunk) when is_binary(chunk), do: %{"delta" => chunk}
+  defp payload_to_map(:function_call, calls) when is_list(calls),
+    do: %{"calls" => Enum.map(calls, &map_call/1)}
+
+  defp payload_to_map(:usage, %{} = usage), do: usage
+  defp payload_to_map(:thinking, _), do: %{}
+  defp payload_to_map(:finalized, %{} = m),
+    do: %{"content" => Map.get(m, :content) || Map.get(m, "content"), "meta" => Map.get(m, :meta) || Map.get(m, "meta")}
+
+  defp payload_to_map(_t, p) when is_map(p), do: p
+  defp payload_to_map(_t, _), do: %{}
+
+  defp map_call(%TheMaestro.Domain.ToolCall{id: id, name: name, arguments: args}),
+    do: %{"id" => id, "name" => name, "arguments" => args}
+
+  defp map_call(%{"id" => id, "name" => name, "arguments" => args}),
+    do: %{"id" => id, "name" => name, "arguments" => to_string(args || "")}
+
+  defp map_call(%{id: id, name: name, arguments: args}),
+    do: %{"id" => id, "name" => name, "arguments" => to_string(args || "")}
+
+  defp map_call(other), do: %{"repr" => inspect(other)}
+
+  defp timeline_enabled? do
+    Application.get_env(:the_maestro, :chat_full_timeline, false)
+  end
+
+  defp maybe_put_frames(canon, thread_id, turn_index, frames) do
+    if timeline_enabled?() and is_binary(thread_id) and is_integer(turn_index) do
+      alias TheMaestro.Domain.CombinedChat
+      canon
+      |> CombinedChat.from_map()
+      |> CombinedChat.put_turn_frames(thread_id, turn_index, frames)
+      |> CombinedChat.to_map()
+    else
+      canon
+    end
+  end
+
   defp finalize_and_persist(session_id, stream_id, st) do
-    with %{acc: %{text: text, usage: usage, meta: meta, events: events}} <-
-           Map.get(st, session_id),
-         %Conversations.ChatEntry{} = latest <- Conversations.latest_snapshot(session_id) do
+    case Map.get(st, session_id) do
+      %{acc: %{text: text, usage: usage, meta: meta, events: events}} ->
+        maybe_allow_sandbox(meta[:sandbox_owner])
+        case Conversations.latest_snapshot(session_id) do
+          %Conversations.ChatEntry{} = latest ->
       session = Conversations.get_session_with_auth!(session_id)
       provider = meta.provider
       model = meta.model
@@ -502,10 +598,12 @@ defmodule TheMaestro.Sessions.Manager do
             |> maybe_append_tool_history(meta)
         end
 
+      turn_idx = Conversations.next_turn_index(session_id)
+
       {:ok, entry} =
         Conversations.create_chat_entry(%{
           session_id: session_id,
-          turn_index: Conversations.next_turn_index(session_id),
+          turn_index: turn_idx,
           actor: "assistant",
           provider: Atom.to_string(provider),
           request_headers: %{
@@ -519,7 +617,11 @@ defmodule TheMaestro.Sessions.Manager do
             "tools" => Map.get(st[session_id].acc, :tool_calls, []),
             "tool_history" => (meta && meta[:tool_history_acc]) || []
           },
-          combined_chat: updated2,
+          combined_chat:
+            maybe_put_frames(updated2, latest.thread_id,
+              Conversations.next_turn_index_for_thread(latest.thread_id),
+              Map.get(st[session_id].acc, :frames, [])
+            ),
           edit_version: 0,
           thread_id: latest.thread_id
         })
@@ -539,17 +641,29 @@ defmodule TheMaestro.Sessions.Manager do
             :ok
         end
 
-      alias TheMaestro.Domain.{StreamEvent, Usage}
-      usage_struct = if usage, do: Usage.new!(usage), else: nil
+          alias TheMaestro.Domain.{StreamEvent, Usage}
+          usage_struct = if usage, do: Usage.new!(usage), else: nil
 
-      publish_both(session_id, stream_id, %StreamEvent{
-        type: :finalized,
-        content: text,
-        usage: usage_struct,
-        raw: %{meta: req_meta}
-      })
-    else
-      _ -> :ok
+          publish_both(session_id, stream_id, %StreamEvent{
+            type: :finalized,
+            content: text,
+            usage: usage_struct,
+            raw: %{meta: req_meta}
+          })
+
+          if timeline_enabled?() do
+            {final_frame, _} =
+              build_frame(Map.get(st[session_id], :acc), :finalized, %{content: text, meta: req_meta})
+
+            publish_turn_frame(session_id, stream_id, final_frame)
+          end
+
+        _ ->
+          :ok
+        end
+
+      _ ->
+        :ok
     end
   end
 
@@ -641,6 +755,25 @@ defmodule TheMaestro.Sessions.Manager do
       owner_pid = acc.meta && acc.meta[:sandbox_owner]
 
       outputs = exec_tools(session_id, calls_to_run, base_cwd)
+
+      if timeline_enabled?() do
+        Enum.each(outputs, fn {id, result} ->
+          preview =
+            case result do
+              {:ok, payload} when is_binary(payload) -> String.slice(payload, 0, 200)
+              {:ok, payload} -> to_string(payload) |> String.slice(0, 200)
+              {:error, reason} -> to_string(reason)
+            end
+
+          GenServer.cast(__MODULE__, {
+            :frame_event,
+            session_id,
+            stream_id,
+            :tool_result,
+            %{"tool_call_id" => id, "preview" => preview}
+          })
+        end)
+      end
 
       items =
         case provider do
