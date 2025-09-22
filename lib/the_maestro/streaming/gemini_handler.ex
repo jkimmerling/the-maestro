@@ -109,7 +109,11 @@ defmodule TheMaestro.Streaming.GeminiHandler do
   defp handle_content_part(%{"text" => text}, messages) when is_binary(text) and text != "" do
     case detect_reasoning_json(text) do
       {:complete, reasoning, answer} ->
-        base = [content_message("Thinking: #{reasoning}\n\n", %{reasoning: true}) | messages]
+        base = [
+          content_message("Thinking: #{reasoning}\n\n", %{reasoning: true, thinking: true})
+          | messages
+        ]
+
         if is_binary(answer) and answer != "" do
           [content_message(answer) | base]
         else
@@ -151,6 +155,7 @@ defmodule TheMaestro.Streaming.GeminiHandler do
   # Reasoning JSON detection (heuristic)
   defp detect_reasoning_json(text) do
     trimmed = String.trim(to_string(text || ""))
+
     cond do
       looks_like_reasoning_json?(trimmed) -> parse_reasoning_json(trimmed)
       String.starts_with?(trimmed, "{") -> {:incomplete}
@@ -158,16 +163,21 @@ defmodule TheMaestro.Streaming.GeminiHandler do
     end
   end
 
-  defp looks_like_reasoning_json?(s), do: String.starts_with?(s, "{") and String.contains?(s, "\"reasoning\"")
+  defp looks_like_reasoning_json?(s),
+    do: String.starts_with?(s, "{") and String.contains?(s, "\"reasoning\"")
 
   defp parse_reasoning_json(s) do
     case Jason.decode(s) do
       {:ok, %{"reasoning" => reasoning} = parsed} ->
         answer = Map.get(parsed, "answer") || Map.get(parsed, "response")
-        answer_text = if is_list(answer), do: Enum.join(answer, " "), else: to_string(answer || "")
+
+        answer_text =
+          if is_list(answer), do: Enum.join(answer, " "), else: to_string(answer || "")
+
         {:complete, reasoning, answer_text}
 
-      _ -> {:incomplete}
+      _ ->
+        {:incomplete}
     end
   end
 end

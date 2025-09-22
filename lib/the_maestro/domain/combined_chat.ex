@@ -55,11 +55,19 @@ defmodule TheMaestro.Domain.CombinedChat do
   def put_turn_frames(%__MODULE__{} = cc, thread_id, turn_index, frames)
       when is_binary(thread_id) and is_integer(turn_index) and is_list(frames) do
     threads = cc.threads || %{}
-    updated = Map.update(threads, thread_id, %{"turns" => [%{"turn_index" => turn_index, "frames" => frames}]}, fn thread ->
-      turns = thread["turns"] || []
-      upsert_turn(turns, turn_index, frames)
-      |> then(&Map.put(thread, "turns", &1))
-    end)
+
+    updated =
+      Map.update(
+        threads,
+        thread_id,
+        %{"turns" => [%{"turn_index" => turn_index, "frames" => frames}]},
+        fn thread ->
+          turns = thread["turns"] || []
+
+          upsert_turn(turns, turn_index, frames)
+          |> then(&Map.put(thread, "turns", &1))
+        end
+      )
 
     %__MODULE__{cc | version: "v2", threads: updated}
   end
@@ -81,6 +89,9 @@ defmodule TheMaestro.Domain.CombinedChat do
     end
   end
 
+  def get_turn_frames(%{} = map, thread_id, turn_index),
+    do: get_turn_frames(from_map(map), thread_id, turn_index)
+
   defp upsert_turn(turns, idx, frames) do
     case Enum.find_index(turns, &match_turn_index?(&1, idx)) do
       nil -> turns ++ [%{"turn_index" => idx, "frames" => frames}]
@@ -91,9 +102,6 @@ defmodule TheMaestro.Domain.CombinedChat do
   defp match_turn_index?(%{"turn_index" => i}, idx), do: i == idx
   defp match_turn_index?(%{turn_index: i}, idx), do: i == idx
   defp match_turn_index?(_, _), do: false
-
-  def get_turn_frames(%{} = map, thread_id, turn_index),
-    do: get_turn_frames(from_map(map), thread_id, turn_index)
 
   @doc "Backfill thread turns/frames from legacy messages if missing."
   @spec backfill_for_thread(map() | t(), String.t()) :: map()
@@ -106,11 +114,12 @@ defmodule TheMaestro.Domain.CombinedChat do
       to_map(cc)
     else
       turns = build_turns_from_messages(cc.messages || [])
+
       cc
       |> Map.put(:version, "v2")
       |> Map.put(:threads, %{thread_id => %{"turns" => turns}})
       |> to_map()
-  end
+    end
   end
 
   defp build_turns_from_messages(messages) when is_list(messages) do
@@ -126,7 +135,11 @@ defmodule TheMaestro.Domain.CombinedChat do
       end
     end)
     |> then(fn {acc, cur} ->
-      acc = if cur.frames == [], do: acc, else: [%{"turn_index" => cur.turn_index, "frames" => cur.frames} | acc]
+      acc =
+        if cur.frames == [],
+          do: acc,
+          else: [%{"turn_index" => cur.turn_index, "frames" => cur.frames} | acc]
+
       Enum.reverse(acc)
     end)
   end
@@ -149,6 +162,7 @@ defmodule TheMaestro.Domain.CombinedChat do
 
   defp message_text(m) do
     content = List.wrap(m["content"] || m[:content] || [])
+
     case List.first(content) do
       %{"text" => t} -> to_string(t)
       %{text: t} -> to_string(t)
@@ -157,7 +171,11 @@ defmodule TheMaestro.Domain.CombinedChat do
   end
 
   defp add_user(acc, cur, text) do
-    acc = if cur.frames == [], do: acc, else: [%{"turn_index" => cur.turn_index, "frames" => cur.frames} | acc]
+    acc =
+      if cur.frames == [],
+        do: acc,
+        else: [%{"turn_index" => cur.turn_index, "frames" => cur.frames} | acc]
+
     new_tix = if cur.frames == [], do: cur.turn_index, else: cur.turn_index + 1
     frame = frame(%{fidx: 0}, "user", "user_text", %{"text" => text})
     {acc, %{turn_index: new_tix, frames: [frame], fidx: 1}}

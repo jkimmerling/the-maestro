@@ -32,7 +32,12 @@ defmodule TheMaestroWeb.Integration.OpenAIFrameTimelineTest do
         [
           sse(%{"type" => "response.output_text.delta", "delta" => "Hello"}),
           sse(%{"type" => "response.output_text.delta", "delta" => " world"}),
-          sse(%{"type" => "response.completed", "response" => %{"usage" => %{"input_tokens" => 3, "output_tokens" => 2, "total_tokens" => 5}}})
+          sse(%{
+            "type" => "response.completed",
+            "response" => %{
+              "usage" => %{"input_tokens" => 3, "output_tokens" => 2, "total_tokens" => 5}
+            }
+          })
         ]
         |> Stream.concat(Stream.iterate(0, & &1) |> Stream.take(0))
 
@@ -57,7 +62,11 @@ defmodule TheMaestroWeb.Integration.OpenAIFrameTimelineTest do
     frames = receive_until_final([])
 
     assert frames != []
-    assert Enum.any?(frames, &((&1["kind"] in ["assistant_text", "final", "usage", "assistant_thinking"])))
+
+    assert Enum.any?(
+             frames,
+             &(&1["kind"] in ["assistant_text", "final", "usage", "assistant_thinking"])
+           )
 
     Process.sleep(20)
 

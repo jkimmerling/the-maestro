@@ -12,8 +12,8 @@ defmodule TheMaestro.Domain.TurnFrameTest do
         role: "assistant",
         kind: "assistant_text",
         payload: %{"delta" => "hi"},
-        "thought?": false,
-        "collapsed?": true
+        thought?: false,
+        collapsed?: true
       })
 
     m = TurnFrame.to_map(f)

@@ -28,7 +28,6 @@ defmodule TheMaestro.Tools.ViewImage do
       {:ok, ExecOutput.format("image attached: " <> abs, 0, 0.0)}
     else
       {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
-      {:error, :not_found} -> {:error, "enoent"}
       {:error, _} -> {:error, "invalid path"}
     end
   end
@@ -56,10 +55,10 @@ defmodule TheMaestro.Tools.ViewImage do
   end
 
   defp resolve_image(path, base) do
-    case PathResolver.resolve_existing(path, base) do
+    case PathResolver.resolve(path, base) do
       {:ok, abs} -> if image_ext?(abs), do: {:ok, abs}, else: {:ok, abs}
       {:error, :outside_workspace} -> {:error, :outside_workspace}
-      {:error, _} -> {:error, :not_found}
+      {:error, _} -> {:error, :invalid}
     end
   end
 

@@ -149,7 +149,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
 
   # Model has started working but no content yet
   defp handle_openai_event(%{"type" => "response.in_progress"}, _opts) do
-    [content_message("", %{thinking: true})]
+    [content_message("", %{thinking: true, reasoning: true})]
   end
 
   # Additional ChatGPT events observed: 'content_part.added' and 'output_text.done'
@@ -336,7 +336,7 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
     case detect_reasoning_json(new_accumulator) do
       {:complete, reasoning, answer} ->
         put_text_accumulator("")
-        base = [content_message("Thinking: #{reasoning}\n\n", %{reasoning: true})]
+        base = [content_message("Thinking: #{reasoning}\n\n", %{reasoning: true, thinking: true})]
         maybe_add_answer(base, answer)
 
       {:incomplete} ->
@@ -565,7 +565,10 @@ defmodule TheMaestro.Streaming.OpenAIHandler do
       [%{"type" => "text", "text" => text}] ->
         case parse_reasoning_json(text) do
           {:ok, reasoning, answer} ->
-            base = [content_message("Thinking: #{reasoning}\n\n", %{reasoning: true})]
+            base = [
+              content_message("Thinking: #{reasoning}\n\n", %{reasoning: true, thinking: true})
+            ]
+
             maybe_add_answer(base, answer)
 
           {:error, _} ->

@@ -157,11 +157,16 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
   # Handle text content deltas
   defp handle_text_delta(event) do
     case get_in(event, ["delta", "text"]) do
-      nil -> []
+      nil ->
+        []
+
       text ->
         case detect_reasoning_json(text) do
           {:complete, reasoning, answer} ->
-            base = [content_message("Thinking: #{reasoning}\n\n", %{reasoning: true})]
+            base = [
+              content_message("Thinking: #{reasoning}\n\n", %{reasoning: true, thinking: true})
+            ]
+
             maybe_add_answer(base, answer)
 
           {:incomplete} ->
@@ -282,11 +287,17 @@ defmodule TheMaestro.Streaming.AnthropicHandler do
     case Jason.decode(text) do
       {:ok, %{"reasoning" => reasoning} = parsed} ->
         answer = Map.get(parsed, "answer") || Map.get(parsed, "response")
-        answer_text = if is_list(answer), do: Enum.join(answer, " "), else: to_string(answer || "")
+
+        answer_text =
+          if is_list(answer), do: Enum.join(answer, " "), else: to_string(answer || "")
+
         {:ok, reasoning, answer_text}
 
-      {:ok, _} -> {:error, :not_reasoning}
-      {:error, reason} -> {:error, reason}
+      {:ok, _} ->
+        {:error, :not_reasoning}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

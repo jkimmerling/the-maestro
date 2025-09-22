@@ -42,8 +42,9 @@ defmodule TheMaestro.Domain.TurnFrame do
     }
   end
 
-  defp coerce_int(v, default) when is_integer(v), do: v
+  defp coerce_int(v, _default) when is_integer(v), do: v
   defp coerce_int(v, _default) when is_float(v), do: trunc(v)
+
   defp coerce_int(v, default) when is_binary(v) do
     case Integer.parse(v) do
       {i, _} when i >= 0 -> i
@@ -68,6 +69,7 @@ defmodule TheMaestro.Domain.TurnFrame do
 
   defp get_id(m), do: Map.get(m, :id) || Map.get(m, "id") || Ecto.UUID.generate()
   defp get_idx(m), do: coerce_int(Map.get(m, :idx) || Map.get(m, "idx") || 0, 0)
+
   defp get_at_ms(m),
     do:
       coerce_int(

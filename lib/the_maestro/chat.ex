@@ -256,10 +256,13 @@ defmodule TheMaestro.Chat do
 
   # ----- Timeline frames (v2) -----
   @doc "List frames for a thread's turn index; :latest fetches the latest turn."
-  @spec list_turn_frames(thread_id, non_neg_integer() | :latest) :: {:ok, [frame]} | {:error, term()}
+  @spec list_turn_frames(thread_id, non_neg_integer() | :latest) ::
+          {:ok, [frame]} | {:error, term()}
   def list_turn_frames(thread_id, turn_index \\ :latest) when is_binary(thread_id) do
     case Conversations.latest_snapshot_for_thread(thread_id) do
-      nil -> {:ok, []}
+      nil ->
+        {:ok, []}
+
       entry ->
         alias TheMaestro.Domain.CombinedChat
         cc = CombinedChat.from_map(entry.combined_chat)
@@ -284,6 +287,7 @@ defmodule TheMaestro.Chat do
   defp fallback_frames(cc, thread_id, idx) do
     alias TheMaestro.Domain.CombinedChat
     frames = CombinedChat.get_turn_frames(cc, thread_id, idx)
+
     if frames == [] do
       turns =
         case (cc.threads || %{})[thread_id] do
