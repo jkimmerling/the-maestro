@@ -62,7 +62,13 @@ defmodule TheMaestro.Tools.ProviderToolManifest do
   @doc "Provider-specific tool declaration list suitable for request payloads."
   @spec provider_decl_builtins(provider()) :: [map()]
   def provider_decl_builtins(:openai) do
-    [openai_shell(), openai_apply_patch(), openai_web_search(), openai_update_plan(), openai_view_image()]
+    [
+      openai_shell(),
+      openai_apply_patch(),
+      openai_web_search(),
+      openai_update_plan(),
+      openai_view_image()
+    ]
   end
 
   def provider_decl_builtins(:gemini) do
@@ -82,7 +88,8 @@ defmodule TheMaestro.Tools.ProviderToolManifest do
   end
 
   def provider_decl_builtins(:anthropic) do
-    # Anthropic uses TitleCase tool names with input_schema. Defer to provider module; here we only keep inventory unified.
+    # Anthropic uses TitleCase tool names with input_schema.
+    # Defer to provider module; here we only keep inventory unified.
     []
   end
 
@@ -157,7 +164,10 @@ defmodule TheMaestro.Tools.ProviderToolManifest do
               "type" => "object",
               "properties" => %{
                 "step" => %{"type" => "string"},
-                "status" => %{"type" => "string", "enum" => ["pending", "in_progress", "completed"]}
+                "status" => %{
+                  "type" => "string",
+                  "enum" => ["pending", "in_progress", "completed"]
+                }
               },
               "required" => ["step", "status"],
               "additionalProperties" => false
@@ -309,8 +319,10 @@ defmodule TheMaestro.Tools.ProviderToolManifest do
       "description" => "Read multiple files.",
       "parameters" =>
         obj(
-          %{"files" => %{"type" => "array", "items" => %{"type" => "string"}},
-            "separator" => %{"type" => "string"}},
+          %{
+            "files" => %{"type" => "array", "items" => %{"type" => "string"}},
+            "separator" => %{"type" => "string"}
+          },
           ["files"]
         )
     }
@@ -332,4 +344,3 @@ defmodule TheMaestro.Tools.ProviderToolManifest do
     }
   end
 end
-

@@ -17,41 +17,55 @@ defmodule TheMaestro.Tools.WebSearch do
 
   defp run_tavily(args) do
     api_key =
-      Application.get_env(:the_maestro, :tavily_api_key) ||
-        System.get_env("TAVILY_API_KEY")
+      Application.get_env(:the_maestro, :tavily_api_key) || System.get_env("TAVILY_API_KEY")
 
     q = Map.get(args, "query") || Map.get(args, :query)
     depth = Map.get(args, "search_depth") || "basic"
     allowed = Map.get(args, "allowed_domains") || Map.get(args, :allowed_domains) || []
     blocked = Map.get(args, "blocked_domains") || Map.get(args, :blocked_domains) || []
 
-    cond do
-      is_nil(api_key) or api_key == "" ->
-        {:error, "tavily api key missing"}
+    with :ok <- ensure_key(api_key),
+         {:ok, query} <- ensure_query(q),
+         {:ok, payload} <- build_tavily_payload(api_key, query, depth, allowed, blocked),
+         {:ok, body, duration} <- post_json("https://api.tavily.com/search", payload) do
+      {:ok, ExecOutput.format(Jason.encode!(body), 0, duration)}
+    end
+  end
 
-      !is_binary(q) or String.trim(q) == "" ->
-        {:error, "missing query"}
+  defp ensure_key(nil), do: {:error, "tavily api key missing"}
+  defp ensure_key(""), do: {:error, "tavily api key missing"}
+  defp ensure_key(_), do: :ok
 
-      true ->
-        started = System.monotonic_time(:millisecond)
-        url = "https://api.tavily.com/search"
-        payload =
-          %{
-            api_key: api_key,
-            query: q,
-            search_depth: depth
-          }
-          |> maybe_put(:include_domains, sanitize_domains(allowed))
-          |> maybe_put(:exclude_domains, sanitize_domains(blocked))
+  defp ensure_query(q) do
+    if is_binary(q) and String.trim(q) != "" do
+      {:ok, q}
+    else
+      {:error, "missing query"}
+    end
+  end
 
-        try do
-          resp = Req.post!(url: url, json: payload, receive_timeout: 20_000)
-          duration = (System.monotonic_time(:millisecond) - started) / 1000
-          out = Jason.encode!(resp.body)
-          {:ok, ExecOutput.format(out, 0, duration)}
-        rescue
-          e -> {:error, Exception.message(e)}
-        end
+  defp build_tavily_payload(api_key, q, depth, allowed, blocked) do
+    payload =
+      %{
+        api_key: api_key,
+        query: q,
+        search_depth: depth
+      }
+      |> maybe_put(:include_domains, sanitize_domains(allowed))
+      |> maybe_put(:exclude_domains, sanitize_domains(blocked))
+
+    {:ok, payload}
+  end
+
+  defp post_json(url, payload) do
+    started = System.monotonic_time(:millisecond)
+
+    try do
+      resp = Req.post!(url: url, json: payload, receive_timeout: 20_000)
+      duration = (System.monotonic_time(:millisecond) - started) / 1000
+      {:ok, resp.body, duration}
+    rescue
+      e -> {:error, Exception.message(e)}
     end
   end
 
@@ -59,12 +73,15 @@ defmodule TheMaestro.Tools.WebSearch do
     Enum.flat_map(list, fn
       s when is_binary(s) ->
         trimmed = String.trim(s)
+
         if trimmed == "" do
           []
         else
           [trimmed]
         end
-      _ -> []
+
+      _ ->
+        []
     end)
   end
 

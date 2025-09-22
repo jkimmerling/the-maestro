@@ -9,7 +9,8 @@ defmodule TheMaestro.Tools.Edit do
     - expected_replacements?: integer (default 1)
   """
 
-  alias TheMaestro.Tools.{PathResolver, ExecOutput}
+  alias TheMaestro.Tools.{ExecOutput, PathResolver}
+  alias TheMaestro.Tools.Filters.EmojiFilter
 
   @spec run(map(), keyword()) ::
           {:ok, String.t(), %{prev: String.t(), new: String.t(), path: String.t()}}
@@ -55,43 +56,60 @@ defmodule TheMaestro.Tools.Edit do
   end
 
   defp apply_edit(prev, exists?, args) do
-    old = Map.get(args, "old_string") || Map.get(args, :old_string) || ""
-    new = Map.get(args, "new_string") || Map.get(args, :new_string) || ""
-    replace_all = Map.get(args, "replace_all") || Map.get(args, :replace_all) || false
+    with {:ok, old, new, replace_all?} <- fetch_edit_strings(args),
+         :ok <- validate_creation(old, exists?) do
+      src_result = if old == "", do: {:ok, ""}, else: ensure_source(prev)
 
-    cond do
-      not is_binary(old) or not is_binary(new) ->
-        {:error, "invalid edit arguments"}
-
-      old == "" and exists? ->
-        {:error, "attempt to create existing file"}
-
-      old == "" and not exists? ->
-        {:ok, new}
-
-      prev == nil ->
-        {:error, "file not found"}
-
-      old == new ->
-        {:error, "no change"}
-
-      true ->
-        occ = occurrences(prev, old)
-
-        cond do
-          occ == 0 -> {:error, "no occurrences found"}
-          replace_all == true -> {:ok, String.replace(prev, old, new)}
-          occ == 1 -> {:ok, String.replace(prev, old, new)}
-          true -> {:error, "non-unique match without replace_all"}
-        end
+      with {:ok, source} <- src_result,
+           :ok <- validate_change(old, new),
+           :ok <- validate_occurrences(source, old, replace_all?) do
+        {:ok, apply_replacement(source, old, new, replace_all?)}
+      end
     end
   end
+
+  defp fetch_edit_strings(args) do
+    old = Map.get(args, "old_string") || Map.get(args, :old_string) || ""
+    new = Map.get(args, "new_string") || Map.get(args, :new_string) || ""
+    replace_all? = Map.get(args, "replace_all") || Map.get(args, :replace_all) || false
+
+    if is_binary(old) and is_binary(new) do
+      {:ok, old, new, replace_all?}
+    else
+      {:error, "invalid edit arguments"}
+    end
+  end
+
+  defp validate_creation("", true), do: {:error, "attempt to create existing file"}
+  defp validate_creation("", false), do: :ok
+  defp validate_creation(_old, _exists?), do: :ok
+
+  defp ensure_source(nil), do: {:error, "file not found"}
+  defp ensure_source(content), do: {:ok, content}
+
+  defp validate_change(old, new) when old == new, do: {:error, "no change"}
+  defp validate_change(_old, _new), do: :ok
+
+  defp validate_occurrences(_content, "", _replace_all), do: :ok
+
+  defp validate_occurrences(content, old, replace_all?) do
+    case occurrences(content, old) do
+      0 -> {:error, "no occurrences found"}
+      1 -> :ok
+      _count when replace_all? -> :ok
+      _ -> {:error, "non-unique match without replace_all"}
+    end
+  end
+
+  defp apply_replacement(_content, "", new, _replace_all?), do: new
+  defp apply_replacement(content, old, new, true), do: String.replace(content, old, new)
+  defp apply_replacement(content, old, new, false), do: String.replace(content, old, new)
 
   defp occurrences(content, sub) do
     do_count(content, sub, 0, 0)
   end
 
-  defp do_count(_c, _s, _i, n) when _s == "", do: n
+  defp do_count(_c, s, _i, n) when s == "", do: n
 
   defp do_count(c, s, i, n) do
     case :binary.match(c, s, scope: {i, byte_size(c) - i}) do
@@ -110,7 +128,7 @@ defmodule TheMaestro.Tools.Edit do
   end
 
   defp maybe_filter_new_string(text) do
-    mode = TheMaestro.Tools.Filters.EmojiFilter.mode_from_env()
-    TheMaestro.Tools.Filters.EmojiFilter.filter(text, mode)
+    mode = EmojiFilter.mode_from_env()
+    EmojiFilter.filter(text, mode)
   end
 end

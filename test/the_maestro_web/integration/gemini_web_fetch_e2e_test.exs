@@ -1,9 +1,9 @@
 defmodule TheMaestroWeb.Integration.GeminiWebFetchE2ETest do
   use TheMaestroWeb.ConnCase, async: true
 
+  alias TheMaestro.AgentLoop
   alias TheMaestro.Auth
   alias TheMaestro.Conversations
-  alias TheMaestro.AgentLoop
 
   setup do
     {:ok, saved_auth} =
@@ -37,9 +37,19 @@ defmodule TheMaestroWeb.Integration.GeminiWebFetchE2ETest do
 
     contents = AgentLoop.build_gemini_tool_followup_public([], calls)
 
-    assert [%{"role" => "assistant", "parts" => _fc}, %{"role" => "tool", "parts" => fr_parts}] = contents
-    assert [%{"functionResponse" => %{"name" => "web_fetch", "id" => "call_1", "response" => resp}}] = fr_parts
+    assert [%{"role" => "assistant", "parts" => _fc}, %{"role" => "tool", "parts" => fr_parts}] =
+             contents
+
+    assert [
+             %{
+               "functionResponse" => %{
+                 "name" => "web_fetch",
+                 "id" => "call_1",
+                 "response" => resp
+               }
+             }
+           ] = fr_parts
+
     assert is_map(resp)
   end
 end
-

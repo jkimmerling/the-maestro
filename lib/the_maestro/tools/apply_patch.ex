@@ -3,8 +3,8 @@ defmodule TheMaestro.Tools.ApplyPatch do
   Full `apply_patch` tool using a dedicated parser and runner.
   """
 
-  alias TheMaestro.Tools.ExecOutput
   alias TheMaestro.Tools.ApplyPatch.Runner
+  alias TheMaestro.Tools.ExecOutput
 
   @type result :: {:ok, String.t()} | {:error, String.t()}
 
@@ -16,7 +16,7 @@ defmodule TheMaestro.Tools.ApplyPatch do
 
     case Runner.apply(patch, base_cwd: base) do
       {:ok, %{added: _a, modified: _m, deleted: _d} = res} ->
-        summary = Runner.format_summary(res, base)
+        summary = Runner.format_summary(Map.take(res, [:added, :modified, :deleted]), base)
         {:ok, ExecOutput.format(summary, 0, 0.0)}
 
       {:error, reason} ->

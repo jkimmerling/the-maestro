@@ -13,14 +13,19 @@ defmodule TheMaestro.Images do
   @spec list(String.t(), String.t() | nil) :: [map()]
   def list(session_id, thread_id \\ nil) when is_binary(session_id) do
     key = key(session_id, thread_id)
+
     case RedisClient.command(TheMaestro.Redis, ["GET", key]) do
-      {:ok, nil} -> []
+      {:ok, nil} ->
+        []
+
       {:ok, json} ->
         case Jason.decode(json) do
           {:ok, list} when is_list(list) -> list
           _ -> []
         end
-      _ -> []
+
+      _ ->
+        []
     end
   end
 
@@ -28,7 +33,7 @@ defmodule TheMaestro.Images do
   def append(session_id, thread_id \\ nil, item) when is_binary(session_id) and is_map(item) do
     key = key(session_id, thread_id)
     prev = list(session_id, thread_id)
-    payload = Jason.encode!((prev ++ [item]))
+    payload = Jason.encode!(prev ++ [item])
     _ = RedisClient.command(TheMaestro.Redis, ["SET", key, payload])
     :ok
   end
@@ -43,12 +48,17 @@ defmodule TheMaestro.Images do
   @spec clear_all(String.t()) :: :ok
   def clear_all(session_id) when is_binary(session_id) do
     prefix = Enum.join([@prefix, session_id], ":")
-    {:ok, ["0", keys]} = RedisClient.command(TheMaestro.Redis, ["SCAN", "0", "MATCH", prefix <> "*", "COUNT", "1000"])
+
+    {:ok, ["0", keys]} =
+      RedisClient.command(TheMaestro.Redis, ["SCAN", "0", "MATCH", prefix <> "*", "COUNT", "1000"])
+
     keys = List.wrap(keys)
+
     case keys do
       [] -> :ok
       ks -> _ = RedisClient.command(TheMaestro.Redis, ["DEL" | ks])
     end
+
     :ok
   end
 

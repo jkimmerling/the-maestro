@@ -145,6 +145,7 @@ defmodule TheMaestro.Conversations do
     rescue
       _ -> :ok
     end
+
     Repo.delete(session)
   end
 
@@ -161,6 +162,7 @@ defmodule TheMaestro.Conversations do
       rescue
         _ -> :ok
       end
+
       from(e in ChatEntry, where: e.session_id == ^session.id)
       |> Repo.update_all(set: [session_id: nil])
 
@@ -189,6 +191,7 @@ defmodule TheMaestro.Conversations do
       rescue
         _ -> :ok
       end
+
       # Delete all chat entries that reference this session
       from(e in ChatEntry, where: e.session_id == ^session.id)
       |> Repo.delete_all()

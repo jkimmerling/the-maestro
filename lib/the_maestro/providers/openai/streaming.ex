@@ -400,7 +400,6 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
 
   # Legacy filters removed; ToolSurface applies allowlist
 
-
   # -- follow-up builders (extracted to reduce complexity) --
   defp build_followup_request(:enterprise, session_name, items, opts) do
     with {:ok, req0} <- ReqClientFactory.create_client(:openai, :api_key, session: session_name) do

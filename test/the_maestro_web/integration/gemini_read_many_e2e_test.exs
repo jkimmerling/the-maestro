@@ -1,9 +1,9 @@
 defmodule TheMaestroWeb.Integration.GeminiReadManyE2ETest do
   use TheMaestroWeb.ConnCase, async: true
 
+  alias TheMaestro.AgentLoop
   alias TheMaestro.Auth
   alias TheMaestro.Conversations
-  alias TheMaestro.AgentLoop
 
   setup do
     {:ok, saved_auth} =
@@ -38,16 +38,30 @@ defmodule TheMaestroWeb.Integration.GeminiReadManyE2ETest do
       %{
         "id" => "call_1",
         "name" => "read_many_files",
-        "arguments" => Jason.encode!(%{"files" => [Path.relative_to(p1, base), Path.relative_to(p2, base)]})
+        "arguments" =>
+          Jason.encode!(%{"files" => [Path.relative_to(p1, base), Path.relative_to(p2, base)]})
       }
     ]
 
     contents = AgentLoop.build_gemini_tool_followup_public([], calls)
 
-    assert [%{"role" => "assistant", "parts" => fc_parts}, %{"role" => "tool", "parts" => fr_parts}] = contents
+    assert [
+             %{"role" => "assistant", "parts" => fc_parts},
+             %{"role" => "tool", "parts" => fr_parts}
+           ] = contents
+
     assert [%{"functionCall" => %{"name" => "read_many_files", "id" => "call_1"}}] = fc_parts
-    assert [%{"functionResponse" => %{"name" => "read_many_files", "id" => "call_1", "response" => resp}}] = fr_parts
+
+    assert [
+             %{
+               "functionResponse" => %{
+                 "name" => "read_many_files",
+                 "id" => "call_1",
+                 "response" => resp
+               }
+             }
+           ] = fr_parts
+
     assert is_map(resp)
   end
 end
-

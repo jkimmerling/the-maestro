@@ -41,6 +41,7 @@ defmodule TheMaestro.Tools.UpdatePlanTest do
     assert Enum.any?(stored, &(&1["step"] == "Add tools" or &1[:step] == "Add tools"))
 
     bad = put_in(args, ["plan", Access.at(1), "status"], "in_progress")
+
     assert {:error, "multiple in_progress steps"} =
              UpdatePlan.run(bad, session_id: session.id)
   end

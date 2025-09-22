@@ -91,23 +91,21 @@ defmodule TheMaestro.Tools.ApplyPatch.Parser do
   defp do_parse_hunks([], _ln, acc), do: {:ok, Enum.reverse(acc)}
 
   defp do_parse_hunks([line | rest], ln, acc) do
-    trimmed = String.trim(line)
+    line
+    |> String.trim()
+    |> handle_hunk_line(line, rest, ln, acc)
+  end
 
+  defp handle_hunk_line("", _line, rest, ln, acc), do: do_parse_hunks(rest, ln + 1, acc)
+
+  defp handle_hunk_line(trimmed, _line, rest, ln, acc) do
     cond do
-      trimmed == "" ->
-        do_parse_hunks(rest, ln + 1, acc)
-
       String.starts_with?(trimmed, @add_marker) ->
         path = String.trim_leading(trimmed, @add_marker)
-        {add_lines, rest2, consumed} = take_prefixed(rest, ?+, [])
-
-        contents =
-          add_lines
-          |> Enum.map(&String.trim_leading(&1, "+"))
-          |> Enum.join("\n")
-
-        contents = contents <> "\n"
-        do_parse_hunks(rest2, ln + 1 + consumed, [{:add, path, contents} | acc])
+        {add_lines, remaining, consumed} = take_prefixed(rest, ?+, [])
+        joined = add_lines |> Enum.map(&String.trim_leading(&1, "+")) |> Enum.join("\n")
+        contents = joined <> "\n"
+        do_parse_hunks(remaining, ln + 1 + consumed, [{:add, path, contents} | acc])
 
       String.starts_with?(trimmed, @del_marker) ->
         path = String.trim_leading(trimmed, @del_marker)
@@ -115,31 +113,19 @@ defmodule TheMaestro.Tools.ApplyPatch.Parser do
 
       String.starts_with?(trimmed, @upd_marker) ->
         path = String.trim_leading(trimmed, @upd_marker)
+        {move_to, after_move, move_consumed} = extract_move_target(rest)
 
-        {move_to, rest_after_move, move_consumed} =
-          case rest do
-            [mt | tail] ->
-              if String.starts_with?(mt, @move_marker) do
-                {String.trim_leading(mt, @move_marker), tail, 1}
-              else
-                {nil, rest, 0}
-              end
+        {chunks, remaining, chunk_consumed} =
+          parse_update_chunks(after_move, ln + 1 + move_consumed)
 
-            _ ->
-              {nil, rest, 0}
-          end
+        case chunks do
+          [] ->
+            {:error, "invalid hunk at line #{ln}: Update file hunk for path '#{path}' is empty"}
 
-        {chunks, rest_after_chunks, chunk_consumed} =
-          parse_update_chunks(rest_after_move, ln + 1 + move_consumed)
-
-        if chunks == [] do
-          {:error, "invalid hunk at line #{ln}: Update file hunk for path '#{path}' is empty"}
-        else
-          do_parse_hunks(
-            rest_after_chunks,
-            ln + 1 + move_consumed + chunk_consumed,
-            [{:update, path, move_to, chunks} | acc]
-          )
+          _ ->
+            do_parse_hunks(remaining, ln + 1 + move_consumed + chunk_consumed, [
+              {:update, path, move_to, chunks} | acc
+            ])
         end
 
       true ->
@@ -148,49 +134,58 @@ defmodule TheMaestro.Tools.ApplyPatch.Parser do
     end
   end
 
-  defp parse_update_chunks(lines, ln) do
-    do_parse_update_chunks(lines, ln, true, [], 0)
+  defp extract_move_target([line | rest]) do
+    if String.starts_with?(line, @move_marker) do
+      {String.trim_leading(line, @move_marker), rest, 1}
+    else
+      {nil, [line | rest], 0}
+    end
   end
 
-  defp do_parse_update_chunks([], _ln, _allow_missing, acc, consumed),
+  defp extract_move_target([]), do: {nil, [], 0}
+
+  defp parse_update_chunks(lines, ln), do: collect_chunks(lines, ln, true, [], 0)
+
+  defp collect_chunks([], _ln, _allow_missing, acc, consumed),
     do: {Enum.reverse(acc), [], consumed}
 
-  defp do_parse_update_chunks([line | rest] = all, ln, allow_missing, acc, consumed) do
+  defp collect_chunks([line | rest] = all, ln, allow_missing, acc, consumed) do
+    case classify_chunk_line(line) do
+      :blank -> collect_chunks(rest, ln + 1, allow_missing, acc, consumed + 1)
+      :header -> {Enum.reverse(acc), all, consumed}
+      :content -> collect_chunk_content(all, ln, allow_missing, acc, consumed)
+    end
+  end
+
+  defp classify_chunk_line(line) do
     trimmed = String.trim(line)
 
     cond do
-      trimmed == "" ->
-        do_parse_update_chunks(rest, ln + 1, allow_missing, acc, consumed + 1)
+      trimmed == "" -> :blank
+      String.starts_with?(trimmed, "***") -> :header
+      true -> :content
+    end
+  end
 
-      String.starts_with?(trimmed, "***") ->
-        {Enum.reverse(acc), all, consumed}
+  defp collect_chunk_content(lines, ln, allow_missing, acc, consumed) do
+    case parse_one_chunk(lines, ln, allow_missing) do
+      {:ok, chunk, used} ->
+        updated_lines = Enum.drop(lines, used)
+        collect_chunks(updated_lines, ln + used, false, [chunk | acc], consumed + used)
 
-      true ->
-        case parse_one_chunk(all, ln, allow_missing) do
-          {:ok, chunk, used} ->
-            do_parse_update_chunks(
-              Enum.drop(all, used),
-              ln + used,
-              false,
-              [chunk | acc],
-              consumed + used
-            )
+      {:error, _} ->
+        collect_fallback_chunk(lines, ln, acc, consumed)
+    end
+  end
 
-          {:error, _msg} ->
-            case parse_fallback_chunk(all) do
-              {:ok, chunk, used} when used > 0 ->
-                do_parse_update_chunks(
-                  Enum.drop(all, used),
-                  ln + used,
-                  false,
-                  [chunk | acc],
-                  consumed + used
-                )
+  defp collect_fallback_chunk(lines, ln, acc, consumed) do
+    case parse_fallback_chunk(lines) do
+      {:ok, chunk, used} when used > 0 ->
+        updated_lines = Enum.drop(lines, used)
+        collect_chunks(updated_lines, ln + used, false, [chunk | acc], consumed + used)
 
-              _ ->
-                {Enum.reverse(acc), all, consumed}
-            end
-        end
+      _ ->
+        {Enum.reverse(acc), lines, consumed}
     end
   end
 
@@ -213,120 +208,124 @@ defmodule TheMaestro.Tools.ApplyPatch.Parser do
            "invalid hunk at line #{ln}, Expected update hunk to start with a @@ context marker, got: '#{first}'"}
       end
 
-    case change_context do
-      {:error, msg} ->
-        {:error, msg}
-
-      _ ->
-        if start_idx >= length(lines) do
-          {:error, "invalid hunk at line #{ln + 1}, Update hunk does not contain any lines"}
-        else
-          take_update_lines(Enum.drop(lines, start_idx), ln + start_idx, change_context)
-        end
+    if start_idx >= length(lines) do
+      {:error, "invalid hunk at line #{ln + 1}, Update hunk does not contain any lines"}
+    else
+      take_update_lines(Enum.drop(lines, start_idx), ln + start_idx, change_context)
     end
   end
 
   defp take_update_lines(lines, ln, change_context) do
     {collected, consumed, eof?} =
       Enum.reduce_while(lines, {[], 0, false}, fn line, {acc, n, eof?} ->
-        cond do
-          line == @eof_marker ->
-            {:halt, {acc, n + 1, true}}
-
-          String.starts_with?(line, @add_marker) or String.starts_with?(line, @del_marker) or
-              String.starts_with?(line, @upd_marker) ->
-            {:halt, {acc, n, false}}
-
-          true ->
-            case String.first(line) do
-              nil ->
-                {:cont, {[{:both, ""} | acc], n + 1, eof?}}
-
-              " " ->
-                {:cont, {[{:both, String.trim_leading(line, " ")} | acc], n + 1, eof?}}
-
-              "+" ->
-                {:cont, {[{:add, String.trim_leading(line, "+")} | acc], n + 1, eof?}}
-
-              "-" ->
-                {:cont, {[{:del, String.trim_leading(line, "-")} | acc], n + 1, eof?}}
-
-              _ when n == 0 ->
-                {:halt,
-                 {acc, :error,
-                  "invalid hunk at line #{ln + 1}, Unexpected line found in update hunk: '#{line}'. Every line should start with ' ' (context line), '+' (added line), or '-' (removed line)"}}
-
-              _ ->
-                {:halt, {acc, n, eof?}}
-            end
-        end
+        reduce_update_line(line, {acc, n, eof?}, ln)
       end)
 
     case consumed do
-      :error ->
-        {:error, eof?}
-
-      _ ->
-        {old_lines, new_lines} =
-          collected
-          |> Enum.reverse()
-          |> Enum.reduce({[], []}, fn
-            {:both, s}, {o, n} -> {o ++ [s], n ++ [s]}
-            {:add, s}, {o, n} -> {o, n ++ [s]}
-            {:del, s}, {o, n} -> {o ++ [s], n}
-          end)
-
-        {:ok,
-         %{
-           change_context:
-             (change_context == nil and change_context) ||
-               (is_binary(change_context) && change_context) || nil,
-           old_lines: old_lines,
-           new_lines: new_lines,
-           is_end_of_file: eof?
-         }, consumed + if(change_context in [nil, false], do: 0, else: 1)}
+      :error -> {:error, eof?}
+      _ -> build_update_result(collected, consumed, change_context, eof?)
     end
   end
 
-  defp parse_fallback_chunk(lines) do
-    {collected, used} =
-      Enum.reduce_while(lines, {[], 0}, fn line, {acc, n} ->
-        cond do
-          String.starts_with?(line, @add_marker) or String.starts_with?(line, @del_marker) or
-              String.starts_with?(line, @upd_marker) ->
-            {:halt, {acc, n}}
+  defp reduce_update_line(line, {acc, n, eof?}, ln) do
+    case classify_update_line(line) do
+      :eof ->
+        {:halt, {acc, n + 1, true}}
 
-          true ->
-            case String.first(line) do
-              " " -> {:cont, {[{:both, String.trim_leading(line, " ")} | acc], n + 1}}
-              "+" -> {:cont, {[{:add, String.trim_leading(line, "+")} | acc], n + 1}}
-              "-" -> {:cont, {[{:del, String.trim_leading(line, "-")} | acc], n + 1}}
-              _ -> {:halt, {acc, n}}
-            end
-        end
+      :header ->
+        {:halt, {acc, n, false}}
+
+      {:content, nil} ->
+        {:cont, {[{:both, ""} | acc], n + 1, eof?}}
+
+      {:content, " "} ->
+        {:cont, {[{:both, String.trim_leading(line, " ")} | acc], n + 1, eof?}}
+
+      {:content, "+"} ->
+        {:cont, {[{:add, String.trim_leading(line, "+")} | acc], n + 1, eof?}}
+
+      {:content, "-"} ->
+        {:cont, {[{:del, String.trim_leading(line, "-")} | acc], n + 1, eof?}}
+
+      {:content, _other} when n == 0 ->
+        {:halt,
+         {acc, :error,
+          "invalid hunk at line #{ln + 1}, Unexpected line found in update hunk: '#{line}'. Every line should start with ' ' (context line), '+' (added line), or '-' (removed line)"}}
+
+      {:content, _} ->
+        {:halt, {acc, n, eof?}}
+    end
+  end
+
+  defp classify_update_line(line) do
+    cond do
+      line == @eof_marker ->
+        :eof
+
+      String.starts_with?(line, @add_marker) or String.starts_with?(line, @del_marker) or
+          String.starts_with?(line, @upd_marker) ->
+        :header
+
+      true ->
+        {:content, String.first(line)}
+    end
+  end
+
+  defp build_update_result(collected, consumed, change_context, eof?) do
+    {old_lines, new_lines} =
+      collected
+      |> Enum.reverse()
+      |> Enum.reduce({[], []}, fn
+        {:both, s}, {o, n} -> {o ++ [s], n ++ [s]}
+        {:add, s}, {o, n} -> {o, n ++ [s]}
+        {:del, s}, {o, n} -> {o ++ [s], n}
       end)
 
-    case used do
-      0 ->
-        {:error, :empty}
+    {:ok,
+     %{
+       change_context: (is_binary(change_context) && change_context) || nil,
+       old_lines: old_lines,
+       new_lines: new_lines,
+       is_end_of_file: eof?
+     }, consumed + if(change_context == nil, do: 0, else: 1)}
+  end
 
-      _ ->
-        {old_lines, new_lines} =
-          collected
-          |> Enum.reverse()
-          |> Enum.reduce({[], []}, fn
-            {:both, s}, {o, n} -> {o ++ [s], n ++ [s]}
-            {:add, s}, {o, n} -> {o, n ++ [s]}
-            {:del, s}, {o, n} -> {o ++ [s], n}
-          end)
+  defp parse_fallback_chunk(lines) do
+    {collected, used} = Enum.reduce_while(lines, {[], 0}, &reduce_fallback_line/2)
 
-        {:ok,
-         %{
-           change_context: nil,
-           old_lines: old_lines,
-           new_lines: new_lines,
-           is_end_of_file: false
-         }, used}
+    if used == 0 do
+      {:error, :empty}
+    else
+      {old_lines, new_lines} =
+        collected
+        |> Enum.reverse()
+        |> Enum.reduce({[], []}, fn
+          {:both, s}, {o, n} -> {o ++ [s], n ++ [s]}
+          {:add, s}, {o, n} -> {o, n ++ [s]}
+          {:del, s}, {o, n} -> {o ++ [s], n}
+        end)
+
+      {:ok,
+       %{
+         change_context: nil,
+         old_lines: old_lines,
+         new_lines: new_lines,
+         is_end_of_file: false
+       }, used}
+    end
+  end
+
+  defp reduce_fallback_line(line, {acc, n}) do
+    if String.starts_with?(line, @add_marker) or String.starts_with?(line, @del_marker) or
+         String.starts_with?(line, @upd_marker) do
+      {:halt, {acc, n}}
+    else
+      case String.first(line) do
+        " " -> {:cont, {[{:both, String.trim_leading(line, " ")} | acc], n + 1}}
+        "+" -> {:cont, {[{:add, String.trim_leading(line, "+")} | acc], n + 1}}
+        "-" -> {:cont, {[{:del, String.trim_leading(line, "-")} | acc], n + 1}}
+        _ -> {:halt, {acc, n}}
+      end
     end
   end
 
@@ -334,7 +333,7 @@ defmodule TheMaestro.Tools.ApplyPatch.Parser do
     case lines do
       [line | rest] ->
         if String.starts_with?(line, "+") do
-          take_prefixed(rest, _mark, [line | acc])
+          take_prefixed(rest, :same, [line | acc])
         else
           {Enum.reverse(acc), lines, length(acc)}
         end

@@ -2,9 +2,9 @@ defmodule TheMaestroWeb.Integration.GeminiReplaceServerE2ETest do
   use TheMaestroWeb.ConnCase, async: true
 
   import Ecto.Query
+  alias TheMaestro.AgentLoop
   alias TheMaestro.Auth
   alias TheMaestro.Conversations
-  alias TheMaestro.AgentLoop
 
   setup do
     {:ok, saved_auth} =
@@ -26,7 +26,10 @@ defmodule TheMaestroWeb.Integration.GeminiReplaceServerE2ETest do
     {:ok, %{session: session, saved_auth: saved_auth}}
   end
 
-  test "server-side replace logs ToolChangeLog and builds Cloud Code parts", %{session: session, saved_auth: sa} do
+  test "server-side replace logs ToolChangeLog and builds Cloud Code parts", %{
+    session: session,
+    saved_auth: sa
+  } do
     base = File.cwd!()
     rel = "tmp/e2e_gemini_replace_server.txt"
     abs = Path.join(base, rel)
@@ -34,7 +37,13 @@ defmodule TheMaestroWeb.Integration.GeminiReplaceServerE2ETest do
     File.mkdir_p!(Path.dirname(abs))
     File.write!(abs, "a\na\n")
 
-    args_map = %{"file_path" => rel, "old_string" => "a", "new_string" => "b", "expected_replacements" => 2}
+    args_map = %{
+      "file_path" => rel,
+      "old_string" => "a",
+      "new_string" => "b",
+      "expected_replacements" => 2
+    }
+
     calls = [%{"id" => "call_1", "name" => "replace", "arguments" => Jason.encode!(args_map)}]
 
     t0_ms = System.monotonic_time(:millisecond)

@@ -28,39 +28,38 @@ defmodule TheMaestro.Tools.UnifiedDiff do
 
     table =
       Enum.reduce(0..(m - 1), %{}, fn i, t ->
-        Enum.reduce(0..(n - 1), t, fn j, t2 ->
-          ai = Enum.at(a, i)
-          bj = Enum.at(b, j)
-
-          v =
-            if ai == bj do
-              get(t2, i, j) + 1
-            else
-              max(get(t2, i + 1, j), get(t2, i, j + 1))
-            end
-
-          put(t2, i + 1, j + 1, v)
-        end)
+        Enum.reduce(0..(n - 1), t, fn j, t2 -> lcs_cell_update(a, b, i, j, t2) end)
       end)
 
     backtrack(a, b, table, m, n)
   end
 
+  defp lcs_cell_update(a, b, i, j, t2) do
+    ai = Enum.at(a, i)
+    bj = Enum.at(b, j)
+
+    v =
+      if ai == bj do
+        get(t2, i, j) + 1
+      else
+        max(get(t2, i + 1, j), get(t2, i, j + 1))
+      end
+
+    put(t2, i + 1, j + 1, v)
+  end
+
   defp backtrack(a, b, table, i, j) do
     cond do
-      i > 0 and j > 0 and Enum.at(a, i - 1) == Enum.at(b, j - 1) ->
-        backtrack(a, b, table, i - 1, j - 1) ++ [{:eq, Enum.at(a, i - 1)}]
-
-      j > 0 and (i == 0 or get(table, i, j - 1) >= get(table, i - 1, j)) ->
-        backtrack(a, b, table, i, j - 1) ++ [{:add, Enum.at(b, j - 1)}]
-
-      i > 0 and (j == 0 or get(table, i, j - 1) < get(table, i - 1, j)) ->
-        backtrack(a, b, table, i - 1, j) ++ [{:del, Enum.at(a, i - 1)}]
-
-      true ->
-        []
+      eq_prev?(a, b, i, j) -> backtrack(a, b, table, i - 1, j - 1) ++ [{:eq, Enum.at(a, i - 1)}]
+      take_b?(table, i, j) -> backtrack(a, b, table, i, j - 1) ++ [{:add, Enum.at(b, j - 1)}]
+      take_a?(table, i, j) -> backtrack(a, b, table, i - 1, j) ++ [{:del, Enum.at(a, i - 1)}]
+      true -> []
     end
   end
+
+  defp eq_prev?(a, b, i, j), do: i > 0 and j > 0 and Enum.at(a, i - 1) == Enum.at(b, j - 1)
+  defp take_b?(table, i, j), do: j > 0 and (i == 0 or get(table, i, j - 1) >= get(table, i - 1, j))
+  defp take_a?(table, i, j), do: i > 0 and (j == 0 or get(table, i, j - 1) < get(table, i - 1, j))
 
   defp get(t, i, j), do: Map.get(t, {i, j}, 0)
   defp put(t, i, j, v), do: Map.put(t, {i, j}, v)

@@ -1,7 +1,7 @@
 defmodule TheMaestro.Conversations.CleanupRedisOnDeleteTest do
   use TheMaestro.DataCase, async: true
 
-  alias TheMaestro.{Auth, Conversations, Plans, Todos, Images}
+  alias TheMaestro.{Auth, Conversations, Images, Plans, Todos}
 
   setup do
     {:ok, saved_auth} =
@@ -36,4 +36,3 @@ defmodule TheMaestro.Conversations.CleanupRedisOnDeleteTest do
     assert Images.list(session.id) == []
   end
 end
-

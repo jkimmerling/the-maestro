@@ -6,8 +6,8 @@ defmodule TheMaestro.Tools.TodoWrite do
     - todos: [ %{content, activeForm, status} ]
   """
 
-  alias TheMaestro.Tools.ExecOutput
   alias TheMaestro.Todos
+  alias TheMaestro.Tools.ExecOutput
 
   @valid_statuses MapSet.new(["pending", "in_progress", "completed"])
 
@@ -15,12 +15,14 @@ defmodule TheMaestro.Tools.TodoWrite do
   def run(args, opts \\ []) do
     session_id = Keyword.get(opts, :session_id)
     thread_id = Keyword.get(opts, :thread_id)
-    if is_binary(session_id), do: do_run(args, session_id, thread_id), else: {:error, "missing session_id"}
+
+    if is_binary(session_id),
+      do: do_run(args, session_id, thread_id),
+      else: {:error, "missing session_id"}
   end
 
   defp do_run(args, session_id, thread_id) do
     with {:ok, todos} <- resolve_todos(args) do
-      old = Todos.list(session_id, thread_id)
       # Clear list if all completed, else store provided list
       new_list = if Enum.all?(todos, &(&1.status == "completed")), do: [], else: todos
       :ok = Todos.put(session_id, thread_id, new_list)
@@ -53,9 +55,11 @@ defmodule TheMaestro.Tools.TodoWrite do
   end
 
   defp normalize_item(other) when is_map(other) do
-    %{content: to_string(other[:content] || other["content"] || ""),
+    %{
+      content: to_string(other[:content] || other["content"] || ""),
       activeForm: to_string(other[:activeForm] || other["activeForm"] || ""),
-      status: normalize_status(other[:status] || other["status"])}
+      status: normalize_status(other[:status] || other["status"])
+    }
   end
 
   defp normalize_status(s) when s in ["pending", :pending], do: "pending"

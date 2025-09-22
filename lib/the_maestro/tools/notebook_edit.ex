@@ -37,7 +37,8 @@ defmodule TheMaestro.Tools.NotebookEdit do
           _ -> {:error, "invalid notebook_path"}
         end
 
-      _ -> {:error, "missing notebook_path"}
+      _ ->
+        {:error, "missing notebook_path"}
     end
   end
 
@@ -64,7 +65,8 @@ defmodule TheMaestro.Tools.NotebookEdit do
           _ -> {:error, "invalid notebook json"}
         end
 
-      {:error, r} -> {:error, to_string(r)}
+      {:error, r} ->
+        {:error, to_string(r)}
     end
   end
 
@@ -72,62 +74,82 @@ defmodule TheMaestro.Tools.NotebookEdit do
     cid = Map.get(args, "cell_id") || Map.get(args, :cell_id)
 
     cond do
-      cid in [nil, ""] and mode == "insert" -> {:ok, 0}
-      cid in [nil, ""] -> {:error, "cell_id required unless inserting"}
-      is_integer(cid) -> {:ok, clamp_index(cid, length(cells))}
+      cid in [nil, ""] ->
+        if mode == "insert", do: {:ok, 0}, else: {:error, "cell_id required unless inserting"}
+
+      is_integer(cid) ->
+        {:ok, clamp_index(cid, length(cells))}
+
       is_binary(cid) ->
-        case Integer.parse(cid) do
-          {i, _} -> {:ok, clamp_index(i, length(cells))}
-          :error ->
-            case Enum.find_index(cells, fn c -> Map.get(c, "id") == cid end) do
-              nil -> {:error, "cell id not found"}
-              idx -> {:ok, idx}
-            end
-        end
+        pick_index_from_string(cid, cells)
+
+      true ->
+        {:error, "cell_id required unless inserting"}
     end
   end
 
-  defp clamp_index(i, len) when i < 0, do: 0
+  defp pick_index_from_string(cid, cells) do
+    case Integer.parse(cid) do
+      {i, _} -> {:ok, clamp_index(i, length(cells))}
+      :error -> pick_index_by_cell_id(cid, cells)
+    end
+  end
+
+  defp pick_index_by_cell_id(cid, cells) do
+    idx = Enum.find_index(cells, fn c -> Map.get(c, "id") == cid end)
+    if is_nil(idx), do: {:error, "cell id not found"}, else: {:ok, idx}
+  end
+
+  defp clamp_index(i, _len) when i < 0, do: 0
   defp clamp_index(i, len) when i > len, do: len
   defp clamp_index(i, _len), do: i
 
-  defp apply_edit(nb, idx, args, mode)
-       when mode in ["replace", "insert", "delete"] do
+  defp apply_edit(nb, idx, args, mode) when mode in ["replace", "insert", "delete"] do
     case mode do
-      "delete" ->
-        {:ok, update_in(nb, ["cells"], &List.delete_at(&1, idx))}
+      "delete" -> do_delete(nb, idx)
+      "insert" -> do_insert(nb, idx, args)
+      "replace" -> do_replace(nb, idx, args)
+    end
+  end
 
-      "insert" ->
-        cell_type = (Map.get(args, "cell_type") || Map.get(args, :cell_type) || "code") |> to_string()
-        new_source = get_source!(args)
+  defp do_delete(nb, idx), do: {:ok, update_in(nb, ["cells"], &List.delete_at(&1, idx))}
+
+  defp do_insert(nb, idx, args) do
+    cell_type = (Map.get(args, "cell_type") || Map.get(args, :cell_type) || "code") |> to_string()
+
+    case get_source(args) do
+      {:ok, new_source} ->
         cell = new_cell(new_source, cell_type, nil)
         {:ok, update_in(nb, ["cells"], &List.insert_at(&1, idx, cell))}
 
-      "replace" ->
-        new_source = get_source!(args)
-        cells = nb["cells"] || []
-        cell = Enum.at(cells, idx)
-        if is_nil(cell) do
-          # Append behavior: replace at end becomes insert
-          cell = new_cell(new_source, Map.get(args, "cell_type") || "code", nil)
-          {:ok, update_in(nb, ["cells"], &List.insert_at(&1, idx, cell))}
-        else
-          cell2 =
-            cell
-            |> Map.put("source", new_source)
-            |> maybe_reset_code_outputs()
-
-          {:ok, put_in(nb["cells"][idx], cell2)}
-        end
+      {:error, r} ->
+        {:error, r}
     end
-  rescue
-    e -> {:error, Exception.message(e)}
   end
 
-  defp get_source!(args) do
+  defp do_replace(nb, idx, args) do
+    with {:ok, new_source} <- get_source(args) do
+      cells = nb["cells"] || []
+      cell = Enum.at(cells, idx)
+
+      if is_nil(cell) do
+        cell = new_cell(new_source, Map.get(args, "cell_type") || "code", nil)
+        {:ok, update_in(nb, ["cells"], &List.insert_at(&1, idx, cell))}
+      else
+        cell2 =
+          cell
+          |> Map.put("source", new_source)
+          |> maybe_reset_code_outputs()
+
+        {:ok, put_in(nb["cells"][idx], cell2)}
+      end
+    end
+  end
+
+  defp get_source(args) do
     case Map.get(args, "new_source") || Map.get(args, :new_source) do
-      s when is_binary(s) -> s
-      _ -> raise ArgumentError, message: "missing new_source"
+      s when is_binary(s) -> {:ok, s}
+      _ -> {:error, "missing new_source"}
     end
   end
 

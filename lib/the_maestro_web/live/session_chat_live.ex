@@ -18,6 +18,7 @@ defmodule TheMaestroWeb.SessionChatLive do
 
     {:ok, {session, _snap}} = Conversations.ensure_seeded_snapshot(session)
     TheMaestro.Chat.subscribe(session.id)
+
     if connected?(socket) do
       TheMaestroWeb.Endpoint.subscribe(TheMaestro.Events.topic(:plans, session.id))
       TheMaestroWeb.Endpoint.subscribe(TheMaestro.Events.topic(:images, session.id))
@@ -156,14 +157,20 @@ defmodule TheMaestroWeb.SessionChatLive do
       tid when is_binary(tid) ->
         {:ok, _} = Conversations.delete_thread_entries(tid)
 
-         {:noreply,
-          socket
-          |> assign(:show_clear_confirm, false)
-          |> assign(:messages, [])
-          |> assign(:summary, nil)
-          |> assign(:plans, TheMaestro.Plans.list(socket.assigns.session.id, socket.assigns.current_thread_id))
-          |> assign(:images, TheMaestro.Images.list(socket.assigns.session.id, socket.assigns.current_thread_id))
-          |> put_flash(:info, "Cleared current chat thread")}
+        {:noreply,
+         socket
+         |> assign(:show_clear_confirm, false)
+         |> assign(:messages, [])
+         |> assign(:summary, nil)
+         |> assign(
+           :plans,
+           TheMaestro.Plans.list(socket.assigns.session.id, socket.assigns.current_thread_id)
+         )
+         |> assign(
+           :images,
+           TheMaestro.Images.list(socket.assigns.session.id, socket.assigns.current_thread_id)
+         )
+         |> put_flash(:info, "Cleared current chat thread")}
 
       _ ->
         {:noreply, assign(socket, :show_clear_confirm, false)}
@@ -179,26 +186,6 @@ defmodule TheMaestroWeb.SessionChatLive do
 
       _ ->
         {:noreply, socket}
-    end
-  end
-
-  @impl true
-  def handle_info(%{event: "plans:updated", payload: %{session_id: sid, thread_id: tid}}, socket) do
-    if sid == socket.assigns.session.id and (is_nil(tid) or tid == socket.assigns.current_thread_id) do
-      {:noreply,
-       assign(socket, :plans, TheMaestro.Plans.list(socket.assigns.session.id, socket.assigns.current_thread_id))}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  @impl true
-  def handle_info(%{event: "images:attached", payload: %{session_id: sid, thread_id: tid}}, socket) do
-    if sid == socket.assigns.session.id and (is_nil(tid) or tid == socket.assigns.current_thread_id) do
-      {:noreply,
-       assign(socket, :images, TheMaestro.Images.list(socket.assigns.session.id, socket.assigns.current_thread_id))}
-    else
-      {:noreply, socket}
     end
   end
 
@@ -1013,6 +1000,39 @@ defmodule TheMaestroWeb.SessionChatLive do
     handle_thinking_event(envelope, socket)
   end
 
+  @impl true
+  def handle_info(%{event: "plans:updated", payload: %{session_id: sid, thread_id: tid}}, socket) do
+    if sid == socket.assigns.session.id and
+         (is_nil(tid) or tid == socket.assigns.current_thread_id) do
+      {:noreply,
+       assign(
+         socket,
+         :plans,
+         TheMaestro.Plans.list(socket.assigns.session.id, socket.assigns.current_thread_id)
+       )}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_info(
+        %{event: "images:attached", payload: %{session_id: sid, thread_id: tid}},
+        socket
+      ) do
+    if sid == socket.assigns.session.id and
+         (is_nil(tid) or tid == socket.assigns.current_thread_id) do
+      {:noreply,
+       assign(
+         socket,
+         :images,
+         TheMaestro.Images.list(socket.assigns.session.id, socket.assigns.current_thread_id)
+       )}
+    else
+      {:noreply, socket}
+    end
+  end
+
   # moved below to keep handle_info/2 clauses contiguous
 
   # Handle MCP server create/cancel from modal
@@ -1686,7 +1706,7 @@ defmodule TheMaestroWeb.SessionChatLive do
                       <li>
                         <span class={[
                           "mr-2 inline-block px-1 rounded text-xs",
-                          case (item[:status] || item["status"]) do
+                          case item[:status] || item["status"] do
                             "completed" -> "bg-green-700"
                             "in_progress" -> "bg-blue-700"
                             _ -> "bg-amber-700"

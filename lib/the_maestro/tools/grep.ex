@@ -8,52 +8,57 @@ defmodule TheMaestro.Tools.Grep do
   @max_hits 500
 
   @spec run(map(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
-  def run(args, opts \\ []) when is_map(args) do
+  def run(args, opts \\ [])
+
+  def run(args, opts) when is_map(args) do
     base = Keyword.get(opts, :base_cwd, File.cwd!())
     pattern = Map.get(args, "pattern") || Map.get(args, :pattern)
     path_like = Map.get(args, "path") || Map.get(args, :path)
 
-    cond do
-      !is_binary(pattern) or String.trim(pattern) == "" ->
-        {:error, "missing pattern"}
-
-      true ->
-        with {:ok, dir} <- PathResolver.resolve_dir(path_like, base) do
-          {matcher, is_regex} =
-            case Regex.compile(pattern) do
-              {:ok, re} -> {re, true}
-              _ -> {pattern, false}
-            end
-
-          files = collect_files(dir, base, 10_000)
-
-          hits =
-            Enum.reduce_while(files, {[], 0}, fn file, {acc, c} ->
-              if c >= @max_hits,
-                do: {:halt, {acc, c}},
-                else:
-                  {:cont,
-                   {acc ++ grep_file(file, matcher, is_regex, base, @max_hits - c),
-                    c + length(grep_file(file, matcher, is_regex, base, @max_hits - c))}}
-            end)
-            |> elem(0)
-
-          payload =
-            hits
-            |> Enum.map(fn %{path: p, line: ln, text: t} -> "#{p}:#{ln}: #{t}" end)
-            |> Enum.join("\n")
-
-          {:ok, payload}
-        else
-          {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
-          {:error, :not_found} -> {:error, "directory not found"}
-          {:error, :invalid} -> {:error, "invalid directory"}
-          _ -> {:error, "invalid arguments"}
-        end
+    if !is_binary(pattern) or String.trim(pattern) == "" do
+      {:error, "missing pattern"}
+    else
+      case PathResolver.resolve_dir(path_like, base) do
+        {:ok, dir} -> do_grep(dir, base, pattern)
+        {:error, reason} -> map_resolve_error(reason)
+      end
     end
   end
 
   def run(_, _), do: {:error, "invalid arguments"}
+
+  defp do_grep(dir, base, pattern) do
+    {matcher, is_regex} =
+      case Regex.compile(pattern) do
+        {:ok, re} -> {re, true}
+        _ -> {pattern, false}
+      end
+
+    files = collect_files(dir, base, 10_000)
+
+    hits =
+      Enum.reduce_while(files, {[], 0}, fn file, {acc, c} ->
+        if c >= @max_hits do
+          {:halt, {acc, c}}
+        else
+          found = grep_file(file, matcher, is_regex, base, @max_hits - c)
+          {:cont, {acc ++ found, c + length(found)}}
+        end
+      end)
+      |> elem(0)
+
+    payload =
+      hits
+      |> Enum.map(fn %{path: p, line: ln, text: t} -> "#{p}:#{ln}: #{t}" end)
+      |> Enum.join("\n")
+
+    {:ok, payload}
+  end
+
+  defp map_resolve_error(:outside_workspace), do: {:error, "requested path outside workspace"}
+  defp map_resolve_error(:not_found), do: {:error, "directory not found"}
+  defp map_resolve_error(:invalid), do: {:error, "invalid directory"}
+  defp map_resolve_error(_), do: {:error, "invalid arguments"}
 
   defp collect_files(dir, base_root, max_count),
     do: do_collect_files([dir], base_root, [], 0, max_count)

@@ -31,11 +31,12 @@ defmodule TheMaestro.Providers.Anthropic.TodoWritePersistenceTest do
       %{
         "id" => "call_1",
         "name" => "todo_write",
-        "arguments" => Jason.encode!(%{
-          "todos" => [
-            %{content: "Implement X", activeForm: "dev", status: "pending"}
-          ]
-        })
+        "arguments" =>
+          Jason.encode!(%{
+            "todos" => [
+              %{content: "Implement X", activeForm: "dev", status: "pending"}
+            ]
+          })
       }
     ]
 
@@ -45,4 +46,3 @@ defmodule TheMaestro.Providers.Anthropic.TodoWritePersistenceTest do
     assert Enum.any?(items, fn it -> (it["content"] || it[:content]) == "Implement X" end)
   end
 end
-

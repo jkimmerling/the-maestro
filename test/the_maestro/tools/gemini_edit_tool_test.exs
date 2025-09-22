@@ -30,7 +30,13 @@ defmodule TheMaestro.Tools.GeminiEditToolTest do
     abs = Path.join(base, "c.txt")
     File.write!(abs, "a\na\n")
     # Mismatch
-    args = %{"file_path" => abs, "old_string" => "a", "new_string" => "b", "expected_replacements" => 1}
+    args = %{
+      "file_path" => abs,
+      "old_string" => "a",
+      "new_string" => "b",
+      "expected_replacements" => 1
+    }
+
     assert {:error, msg} = GeminiEdit.run(args, base_cwd: base)
     assert msg =~ "expected 1 occurrence but found 2" |> String.downcase()
 

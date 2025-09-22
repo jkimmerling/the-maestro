@@ -6,47 +6,56 @@ defmodule TheMaestro.Tools.ReadFile do
   alias TheMaestro.Tools.PathResolver
 
   @spec run(map(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
-  def run(args, opts \\ []) when is_map(args) do
+  def run(args, opts \\ [])
+
+  def run(args, opts) when is_map(args) do
     base = Keyword.get(opts, :base_cwd, File.cwd!())
 
-    with {:ok, path} <- ensure_file_path(args, base),
-         {:ok, content} <- read_file(path) do
-      off = normalize_int(Map.get(args, "offset") || Map.get(args, :offset))
-      lim = normalize_int(Map.get(args, "limit") || Map.get(args, :limit))
-      {:ok, slice_string(content, off, lim)}
-    else
-      {:error, r} -> {:error, to_string(r)}
+    case fetch_file_path(args, base) do
+      {:ok, path} -> read_and_slice(path, args)
+      {:error, reason} -> {:error, reason}
     end
   end
 
   def run(_, _), do: {:error, "invalid arguments"}
 
-  defp ensure_file_path(args, base_cwd) do
+  defp fetch_file_path(args, base) do
     case Map.get(args, "file_path") || Map.get(args, :file_path) do
-      path when is_binary(path) ->
-        cond do
-          Path.type(path) == :absolute and File.exists?(path) ->
-            {:ok, path}
-
-          true ->
-            case PathResolver.resolve_existing(path, base_cwd) do
-              {:ok, abs} -> {:ok, abs}
-              {:error, :not_found} -> {:error, "enoent"}
-              {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
-              {:error, :missing} -> {:error, "missing file_path"}
-            end
-        end
-
-      _ ->
-        {:error, "missing file_path"}
+      path when is_binary(path) and path != "" -> resolve_existing_path(path, base)
+      _ -> {:error, "missing file_path"}
     end
   end
 
-  defp read_file(path) do
+  defp resolve_existing_path(path, base) do
+    if absolute_path?(path) do
+      if File.exists?(path), do: {:ok, path}, else: {:error, "enoent"}
+    else
+      resolve_relative_path(path, base)
+    end
+  end
+
+  defp absolute_path?(path), do: Path.type(path) == :absolute
+
+  defp resolve_relative_path(path, base) do
+    case PathResolver.resolve_existing(path, base) do
+      {:ok, abs} -> {:ok, abs}
+      {:error, :not_found} -> {:error, "enoent"}
+      {:error, :outside_workspace} -> {:error, "requested path outside workspace"}
+      {:error, :missing} -> {:error, "missing file_path"}
+    end
+  end
+
+  defp read_and_slice(path, args) do
     case File.read(path) do
-      {:ok, content} -> {:ok, content}
+      {:ok, content} -> {:ok, slice(content, args)}
       {:error, reason} -> {:error, to_string(reason)}
     end
+  end
+
+  defp slice(content, args) do
+    offset = normalize_int(Map.get(args, "offset") || Map.get(args, :offset))
+    limit = normalize_int(Map.get(args, "limit") || Map.get(args, :limit))
+    slice_string(content, offset, limit)
   end
 
   defp normalize_int(nil), do: nil

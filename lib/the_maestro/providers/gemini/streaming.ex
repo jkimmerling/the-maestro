@@ -10,7 +10,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   require Logger
 
   alias TheMaestro.Conversations
-  
+
   alias TheMaestro.Providers.Gemini.CodeAssist
   alias TheMaestro.Providers.Gemini.OAuth, as: GemOAuth
   alias TheMaestro.Providers.Http.ReqClientFactory
@@ -18,6 +18,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   alias TheMaestro.SavedAuthentication
   alias TheMaestro.SystemPrompts
   alias TheMaestro.SystemPrompts.Defaults, as: PromptDefaults
+  alias TheMaestro.Tools.ToolSurface
   alias TheMaestro.Types
 
   @dialyzer {:nowarn_function, resolve_decl_session_id: 2}
@@ -289,9 +290,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   end
 
   # -- Tools exposure for Gemini --
-  defp function_declarations_for_session(session_id) do
-    TheMaestro.Tools.ToolSurface.resolve_for_provider_decl(:gemini, session_id)
-  end
+  defp function_declarations_for_session(session_id),
+    do: ToolSurface.resolve_for_provider_decl(:gemini, session_id)
 
   # Resolve the Conversations session UUID for use by MCP.Registry.
   # The first parameter to this module is actually the SavedAuthentication session name.
@@ -310,8 +310,6 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
         session_name
     end
   end
-
-  
 
   defp maybe_put_tools(req_map, decls) when is_list(decls) do
     Map.put(req_map, "tools", [

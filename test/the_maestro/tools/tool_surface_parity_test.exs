@@ -1,7 +1,7 @@
 defmodule TheMaestro.Tools.ToolSurfaceParityTest do
   use ExUnit.Case, async: true
 
-  alias TheMaestro.Tools.{ToolSurface, ProviderToolManifest}
+  alias TheMaestro.Tools.{ProviderToolManifest, ToolSurface}
 
   test "openai builtins parity with manifest" do
     inv = ToolSurface.list_builtins(:openai) |> Enum.map(& &1.name) |> MapSet.new()
@@ -36,4 +36,3 @@ defmodule TheMaestro.Tools.ToolSurfaceParityTest do
     assert names == man
   end
 end
-

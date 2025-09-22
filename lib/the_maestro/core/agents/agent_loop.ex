@@ -24,7 +24,7 @@ defmodule TheMaestro.AgentLoop do
 
   @spec run_turn(:openai | :anthropic | :gemini, String.t(), String.t(), [map()], keyword()) ::
           {:ok, result} | {:error, term()}
-  def run_turn(_provider, _session_name, _model, _messages, _opts \\ [])
+  def run_turn(_provider, _session_name, _model, _messages, opts \\ [])
 
   def run_turn(:openai, session_name, model, messages, opts) when is_list(messages) do
     adapter = Keyword.get(opts, :streaming_adapter)
@@ -54,6 +54,7 @@ defmodule TheMaestro.AgentLoop do
             provider: :openai,
             session_name: session_name
           )
+
         used_calls = calls
         last_answer = answer
 
@@ -84,6 +85,7 @@ defmodule TheMaestro.AgentLoop do
                         provider: :openai,
                         session_name: session_name
                       )
+
                     next_items = acc_items ++ new_items
                     next_calls = acc_calls ++ new_calls
                     {:cont, {new_answer, next_calls, usage_n || %{}, next_items}}
@@ -121,6 +123,7 @@ defmodule TheMaestro.AgentLoop do
 
         # Resolve Conversations session_id from auth session name to flow into tool runtime
         sid = resolve_decl_session_id(session_name, :anthropic)
+
         {anth_msgs, _outputs} =
           TheMaestro.Followups.Anthropic.build(messages, calls, answer,
             base_cwd: base_cwd,
@@ -340,10 +343,11 @@ defmodule TheMaestro.AgentLoop do
     end)
   end
 
-  defp build_function_call_outputs(calls, prior_answer_text, original_messages, opts \\ []) do
+  defp build_function_call_outputs(calls, prior_answer_text, original_messages, opts) do
     base_cwd = File.cwd!()
     session_name = Keyword.get(opts, :session_name)
     provider = Keyword.get(opts, :provider)
+
     session_uuid =
       case provider do
         :openai -> resolve_decl_session_id(session_name, :openai)
@@ -423,42 +427,6 @@ defmodule TheMaestro.AgentLoop do
               else
                 {:error, reason} ->
                   TheMaestro.Tools.ExecOutput.format("write_file error: #{reason}", 1, 0.0)
-              end
-
-            "web_search" ->
-              with {:ok, json} <- Jason.decode(args || "{}"),
-                   {:ok, payload} <- TheMaestro.Tools.WebSearch.run(json, base_cwd: base_cwd) do
-                payload
-              else
-                _ ->
-                  Jason.encode!(%{
-                    "output" => "web_search error",
-                    "metadata" => %{"exit_code" => 1, "duration_seconds" => 0.0}
-                  })
-              end
-
-            "update_plan" ->
-              with {:ok, json} <- Jason.decode(args || "{}"),
-                   {:ok, payload} <- TheMaestro.Tools.UpdatePlan.run(json, base_cwd: base_cwd) do
-                payload
-              else
-                _ ->
-                  Jason.encode!(%{
-                    "output" => "update_plan error",
-                    "metadata" => %{"exit_code" => 1, "duration_seconds" => 0.0}
-                  })
-              end
-
-            "view_image" ->
-              with {:ok, json} <- Jason.decode(args || "{}"),
-                   {:ok, payload} <- TheMaestro.Tools.ViewImage.run(json, base_cwd: base_cwd) do
-                payload
-              else
-                _ ->
-                  Jason.encode!(%{
-                    "output" => "view_image error",
-                    "metadata" => %{"exit_code" => 1, "duration_seconds" => 0.0}
-                  })
               end
 
             "web_search" ->
@@ -604,7 +572,7 @@ defmodule TheMaestro.AgentLoop do
     base ++ assistant_part ++ [assistant_fc_msg, tool_msg]
   end
 
-  defp exec_gemini_tool(name, args_json, base_cwd, session_name \\ nil) do
+  defp exec_gemini_tool(name, args_json, base_cwd, session_name) do
     name = String.downcase(to_string(name || ""))
 
     case Jason.decode(args_json || "{}") do
@@ -713,7 +681,9 @@ defmodule TheMaestro.AgentLoop do
               {:ok, map} -> {:ok, map}
               _ -> {:ok, %{"output" => payload_json}}
             end
-          {:error, reason} -> {:error, reason}
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       "search_file_content" ->
@@ -734,7 +704,9 @@ defmodule TheMaestro.AgentLoop do
               {:ok, map} -> {:ok, map}
               _ -> {:ok, %{"output" => payload_json}}
             end
-          {:error, reason} -> {:error, reason}
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       "read_many_files" ->
@@ -744,7 +716,9 @@ defmodule TheMaestro.AgentLoop do
               {:ok, map} -> {:ok, map}
               _ -> {:ok, %{"output" => payload_json}}
             end
-          {:error, reason} -> {:error, reason}
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       "web_fetch" ->
@@ -754,7 +728,9 @@ defmodule TheMaestro.AgentLoop do
               {:ok, map} -> {:ok, map}
               _ -> {:ok, %{"output" => payload_json}}
             end
-          {:error, reason} -> {:error, reason}
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       name when name in ["replace", "edit"] ->
@@ -762,23 +738,30 @@ defmodule TheMaestro.AgentLoop do
           {:ok, payload_json, %{prev: prev, new: newc, path: path}} ->
             # Log ToolChangeLog with session_id when resolvable
             session_id = resolve_decl_session_id(session_name, :gemini)
-            {diff, sum} = TheMaestro.Tools.UnifiedDiff.diff(prev || "", newc || "")
+            prev_str = if is_binary(prev), do: prev, else: ""
+            new_str = if is_binary(newc), do: newc, else: ""
+            {diff, sum} = TheMaestro.Tools.UnifiedDiff.diff(prev_str, new_str)
+
             _ =
+              path_str = if is_binary(path), do: path, else: ""
               TheMaestro.Conversations.create_tool_change_log(%{
                 session_id: session_id,
                 provider: "gemini",
                 tool_name: "edit",
-                file_path: to_string(path || ""),
+                file_path: path_str,
                 change_type: "update",
                 diff: diff,
                 summary: sum,
                 metadata: %{}
               })
+
             case Jason.decode(payload_json) do
               {:ok, map} -> {:ok, map}
               _ -> {:ok, %{"output" => payload_json}}
             end
-          {:error, reason} -> {:error, reason}
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       "google_web_search" ->
@@ -788,7 +771,9 @@ defmodule TheMaestro.AgentLoop do
               {:ok, map} -> {:ok, map}
               _ -> {:ok, %{"output" => payload_json}}
             end
-          {:error, reason} -> {:error, reason}
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       _ ->
@@ -801,6 +786,7 @@ defmodule TheMaestro.AgentLoop do
   end
 
   defp resolve_decl_session_id(nil, _provider), do: nil
+
   defp resolve_decl_session_id(session_name, provider) when is_binary(session_name) do
     sa =
       TheMaestro.SavedAuthentication.get_by_provider_and_name(provider, :oauth, session_name) ||
@@ -808,10 +794,8 @@ defmodule TheMaestro.AgentLoop do
 
     case sa do
       %TheMaestro.SavedAuthentication{id: auth_id} ->
-        case TheMaestro.Conversations.latest_session_for_auth_id(auth_id) do
-          %TheMaestro.Conversations.Session{id: id} -> id
-          _ -> nil
-        end
+        sess = TheMaestro.Conversations.latest_session_for_auth_id(auth_id)
+        if is_nil(sess), do: nil, else: sess.id
 
       _ ->
         nil

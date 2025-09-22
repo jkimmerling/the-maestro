@@ -9,9 +9,12 @@ defmodule TheMaestro.Tools.Runtime do
   returning a consistent result tuple.
   """
 
+  alias TheMaestro.Conversations
   alias TheMaestro.MCP.Client, as: MCPClient
   alias TheMaestro.MCP.Registry, as: MCPRegistry
-  alias TheMaestro.Tools.{ApplyPatch, PathResolver, Shell, WriteFile}
+  alias TheMaestro.Tools.ApplyPatch.Runner, as: PatchRunner
+  alias TheMaestro.Tools.{ApplyPatch, Edit, ExecOutput, MultiEdit, NotebookEdit}
+  alias TheMaestro.Tools.{PathResolver, Shell, TodoWrite, UnifiedDiff, WriteFile}
   require Logger
 
   @type exec_result :: {:ok, String.t()} | {:error, String.t()}
@@ -46,24 +49,28 @@ defmodule TheMaestro.Tools.Runtime do
       "apply_patch" ->
         case safe_decode(args_json || "{}") do
           {:ok, %{"input" => patch}} when is_binary(patch) ->
-            case TheMaestro.Tools.ApplyPatch.Runner.apply(patch, base_cwd: base_cwd) do
+            case PatchRunner.apply(patch, base_cwd: base_cwd) do
               {:ok, %{details: details} = result} ->
                 Enum.each(details, fn d ->
+                  path_str = if is_binary(d.file_path), do: d.file_path, else: ""
+                  change_type = if is_binary(d.change_type), do: d.change_type, else: "update"
+                  diff_str = if is_binary(d.diff), do: d.diff, else: ""
+                  summary_map = Map.new(d.summary || %{})
                   _ =
-                    TheMaestro.Conversations.create_tool_change_log(%{
+                    Conversations.create_tool_change_log(%{
                       session_id: session_id,
                       provider: nil,
                       tool_name: "apply_patch",
-                      file_path: to_string(d.file_path || ""),
-                      change_type: to_string(d.change_type || "update"),
-                      diff: to_string(d.diff || ""),
-                      summary: Map.new(d.summary || %{}),
+                      file_path: path_str,
+                      change_type: change_type,
+                      diff: diff_str,
+                      summary: summary_map,
                       metadata: %{}
                     })
                 end)
 
-                summary = TheMaestro.Tools.ApplyPatch.Runner.format_summary(result, base_cwd)
-                {:ok, TheMaestro.Tools.ExecOutput.format(summary, 0, 0.0)}
+                summary = PatchRunner.format_summary(Map.take(result, [:added, :modified, :deleted]), base_cwd)
+                {:ok, ExecOutput.format(summary, 0, 0.0)}
 
               {:error, reason} ->
                 {:error, reason}
@@ -167,7 +174,7 @@ defmodule TheMaestro.Tools.Runtime do
       "edit" ->
         case safe_decode(args_json) do
           {:ok, args} ->
-            case TheMaestro.Tools.Edit.run(args, base_cwd: base_cwd) do
+            case Edit.run(args, base_cwd: base_cwd) do
               {:ok, payload, %{prev: prev, new: newc, path: path}} ->
                 log_edit_change(session_id, path, prev, newc)
                 {:ok, payload}
@@ -183,7 +190,7 @@ defmodule TheMaestro.Tools.Runtime do
       "multi_edit" ->
         case safe_decode(args_json) do
           {:ok, args} ->
-            case TheMaestro.Tools.MultiEdit.run(args, base_cwd: base_cwd) do
+            case MultiEdit.run(args, base_cwd: base_cwd) do
               {:ok, payload, %{prev: prev, new: newc, path: path}} ->
                 log_edit_change(session_id, path, prev, newc)
                 {:ok, payload}
@@ -200,18 +207,19 @@ defmodule TheMaestro.Tools.Runtime do
         case safe_decode(args_json) do
           {:ok, args} ->
             thread_id =
-              case TheMaestro.Conversations.latest_snapshot(session_id) do
-                %TheMaestro.Conversations.ChatEntry{thread_id: tid} -> tid
+              case Conversations.latest_snapshot(session_id) do
+                %Conversations.ChatEntry{thread_id: tid} -> tid
                 _ -> nil
               end
 
-            TheMaestro.Tools.TodoWrite.run(args,
+            TodoWrite.run(args,
               base_cwd: base_cwd,
               session_id: session_id,
               thread_id: thread_id
             )
 
-          {:error, r} -> {:error, r}
+          {:error, r} ->
+            {:error, r}
         end
 
       _ ->
@@ -240,30 +248,37 @@ defmodule TheMaestro.Tools.Runtime do
       "notebook_edit" ->
         case safe_decode(args_json) do
           {:ok, args} ->
-            case TheMaestro.Tools.NotebookEdit.run(args, base_cwd: base_cwd) do
+            case NotebookEdit.run(args, base_cwd: base_cwd) do
               {:ok, payload} -> {:ok, payload}
               {:error, r} -> {:error, r}
             end
-          {:error, r} -> {:error, r}
+
+          {:error, r} ->
+            {:error, r}
         end
+
       "notebookedit" ->
         do_dispatch_known("notebook_edit", args_json, base_cwd)
+
       # TitleCase → lowercase alias handling for provider parity
       # Claude Code emits names like "MultiEdit", "WebSearch", "WebFetch".
       # Normalize to our snake_case routes.
       "multiedit" ->
         do_dispatch_known("multi_edit", args_json, base_cwd)
+
       "websearch" ->
         do_dispatch_known("web_search", args_json, base_cwd)
+
       "webfetch" ->
         do_dispatch_known("web_fetch", args_json, base_cwd)
+
       "read" ->
         dispatch("read", args_json, base_cwd)
 
       "edit" ->
         case safe_decode(args_json) do
           {:ok, args} ->
-            case TheMaestro.Tools.Edit.run(args, base_cwd: base_cwd) do
+            case Edit.run(args, base_cwd: base_cwd) do
               {:ok, payload, %{prev: prev, new: newc, path: path}} ->
                 log_edit_change(nil, path, prev, newc)
                 {:ok, payload}
@@ -279,7 +294,7 @@ defmodule TheMaestro.Tools.Runtime do
       "multi_edit" ->
         case safe_decode(args_json) do
           {:ok, args} ->
-            case TheMaestro.Tools.MultiEdit.run(args, base_cwd: base_cwd) do
+            case MultiEdit.run(args, base_cwd: base_cwd) do
               {:ok, payload, %{prev: prev, new: newc, path: path}} ->
                 log_edit_change(nil, path, prev, newc)
                 {:ok, payload}
@@ -324,7 +339,7 @@ defmodule TheMaestro.Tools.Runtime do
 
       "todo_write" ->
         case safe_decode(args_json) do
-          {:ok, args} -> TheMaestro.Tools.TodoWrite.run(args, base_cwd: base_cwd)
+          {:ok, args} -> TodoWrite.run(args, base_cwd: base_cwd)
           {:error, r} -> {:error, r}
         end
 
@@ -536,20 +551,22 @@ defmodule TheMaestro.Tools.Runtime do
   defp return_outside_workspace, do: {:error, "requested path outside workspace"}
 
   defp log_edit_change(session_id, path, prev, newc) do
-    {diff, sum} = TheMaestro.Tools.UnifiedDiff.diff(prev || "", newc || "")
+    prev_str = if is_binary(prev), do: prev, else: ""
+    new_str = if is_binary(newc), do: newc, else: ""
+    {diff, sum} = UnifiedDiff.diff(prev_str, new_str)
 
     attrs = %{
       session_id: session_id,
       provider: nil,
       tool_name: "edit",
-      file_path: to_string(path || ""),
+      file_path: (if is_binary(path), do: path, else: ""),
       change_type: "update",
       diff: diff,
       summary: sum,
       metadata: %{}
     }
 
-    _ = TheMaestro.Conversations.create_tool_change_log(attrs)
+    _ = Conversations.create_tool_change_log(attrs)
     :ok
   end
 

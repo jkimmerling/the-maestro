@@ -6,7 +6,9 @@ defmodule TheMaestro.Tools.WebFetch do
   alias TheMaestro.Tools.ExecOutput
 
   @spec run(map(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
-  def run(args, _opts \\ []) when is_map(args) do
+  def run(args, _opts \\ [])
+
+  def run(args, _opts) when is_map(args) do
     url = Map.get(args, "url") || Map.get(args, :url)
 
     if is_binary(url) and String.starts_with?(url, "http") do

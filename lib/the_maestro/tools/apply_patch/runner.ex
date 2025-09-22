@@ -4,6 +4,8 @@ defmodule TheMaestro.Tools.ApplyPatch.Runner do
   """
 
   alias TheMaestro.Tools.ApplyPatch.Parser
+  alias TheMaestro.Tools.SeekSequence
+  alias TheMaestro.Tools.UnifiedDiff
 
   @type result ::
           {:ok,
@@ -18,67 +20,67 @@ defmodule TheMaestro.Tools.ApplyPatch.Runner do
   @spec apply(String.t(), keyword()) :: result
   def apply(patch_text, opts \\ []) do
     base = Keyword.get(opts, :base_cwd, File.cwd!()) |> Path.expand()
-
-    with {:ok, %{hunks: hunks}} <- Parser.parse(patch_text),
-         {:ok, res} <- apply_hunks(hunks, base) do
-      {:ok, res}
-    end
+    patch_text |> Parser.parse() |> do_apply(base)
   end
+
+  defp do_apply({:ok, %{hunks: hunks}}, base), do: apply_hunks(hunks, base)
+  defp do_apply({:error, _} = e, _), do: e
 
   defp apply_hunks(hunks, base) do
     Enum.reduce_while(hunks, {:ok, %{added: [], modified: [], deleted: [], details: []}}, fn h,
                                                                                              {:ok,
                                                                                               acc} ->
-      case h do
-        {:add, path, contents} ->
-          abs = safe_join(base, path)
-          :ok = File.mkdir_p!(Path.dirname(abs))
-          :ok = File.write!(abs, contents)
-          {udiff, sum} = TheMaestro.Tools.UnifiedDiff.diff("", contents)
-          det = %{file_path: abs, change_type: "add", diff: udiff, summary: sum}
-
-          {:cont,
-           {:ok,
-            acc |> Map.update!(:added, &(&1 ++ [abs])) |> Map.update!(:details, &(&1 ++ [det]))}}
-
-        {:delete, path} ->
-          abs = safe_join(base, path)
-          prev = if File.exists?(abs), do: File.read!(abs), else: ""
-          if File.exists?(abs), do: File.rm!(abs)
-          {udiff, sum} = TheMaestro.Tools.UnifiedDiff.diff(prev, "")
-          det = %{file_path: abs, change_type: "delete", diff: udiff, summary: sum}
-
-          {:cont,
-           {:ok,
-            acc |> Map.update!(:deleted, &(&1 ++ [abs])) |> Map.update!(:details, &(&1 ++ [det]))}}
-
-        {:update, path, move_to, chunks} ->
-          src = safe_join(base, path)
-          dst = if move_to, do: safe_join(base, move_to), else: src
-
-          case apply_update(src, dst, chunks) do
-            {:ok, prev, newc} ->
-              {udiff, sum} = TheMaestro.Tools.UnifiedDiff.diff(prev, newc)
-
-              det = %{
-                file_path: dst,
-                change_type: "update",
-                diff: udiff,
-                summary: sum,
-                move_to: if(move_to, do: dst, else: nil)
-              }
-
-              {:cont,
-               {:ok,
-                acc
-                |> Map.update!(:modified, &(&1 ++ [dst]))
-                |> Map.update!(:details, &(&1 ++ [det]))}}
-
-            {:error, reason} ->
-              {:halt, {:error, reason}}
-          end
-      end
+      handle_hunk(h, acc, base)
     end)
+  end
+
+  defp handle_hunk({:add, path, contents}, acc, base) do
+    abs = safe_join(base, path)
+    :ok = File.mkdir_p!(Path.dirname(abs))
+    :ok = File.write!(abs, contents)
+    {udiff, sum} = UnifiedDiff.diff("", contents)
+    det = %{file_path: abs, change_type: "add", diff: udiff, summary: sum}
+
+    {:cont,
+     {:ok, acc |> Map.update!(:added, &(&1 ++ [abs])) |> Map.update!(:details, &(&1 ++ [det]))}}
+  end
+
+  defp handle_hunk({:delete, path}, acc, base) do
+    abs = safe_join(base, path)
+    prev = if File.exists?(abs), do: File.read!(abs), else: ""
+    if File.exists?(abs), do: File.rm!(abs)
+    {udiff, sum} = UnifiedDiff.diff(prev, "")
+    det = %{file_path: abs, change_type: "delete", diff: udiff, summary: sum}
+
+    {:cont,
+     {:ok, acc |> Map.update!(:deleted, &(&1 ++ [abs])) |> Map.update!(:details, &(&1 ++ [det]))}}
+  end
+
+  defp handle_hunk({:update, path, move_to, chunks}, acc, base) do
+    src = safe_join(base, path)
+    dst = if move_to, do: safe_join(base, move_to), else: src
+
+    case apply_update(src, dst, chunks) do
+      {:ok, prev, newc} ->
+        {udiff, sum} = UnifiedDiff.diff(prev, newc)
+
+        det = %{
+          file_path: dst,
+          change_type: "update",
+          diff: udiff,
+          summary: sum,
+          move_to: if(move_to, do: dst, else: nil)
+        }
+
+        {:cont,
+         {:ok,
+          acc
+          |> Map.update!(:modified, &(&1 ++ [dst]))
+          |> Map.update!(:details, &(&1 ++ [det]))}}
+
+      {:error, reason} ->
+        {:halt, {:error, reason}}
+    end
   end
 
   defp safe_join(base, path) do
@@ -115,20 +117,16 @@ defmodule TheMaestro.Tools.ApplyPatch.Runner do
     lines = String.split(original, "\n", trim: false)
     lines = if lines == [], do: [""], else: lines
 
-    {acc, ok?} =
-      Enum.reduce(chunks, {lines, true}, fn ch, {cur, ok} ->
-        if ok do
-          case replace_chunk(cur, ch) do
-            {:ok, cur2} -> {cur2, true}
-            {:error, _} = e -> {cur, e}
-          end
-        else
-          {cur, ok}
+    {final_lines, status} =
+      Enum.reduce_while(chunks, {lines, :ok}, fn ch, {cur, :ok} ->
+        case replace_chunk(cur, ch) do
+          {:ok, cur2} -> {:cont, {cur2, :ok}}
+          {:error, reason} -> {:halt, {cur, {:error, reason}}}
         end
       end)
 
-    case ok? do
-      true -> {:ok, Enum.join(acc, "\n")}
+    case status do
+      :ok -> {:ok, Enum.join(final_lines, "\n")}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -142,14 +140,13 @@ defmodule TheMaestro.Tools.ApplyPatch.Runner do
     start_pos =
       case ctx do
         nil -> 0
-        ctx_line -> TheMaestro.Tools.SeekSequence.seek_sequence(lines, [ctx_line], 0, false) || 0
+        ctx_line -> SeekSequence.seek_sequence(lines, [ctx_line], 0, false) || 0
       end
 
     pattern = olds
     news = news
 
-    pos =
-      TheMaestro.Tools.SeekSequence.seek_sequence(Enum.drop(lines, start_pos), pattern, 0, eof?)
+    pos = SeekSequence.seek_sequence(Enum.drop(lines, start_pos), pattern, 0, eof?)
 
     case pos do
       nil ->

@@ -4,6 +4,7 @@ defmodule TheMaestroWeb.Integration.OpenAIApplyPatchE2ETest do
   import Ecto.Query
   alias TheMaestro.Auth
   alias TheMaestro.Conversations
+  alias TheMaestro.Tools.ExecOutput
   alias TheMaestro.Tools.Runtime
 
   setup do
@@ -84,7 +85,7 @@ defmodule TheMaestroWeb.Integration.OpenAIApplyPatchE2ETest do
     out = %{
       "type" => "function_call_output",
       "call_id" => "call_1",
-      "output" => Jason.encode!(%{"output" => _ = TheMaestro.Tools.ExecOutput.format("", 0, 0.0)})
+      "output" => Jason.encode!(%{"output" => _ = ExecOutput.format("", 0, 0.0)})
     }
 
     # Validate shapes (keys and required fields)

@@ -37,4 +37,3 @@ defmodule TheMaestro.Events do
     :ok
   end
 end
-

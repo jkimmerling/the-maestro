@@ -1,9 +1,9 @@
 defmodule TheMaestroWeb.Integration.OpenAIToolsSurfaceE2ETest do
   use TheMaestroWeb.ConnCase, async: true
 
-  import Ecto.Query
   alias TheMaestro.Auth
   alias TheMaestro.Conversations
+  alias TheMaestro.Providers.OpenAI.Streaming, as: OpenAIStreaming
 
   setup do
     {:ok, saved_auth} =
@@ -27,11 +27,9 @@ defmodule TheMaestroWeb.Integration.OpenAIToolsSurfaceE2ETest do
   end
 
   defmodule CaptureAdapter do
-    @behaviour TheMaestro.Providers.Http.StreamingAdapter
-
-    @impl true
     def stream_request(_req, opts) do
       json = Keyword.get(opts, :json, %{})
+
       meta = %{
         tools_count: (json["tools"] || []) |> length(),
         tools_names: Enum.map(json["tools"] || [], & &1["name"]) |> Enum.sort()
@@ -50,7 +48,7 @@ defmodule TheMaestroWeb.Integration.OpenAIToolsSurfaceE2ETest do
       })
 
     {:ok, _} =
-      TheMaestro.Providers.OpenAI.Streaming.stream_chat(
+      OpenAIStreaming.stream_chat(
         "openai-tools-surface",
         [%{"role" => "user", "content" => "hello"}],
         streaming_adapter: __MODULE__.CaptureAdapter
@@ -66,14 +64,15 @@ defmodule TheMaestroWeb.Integration.OpenAIToolsSurfaceE2ETest do
         })
 
       {:ok, _} =
-        TheMaestro.Providers.OpenAI.Streaming.stream_chat(
+        OpenAIStreaming.stream_chat(
           "openai-tools-surface",
           [%{"role" => "user", "content" => "ping"}],
           streaming_adapter: __MODULE__.CaptureAdapter
         )
 
-      assert_receive {:captured_openai_payload,
-                      %{tools_count: 1, tools_names: names}} when names == [name], 2_000
+      assert_receive {:captured_openai_payload, %{tools_count: 1, tools_names: names}}
+                     when names == [name],
+                     2_000
     end
 
     # 3) Allow all three together
@@ -83,13 +82,14 @@ defmodule TheMaestroWeb.Integration.OpenAIToolsSurfaceE2ETest do
       })
 
     {:ok, _} =
-      TheMaestro.Providers.OpenAI.Streaming.stream_chat(
+      OpenAIStreaming.stream_chat(
         "openai-tools-surface",
         [%{"role" => "user", "content" => "list tools"}],
         streaming_adapter: __MODULE__.CaptureAdapter
       )
 
     assert_receive {:captured_openai_payload,
-                    %{tools_count: 3, tools_names: ["update_plan", "view_image", "web_search"]}}, 2_000
+                    %{tools_count: 3, tools_names: ["update_plan", "view_image", "web_search"]}},
+                   2_000
   end
 end

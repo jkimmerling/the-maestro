@@ -1,5 +1,6 @@
 defmodule TheMaestro.TestStreamingAdapter do
   @moduledoc "Test streaming adapter that returns a caller-supplied SSE stream."
+  alias TheMaestro.Providers.Http.StreamingAdapter
 
   @type sse_event :: %{event_type: String.t(), data: String.t()}
 
@@ -35,6 +36,5 @@ defmodule TheMaestro.TestStreamingAdapter do
   end
 
   @spec parse_sse_events(Enumerable.t()) :: Enumerable.t()
-  def parse_sse_events(enum),
-    do: TheMaestro.Providers.Http.StreamingAdapter.parse_sse_events(enum)
+  def parse_sse_events(enum), do: StreamingAdapter.parse_sse_events(enum)
 end

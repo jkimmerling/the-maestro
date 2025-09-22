@@ -19,7 +19,15 @@ defmodule TheMaestro.Followups.Anthropic do
   @spec build([map()], [call()], String.t(), keyword()) :: {[map()], list()}
   def build(original_messages, calls, prior_answer_text \\ "", opts \\ []) do
     base_cwd = Keyword.get(opts, :base_cwd, File.cwd!())
-    outputs = compute_outputs(calls, Keyword.get(opts, :outputs), base_cwd, Keyword.get(opts, :session_id))
+
+    outputs =
+      compute_outputs(
+        calls,
+        Keyword.get(opts, :outputs),
+        base_cwd,
+        Keyword.get(opts, :session_id)
+      )
+
     tool_uses = build_tool_uses(calls)
     tool_results = build_tool_results(outputs)
     assistant_blocks = build_assistant_blocks(prior_answer_text, tool_uses)

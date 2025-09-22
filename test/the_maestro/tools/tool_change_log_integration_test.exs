@@ -1,7 +1,6 @@
 defmodule TheMaestro.Tools.ToolChangeLogIntegrationTest do
   use TheMaestro.DataCase, async: true
   alias TheMaestro.Tools.Runtime
-  alias TheMaestro.Conversations
 
   test "apply_patch logs unified diff per file" do
     # Create a fake session id

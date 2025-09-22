@@ -15,14 +15,17 @@ defmodule TheMaestro.Todos do
     key = key(session_id, thread_id)
 
     case RedisClient.command(TheMaestro.Redis, ["GET", key]) do
-      {:ok, nil} -> []
+      {:ok, nil} ->
+        []
+
       {:ok, json} ->
         case Jason.decode(json) do
           {:ok, list} when is_list(list) -> list
           _ -> []
         end
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -44,12 +47,17 @@ defmodule TheMaestro.Todos do
   @spec clear_all(String.t()) :: :ok
   def clear_all(session_id) when is_binary(session_id) do
     prefix = Enum.join([@prefix, session_id], ":")
-    {:ok, ["0", keys]} = RedisClient.command(TheMaestro.Redis, ["SCAN", "0", "MATCH", prefix <> "*", "COUNT", "1000"])
+
+    {:ok, ["0", keys]} =
+      RedisClient.command(TheMaestro.Redis, ["SCAN", "0", "MATCH", prefix <> "*", "COUNT", "1000"])
+
     keys = List.wrap(keys)
+
     case keys do
       [] -> :ok
       ks -> _ = RedisClient.command(TheMaestro.Redis, ["DEL" | ks])
     end
+
     :ok
   end
 
