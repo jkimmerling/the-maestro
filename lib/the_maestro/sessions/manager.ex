@@ -92,7 +92,9 @@ defmodule TheMaestro.Sessions.Manager do
       session_name: session_name,
       model: model,
       t0_ms: t0_ms,
-      sandbox_owner: owner_pid
+      sandbox_owner: owner_pid,
+      thread_id: Keyword.get(opts, :thread_id),
+      last_flushed_idx: 0
     }
 
     {:ok, task} =
@@ -331,7 +333,9 @@ defmodule TheMaestro.Sessions.Manager do
       %{stream_id: ^stream_id, acc: acc} ->
         {frame, acc2} = build_frame(acc, type, payload)
         publish_turn_frame(session_id, stream_id, frame)
-        {:noreply, put_in(st, [session_id, :acc], acc2)}
+        st = put_in(st, [session_id, :acc], acc2)
+        st = maybe_flush_frames(session_id, st)
+        {:noreply, st}
 
       _ ->
         {:noreply, st}
@@ -1150,4 +1154,29 @@ defmodule TheMaestro.Sessions.Manager do
   defp normalize_status(s) when s in ["in_progress", :in_progress], do: "in_progress"
   defp normalize_status(s) when s in ["completed", :completed], do: "completed"
   defp normalize_status(_), do: "pending"
+
+  defp maybe_flush_frames(session_id, st) do
+    case Map.get(st, session_id) do
+      %{acc: %{frames: frames, meta: meta}} ->
+        batch = Application.get_env(:the_maestro, :frame_flush, []) |> Keyword.get(:batch_size, 0)
+        last = meta[:last_flushed_idx] || 0
+
+        if is_integer(batch) and batch > 0 and length(frames) - last >= batch do
+          case Conversations.latest_snapshot(session_id) do
+            %Conversations.ChatEntry{thread_id: tid, turn_index: tix, combined_chat: canon} = latest
+                when is_binary(tid) ->
+              updated = maybe_put_frames(canon, tid, tix, frames)
+              _ = Conversations.update_chat_entry(latest, %{combined_chat: updated})
+              put_in(st, [session_id, :acc, :meta, :last_flushed_idx], length(frames))
+
+            _ ->
+              st
+          end
+        else
+          st
+        end
+
+      _ -> st
+    end
+  end
 end

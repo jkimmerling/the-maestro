@@ -201,7 +201,7 @@ defmodule TheMaestro.Chat do
              auth_name,
              provider_msgs,
              model,
-             opts
+             Keyword.put(opts, :thread_id, tid)
            ) do
       {:ok,
        %{
