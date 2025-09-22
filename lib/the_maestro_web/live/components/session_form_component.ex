@@ -27,34 +27,62 @@ defmodule TheMaestroWeb.SessionFormComponent do
 
   @impl true
   def update(assigns, socket) do
+    prev_allowed = socket.assigns[:tool_picker_allowed]
+    prev_mcp = socket.assigns[:session_mcp_selected_ids]
+
     socket =
       socket
       |> assign(assigns)
-      |> ensure_state()
+      |> ensure_state(prev_allowed, prev_mcp)
 
     {:ok, socket}
   end
 
-  defp ensure_state(%{assigns: assigns} = socket) do
-    ui = Map.get(assigns, :ui_sections) || %{prompt: true, persona: true, memory: true}
-
-    inv =
-      if map_size(assigns[:tool_inventory_by_provider] || %{}) > 0 do
-        assigns.tool_inventory_by_provider
-      else
-        build_initial_inventory(assigns)
-      end
-
-    allowed = assigns[:tool_picker_allowed] || %{}
+  defp ensure_state(%{assigns: assigns} = socket, prev_allowed, prev_mcp) do
+    ui = compute_ui(assigns)
+    inv = compute_inventory(assigns)
+    allowed = compute_allowed(prev_allowed, assigns, inv)
+    selected_ids = compute_selected(prev_mcp, assigns)
 
     socket
     |> assign(:ui_sections, ui)
     |> assign(:tool_inventory_by_provider, inv)
     |> assign(:tool_picker_allowed, allowed)
-    |> assign(:session_mcp_selected_ids, assigns[:session_mcp_selected_ids] || [])
+    |> assign(:session_mcp_selected_ids, selected_ids)
     |> assign(:mcp_warming, assigns[:mcp_warming] || false)
     |> assign(:mcp_expanded_servers, assigns[:mcp_expanded_servers] || MapSet.new())
     |> assign(:mcp_server_tools, assigns[:mcp_server_tools] || %{})
+  end
+
+  defp compute_ui(assigns),
+    do: Map.get(assigns, :ui_sections) || %{prompt: true, persona: true, memory: true}
+
+  defp compute_inventory(assigns) do
+    case Map.get(assigns, :tool_inventory_by_provider) do
+      %{} = m when map_size(m) > 0 -> m
+      _ -> build_initial_inventory(assigns)
+    end
+  end
+
+  defp compute_allowed(prev_allowed, assigns, inv) do
+    allowed0 = prev_allowed || assigns[:tool_picker_allowed] || %{}
+    if map_size(allowed0) == 0, do: default_allowed_from_inventory(inv), else: allowed0
+  end
+
+  defp compute_selected(prev_mcp, assigns),
+    do: prev_mcp || assigns[:session_mcp_selected_ids] || []
+
+  defp default_allowed_from_inventory(inv_map) when is_map(inv_map) do
+    for prov <- [:openai, :anthropic, :gemini], reduce: %{} do
+      acc ->
+        names =
+          inv_map
+          |> Map.get(prov, [])
+          |> Enum.filter(&(&1.source == :builtin))
+          |> Enum.map(& &1.name)
+
+        if names == [], do: acc, else: Map.put(acc, prov, names)
+    end
   end
 
   defp build_initial_inventory(%{mode: :edit, config_form: %{"session_id" => sid}})
@@ -421,6 +449,13 @@ defmodule TheMaestroWeb.SessionFormComponent do
           value={id}
         />
       <% end %>
+      <%= if (@session_mcp_selected_ids || []) == [] do %>
+        <input
+          type="hidden"
+          name={if @mode == :edit, do: "mcp_server_ids", else: "session[mcp_server_ids]"}
+          value=""
+        />
+      <% end %>
     </div>
     """
   end
@@ -450,8 +485,6 @@ defmodule TheMaestroWeb.SessionFormComponent do
     # Build inventory immediately from cache (will use stale data if available)
     inv = build_tool_inventory_for_servers(selected)
 
-    send(self(), {:session_mcp_selected_ids, selected})
-
     # When toggling server, also update tool selection
     socket =
       if was_selected do
@@ -463,9 +496,6 @@ defmodule TheMaestroWeb.SessionFormComponent do
         socket
         |> add_all_server_tools_to_allowed(id, inv)
       end
-
-    # Notify parent about tool selection changes
-    send(self(), {:tool_picker_allowed, socket.assigns.tool_picker_allowed})
 
     {:noreply,
      assign(socket,
@@ -587,9 +617,6 @@ defmodule TheMaestroWeb.SessionFormComponent do
     # Update the allowed tools
     updated_allowed = Map.put(allowed0, provider, desired)
 
-    # Notify parent to persist the state
-    send(self(), {:tool_picker_allowed, updated_allowed})
-
     {:noreply, assign(socket, :tool_picker_allowed, updated_allowed)}
   end
 
@@ -608,7 +635,6 @@ defmodule TheMaestroWeb.SessionFormComponent do
 
     desired = Enum.uniq(current ++ target)
     updated_allowed = Map.put(allowed0, provider, desired)
-    send(self(), {:tool_picker_allowed, updated_allowed})
     {:noreply, assign(socket, :tool_picker_allowed, updated_allowed)}
   end
 
@@ -627,7 +653,6 @@ defmodule TheMaestroWeb.SessionFormComponent do
 
     desired = Enum.reject(current, &(&1 in target))
     updated_allowed = Map.put(allowed0, provider, desired)
-    send(self(), {:tool_picker_allowed, updated_allowed})
     {:noreply, assign(socket, :tool_picker_allowed, updated_allowed)}
   end
 

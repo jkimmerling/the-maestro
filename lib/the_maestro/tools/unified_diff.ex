@@ -58,7 +58,10 @@ defmodule TheMaestro.Tools.UnifiedDiff do
   end
 
   defp eq_prev?(a, b, i, j), do: i > 0 and j > 0 and Enum.at(a, i - 1) == Enum.at(b, j - 1)
-  defp take_b?(table, i, j), do: j > 0 and (i == 0 or get(table, i, j - 1) >= get(table, i - 1, j))
+
+  defp take_b?(table, i, j),
+    do: j > 0 and (i == 0 or get(table, i, j - 1) >= get(table, i - 1, j))
+
   defp take_a?(table, i, j), do: i > 0 and (j == 0 or get(table, i, j - 1) < get(table, i - 1, j))
 
   defp get(t, i, j), do: Map.get(t, {i, j}, 0)

@@ -744,16 +744,17 @@ defmodule TheMaestro.AgentLoop do
 
             _ =
               path_str = if is_binary(path), do: path, else: ""
-              TheMaestro.Conversations.create_tool_change_log(%{
-                session_id: session_id,
-                provider: "gemini",
-                tool_name: "edit",
-                file_path: path_str,
-                change_type: "update",
-                diff: diff,
-                summary: sum,
-                metadata: %{}
-              })
+
+            TheMaestro.Conversations.create_tool_change_log(%{
+              session_id: session_id,
+              provider: "gemini",
+              tool_name: "edit",
+              file_path: path_str,
+              change_type: "update",
+              diff: diff,
+              summary: sum,
+              metadata: %{}
+            })
 
             case Jason.decode(payload_json) do
               {:ok, map} -> {:ok, map}

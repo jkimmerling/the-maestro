@@ -56,6 +56,7 @@ defmodule TheMaestro.Tools.Runtime do
                   change_type = if is_binary(d.change_type), do: d.change_type, else: "update"
                   diff_str = if is_binary(d.diff), do: d.diff, else: ""
                   summary_map = Map.new(d.summary || %{})
+
                   _ =
                     Conversations.create_tool_change_log(%{
                       session_id: session_id,
@@ -69,7 +70,12 @@ defmodule TheMaestro.Tools.Runtime do
                     })
                 end)
 
-                summary = PatchRunner.format_summary(Map.take(result, [:added, :modified, :deleted]), base_cwd)
+                summary =
+                  PatchRunner.format_summary(
+                    Map.take(result, [:added, :modified, :deleted]),
+                    base_cwd
+                  )
+
                 {:ok, ExecOutput.format(summary, 0, 0.0)}
 
               {:error, reason} ->
@@ -559,7 +565,7 @@ defmodule TheMaestro.Tools.Runtime do
       session_id: session_id,
       provider: nil,
       tool_name: "edit",
-      file_path: (if is_binary(path), do: path, else: ""),
+      file_path: if(is_binary(path), do: path, else: ""),
       change_type: "update",
       diff: diff,
       summary: sum,
