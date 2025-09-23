@@ -38,6 +38,9 @@ config :phoenix, :plug_init_mode, :runtime
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
+# Reduce tool result wait to speed up timeout tests
+config :the_maestro, :tool_result_timeout_ms, 50
+
 # Configure Finch pools for HTTP clients - Test (minimal configuration)
 config :the_maestro, :finch_pools,
   anthropic: [

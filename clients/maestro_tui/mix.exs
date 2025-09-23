@@ -7,7 +7,8 @@ defmodule MaestroTui.MixProject do
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      releases: releases()
     ]
   end
 
@@ -28,9 +29,21 @@ defmodule MaestroTui.MixProject do
     ]
 
     if System.get_env("TUI_ENABLE_TUI") in ["1", "true", "TRUE"] do
-      base ++ [{:ratatouille, "~> 0.5.1"}]
+      base ++ [
+        {:ratatouille, "~> 0.5.1"},
+        {:bypass, "~> 2.1", only: :test}
+      ]
     else
-      base
+      base ++ [{:bypass, "~> 2.1", only: :test}]
     end
+  end
+
+  defp releases do
+    [
+      maestro_tui: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent]
+      ]
+    ]
   end
 end

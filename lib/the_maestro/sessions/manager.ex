@@ -899,16 +899,50 @@ defmodule TheMaestro.Sessions.Manager do
       owner_pid = acc.meta && acc.meta[:sandbox_owner]
 
       if is_binary(session.tool_runtime) and session.tool_runtime == "remote" do
+        {io_calls, server_calls} = partition_io_vs_server(calls_to_run)
+
+        # Execute server-side tools immediately, even in remote runtime
+        local_outputs = exec_tools(session_id, server_calls, base_cwd)
+
+        Enum.each(local_outputs, fn {id, result} ->
+          preview =
+            case result do
+              {:ok, payload} when is_binary(payload) -> String.slice(payload, 0, 200)
+              {:ok, payload} -> to_string(payload) |> String.slice(0, 200)
+              {:error, reason} -> to_string(reason)
+            end
+
+          GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :tool_result, %{"tool_call_id" => id, "preview" => preview}})
+        end)
+
+        results_map =
+          Enum.into(local_outputs, %{}, fn
+            {id, {:ok, payload}} -> {id, payload}
+            {id, {:error, reason}} -> {id, to_string(reason)}
+          end)
+
+        follow_order_ids = Enum.map(calls_to_run, & &1["id"]) |> Enum.filter(& &1)
+
         st =
           update_in(st, [session_id, :acc, :meta], fn meta ->
             meta = meta || %{}
             meta
-            |> Map.put(:pending_calls, calls_to_run)
+            |> Map.put(:pending_calls, io_calls)
             |> Map.put_new(:results_by_call, %{})
+            |> Map.update(:results_by_call, results_map, &Map.merge(&1, results_map))
+            |> Map.put(:followup_order_ids, follow_order_ids)
           end)
 
-        Process.send_after(__MODULE__, {:tool_result_timeout, session_id, stream_id}, 120_000)
-        st
+        # If there are no IO calls pending, immediately run follow-up with local outputs
+        if io_calls == [] do
+          outputs = Enum.map(follow_order_ids, fn id -> {id, {:ok, Map.get(results_map, id)}} end)
+          st = run_followup_with_outputs(session_id, stream_id, outputs, st)
+          st
+        else
+          timeout_ms = Application.get_env(:the_maestro, :tool_result_timeout_ms, 120_000)
+          Process.send_after(__MODULE__, {:tool_result_timeout, session_id, stream_id}, timeout_ms)
+          st
+        end
       else
         outputs = exec_tools(session_id, calls_to_run, base_cwd)
 
@@ -1037,22 +1071,20 @@ defmodule TheMaestro.Sessions.Manager do
           {:noreply, st}
         else
           results = Map.get(meta, :results_by_call, %{}) |> Map.put(id, output)
-          all_ids = Enum.map(pending, & &1["id"]) |> MapSet.new()
+          remote_ids = Enum.map(pending, & &1["id"]) |> MapSet.new()
           have_ids = Map.keys(results) |> MapSet.new()
 
           st = put_in(st, [session_id, :acc, :meta, :results_by_call], results)
 
-          if MapSet.subset?(all_ids, have_ids) do
-            outputs = Enum.map(pending, fn %{"id" => cid} -> {cid, {:ok, results[cid]}} end)
+          if MapSet.subset?(remote_ids, have_ids) do
+            order_ids = Map.get(meta, :followup_order_ids) || Enum.map(pending, & &1["id"])
+            outputs = Enum.map(order_ids, fn cid -> {cid, {:ok, Map.get(results, cid)}} end)
 
-            # Emit tool_result preview frames for UI parity
             Enum.each(outputs, fn {cid, {:ok, out}} ->
-              preview =
-                out
-                |> to_string()
-                |> String.slice(0, 200)
-
-              GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :tool_result, %{"tool_call_id" => cid, "preview" => preview}})
+              if cid in MapSet.to_list(remote_ids) do
+                preview = out |> to_string() |> String.slice(0, 200)
+                GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :tool_result, %{"tool_call_id" => cid, "preview" => preview}})
+              end
             end)
 
             st =
@@ -1060,6 +1092,7 @@ defmodule TheMaestro.Sessions.Manager do
                 m
                 |> Map.delete(:pending_calls)
                 |> Map.delete(:results_by_call)
+                |> Map.delete(:followup_order_ids)
               end)
 
             st = run_followup_with_outputs(session_id, stream_id, outputs, st)
@@ -1171,6 +1204,36 @@ defmodule TheMaestro.Sessions.Manager do
       wd when is_binary(wd) and wd != "" -> Path.expand(wd)
       _ -> File.cwd!() |> Path.expand()
     end
+  end
+
+  # Classify tool calls into IO (remote) vs server-executed
+  defp partition_io_vs_server(calls) when is_list(calls) do
+    Enum.split_with(calls, fn %{"name" => name} -> io_tool_name?(name) end)
+  end
+
+  defp io_tool_name?(name) do
+    n =
+      name
+      |> to_string()
+      |> String.downcase()
+      |> String.replace(~r/[^a-z0-9_]/, "")
+
+    n in [
+      "apply_patch",
+      "write_file",
+      "write",
+      "create_file",
+      "edit",
+      "multi_edit",
+      "multiedit",
+      "list_directory",
+      "glob",
+      "grep",
+      "shell",
+      "run_shell_command",
+      "notebook_edit",
+      "notebookedit"
+    ]
   end
 
   defp exec_tools(session_id, calls, base_cwd) do
