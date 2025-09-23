@@ -12,6 +12,8 @@ if Code.ensure_loaded?(Ratatouille) do
                 providers: [], provider: nil,
                 auths: [], auth_id: nil,
                 models: [], model: nil,
+                prov_idx: 0, auth_idx: 0, model_idx: 0,
+                wizard_focus: :provider,
                 sessions: %{}, order: [], active: nil,
                 log_visible: false, log: [], input: "",
                 session_id: nil, stream_task: nil,
@@ -44,7 +46,56 @@ if Code.ensure_loaded?(Ratatouille) do
         _ -> s
       end
     end
+    def update(%State{screen: :wizard} = s, {:event, %{key: :up}}), do: move_index(s, -1)
+    def update(%State{screen: :wizard} = s, {:event, %{key: :down}}), do: move_index(s, 1)
+    def update(%State{screen: :wizard} = s, {:event, %{key: :left}}), do: move_focus(s, -1)
+    def update(%State{screen: :wizard} = s, {:event, %{key: :right}}), do: move_focus(s, 1)
+    def update(%State{screen: :wizard} = s, {:event, %{key: :tab}}), do: move_focus(s, 1)
+    def update(%State{screen: :wizard} = s, {:event, %{key: :backtab}}), do: move_focus(s, -1)
     def update(%State{screen: :wizard} = s, _msg), do: s
+
+    defp move_focus(%State{wizard_focus: :provider} = s, 1), do: %State{s | wizard_focus: :auth}
+    defp move_focus(%State{wizard_focus: :auth} = s, 1), do: %State{s | wizard_focus: :model}
+    defp move_focus(%State{wizard_focus: :model} = s, 1), do: s
+    defp move_focus(%State{wizard_focus: :model} = s, -1), do: %State{s | wizard_focus: :auth}
+    defp move_focus(%State{wizard_focus: :auth} = s, -1), do: %State{s | wizard_focus: :provider}
+    defp move_focus(%State{wizard_focus: :provider} = s, -1), do: s
+
+    defp move_index(%State{wizard_focus: :provider} = s, delta) do
+      maxi = max(length(s.providers) - 1, 0)
+      i = clamp(s.prov_idx + delta, 0, maxi)
+      pv = Enum.at(s.providers, i)
+      %State{s | prov_idx: i, provider: pv, auths: [], models: [], auth_idx: 0, model_idx: 0}
+    end
+
+    defp move_index(%State{wizard_focus: :auth} = s, delta) do
+      auths = if s.auths == [], do: (case pick_auths(s.provider) do {:ok, {_, list}} -> list; _ -> [] end), else: s.auths
+      maxi = max(length(auths) - 1, 0)
+      i = clamp(s.auth_idx + delta, 0, maxi)
+      aid = Enum.at(auths, i)
+      %State{s | auths: auths, auth_idx: i, auth_id: aid, models: [], model_idx: 0}
+    end
+
+    defp move_index(%State{wizard_focus: :model} = s, delta) do
+      models =
+        if s.models == [] and is_binary(s.auth_id) do
+          case pick_models(s.provider, s.auth_id) do
+            {:ok, {_, list}} -> list
+            _ -> []
+          end
+        else
+          s.models
+        end
+
+      maxi = max(length(models) - 1, 0)
+      i = clamp(s.model_idx + delta, 0, maxi)
+      mdl = Enum.at(models, i)
+      %State{s | models: models, model_idx: i, model: mdl}
+    end
+
+    defp clamp(i, lo, hi) when i < lo, do: lo
+    defp clamp(i, lo, hi) when i > hi, do: hi
+    defp clamp(i, _lo, _hi), do: i
 
     def update(%State{screen: :chat} = s, {:event, ev}) when is_map(ev) and Map.get(ev, :key) in [:enter, "Enter"] do
       if shift?(ev) do
@@ -115,20 +166,7 @@ if Code.ensure_loaded?(Ratatouille) do
       %State{s | sessions: sessions, order: s.order ++ [id], active: id}
     end
 
-    # Old headless send removed; UI performs turn start + SSE
-    defp send_message(%State{} = s) do
-      text = String.trim(s.input)
-      case ensure_session(s) do
-        {:ok, sid} ->
-          case start_turn(sid, text) do
-            {:ok, %{"stream_id" => stream_id}} ->
-              spawn(fn -> consume_sse(sid, stream_id, s.working_dir) end)
-              %State{s | input: "", log: s.log ++ ["> " <> text], session_id: sid}
-            _ -> s
-          end
-        _ -> s
-      end
-    end
+    # Old headless send removed; UI performs turn start + SSE (implemented below)
 
     defp new_session(%State{} = s) do
       s1 = %State{s | session_id: nil, input: "", log: s.log}
@@ -170,15 +208,43 @@ if Code.ensure_loaded?(Ratatouille) do
     defp backspace?(%{key: k}) when k in [:backspace, :backspace2, "Backspace"], do: true
     defp backspace?(_), do: false
 
-    defp render(%State{screen: :wizard, providers: providers}) do
+    defp render(%State{screen: :wizard, providers: providers, prov_idx: pidx, auths: auths, auth_idx: aidx, models: models, model_idx: midx, wizard_focus: focus}) do
       import Ratatouille.View
       view do
         panel title: "Provider / Auth / Model" do
-          label(content: "Providers: #{Enum.join(providers, ", ")}")
-          label(content: "Press Enter to continue")
+          label(content: "Arrows=move  Tab/Shift+Tab=switch  Enter=start")
+          columns do
+            column size: 4 do
+              panel title: focus_title(:provider, focus) do
+                for {p, i} <- Enum.with_index(providers) do
+                  label(content: list_item(p, i == pidx))
+                end
+              end
+            end
+            column size: 4 do
+              panel title: focus_title(:auth, focus) do
+                for {a, i} <- Enum.with_index(auths) do
+                  label(content: list_item(a || "", i == aidx))
+                end
+              end
+            end
+            column size: 4 do
+              panel title: focus_title(:model, focus) do
+                for {m, i} <- Enum.with_index(models) do
+                  label(content: list_item(m || "", i == midx))
+                end
+              end
+            end
+          end
         end
       end
     end
+
+    defp focus_title(which, focus) do
+      if which == focus, do: "→ #{which}", else: to_string(which)
+    end
+    defp list_item(text, true), do: "> " <> to_string(text)
+    defp list_item(text, false), do: "  " <> to_string(text)
 
     def render(%State{screen: :chat, input: input, log: log, log_visible: lv, provider: pv, auth_id: aid, model: mdl}) do
       import Ratatouille.View
