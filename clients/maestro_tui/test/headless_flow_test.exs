@@ -95,6 +95,57 @@ defmodule MaestroTui.HeadlessFlowTest do
     assert is_binary(out)
   end
 
+  test "SSE assistant_text across chunks is parsed", %{bypass: bypass, tmp: tmp} do
+    Bypass.expect(bypass, "GET", "/api/providers", fn conn ->
+      conn |> Plug.Conn.put_resp_content_type("application/json") |> Plug.Conn.resp(200, ~s({"providers":["openai"]}))
+    end)
+
+    Bypass.expect(bypass, "GET", "/api/providers/openai/saved_auths", fn conn ->
+      body = %{"auths" => [%{"id" => "auth1", "label" => "Auth 1", "auth_type" => "api_key"}]}
+      conn |> json(200, body)
+    end)
+
+    Bypass.expect(bypass, "GET", "/api/providers/openai/saved_auths/auth1/models", fn conn ->
+      conn |> json(200, %{"models" => ["gpt-4o"]})
+    end)
+
+    Bypass.expect(bypass, "POST", "/api/sessions", fn conn ->
+      conn |> json(200, %{"session_id" => "s1"})
+    end)
+
+    Bypass.expect(bypass, "POST", "/api/sessions/s1/turns", fn conn ->
+      conn |> json(202, %{"stream_id" => "t1", "thread_id" => "th1", "model" => "gpt-4o", "provider" => "openai"})
+    end)
+
+    Bypass.expect(bypass, "GET", "/api/sessions/s1/turns/t1/frames", fn conn ->
+      conn =
+        conn
+        |> Plug.Conn.put_resp_header("content-type", "text/event-stream")
+        |> Plug.Conn.send_chunked(200)
+
+      json = Jason.encode!(%{"data" => %{"kind" => "assistant_text", "payload" => %{"delta" => "hello world"}}})
+
+      :ok = Plug.Conn.chunk(conn, "event: message\n")
+      :ok = Plug.Conn.chunk(conn, "data: " <> String.slice(json, 0, 10))
+      :ok = Plug.Conn.chunk(conn, String.slice(json, 10, 1000) <> "\n\n")
+      conn
+    end)
+
+    out =
+      capture_io(fn ->
+        assert :ok =
+                 MaestroTui.Headless.run(
+                   provider: "openai",
+                   auth_id: "auth1",
+                   model: "gpt-4o",
+                   working_dir: tmp,
+                   message: "test"
+                 )
+      end)
+
+    assert String.contains?(out, "hello world")
+  end
+
   defp json(conn, status, map) do
     conn
     |> Plug.Conn.put_resp_content_type("application/json")

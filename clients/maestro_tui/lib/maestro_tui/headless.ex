@@ -74,30 +74,41 @@ defmodule MaestroTui.Headless do
     req = Req.new(headers: [API.auth_header()], finch: MaestroTui.Finch)
     case Req.request(req, method: :get, url: url, into: :self, receive_timeout: :infinity) do
       {:ok, %Req.Response{status: 200, body: stream}} ->
-        for chunk <- stream do
-          for ev <- parse_sse(chunk) do
-            handle_event(session_id, stream_id, ev, workdir)
-          end
-        end
+        _rest =
+          Enum.reduce(stream, "", fn chunk, acc ->
+            {events, rest} = parse_sse_chunk(acc, chunk)
+            Enum.each(events, fn ev -> handle_event(session_id, stream_id, ev, workdir) end)
+            rest
+          end)
         :ok
       _ -> :ok
     end
   end
 
-  defp parse_sse(chunk) do
-    data = IO.iodata_to_binary(chunk)
-    data
-    |> String.split("\n\n", trim: true)
-    |> Enum.flat_map(fn block ->
-      case Regex.run(~r/data:\s*(.*)/s, block, capture: :all_but_first) do
-        [json] ->
-          case Jason.decode(json) do
-            {:ok, %{"data" => frame}} -> [%{data: frame}]
-            _ -> []
-          end
-        _ -> []
+  defp parse_sse_chunk(acc, chunk) do
+    data = acc <> IO.iodata_to_binary(chunk)
+    segs = String.split(data, "\n\n", trim: false)
+    {complete, rest} =
+      if String.ends_with?(data, "\n\n") do
+        {segs, ""}
+      else
+        {Enum.drop(segs, -1), List.last(segs) || ""}
       end
-    end)
+
+    events =
+      complete
+      |> Enum.flat_map(fn block ->
+        case Regex.run(~r/data:\s*(.*)/s, block, capture: :all_but_first) do
+          [json] ->
+            case Jason.decode(json) do
+              {:ok, %{"data" => frame}} -> [%{data: frame}]
+              _ -> []
+            end
+          _ -> []
+        end
+      end)
+
+    {events, rest}
   end
 
   defp handle_event(session_id, stream_id, %{data: %{"kind" => "function_call", "payload" => %{"calls" => calls}}}, workdir) do
