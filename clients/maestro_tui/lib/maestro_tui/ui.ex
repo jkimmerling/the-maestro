@@ -1,9 +1,11 @@
 defmodule MaestroTui.UI do
     @moduledoc false
+    @behaviour Ratatouille.App
     alias MaestroTui.API
+    import Ratatouille.View
 
     def run do
-      Ratatouille.run(%Ratatouille.Runtime{subscribe: &subscribe/1, update: &update/2, render: &render/1, init: &init/0})
+      Ratatouille.run(__MODULE__)
     end
 
     defmodule State do
@@ -21,12 +23,15 @@ defmodule MaestroTui.UI do
                 working_dir: File.cwd!()
     end
 
-    defp init do
-      {:ok, providers} = API.providers()
-      %State{providers: providers}
+    @impl true
+    def init(_context) do
+      case API.providers() do
+        {:ok, providers} -> %State{providers: providers}
+        {:error, _} -> %State{providers: [], log: ["API unavailable — set TUI_API_BASE_URL and TUI_API_TOKEN"]}
+      end
     end
 
-    defp subscribe(_state), do: []
+    # No explicit subscriptions; spawned tasks send messages to self
 
     def update(%State{screen: :wizard} = s, {:event, %{ch: 10}}) do
       prov = s.provider || List.first(s.providers)
@@ -98,15 +103,20 @@ defmodule MaestroTui.UI do
     defp clamp(i, lo, hi) when i > hi, do: hi
     defp clamp(i, _lo, _hi), do: i
 
-    def update(%State{screen: :chat} = s, {:event, ev}) when is_map(ev) and Map.get(ev, :key) in [:enter, "Enter"] do
-      # If a modal is open, Enter selects inside modal
-      if s.modal do
-        handle_modal_enter(s)
-      else if shift?(ev) do
-        %State{s | input: s.input <> "\n"}
-      else
-        run_submit(s)
-      end
+    def update(%State{screen: :chat} = s, {:event, ev}) when is_map(ev) do
+      case Map.get(ev, :key) do
+        key when key in [:enter, "Enter"] ->
+          # If a modal is open, Enter selects inside modal
+          cond do
+            s.modal ->
+              handle_modal_enter(s)
+            shift?(ev) ->
+              %State{s | input: s.input <> "\n"}
+            true ->
+              run_submit(s)
+          end
+        _ ->
+          s
       end
     end
 
@@ -223,12 +233,12 @@ defmodule MaestroTui.UI do
     defp backspace?(%{key: k}) when k in [:backspace, :backspace2, "Backspace"], do: true
     defp backspace?(_), do: false
 
-    defp render(%State{screen: :wizard, providers: providers, prov_idx: pidx, auths: auths, auth_idx: aidx, models: models, model_idx: midx, wizard_focus: focus}) do
+    def render(%State{screen: :wizard, providers: providers, prov_idx: pidx, auths: auths, auth_idx: aidx, models: models, model_idx: midx, wizard_focus: focus}) do
       import Ratatouille.View
       view do
         panel title: "Provider / Auth / Model" do
           label(content: "Arrows=move  Tab/Shift+Tab=switch  Enter=start")
-          columns do
+          row do
             column size: 4 do
               panel title: focus_title(:provider, focus) do
                 for {p, i} <- Enum.with_index(providers) do
@@ -565,4 +575,3 @@ defmodule MaestroTui.UI do
       %State{s | model: Enum.at(models, rem(idx + 1, length(models)))}
     end
   end
-end

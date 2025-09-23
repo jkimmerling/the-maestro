@@ -25,7 +25,7 @@ defmodule MaestroTui.MixProject do
     [
       {:jason, "~> 1.4"},
       {:req, "~> 0.5"},
-      {:finch, "~> 0.19"},
+      {:finch, "~> 0.19.0", override: true},
       {:ratatouille, "~> 0.5.1"},
       {:bypass, "~> 2.1", only: :test}
     ]
