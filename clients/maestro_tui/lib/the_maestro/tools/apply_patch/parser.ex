@@ -25,8 +25,15 @@ defmodule TheMaestro.Tools.ApplyPatch.Parser do
   defp unwrap(patch) do
     lines = String.split(patch, "\n", trim: false) |> drop_trailing()
     case lines do
-      [first | rest] when first in ["<<EOF", "<<'EOF'", "<<\"EOF\""] and rest != [] and List.last(rest) == "EOF" -> {:ok, rest |> Enum.drop(-1) |> Enum.join("\n")}
-      _ -> {:ok, patch}
+      [first | rest] when first in ["<<EOF", "<<'EOF'", "<<\"EOF\""] ->
+        if rest != [] and Enum.at(rest, -1) == "EOF" do
+          {:ok, rest |> Enum.drop(-1) |> Enum.join("\n")}
+        else
+          {:ok, patch}
+        end
+
+      _ ->
+        {:ok, patch}
     end
   end
 
