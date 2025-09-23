@@ -13,6 +13,9 @@ defmodule TheMaestroWeb.Router do
   pipeline :api do
     plug :accepts, ["json"]
   end
+  pipeline :api_auth do
+    plug TheMaestroWeb.ApiAuthPlug
+  end
 
   scope "/", TheMaestroWeb do
     pipe_through :browser
@@ -59,6 +62,26 @@ defmodule TheMaestroWeb.Router do
     post "/oauth/anthropic/callback", OAuthController, :anthropic_callback
     post "/oauth/gemini/callback", OAuthController, :gemini_callback
     post "/sessions/:id/turn", ChatController, :create
+  end
+
+  scope "/api", TheMaestroWeb.Api do
+    pipe_through [:api, :api_auth]
+
+    get "/providers", ProvidersController, :index
+    get "/providers/:provider/saved_auths", ProvidersController, :saved_auths
+    get "/providers/:_provider/saved_auths/:auth_id/models", ProvidersController, :models
+
+    post "/sessions", SessionsController, :create
+    post "/sessions/:session_id/turns", TurnsController, :create
+
+    # SSE frames for a specific turn
+    get "/sessions/:session_id/turns/:stream_id/frames", FramesController, :sse
+
+    # Latest frames for a thread (polling fallback)
+    get "/threads/:thread_id/turns/latest/frames", FramesController, :latest
+
+    # Tool results from remote clients (TUI)
+    post "/sessions/:session_id/turns/:stream_id/tools/results", ToolResultsController, :create
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

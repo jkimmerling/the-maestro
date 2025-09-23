@@ -898,121 +898,251 @@ defmodule TheMaestro.Sessions.Manager do
     else
       owner_pid = acc.meta && acc.meta[:sandbox_owner]
 
-      outputs = exec_tools(session_id, calls_to_run, base_cwd)
+      if is_binary(session.tool_runtime) and session.tool_runtime == "remote" do
+        st =
+          update_in(st, [session_id, :acc, :meta], fn meta ->
+            meta = meta || %{}
+            meta
+            |> Map.put(:pending_calls, calls_to_run)
+            |> Map.put_new(:results_by_call, %{})
+          end)
 
-      Enum.each(outputs, fn {id, result} ->
-        preview =
-          case result do
-            {:ok, payload} when is_binary(payload) -> String.slice(payload, 0, 200)
-            {:ok, payload} -> to_string(payload) |> String.slice(0, 200)
-            {:error, reason} -> to_string(reason)
+        Process.send_after(__MODULE__, {:tool_result_timeout, session_id, stream_id}, 120_000)
+        st
+      else
+        outputs = exec_tools(session_id, calls_to_run, base_cwd)
+
+        Enum.each(outputs, fn {id, result} ->
+          preview =
+            case result do
+              {:ok, payload} when is_binary(payload) -> String.slice(payload, 0, 200)
+              {:ok, payload} -> to_string(payload) |> String.slice(0, 200)
+              {:error, reason} -> to_string(reason)
+            end
+
+          GenServer.cast(__MODULE__, {
+            :frame_event,
+            session_id,
+            stream_id,
+            :tool_result,
+            %{"tool_call_id" => id, "preview" => preview}
+          })
+        end)
+
+        items =
+          case provider do
+            :openai -> build_openai_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
+            :anthropic -> build_anthropic_items(latest, acc.text, acc.tool_calls || [], outputs)
+            :gemini -> build_gemini_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
           end
 
-        GenServer.cast(__MODULE__, {
-          :frame_event,
-          session_id,
-          stream_id,
-          :tool_result,
-          %{"tool_call_id" => id, "preview" => preview}
-        })
-      end)
+        # Follow-up stream publishes under the SAME stream_id for UI continuity
+        # bump follow-up round counter to prevent infinite loops
+        history_entry = %{
+          provider: provider,
+          at: now_ms(),
+          calls:
+            Enum.map(calls_to_run, fn %{"id" => id, "name" => name, "arguments" => args} ->
+              %{"id" => id, "name" => name, "arguments" => args}
+            end),
+          outputs:
+            Enum.map(outputs, fn {id, result} ->
+              %{"id" => id, "output" => tool_output_payload(result)}
+            end)
+        }
 
-      items =
-        case provider do
-          :openai -> build_openai_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
-          :anthropic -> build_anthropic_items(latest, acc.text, acc.tool_calls || [], outputs)
-          :gemini -> build_gemini_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
-        end
+        st =
+          update_in(st, [session_id, :acc, :meta], fn meta ->
+            meta = meta || %{}
 
-      # Follow-up stream publishes under the SAME stream_id for UI continuity
-      # bump follow-up round counter to prevent infinite loops
-      history_entry = %{
-        provider: provider,
-        at: now_ms(),
-        calls:
-          Enum.map(calls_to_run, fn %{"id" => id, "name" => name, "arguments" => args} ->
-            %{"id" => id, "name" => name, "arguments" => args}
-          end),
-        outputs:
-          Enum.map(outputs, fn {id, result} ->
-            %{"id" => id, "output" => tool_output_payload(result)}
+            executed2 =
+              Enum.reduce(calls_to_run, executed, fn %{"name" => n, "arguments" => a}, accset ->
+                MapSet.put(accset, make_call_sig(n, a))
+              end)
+
+            meta
+            |> Map.update(:followup_rounds, 1, &(&1 + 1))
+            |> Map.put(:executed_calls, executed2)
+            |> Map.update(:tool_history_acc, [history_entry], fn l -> l ++ [history_entry] end)
           end)
-      }
 
-      st =
-        update_in(st, [session_id, :acc, :meta], fn meta ->
-          meta = meta || %{}
+        {:ok, _task} =
+          Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
+            maybe_allow_sandbox(owner_pid)
 
-          executed2 =
-            Enum.reduce(calls_to_run, executed, fn %{"name" => n, "arguments" => a}, accset ->
-              MapSet.put(accset, make_call_sig(n, a))
+            result =
+              do_followup_provider(provider, session_name, items, model,
+                decl_session_id: session_id
+              )
+
+            case result do
+              {:ok, stream} ->
+                for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
+                  publish_both(session_id, stream_id, msg)
+
+                  case msg do
+                    %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
+                    when is_binary(chunk) ->
+                      GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+
+                    %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
+                    when is_list(calls) ->
+                      GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
+
+                    %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
+                      GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
+
+                    _ ->
+                      :ok
+                  end
+                end
+
+                publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
+                GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
+
+              {:error, reason} ->
+                publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
+                  type: :error,
+                  error: inspect(reason)
+                })
+
+                publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
+                GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
+            end
+          end)
+
+        # reset accumulators for follow-up turn (keep frames/meta)
+        st =
+          put_in(st, [session_id, :acc], %{
+            text: "",
+            tool_calls: [],
+            usage: nil,
+            events: acc.events,
+            meta: acc.meta,
+            frames: acc.frames || [],
+            frame_idx: acc.frame_idx || 0
+          })
+
+        st
+      end
+    end
+  end
+
+  @impl true
+  def handle_cast({:tool_result_posted, session_id, stream_id, %{id: id, output: output} = result}, st) do
+    case Map.get(st, session_id) do
+      %{stream_id: ^stream_id, acc: %{meta: meta} = acc} ->
+        pending = Map.get(meta, :pending_calls, [])
+        if pending == [] do
+          {:noreply, st}
+        else
+          results = Map.get(meta, :results_by_call, %{}) |> Map.put(id, output)
+          all_ids = Enum.map(pending, & &1["id"]) |> MapSet.new()
+          have_ids = Map.keys(results) |> MapSet.new()
+
+          st = put_in(st, [session_id, :acc, :meta, :results_by_call], results)
+
+          if MapSet.subset?(all_ids, have_ids) do
+            outputs = Enum.map(pending, fn %{"id" => cid} -> {cid, {:ok, results[cid]}} end)
+
+            # Emit tool_result preview frames for UI parity
+            Enum.each(outputs, fn {cid, {:ok, out}} ->
+              preview =
+                out
+                |> to_string()
+                |> String.slice(0, 200)
+
+              GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :tool_result, %{"tool_call_id" => cid, "preview" => preview}})
             end)
 
-          meta
-          |> Map.update(:followup_rounds, 1, &(&1 + 1))
-          |> Map.put(:executed_calls, executed2)
-          |> Map.update(:tool_history_acc, [history_entry], fn l -> l ++ [history_entry] end)
-        end)
+            st =
+              update_in(st, [session_id, :acc, :meta], fn m ->
+                m
+                |> Map.delete(:pending_calls)
+                |> Map.delete(:results_by_call)
+              end)
 
-      {:ok, _task} =
-        Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
-          maybe_allow_sandbox(owner_pid)
-
-          result =
-            do_followup_provider(provider, session_name, items, model,
-              decl_session_id: session_id
-            )
-
-          case result do
-            {:ok, stream} ->
-              for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
-                publish_both(session_id, stream_id, msg)
-
-                case msg do
-                  %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
-                  when is_binary(chunk) ->
-                    GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
-
-                  %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
-                  when is_list(calls) ->
-                    GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
-
-                  %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
-                    GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
-
-                  _ ->
-                    :ok
-                end
-              end
-
-              publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
-              GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
-
-            {:error, reason} ->
-              publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{
-                type: :error,
-                error: inspect(reason)
-              })
-
-              publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
-              GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
+            st = run_followup_with_outputs(session_id, stream_id, outputs, st)
+            {:noreply, st}
+          else
+            {:noreply, st}
           end
-        end)
+        end
 
-      # reset accumulators for follow-up turn (keep frames/meta)
-      st =
-        put_in(st, [session_id, :acc], %{
-          text: "",
-          tool_calls: [],
-          usage: nil,
-          events: acc.events,
-          meta: acc.meta,
-          frames: acc.frames || [],
-          frame_idx: acc.frame_idx || 0
-        })
-
-      st
+      _ ->
+        {:noreply, st}
     end
+  end
+
+  @impl true
+  def handle_info({:tool_result_timeout, session_id, stream_id}, st) do
+    case Map.get(st, session_id) do
+      %{stream_id: ^stream_id, acc: %{meta: meta}} ->
+        if Map.get(meta, :pending_calls, []) != [] do
+          publish_turn_frame(session_id, stream_id, %{
+            id: Ecto.UUID.generate(), idx: 0, at_ms: now_ms(), role: "assistant", kind: "tool_result", payload: %{"timeout" => true}
+          })
+        end
+        {:noreply, st}
+
+      _ ->
+        {:noreply, st}
+    end
+  end
+
+  defp run_followup_with_outputs(session_id, stream_id, outputs, st) do
+    acc = st[session_id].acc
+    provider = acc.meta.provider
+    model = acc.meta.model
+    latest = Conversations.latest_snapshot(session_id)
+    last_user_text = last_user_text_from(latest)
+    {_auth_type, session_name} = auth_meta_from_session(Conversations.get_session_with_auth!(session_id))
+
+    items =
+      case provider do
+        :openai -> build_openai_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
+        :anthropic -> build_anthropic_items(latest, acc.text, acc.tool_calls || [], outputs)
+        :gemini -> build_gemini_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
+      end
+
+    owner_pid = acc.meta && acc.meta[:sandbox_owner]
+
+    {:ok, _task} =
+      Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
+        maybe_allow_sandbox(owner_pid)
+        result = do_followup_provider(provider, session_name, items, model, decl_session_id: session_id)
+        case result do
+          {:ok, stream} ->
+            for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
+              publish_both(session_id, stream_id, msg)
+              case msg do
+                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk} when is_binary(chunk) ->
+                  GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+                %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls} when is_list(calls) ->
+                  GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
+                %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
+                  GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
+                _ -> :ok
+              end
+            end
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
+            GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
+          {:error, reason} ->
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :error, error: inspect(reason)})
+            publish_both(session_id, stream_id, %TheMaestro.Domain.StreamEvent{type: :done})
+            GenServer.cast(__MODULE__, {:stream_done_followup, session_id, stream_id})
+        end
+      end)
+
+    put_in(st, [session_id, :acc], %{
+      text: "",
+      tool_calls: [],
+      usage: nil,
+      events: acc.events,
+      meta: acc.meta,
+      frames: acc.frames || [],
+      frame_idx: acc.frame_idx || 0
+    })
   end
 
   defp do_followup_provider(:openai, session_name, items, model, opts),

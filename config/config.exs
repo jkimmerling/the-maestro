@@ -22,6 +22,10 @@ config :the_maestro,
     sample_binary_id: "11111111-1111-1111-1111-111111111111"
   ]
 
+# API auth (TUI & remote clients)
+config :the_maestro, :api,
+  token: System.get_env("TUI_API_TOKEN") || "0000000000000000"
+
 # Configures the endpoint
 config :the_maestro, TheMaestroWeb.Endpoint,
   url: [host: "localhost"],
