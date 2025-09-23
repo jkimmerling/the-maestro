@@ -82,6 +82,9 @@ defmodule TheMaestroWeb.Router do
 
     # Tool results from remote clients (TUI)
     post "/sessions/:session_id/turns/:stream_id/tools/results", ToolResultsController, :create
+
+    # Thread maintenance
+    post "/threads/:thread_id/clear", ThreadsController, :clear
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

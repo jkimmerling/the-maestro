@@ -18,7 +18,7 @@ if Code.ensure_loaded?(Ratatouille) do
                 last_usage: %{},
                 sessions: %{}, order: [], active: nil,
                 log_visible: false, log: [], input: "",
-                session_id: nil, stream_task: nil,
+                session_id: nil, current_thread_id: nil, stream_task: nil,
                 working_dir: File.cwd!()
     end
 
@@ -293,9 +293,9 @@ if Code.ensure_loaded?(Ratatouille) do
       case ensure_session(s) do
         {:ok, sid} ->
           case start_turn(sid, text) do
-            {:ok, %{"stream_id" => stream_id}} ->
+            {:ok, %{"stream_id" => stream_id, "thread_id" => tid}} ->
               spawn(fn -> consume_sse(sid, stream_id, s.working_dir) end)
-              %State{s | input: "", log: s.log ++ ["> " <> text], session_id: sid}
+              %State{s | input: "", log: s.log ++ ["> " <> text], session_id: sid, current_thread_id: tid}
             _ -> s
           end
         _ -> s
@@ -376,6 +376,14 @@ if Code.ensure_loaded?(Ratatouille) do
     end
     defp post_tool_result(_sid, _stream, _id, _name, {:error, _}), do: :ok
 
+    defp api_clear_thread(thread_id) do
+      url = API.base_url() <> "/api/threads/" <> thread_id <> "/clear"
+      case Req.post(url: url, headers: [API.auth_header()], finch: MaestroTui.Finch) do
+        {:ok, %Req.Response{status: s}} when s in 200..299 -> :ok
+        other -> {:error, other}
+      end
+    end
+
     defp dispatch("write_file", json, base) do
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.WriteFile.run(args, base_cwd: base)
     end
@@ -453,8 +461,14 @@ if Code.ensure_loaded?(Ratatouille) do
           %State{s | log: s.log ++ help_lines(), input: ""}
 
         %{name: "clear"} ->
-          s2 = %State{s | session_id: nil, last_usage: %{}, log: [], input: ""}
-          put_new_session(s2)
+          case s.current_thread_id do
+            tid when is_binary(tid) ->
+              case api_clear_thread(tid) do
+                :ok -> %State{s | last_usage: %{}, log: [], input: ""}
+                {:error, r} -> %State{s | log: s.log ++ ["Clear failed: " <> inspect(r)], input: ""}
+              end
+            _ -> %State{s | log: s.log ++ ["No thread yet; send a message first"], input: ""}
+          end
 
         _ ->
           %State{s | log: s.log ++ ["Unknown command"], input: ""}
