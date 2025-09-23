@@ -1,8 +1,8 @@
 defmodule TheMaestro.Tools.ApplyPatch.Parser do
   @moduledoc false
 
-  @begin "*** Begin Patch"
-  @end "*** End Patch"
+  @begin_marker "*** Begin Patch"
+  @end_marker "*** End Patch"
   @add "*** Add File: "
   @del "*** Delete File: "
   @upd "*** Update File: "
@@ -35,8 +35,8 @@ defmodule TheMaestro.Tools.ApplyPatch.Parser do
     first = lines |> Enum.at(0) |> to_string() |> String.trim()
     last = lines |> Enum.at(-1) |> to_string() |> String.trim()
     cond do
-      first != @begin -> {:error, "invalid patch: The first line of the patch must be '#{@begin}'"}
-      last != @end -> {:error, "invalid patch: The last line of the patch must be '#{@end}'"}
+      first != @begin_marker -> {:error, "invalid patch: The first line of the patch must be '#{@begin_marker}'"}
+      last != @end_marker -> {:error, "invalid patch: The last line of the patch must be '#{@end_marker}'"}
       true -> {:ok, Enum.slice(lines, 1, length(lines) - 2)}
     end
   end
@@ -201,4 +201,3 @@ defmodule TheMaestro.Tools.ApplyPatch.Parser do
     end
   end
 end
-
