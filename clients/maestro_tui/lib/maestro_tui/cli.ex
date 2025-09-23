@@ -14,10 +14,7 @@ defmodule MaestroTui.CLI do
       )
 
     if Keyword.get(opts, :ui) do
-      case Code.ensure_loaded?(Ratatouille) do
-        true -> MaestroTui.UI.run()
-        false -> IO.puts(:stderr, "UI not available. Set TUI_ENABLE_TUI=1 and run deps.")
-      end
+      MaestroTui.UI.run()
     else
       case MaestroTui.Headless.run(opts) do
         :ok -> :ok

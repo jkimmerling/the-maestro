@@ -1,7 +1,6 @@
 defmodule MaestroTui.Headless do
   @moduledoc false
   alias MaestroTui.API
-  alias TheMaestro.Tools
 
   @io_tools ~w(apply_patch write_file write create_file edit multi_edit list_directory glob grep shell run_shell_command notebook_edit)a
 

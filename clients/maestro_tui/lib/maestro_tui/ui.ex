@@ -1,5 +1,4 @@
-if System.get_env("TUI_ENABLE_TUI") in ["1", "true", "TRUE"] do
-  defmodule MaestroTui.UI do
+defmodule MaestroTui.UI do
     @moduledoc false
     alias MaestroTui.API
 
@@ -565,10 +564,5 @@ if System.get_env("TUI_ENABLE_TUI") in ["1", "true", "TRUE"] do
       idx = Enum.find_index(models, & &1 == mdl) || 0
       %State{s | model: Enum.at(models, rem(idx + 1, length(models)))}
     end
-  end
-else
-  defmodule MaestroTui.UI do
-    @moduledoc false
-    def run, do: IO.puts(:stderr, "UI not available. Set TUI_ENABLE_TUI=1 and run deps.")
   end
 end

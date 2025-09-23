@@ -68,7 +68,7 @@ defmodule TheMaestro.Tools.Edit do
     end
   end
 
-  defp do_replace(c, "", n, _), do: n
+  defp do_replace(_c, "", n, _), do: n
   defp do_replace(c, o, n, true), do: String.replace(c, o, n)
   defp do_replace(c, o, n, false), do: String.replace(c, o, n)
 
@@ -81,4 +81,3 @@ defmodule TheMaestro.Tools.Edit do
     end
   end
 end
-

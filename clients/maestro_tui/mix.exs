@@ -22,20 +22,13 @@ defmodule MaestroTui.MixProject do
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
-    base = [
+    [
       {:jason, "~> 1.4"},
       {:req, "~> 0.5"},
-      {:finch, "~> 0.19"}
+      {:finch, "~> 0.19"},
+      {:ratatouille, "~> 0.5.1"},
+      {:bypass, "~> 2.1", only: :test}
     ]
-
-    if System.get_env("TUI_ENABLE_TUI") in ["1", "true", "TRUE"] do
-      base ++ [
-        {:ratatouille, "~> 0.5.1"},
-        {:bypass, "~> 2.1", only: :test}
-      ]
-    else
-      base ++ [{:bypass, "~> 2.1", only: :test}]
-    end
   end
 
   defp releases do
