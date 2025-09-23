@@ -52,13 +52,19 @@ defmodule MaestroTui.UI do
         _ -> s
       end
     end
-    def update(%State{screen: :wizard} = s, {:event, %{key: :up}}), do: move_index(s, -1)
-    def update(%State{screen: :wizard} = s, {:event, %{key: :down}}), do: move_index(s, 1)
-    def update(%State{screen: :wizard} = s, {:event, %{key: :left}}), do: move_focus(s, -1)
-    def update(%State{screen: :wizard} = s, {:event, %{key: :right}}), do: move_focus(s, 1)
-    def update(%State{screen: :wizard} = s, {:event, %{key: :tab}}), do: move_focus(s, 1)
-    def update(%State{screen: :wizard} = s, {:event, %{key: :backtab}}), do: move_focus(s, -1)
-    def update(%State{screen: :wizard} = s, _msg), do: s
+    def update(%State{screen: :wizard} = s, {:event, ev}) do
+      cond do
+        event_key?(ev, :arrow_up) -> move_index(s, -1)
+        event_key?(ev, :arrow_down) -> move_index(s, 1)
+        event_key?(ev, :arrow_left) -> move_focus(s, -1)
+        event_key?(ev, :arrow_right) -> move_focus(s, 1)
+        event_key?(ev, :tab) -> move_focus(s, 1)
+        event_enter?(ev) ->
+          # Fall back to enter starting the chat
+          update(s, {:event, %{ch: 10}})
+        true -> s
+      end
+    end
 
     defp move_focus(%State{wizard_focus: :provider} = s, 1), do: %State{s | wizard_focus: :auth}
     defp move_focus(%State{wizard_focus: :auth} = s, 1), do: %State{s | wizard_focus: :model}
@@ -104,19 +110,11 @@ defmodule MaestroTui.UI do
     defp clamp(i, _lo, _hi), do: i
 
     def update(%State{screen: :chat} = s, {:event, ev}) when is_map(ev) do
-      case Map.get(ev, :key) do
-        key when key in [:enter, "Enter"] ->
-          # If a modal is open, Enter selects inside modal
-          cond do
-            s.modal ->
-              handle_modal_enter(s)
-            shift?(ev) ->
-              %State{s | input: s.input <> "\n"}
-            true ->
-              run_submit(s)
-          end
-        _ ->
-          s
+      cond do
+        (not is_nil(s.modal)) and event_enter?(ev) -> handle_modal_enter(s)
+        event_enter?(ev) and shift?(ev) -> %State{s | input: s.input <> "\n"}
+        event_enter?(ev) -> run_submit(s)
+        true -> s
       end
     end
 
@@ -131,11 +129,11 @@ defmodule MaestroTui.UI do
     def update(%State{screen: :chat, log_visible: lv} = s, {:event, ev}) when is_map(ev) do
       # Modal navigation takes priority
       if s.modal do
-        case Map.get(ev, :key) do
-          :up -> modal_move(s, -1)
-          :down -> modal_move(s, 1)
-          :escape -> close_modal(s)
-          _ -> s
+        cond do
+          event_key?(ev, :arrow_up) -> modal_move(s, -1)
+          event_key?(ev, :arrow_down) -> modal_move(s, 1)
+          event_key?(ev, :esc) -> close_modal(s)
+          true -> s
         end
       else
       cond do
@@ -230,7 +228,8 @@ defmodule MaestroTui.UI do
       Map.get(ev, :mod) in [:shift, :ctrl_shift] or Map.get(ev, :shift) == true
     end
 
-    defp backspace?(%{key: k}) when k in [:backspace, :backspace2, "Backspace"], do: true
+    import Ratatouille.Constants, only: [key: 1]
+    defp backspace?(%{key: k}) when is_integer(k), do: k in [key(:backspace), key(:backspace2)]
     defp backspace?(_), do: false
 
     def render(%State{screen: :wizard, providers: providers, prov_idx: pidx, auths: auths, auth_idx: aidx, models: models, model_idx: midx, wizard_focus: focus}) do
@@ -574,4 +573,11 @@ defmodule MaestroTui.UI do
       idx = Enum.find_index(models, & &1 == mdl) || 0
       %State{s | model: Enum.at(models, rem(idx + 1, length(models)))}
     end
+
+    # Event helpers
+    defp event_key?(%{key: code}, name) when is_integer(code), do: code == key(name)
+    defp event_key?(_, _), do: false
+    defp event_enter?(%{key: code}) when is_integer(code), do: code == key(:enter)
+    defp event_enter?(%{ch: ch}) when is_integer(ch), do: ch in [10, 13]
+    defp event_enter?(_), do: false
   end
