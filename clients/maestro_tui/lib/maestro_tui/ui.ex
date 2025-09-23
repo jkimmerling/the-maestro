@@ -25,19 +25,28 @@ if Code.ensure_loaded?(Ratatouille) do
 
     defp subscribe(_state), do: []
 
-    defp update(%State{screen: :wizard} = s, {:event, %{ch: 10}}) do
+    def update(%State{screen: :wizard} = s, {:event, %{ch: 10}}) do
       prov = s.provider || List.first(s.providers)
-      with {:ok, auth} <- pick_auth(prov), {:ok, model} <- pick_model(prov, auth) do
+      with {:ok, {auth, auths}} <- pick_auths(prov), {:ok, {model, models}} <- pick_models(prov, auth) do
         sid = nil
-        s1 = %State{s | screen: :chat, provider: prov, auth_id: auth, model: model, session_id: sid}
+        s1 = %State{
+          s
+          | screen: :chat,
+            provider: prov,
+            auth_id: auth,
+            auths: auths,
+            model: model,
+            models: models,
+            session_id: sid
+        }
         put_new_session(s1)
       else
         _ -> s
       end
     end
-    defp update(%State{screen: :wizard} = s, _msg), do: s
+    def update(%State{screen: :wizard} = s, _msg), do: s
 
-    defp update(%State{screen: :chat} = s, {:event, ev}) when is_map(ev) and Map.get(ev, :key) in [:enter, "Enter"] do
+    def update(%State{screen: :chat} = s, {:event, ev}) when is_map(ev) and Map.get(ev, :key) in [:enter, "Enter"] do
       if shift?(ev) do
         %State{s | input: s.input <> "\n"}
       else
@@ -45,7 +54,7 @@ if Code.ensure_loaded?(Ratatouille) do
       end
     end
 
-    defp update(%State{screen: :chat} = s, {:event, %{ch: 10}}) do
+    def update(%State{screen: :chat} = s, {:event, %{ch: 10}}) do
       text = String.trim(s.input)
       if text == "" do
         s
@@ -53,20 +62,23 @@ if Code.ensure_loaded?(Ratatouille) do
         send_message(s)
       end
     end
-    defp update(%State{screen: :chat, log_visible: lv} = s, {:event, ev}) when is_map(ev) do
+    def update(%State{screen: :chat, log_visible: lv} = s, {:event, ev}) when is_map(ev) do
       cond do
         ctrl_shift?(ev, ?L) -> %State{s | log_visible: !lv}
+        ctrl_shift?(ev, ?P) -> cycle_provider(s)
+        ctrl_shift?(ev, ?A) -> cycle_auth(s)
+        ctrl_shift?(ev, ?M) -> cycle_model(s)
         ctrl_shift?(ev, ?N) -> new_session(s)
-        ctrl_shift?(ev, :tab_next) -> next_session(s)
-        ctrl_shift?(ev, :tab_prev) -> prev_session(s)
+        ctrl_shift?(ev, ?]) -> next_session(s)
+        ctrl_shift?(ev, ?[) -> prev_session(s)
         backspace?(ev) -> %State{s | input: String.slice(s.input, 0, max(byte_size(s.input) - 1, 0))}
         true -> s
       end
     end
-    defp update(%State{screen: :chat} = s, {:event, %{ch: ch}}) when is_integer(ch) and ch >= 32 do
+    def update(%State{screen: :chat} = s, {:event, %{ch: ch}}) when is_integer(ch) and ch >= 32 do
       %State{s | input: s.input <> <<ch::utf8>>}
     end
-    defp update(s, _), do: s
+    def update(s, _), do: s
 
     defp ensure_session(%State{session_id: sid} = _s) when is_binary(sid), do: {:ok, sid}
     defp ensure_session(%State{} = s) do
@@ -78,18 +90,21 @@ if Code.ensure_loaded?(Ratatouille) do
       end
     end
 
-    defp pick_auth(provider) do
+    def pick_auths(provider) do
       url = API.base_url() <> "/api/providers/" <> provider <> "/saved_auths"
       case Req.get(url: url, headers: [API.auth_header()], finch: MaestroTui.Finch) do
-        {:ok, %Req.Response{status: 200, body: %{"auths" => [first | _]}}} -> {:ok, first["id"]}
+        {:ok, %Req.Response{status: 200, body: %{"auths" => list}}} when is_list(list) and list != [] ->
+          ids = Enum.map(list, & &1["id"]) |> Enum.filter(&is_binary/1)
+          {:ok, {hd(ids), ids}}
         _ -> {:error, :auth}
       end
     end
 
-    defp pick_model(provider, auth_id) do
+    def pick_models(provider, auth_id) do
       url = API.base_url() <> "/api/providers/" <> provider <> "/saved_auths/" <> auth_id <> "/models"
       case Req.get(url: url, headers: [API.auth_header()], finch: MaestroTui.Finch) do
-        {:ok, %Req.Response{status: 200, body: %{"models" => [m | _]}}} -> {:ok, m}
+        {:ok, %Req.Response{status: 200, body: %{"models" => list}}} when is_list(list) and list != [] ->
+          {:ok, {hd(list), list}}
         _ -> {:error, :model}
       end
     end
@@ -100,13 +115,17 @@ if Code.ensure_loaded?(Ratatouille) do
       %State{s | sessions: sessions, order: s.order ++ [id], active: id}
     end
 
+    # Old headless send removed; UI performs turn start + SSE
     defp send_message(%State{} = s) do
       text = String.trim(s.input)
       case ensure_session(s) do
         {:ok, sid} ->
-          spawn(fn -> MaestroTui.Headless.run(provider: s.provider, auth_id: s.auth_id, model: s.model, working_dir: s.working_dir, message: text) end)
-          log = s.log ++ ["> " <> text]
-          %State{s | input: "", log: log, session_id: sid}
+          case start_turn(sid, text) do
+            {:ok, %{"stream_id" => stream_id}} ->
+              spawn(fn -> consume_sse(sid, stream_id, s.working_dir) end)
+              %State{s | input: "", log: s.log ++ ["> " <> text], session_id: sid}
+            _ -> s
+          end
         _ -> s
       end
     end
@@ -130,16 +149,12 @@ if Code.ensure_loaded?(Ratatouille) do
       %State{s | active: Enum.at(ord, nidx)}
     end
 
-    defp ctrl_shift?(%{key: k}, :tab_next) when k in ["Tab", :tab], do: false
-    defp ctrl_shift?(%{key: k}, :tab_prev) when k in ["Tab", :tab], do: false
     defp ctrl_shift?(ev, code) do
       mod = Map.get(ev, :mod)
       key = Map.get(ev, :key)
       ch = Map.get(ev, :ch)
       cond do
         mod in [:ctrl, :ctrl_shift] and is_integer(code) and (key == to_ctrl_key(code) or ch == code) -> true
-        key in [:ctrl_l, :ctrl_L] and code in [?
-L, ?l] -> true
         false -> false
       end
     end
@@ -165,10 +180,11 @@ L, ?l] -> true
       end
     end
 
-    defp render(%State{screen: :chat, input: input, log: log, log_visible: lv}) do
+    def render(%State{screen: :chat, input: input, log: log, log_visible: lv, provider: pv, auth_id: aid, model: mdl}) do
       import Ratatouille.View
       view do
         panel title: "Chat" do
+          label(content: "Provider: #{pv || "?"}  Auth: #{aid || "?"}  Model: #{mdl || "?"}")
           if lv do
             for line <- Enum.take(log, -200) do
               label(content: line)
@@ -308,8 +324,30 @@ L, ?l] -> true
     defp dispatch(_other, _json, _base), do: {:error, "unsupported tool"}
 
     # ----- UI message handling -----
-    defp update(%State{} = s, {:ui, {:append_text, text}}) when is_binary(text) do
+    def update(%State{} = s, {:ui, {:append_text, text}}) when is_binary(text) do
       %State{s | log: s.log ++ [text]}
+    end
+
+    def cycle_provider(%State{providers: []} = s), do: s
+    def cycle_provider(%State{providers: [_]} = s), do: s
+    def cycle_provider(%State{providers: provs, provider: pv} = s) do
+      idx = Enum.find_index(provs, & &1 == pv) || 0
+      nxt = Enum.at(provs, rem(idx + 1, length(provs)))
+      %State{s | provider: nxt}
+    end
+
+    def cycle_auth(%State{auths: []} = s), do: s
+    def cycle_auth(%State{auths: [_]} = s), do: s
+    def cycle_auth(%State{auths: auths, auth_id: aid} = s) do
+      idx = Enum.find_index(auths, & &1 == aid) || 0
+      %State{s | auth_id: Enum.at(auths, rem(idx + 1, length(auths)))}
+    end
+
+    def cycle_model(%State{models: []} = s), do: s
+    def cycle_model(%State{models: [_]} = s), do: s
+    def cycle_model(%State{models: models, model: mdl} = s) do
+      idx = Enum.find_index(models, & &1 == mdl) || 0
+      %State{s | model: Enum.at(models, rem(idx + 1, length(models)))}
     end
   end
 else
