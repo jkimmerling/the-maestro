@@ -213,14 +213,36 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
 
   defp build_env_context_message(session_id) do
     cwd = safe_session_cwd(session_id)
+    {os, arch} = os_arch()
 
     text = """
     <environment_context>
       <cwd>#{cwd}</cwd>
+      <os>#{os}</os>
+      <arch>#{arch}</arch>
     </environment_context>
     """
 
     %{"role" => "user", "content" => [%{"type" => "text", "text" => String.trim(text)}]}
+  end
+
+  defp os_arch do
+    os =
+      case :os.type() do
+        {:unix, :darwin} -> "macOS"
+        {:unix, :linux} -> "linux"
+        {:win32, _} -> "windows"
+        other -> to_string(other)
+      end
+
+    arch =
+      case :erlang.system_info(:system_architecture) do
+        val when is_list(val) -> List.to_string(val)
+        val when is_binary(val) -> val
+        other -> to_string(other)
+      end
+
+    {os, arch}
   end
 
   defp safe_session_cwd(session_id) do
@@ -687,7 +709,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
 
   defp do_sanitize_cache_control(other, _mode, kept), do: {other, kept}
 
-  defp maybe_log_request(tag, %Req.Request{} = req, url, body) do
+  defp maybe_log_request(tag, %Req.Request{} = req, url, body, decl_session_id \\ nil) do
     if System.get_env("HTTP_DEBUG") in ["1", "true", "TRUE"] do
       headers = sanitize_headers(Enum.into(req.headers, []))
 
@@ -701,6 +723,12 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
       IO.puts("URL: #{url}")
       IO.puts("Headers: " <> inspect(headers))
       IO.puts("Payload preview: " <> inspect(preview))
+
+      if decl_session_id do
+        cwd = safe_session_cwd(decl_session_id)
+        {os, arch} = os_arch()
+        IO.puts("Env: cwd=#{cwd} os=#{os} arch=#{arch}")
+      end
     end
   end
 

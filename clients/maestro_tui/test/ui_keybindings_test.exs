@@ -39,5 +39,18 @@ defmodule MaestroTui.UIKeybindingsTest do
     text = Ratatouille.Renderer.Text.render(view)
     assert text =~ "Provider: openai"
   end
-end
 
+  test "space key appends a space in chat input" do
+    unless Code.ensure_loaded?(Ratatouille) do
+      skip("ratatouille not available; set TUI_ENABLE_TUI=1 for UI tests")
+    end
+
+    import Ratatouille.Constants, only: [key: 1]
+    s = %MaestroTui.UI.State{screen: :chat, input: "foo"}
+    s1 = MaestroTui.UI.update(s, {:event, %{key: key(:space)}})
+    assert s1.input == "foo "
+
+    s2 = MaestroTui.UI.update(s, {:event, %{ch: 32}})
+    assert s2.input == "foo " <> <<32>>
+  end
+end

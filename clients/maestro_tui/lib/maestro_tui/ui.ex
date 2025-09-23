@@ -19,12 +19,12 @@ defmodule MaestroTui.UI do
                 last_usage: %{},
                 sessions: %{}, order: [], active: nil,
                 log_visible: false, log: [],
-                transcript: [], stream_buffer: nil,
+                transcript: [],
                 input: "",
                 session_id: nil, current_thread_id: nil, stream_task: nil,
                 stream_id: nil, stream_consumed: 0,
-                assistant_placeholder_at: nil,
-                working_dir: File.cwd!()
+                working_dir: File.cwd!(),
+                thinking_visibility: :collapsed
     end
 
     @impl true
@@ -165,13 +165,16 @@ defmodule MaestroTui.UI do
       %State{s | models: models, model_idx: i, model: mdl}
     end
 
-    defp clamp(i, lo, hi) when i < lo, do: lo
-    defp clamp(i, lo, hi) when i > hi, do: hi
+    defp clamp(i, lo, _hi) when i < lo, do: lo
+    defp clamp(i, _lo, hi) when i > hi, do: hi
     defp clamp(i, _lo, _hi), do: i
 
     # Chat: printable characters first to ensure typing works
     def update(%State{screen: :chat} = s, {:event, %{ch: ch}}) when is_integer(ch) and ch >= 32 do
       %State{s | input: s.input <> <<ch::utf8>>}
+    end
+    def update(%State{screen: :chat} = s, {:event, %{key: 32}}) do
+      %State{s | input: s.input <> " "}
     end
 
     # Chat: key events (enter, backspace, modal nav)
@@ -188,6 +191,7 @@ defmodule MaestroTui.UI do
         ctrl_shift?(ev, ?A) -> cycle_auth(s)
         ctrl_shift?(ev, ?M) -> cycle_model(s)
         ctrl_shift?(ev, ?N) -> new_session(s)
+        ctrl_shift?(ev, ?T) -> toggle_thinking(s)
         ctrl_shift?(ev, ?]) -> next_session(s)
         ctrl_shift?(ev, ?[) -> prev_session(s)
         backspace?(ev) -> %State{s | input: String.slice(s.input, 0, max(byte_size(s.input) - 1, 0))}
@@ -261,12 +265,13 @@ defmodule MaestroTui.UI do
       ch = Map.get(ev, :ch)
       cond do
         mod in [:ctrl, :ctrl_shift] and is_integer(code) and (key == to_ctrl_key(code) or ch == code) -> true
-        false -> false
+        true -> false
       end
     end
 
     defp to_ctrl_key(?L), do: :ctrl_l
     defp to_ctrl_key(?N), do: :ctrl_n
+    defp to_ctrl_key(?T), do: :ctrl_t
     defp to_ctrl_key(_), do: nil
 
     defp shift?(ev) do
@@ -279,49 +284,9 @@ defmodule MaestroTui.UI do
 
     @transcript_limit 500
     defp add_transcript(%State{} = s, line) when is_binary(line) do
-      tlog("add_transcript line=" <> String.slice(line, 0, 40))
-      tr = Enum.take(s.transcript ++ [line], -@transcript_limit)
+      tr = Enum.take((s.transcript || []) ++ [line], -@transcript_limit)
       %State{s | transcript: tr}
     end
-
-    defp add_stream_chunk(%State{stream_buffer: nil} = s, chunk) when is_binary(chunk) do
-      parts = String.split(chunk, "\n")
-      start = stamp_line("assistant", List.first(parts) || "")
-      tlog("add_stream_chunk start=" <> String.slice(start, 0, 40))
-      tr = Enum.take(s.transcript ++ [start], -@transcript_limit)
-      tr2 =
-        Enum.reduce(Enum.drop(parts, 1), tr, fn piece, acc ->
-          if piece == "" do
-            acc
-          else
-            Enum.take(acc ++ [piece], -@transcript_limit)
-          end
-        end)
-      %State{s | transcript: tr2, stream_buffer: start}
-    end
-    defp add_stream_chunk(%State{stream_buffer: buf} = s, chunk) when is_binary(chunk) do
-      parts = String.split(chunk, "\n")
-      case parts do
-        [only] ->
-          new_buf = (buf || "") <> only
-          tlog("add_stream_chunk cont size=" <> Integer.to_string(byte_size(new_buf)))
-          tr = replace_last(s.transcript, new_buf)
-          %State{s | transcript: tr, stream_buffer: new_buf}
-        [first | rest] ->
-          new_buf = (buf || "") <> first
-          tr = replace_last(s.transcript, new_buf)
-          tr2 =
-            Enum.reduce(rest, tr, fn piece, acc ->
-              if piece == "" do
-                acc
-              else
-                Enum.take(acc ++ [piece], -@transcript_limit)
-              end
-            end)
-          %State{s | transcript: tr2, stream_buffer: new_buf}
-      end
-    end
-    defp add_stream_chunk(%State{} = s, _), do: s
 
     defp replace_last([], v), do: [v]
     defp replace_last(list, v) when is_list(list) do
@@ -337,13 +302,8 @@ defmodule MaestroTui.UI do
         [_old | tail] -> left ++ [v | tail]
       end
     end
-    defp replace_placeholder(%State{assistant_placeholder_at: idx} = s, final_line) when is_integer(idx) do
-      tr = replace_at(s.transcript || [], idx, final_line)
-      %State{s | transcript: tr, assistant_placeholder_at: nil}
-    end
-    defp replace_placeholder(%State{} = s, final_line) do
-      %State{s | transcript: replace_last(s.transcript || [], final_line), assistant_placeholder_at: nil}
-    end
+    
+    defp now_ms, do: :erlang.monotonic_time(:millisecond)
     defp stamp_line(role, text) do
       {_, {h, m, s}} = :calendar.local_time()
       ts = :io_lib.format("~2..0B:~2..0B:~2..0B", [h, m, s]) |> IO.iodata_to_binary()
@@ -360,13 +320,15 @@ defmodule MaestroTui.UI do
       ], & &1), " ")
     end
 
+    # tracing removed for parity-focused implementation
+
     defp append_line_to_stream(stream_id, add_line) do
       case :ets.lookup(:maestro_tui_streams, stream_id) do
         [{^stream_id, %{} = m}] ->
           lines = Map.get(m, :lines, [])
           :ets.insert(:maestro_tui_streams, {stream_id, Map.put(m, :lines, lines ++ [add_line])})
         _ ->
-          :ets.insert(:maestro_tui_streams, {stream_id, %{assistant: "", lines: [add_line], placeholder_pending: false, placeholder_inserted: false, done: false}})
+          :ets.insert(:maestro_tui_streams, {stream_id, %{lines: [add_line]}})
       end
       :ok
     end
@@ -427,7 +389,6 @@ defmodule MaestroTui.UI do
     defp list_item(text, false), do: "  " <> to_string(text)
 
     def render(%State{screen: :chat, input: input, log: log, log_visible: lv, provider: pv, auth_id: aid, model: mdl} = s) do
-      tlog("render chat transcript_size=" <> Integer.to_string(length(s.transcript || [])))
       import Ratatouille.View
       view do
         panel title: "Chat" do
@@ -446,6 +407,7 @@ defmodule MaestroTui.UI do
           if String.starts_with?(input, "/") do
             show_slash_suggestions(s)
           end
+          # Snapshot keybinding hint intentionally omitted in UI to keep noise low
           if s.modal do
             render_modal(s)
           end
@@ -454,7 +416,7 @@ defmodule MaestroTui.UI do
     end
     
     # ----- SSE integration -----
-    @io_tools ~w(apply_patch write_file write create_file edit multi_edit list_directory glob grep shell run_shell_command notebook_edit)a
+    @io_tools ~w(apply_patch write_file write create_file edit multi_edit list_directory glob grep shell run_shell_command notebook_edit bash)a
 
     defp send_message(%State{} = s) do
       text = String.trim(s.input)
@@ -463,16 +425,15 @@ defmodule MaestroTui.UI do
           case start_turn(sid, text) do
             {:ok, %{"stream_id" => stream_id, "thread_id" => tid}} ->
               ui_pid = self()
-              :ets.insert(:maestro_tui_streams, {stream_id, %{assistant: "", lines: [], placeholder_pending: false, placeholder_inserted: false, done: false}})
+              :ets.insert(:maestro_tui_streams, {stream_id, %{lines: [], thread_id: tid, assistant_buf: "", assistant_streaming_idx: nil, assistant_shown: "", thinking_buf: "", thinking_streaming_idx: nil, has_thinking: false, tool_pending?: false, pending_assistant_text: ""}})
               spawn(fn -> consume_sse(sid, stream_id, s.working_dir, ui_pid) end)
               s
               |> add_transcript(stamp_line("you", text))
               |> Map.put(:input, "")
               |> Map.put(:log, s.log ++ ["> " <> text])
-              |> Map.put(:stream_buffer, nil)
+              
               |> Map.put(:stream_id, stream_id)
               |> Map.put(:stream_consumed, 0)
-              |> Map.put(:assistant_placeholder_at, nil)
               |> Map.put(:session_id, sid)
               |> Map.put(:current_thread_id, tid)
             _ -> s
@@ -534,45 +495,95 @@ defmodule MaestroTui.UI do
       {events, rest}
     end
 
-    defp handle_event(_sid, stream_id, %{data: %{"kind" => "assistant_text", "payload" => %{"delta" => d}}}, _wd, _ui) when is_binary(d) do
-      tlog("assistant_text " <> Integer.to_string(byte_size(d)) <> "B")
+    defp handle_event(_sid, stream_id, %{data: %{"kind" => "assistant_text", "payload" => %{"delta" => d}}}, _wd, _ui) do
       case :ets.lookup(:maestro_tui_streams, stream_id) do
         [{^stream_id, %{} = m}] ->
-          buf = Map.get(m, :assistant, "") <> d
-          first? = Map.get(m, :assistant, "") == ""
-          m2 = m
-          |> Map.put(:assistant, buf)
-          |> Map.put(:placeholder_pending, first? || Map.get(m, :placeholder_pending, false))
-          :ets.insert(:maestro_tui_streams, {stream_id, m2})
-        _ ->
-          :ets.insert(:maestro_tui_streams, {stream_id, %{assistant: d, lines: [], placeholder_pending: true, placeholder_inserted: false, done: false}})
+          if Map.get(m, :tool_pending?, false) do
+            pend = (m[:pending_assistant_text] || "") <> to_string(d || "")
+            :ets.insert(:maestro_tui_streams, {stream_id, Map.put(m, :pending_assistant_text, pend)})
+          else
+            buf = (m[:assistant_buf] || "") <> to_string(d || "")
+            :ets.insert(:maestro_tui_streams, {stream_id, Map.put(m, :assistant_buf, buf)})
+          end
+        _ -> :ok
+      end
+    end
+    defp handle_event(_sid, stream_id, %{data: %{"kind" => "assistant_thinking", "payload" => %{"content" => content}}}, _wd, _ui) do
+      case :ets.lookup(:maestro_tui_streams, stream_id) do
+        [{^stream_id, %{} = m}] ->
+          thinking_buf = (m[:thinking_buf] || "") <> to_string(content || "")
+          m1 = m |> Map.put(:thinking_buf, thinking_buf) |> Map.put(:has_thinking, true)
+          :ets.insert(:maestro_tui_streams, {stream_id, m1})
+        _ -> :ok
+      end
+    end
+    defp handle_event(_sid, stream_id, %{data: %{"kind" => "assistant_thinking"}}, _wd, _ui) do
+      # Fallback for thinking without content
+      case :ets.lookup(:maestro_tui_streams, stream_id) do
+        [{^stream_id, %{} = m}] ->
+          m1 = m |> Map.put(:has_thinking, true)
+          :ets.insert(:maestro_tui_streams, {stream_id, m1})
+        _ -> :ok
       end
     end
     defp handle_event(_sid, stream_id, %{data: %{"kind" => "usage", "payload" => usage}}, _wd, _ui) when is_map(usage) do
       append_line_to_stream(stream_id, stamp_line("usage", format_usage(usage)))
     end
     defp handle_event(session_id, stream_id, %{data: %{"kind" => "function_call", "payload" => %{"calls" => calls}}}, workdir, _ui) do
+      tlog("tool_use calls=" <> Integer.to_string(length(calls)))
       Enum.each(calls, fn %{"name" => name, "arguments" => args_json} ->
         prev = String.slice(to_string(args_json || "{}"), 0, 120)
-        append_line_to_stream(stream_id, stamp_line("tool use", to_string(name) <> " args=" <> prev))
+        line = stamp_line("tool use", to_string(name) <> " args=" <> prev)
+        tlog("append tool_use: " <> line)
+        append_line_to_stream(stream_id, line)
       end)
       Enum.each(calls, fn %{"id" => id, "name" => name, "arguments" => args_json} ->
         if io_tool?(name) do
           result = exec_local(name, args_json, workdir)
+          tlog("post tool_result id=" <> to_string(id) <> " name=" <> to_string(name))
           post_tool_result(session_id, stream_id, id, name, result)
         end
       end)
-    end
-    defp handle_event(_sid, stream_id, %{data: %{"kind" => "tool_result", "payload" => payload}}, _wd, _ui) do
-      prev = payload["preview"] || ""
-      append_line_to_stream(stream_id, stamp_line("tool result", String.slice(to_string(prev), 0, 160)))
-    end
-    defp handle_event(_sid, stream_id, %{data: %{"kind" => "done"}}, _wd, _ui) do
       case :ets.lookup(:maestro_tui_streams, stream_id) do
-        [{^stream_id, %{} = m}] -> :ets.insert(:maestro_tui_streams, {stream_id, Map.put(m, :done, true)})
+        [{^stream_id, %{} = m}] -> :ets.insert(:maestro_tui_streams, {stream_id, Map.put(m, :tool_pending?, true)})
         _ -> :ok
       end
     end
+    defp handle_event(_sid, stream_id, %{data: %{"kind" => "tool_result", "payload" => payload}}, _wd, _ui) do
+      prev = payload["preview"] || ""
+      line = stamp_line("tool result", String.slice(to_string(prev), 0, 160))
+      tlog("append tool_result: " <> String.slice(line, 0, 120))
+      append_line_to_stream(stream_id, line)
+      case :ets.lookup(:maestro_tui_streams, stream_id) do
+        [{^stream_id, %{} = m}] ->
+          buf = (m[:assistant_buf] || "") <> to_string(m[:pending_assistant_text] || "")
+          m1 = m |> Map.put(:assistant_buf, buf) |> Map.put(:pending_assistant_text, "") |> Map.put(:tool_pending?, false)
+          :ets.insert(:maestro_tui_streams, {stream_id, m1})
+        _ -> :ok
+      end
+    end
+    defp handle_event(_sid, stream_id, %{data: %{"kind" => "done"}}, _wd, _ui), do: :ok
+    defp handle_event(_sid, stream_id, %{data: %{"kind" => "final", "payload" => payload}}, _wd, _ui) do
+      append_line_to_stream(stream_id, stamp_line("final", ""))
+      content = to_string((payload && (payload["content"] || payload[:content])) || "")
+      case :ets.lookup(:maestro_tui_streams, stream_id) do
+        [{^stream_id, %{} = m}] ->
+          base = (m[:assistant_buf] || "") <> to_string(m[:pending_assistant_text] || "")
+          buf = if content != "", do: content, else: base
+          m1 =
+            m
+            |> Map.put(:assistant_buf, buf)
+            |> Map.put(:assistant_shown, "")
+            |> Map.put(:pending_assistant_text, "")
+            |> Map.put(:tool_pending?, false)
+            |> Map.put(:has_thinking, false)
+          :ets.insert(:maestro_tui_streams, {stream_id, m1})
+        _ -> :ok
+      end
+    end
+
+    # Finalization via frames fetch removed; LiveView parity renders stream frames directly
+
     defp handle_event(_sid, _stream, _ev, _wd, _ui), do: :ok
 
     defp exec_local(name, args_json, base) do
@@ -609,6 +620,7 @@ defmodule MaestroTui.UI do
     defp dispatch("shell", json, base) do
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Shell.run(args, base_cwd: base)
     end
+    defp dispatch("bash", json, base), do: dispatch("shell", json, base)
     defp dispatch("run_shell_command", json, base), do: dispatch("shell", json, base)
     defp dispatch("list_directory", json, base) do
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.ListDirectory.run(args, base_cwd: base)
@@ -640,12 +652,6 @@ defmodule MaestroTui.UI do
     defp dispatch(_other, _json, _base), do: {:error, "unsupported tool"}
 
     # ----- UI message handling -----
-    def update(%State{} = s, {:ui, {:append_text, text}}) when is_binary(text) do
-      tlog("update append_text len=" <> Integer.to_string(byte_size(text)))
-      s2 = add_stream_chunk(s, text)
-      tlog("transcript_size=" <> Integer.to_string(length(s2.transcript || [])))
-      %State{s2 | log: s2.log ++ [text]}
-    end
     def update(%State{} = s, {:ui, {:usage, usage}}) when is_map(usage) do
       %State{s | last_usage: Map.merge(s.last_usage || %{}, usage)}
     end
@@ -653,32 +659,58 @@ defmodule MaestroTui.UI do
       case :ets.lookup(:maestro_tui_streams, sid) do
         [{^sid, %{} = m}] ->
           # Flush queued lines (tool use/results, usage)
-          s1 = Enum.reduce(Map.get(m, :lines, []), s, fn line, acc -> add_transcript(acc, line) end)
+          lines = Map.get(m, :lines, [])
+          if lines != [], do: tlog("tick drain lines count=" <> Integer.to_string(length(lines)))
+          s1 = Enum.reduce(lines, s, fn line, acc -> add_transcript(acc, line) end)
           m = Map.put(m, :lines, [])
 
-          # Insert thinking placeholder once
+          # Thinking aggregator (update/insert a single line according to visibility)
           {s2, m} =
-            if Map.get(m, :placeholder_pending, false) and not Map.get(m, :placeholder_inserted, false) do
-              idx = length(s1.transcript || []) + 1
-              s2 = add_transcript(s1, stamp_line("assistant", "…thinking…"))
-              {Map.put(s2, :assistant_placeholder_at, idx), m |> Map.put(:placeholder_pending, false) |> Map.put(:placeholder_inserted, true)}
+            if Map.get(m, :has_thinking, false) do
+              txt = Map.get(m, :thinking_buf, "")
+              display = case s1.thinking_visibility do
+                :hidden -> "thinking (hidden)"
+                :collapsed -> "…thinking…"
+                :expanded -> if txt == "", do: "…thinking…", else: "Thinking: " <> txt
+              end
+              case Map.get(m, :thinking_streaming_idx) do
+                i when is_integer(i) ->
+                  tr = replace_at(s1.transcript || [], i, stamp_line("assistant", display))
+                  {%{s1 | transcript: tr}, m}
+                _ ->
+                  idx = length(s1.transcript || []) + 1
+                  s1a = add_transcript(s1, stamp_line("assistant", display))
+                  {s1a, Map.put(m, :thinking_streaming_idx, idx)}
+              end
             else
               {s1, m}
             end
 
-          # If done, replace placeholder with final assistant text
-          s3 =
-            if Map.get(m, :done, false) do
-              final = stamp_line("assistant", Map.get(m, :assistant, ""))
-              s2a = replace_placeholder(s2, final)
-              # reset entry
-              :ets.insert(:maestro_tui_streams, {sid, %{assistant: "", lines: [], placeholder_pending: false, placeholder_inserted: false, done: false}})
-              s2a
+          # Assistant streaming aggregator (skip while tool pending)
+          {s3, m} =
+            if Map.get(m, :tool_pending?, false) do
+              {s2, m}
             else
-              :ets.insert(:maestro_tui_streams, {sid, m})
-              s2
+              buf = Map.get(m, :assistant_buf, "")
+              last_shown = Map.get(m, :assistant_shown, "")
+              if buf != "" and buf != last_shown do
+                {s_temp, m2} =
+                  case Map.get(m, :assistant_streaming_idx) do
+                    i when is_integer(i) ->
+                      tr = replace_at(s2.transcript || [], i, stamp_line("assistant", buf))
+                      {%{s2 | transcript: tr}, m}
+                    _ ->
+                      idx = length(s2.transcript || []) + 1
+                      s_temp = add_transcript(s2, stamp_line("assistant", buf))
+                      {s_temp, Map.put(m, :assistant_streaming_idx, idx)}
+                  end
+                {s_temp, Map.put(m2, :assistant_shown, buf)}
+              else
+                {s2, m}
+              end
             end
 
+          :ets.insert(:maestro_tui_streams, {sid, m})
           s3
         _ -> s
       end
@@ -690,7 +722,9 @@ defmodule MaestroTui.UI do
       %{name: "context", desc: "Show context and token usage", type: :action},
       %{name: "model", desc: "Change model", type: :menu},
       %{name: "help", desc: "Show help and keybindings", type: :action},
-      %{name: "clear", desc: "Clear chat context and start new", type: :action}
+      %{name: "clear", desc: "Clear chat context and start new", type: :action},
+      %{name: "thinking", desc: "Set thinking visibility: collapsed|expanded|hidden", type: :action},
+      %{name: "thoughts", desc: "Alias for /thinking", type: :action}
     ]
 
     defp run_submit(%State{input: "/" <> _} = s), do: run_slash(s)
@@ -715,6 +749,14 @@ defmodule MaestroTui.UI do
         %{name: "help"} ->
           %State{s | log: s.log ++ help_lines(), input: ""}
 
+        %{name: "thinking"} ->
+          mode = parse_thinking_mode(input)
+          %State{s | thinking_visibility: mode, input: "", log: s.log ++ ["thinking: " <> Atom.to_string(mode)]}
+
+        %{name: "thoughts"} ->
+          mode = parse_thinking_mode(input)
+          %State{s | thinking_visibility: mode, input: "", log: s.log ++ ["thinking: " <> Atom.to_string(mode)]}
+
         %{name: "clear"} ->
           case s.current_thread_id do
             tid when is_binary(tid) ->
@@ -729,6 +771,8 @@ defmodule MaestroTui.UI do
           %State{s | log: s.log ++ ["Unknown command"], input: ""}
       end
     end
+
+    
 
     defp slash_matches("") do
       @slash_cmds
@@ -767,9 +811,9 @@ defmodule MaestroTui.UI do
     defp help_lines do
       [
         "Help:",
-        " - Slash commands: /context, /model, /help, /clear",
+        " - Slash commands: /context, /model, /help, /clear, /thinking [collapsed|expanded|hidden]",
         " - Type '/' to open the command palette; keep typing to filter; Enter to run",
-        " - Keys: Enter send, Shift+Enter newline, Ctrl+Shift+L log, Ctrl+Shift+N new session, Ctrl+Shift+] / [ switch session, Ctrl+Shift+P/A/M cycle provider/auth/model",
+        " - Keys: Enter send, Shift+Enter newline, Ctrl+Shift+L log, Ctrl+Shift+N new session, Ctrl+Shift+T thinking toggle, Ctrl+Shift+] / [ switch session, Ctrl+Shift+P/A/M cycle provider/auth/model",
         " - Wizard: Arrows move, Tab/Shift+Tab change column, Enter to start"
       ]
     end
@@ -827,4 +871,28 @@ defmodule MaestroTui.UI do
     defp event_enter?(%{key: code}) when is_integer(code), do: code == key(:enter)
     defp event_enter?(%{ch: ch}) when is_integer(ch), do: ch in [10, 13]
     defp event_enter?(_), do: false
+
+    defp toggle_thinking(%State{thinking_visibility: v} = s) do
+      next = case v do
+        :collapsed -> :expanded
+        :expanded -> :hidden
+        _ -> :collapsed
+      end
+      %State{s | thinking_visibility: next, log: s.log ++ ["thinking: " <> Atom.to_string(next)]}
+    end
+
+    defp parse_thinking_mode(input) do
+      arg =
+        input
+        |> String.trim()
+        |> String.replace_prefix("/thinking", "")
+        |> String.replace_prefix("/thoughts", "")
+        |> String.trim()
+
+      case String.downcase(arg || "") do
+        "expanded" -> :expanded
+        "hidden" -> :hidden
+        _ -> :collapsed
+      end
+    end
   end
