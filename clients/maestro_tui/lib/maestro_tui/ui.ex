@@ -14,6 +14,8 @@ if Code.ensure_loaded?(Ratatouille) do
                 models: [], model: nil,
                 prov_idx: 0, auth_idx: 0, model_idx: 0,
                 wizard_focus: :provider,
+                modal: nil,
+                last_usage: %{},
                 sessions: %{}, order: [], active: nil,
                 log_visible: false, log: [], input: "",
                 session_id: nil, stream_task: nil,
@@ -98,10 +100,14 @@ if Code.ensure_loaded?(Ratatouille) do
     defp clamp(i, _lo, _hi), do: i
 
     def update(%State{screen: :chat} = s, {:event, ev}) when is_map(ev) and Map.get(ev, :key) in [:enter, "Enter"] do
-      if shift?(ev) do
+      # If a modal is open, Enter selects inside modal
+      if s.modal do
+        handle_modal_enter(s)
+      else if shift?(ev) do
         %State{s | input: s.input <> "\n"}
       else
-        send_message(s)
+        run_submit(s)
+      end
       end
     end
 
@@ -114,6 +120,15 @@ if Code.ensure_loaded?(Ratatouille) do
       end
     end
     def update(%State{screen: :chat, log_visible: lv} = s, {:event, ev}) when is_map(ev) do
+      # Modal navigation takes priority
+      if s.modal do
+        case Map.get(ev, :key) do
+          :up -> modal_move(s, -1)
+          :down -> modal_move(s, 1)
+          :escape -> close_modal(s)
+          _ -> s
+        end
+      else
       cond do
         ctrl_shift?(ev, ?L) -> %State{s | log_visible: !lv}
         ctrl_shift?(ev, ?P) -> cycle_provider(s)
@@ -124,6 +139,7 @@ if Code.ensure_loaded?(Ratatouille) do
         ctrl_shift?(ev, ?[) -> prev_session(s)
         backspace?(ev) -> %State{s | input: String.slice(s.input, 0, max(byte_size(s.input) - 1, 0))}
         true -> s
+      end
       end
     end
     def update(%State{screen: :chat} = s, {:event, %{ch: ch}}) when is_integer(ch) and ch >= 32 do
@@ -246,7 +262,7 @@ if Code.ensure_loaded?(Ratatouille) do
     defp list_item(text, true), do: "> " <> to_string(text)
     defp list_item(text, false), do: "  " <> to_string(text)
 
-    def render(%State{screen: :chat, input: input, log: log, log_visible: lv, provider: pv, auth_id: aid, model: mdl}) do
+    def render(%State{screen: :chat, input: input, log: log, log_visible: lv, provider: pv, auth_id: aid, model: mdl} = s) do
       import Ratatouille.View
       view do
         panel title: "Chat" do
@@ -259,6 +275,12 @@ if Code.ensure_loaded?(Ratatouille) do
             label(content: "(log hidden) Press Ctrl+Shift+L to toggle")
           end
           label(content: "> " <> input)
+          if String.starts_with?(input, "/") do
+            show_slash_suggestions(s)
+          end
+          if s.modal do
+            render_modal(s)
+          end
         end
       end
     end
@@ -322,6 +344,9 @@ if Code.ensure_loaded?(Ratatouille) do
 
     defp handle_event(session_id, stream_id, %{data: %{"kind" => "assistant_text", "payload" => %{"delta" => d}}}, _wd, ui) when is_binary(d) do
       send(ui, {:ui, {:append_text, d}})
+    end
+    defp handle_event(_sid, _stream, %{data: %{"kind" => "usage", "payload" => usage}}, _wd, ui) when is_map(usage) do
+      send(ui, {:ui, {:usage, usage}})
     end
     defp handle_event(session_id, stream_id, %{data: %{"kind" => "function_call", "payload" => %{"calls" => calls}}}, workdir, ui) do
       Enum.each(calls, fn %{"id" => id, "name" => name, "arguments" => args_json} ->
@@ -393,6 +418,98 @@ if Code.ensure_loaded?(Ratatouille) do
     def update(%State{} = s, {:ui, {:append_text, text}}) when is_binary(text) do
       %State{s | log: s.log ++ [text]}
     end
+    def update(%State{} = s, {:ui, {:usage, usage}}) when is_map(usage) do
+      %State{s | last_usage: Map.merge(s.last_usage || %{}, usage)}
+    end
+
+    # ----- Slash commands -----
+    @slash_cmds [
+      %{name: "context", desc: "Show context and token usage", type: :action},
+      %{name: "model", desc: "Change model", type: :menu}
+    ]
+
+    defp run_submit(%State{input: "/" <> _} = s), do: run_slash(s)
+    defp run_submit(%State{} = s), do: send_message(s)
+
+    defp run_slash(%State{input: input} = s) do
+      query = input |> String.trim() |> String.trim_leading("/")
+      matches = slash_matches(query)
+      case List.first(matches) do
+        %{name: "context"} ->
+          log = s.log ++ [format_context(s)]
+          %State{s | log: log, input: ""}
+
+        %{name: "model"} ->
+          items = if s.models != [], do: s.models, else: (case pick_models(s.provider, s.auth_id) do {:ok, {_, list}} -> list; _ -> [] end)
+          if items == [] do
+            %State{s | log: s.log ++ ["No models available"], input: ""}
+          else
+            %State{s | modal: {:model_picker, items, 0}, input: ""}
+          end
+
+        _ ->
+          %State{s | log: s.log ++ ["Unknown command"], input: ""}
+      end
+    end
+
+    defp slash_matches("") do
+      @slash_cmds
+    end
+    defp slash_matches(query) do
+      q = String.downcase(query || "")
+      Enum.filter(@slash_cmds, fn c -> String.starts_with?(c.name, q) end)
+    end
+
+    defp show_slash_suggestions(%State{input: input}) do
+      import Ratatouille.View
+      query = input |> String.trim_leading("/")
+      ms = slash_matches(query) |> Enum.take(5)
+      panel title: "/ Commands" do
+        for c <- ms do
+          label(content: "/" <> c.name <> " — " <> c.desc)
+        end
+      end
+    end
+
+    defp format_context(%State{} = s) do
+      u = s.last_usage || %{}
+      tokens =
+        [
+          {"input", Map.get(u, "input_tokens") || Map.get(u, :input_tokens)},
+          {"output", Map.get(u, "output_tokens") || Map.get(u, :output_tokens)},
+          {"total", Map.get(u, "total_tokens") || Map.get(u, :total_tokens)}
+        ]
+        |> Enum.filter(fn {_k, v} -> is_integer(v) end)
+        |> Enum.map(fn {k, v} -> "#{k}: #{v}" end)
+        |> Enum.join(", ")
+
+      "Context — provider=#{s.provider || "?"} model=#{s.model || "?"} tokens{#{tokens}}"
+    end
+
+    # ----- Modal: model picker -----
+    defp render_modal(%State{modal: {:model_picker, items, idx}}) do
+      import Ratatouille.View
+      panel title: "Select Model" do
+        for {m, i} <- Enum.with_index(items) do
+          label(content: list_item(m, i == idx))
+        end
+        label(content: "Enter=select  Esc=cancel  ↑/↓=move")
+      end
+    end
+
+    defp modal_move(%State{modal: {:model_picker, items, idx}} = s, delta) do
+      maxi = max(length(items) - 1, 0)
+      i = clamp(idx + delta, 0, maxi)
+      %State{s | modal: {:model_picker, items, i}}
+    end
+    defp modal_move(s, _), do: s
+
+    defp handle_modal_enter(%State{modal: {:model_picker, items, idx}} = s) do
+      mdl = Enum.at(items, idx)
+      %State{s | model: mdl, modal: nil, log: s.log ++ ["model set: " <> to_string(mdl)]}
+    end
+    defp handle_modal_enter(s), do: s
+    defp close_modal(%State{} = s), do: %State{s | modal: nil}
 
     def cycle_provider(%State{providers: []} = s), do: s
     def cycle_provider(%State{providers: [_]} = s), do: s
