@@ -93,6 +93,7 @@ defmodule TheMaestro.Sessions.Manager do
       model: model,
       t0_ms: t0_ms,
       sandbox_owner: owner_pid,
+      streaming_adapter: Keyword.get(opts, :streaming_adapter),
       thread_id: Keyword.get(opts, :thread_id),
       last_flushed_idx: 0
     }
@@ -454,21 +455,24 @@ defmodule TheMaestro.Sessions.Manager do
     do:
       OpenAI.Streaming.stream_chat(session_name, messages,
         model: model,
-        decl_session_id: Keyword.get(opts, :decl_session_id)
+        decl_session_id: Keyword.get(opts, :decl_session_id),
+        streaming_adapter: Keyword.get(opts, :streaming_adapter)
       )
 
   defp do_call_provider(:gemini, session_name, messages, model, opts),
     do:
       Gemini.Streaming.stream_chat(session_name, messages,
         model: model,
-        decl_session_id: Keyword.get(opts, :decl_session_id)
+        decl_session_id: Keyword.get(opts, :decl_session_id),
+        streaming_adapter: Keyword.get(opts, :streaming_adapter)
       )
 
   defp do_call_provider(:anthropic, session_name, messages, model, opts),
     do:
       Anthropic.Streaming.stream_chat(session_name, messages,
         model: model,
-        decl_session_id: Keyword.get(opts, :decl_session_id)
+        decl_session_id: Keyword.get(opts, :decl_session_id),
+        streaming_adapter: Keyword.get(opts, :streaming_adapter)
       )
 
   defp do_call_provider(other, _s, _m, _model, _opts),
@@ -1143,7 +1147,15 @@ defmodule TheMaestro.Sessions.Manager do
     {:ok, _task} =
       Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
         maybe_allow_sandbox(owner_pid)
-        result = do_followup_provider(provider, session_name, items, model, decl_session_id: session_id)
+        result =
+          do_followup_provider(
+            provider,
+            session_name,
+            items,
+            model,
+            decl_session_id: session_id,
+            streaming_adapter: (acc.meta && acc.meta[:streaming_adapter])
+          )
         case result do
           {:ok, stream} ->
             for msg <- Streaming.parse_stream(stream, provider, log_unknown_events: true) do
@@ -1182,21 +1194,24 @@ defmodule TheMaestro.Sessions.Manager do
     do:
       OpenAI.Streaming.stream_tool_followup(session_name, items,
         model: model,
-        decl_session_id: Keyword.get(opts, :decl_session_id)
+        decl_session_id: Keyword.get(opts, :decl_session_id),
+        streaming_adapter: Keyword.get(opts, :streaming_adapter)
       )
 
   defp do_followup_provider(:anthropic, session_name, items, model, opts),
     do:
       Anthropic.Streaming.stream_tool_followup(session_name, items,
         model: model,
-        decl_session_id: Keyword.get(opts, :decl_session_id)
+        decl_session_id: Keyword.get(opts, :decl_session_id),
+        streaming_adapter: Keyword.get(opts, :streaming_adapter)
       )
 
   defp do_followup_provider(:gemini, session_name, items, model, opts),
     do:
       Gemini.Streaming.stream_tool_followup(session_name, items,
         model: model,
-        decl_session_id: Keyword.get(opts, :decl_session_id)
+        decl_session_id: Keyword.get(opts, :decl_session_id),
+        streaming_adapter: Keyword.get(opts, :streaming_adapter)
       )
 
   defp resolve_base_cwd(session) do
