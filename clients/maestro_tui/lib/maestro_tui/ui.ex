@@ -425,7 +425,9 @@ if Code.ensure_loaded?(Ratatouille) do
     # ----- Slash commands -----
     @slash_cmds [
       %{name: "context", desc: "Show context and token usage", type: :action},
-      %{name: "model", desc: "Change model", type: :menu}
+      %{name: "model", desc: "Change model", type: :menu},
+      %{name: "help", desc: "Show help and keybindings", type: :action},
+      %{name: "clear", desc: "Clear chat context and start new", type: :action}
     ]
 
     defp run_submit(%State{input: "/" <> _} = s), do: run_slash(s)
@@ -446,6 +448,13 @@ if Code.ensure_loaded?(Ratatouille) do
           else
             %State{s | modal: {:model_picker, items, 0}, input: ""}
           end
+
+        %{name: "help"} ->
+          %State{s | log: s.log ++ help_lines(), input: ""}
+
+        %{name: "clear"} ->
+          s2 = %State{s | session_id: nil, last_usage: %{}, log: [], input: ""}
+          put_new_session(s2)
 
         _ ->
           %State{s | log: s.log ++ ["Unknown command"], input: ""}
@@ -484,6 +493,16 @@ if Code.ensure_loaded?(Ratatouille) do
         |> Enum.join(", ")
 
       "Context — provider=#{s.provider || "?"} model=#{s.model || "?"} tokens{#{tokens}}"
+    end
+
+    defp help_lines do
+      [
+        "Help:",
+        " - Slash commands: /context, /model, /help, /clear",
+        " - Type '/' to open the command palette; keep typing to filter; Enter to run",
+        " - Keys: Enter send, Shift+Enter newline, Ctrl+Shift+L log, Ctrl+Shift+N new session, Ctrl+Shift+] / [ switch session, Ctrl+Shift+P/A/M cycle provider/auth/model",
+        " - Wizard: Arrows move, Tab/Shift+Tab change column, Enter to start"
+      ]
     end
 
     # ----- Modal: model picker -----

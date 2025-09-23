@@ -43,6 +43,22 @@ defmodule MaestroTui.UISlashTest do
     assert s3.model == "m2"
   end
 
+  test "/help prints usage and /clear resets state" do
+    unless Code.ensure_loaded?(Ratatouille) do
+      skip("ratatouille not available; set TUI_ENABLE_TUI=1 for UI tests")
+    end
+
+    s = %MaestroTui.UI.State{screen: :chat, input: "/help", log: ["foo"], provider: "openai", model: "gpt-4o"}
+    s1 = MaestroTui.UI.update(s, {:event, %{key: :enter}})
+    assert Enum.any?(s1.log, &String.contains?(&1, "/context"))
+
+    s2 = %MaestroTui.UI.State{screen: :chat, input: "/clear", log: ["bar"], order: ["1"], active: "1"}
+    s3 = MaestroTui.UI.update(s2, {:event, %{key: :enter}})
+    assert s3.log == []
+    assert s3.session_id == nil
+    assert length(s3.order) == 2
+  end
+
   test "slash suggestions appear in render" do
     unless Code.ensure_loaded?(Ratatouille) do
       skip("ratatouille not available; set TUI_ENABLE_TUI=1 for UI tests")
@@ -54,4 +70,3 @@ defmodule MaestroTui.UISlashTest do
     assert text =~ "/model"
   end
 end
-
