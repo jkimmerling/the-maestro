@@ -1,4 +1,4 @@
-if Code.ensure_loaded?(Ratatouille) do
+if System.get_env("TUI_ENABLE_TUI") in ["1", "true", "TRUE"] do
   defmodule MaestroTui.UI do
     @moduledoc false
     alias MaestroTui.API
