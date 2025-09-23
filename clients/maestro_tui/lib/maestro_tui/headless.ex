@@ -151,6 +151,12 @@ defmodule MaestroTui.Headless do
       {:ok, payload}
     end
   end
+  defp dispatch("apply_patch", json, base) do
+    with {:ok, %{"input" => input}} <- Jason.decode(json), do: TheMaestro.Tools.ApplyPatch.run(input, base_cwd: base)
+  end
+  defp dispatch("notebook_edit", json, base) do
+    with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.NotebookEdit.run(args, base_cwd: base)
+  end
   defp dispatch(other, _json, _base), do: {:error, "unsupported tool: #{other}"}
 
   defp post_tool_result(session_id, stream_id, call_id, name, {:ok, payload}) do
@@ -168,4 +174,3 @@ defmodule MaestroTui.Headless do
     IO.read(:stdio, :all) |> to_string() |> String.trim()
   end
 end
-
