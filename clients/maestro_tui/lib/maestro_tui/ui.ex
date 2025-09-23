@@ -180,6 +180,137 @@ L, ?l] -> true
         end
       end
     end
+    
+    # ----- SSE integration -----
+    @io_tools ~w(apply_patch write_file write create_file edit multi_edit list_directory glob grep shell run_shell_command notebook_edit)a
+
+    defp send_message(%State{} = s) do
+      text = String.trim(s.input)
+      case ensure_session(s) do
+        {:ok, sid} ->
+          case start_turn(sid, text) do
+            {:ok, %{"stream_id" => stream_id}} ->
+              spawn(fn -> consume_sse(sid, stream_id, s.working_dir) end)
+              %State{s | input: "", log: s.log ++ ["> " <> text], session_id: sid}
+            _ -> s
+          end
+        _ -> s
+      end
+    end
+
+    defp start_turn(session_id, message) do
+      url = API.base_url() <> "/api/sessions/" <> session_id <> "/turns"
+      case Req.post(url: url, headers: [API.auth_header()], json: %{"message" => message}, finch: MaestroTui.Finch) do
+        {:ok, %Req.Response{status: 202, body: body}} -> {:ok, body}
+        other -> {:error, other}
+      end
+    end
+
+    defp consume_sse(session_id, stream_id, workdir) do
+      url = API.base_url() <> "/api/sessions/" <> session_id <> "/turns/" <> stream_id <> "/frames"
+      req = Req.new(headers: [API.auth_header()], finch: MaestroTui.Finch)
+      case Req.request(req, method: :get, url: url, into: :self, receive_timeout: :infinity) do
+        {:ok, %Req.Response{status: 200, body: stream}} ->
+          ui = self()
+          for chunk <- stream do
+            for ev <- parse_sse(chunk) do
+              handle_event(session_id, stream_id, ev, workdir, ui)
+            end
+          end
+          :ok
+        _ -> :ok
+      end
+    end
+
+    defp parse_sse(chunk) do
+      data = IO.iodata_to_binary(chunk)
+      data
+      |> String.split("\n\n", trim: true)
+      |> Enum.flat_map(fn block ->
+        case Regex.run(~r/data:\s*(.*)/s, block, capture: :all_but_first) do
+          [json] ->
+            case Jason.decode(json) do
+              {:ok, %{"data" => frame}} -> [%{data: frame}]
+              _ -> []
+            end
+          _ -> []
+        end
+      end)
+    end
+
+    defp handle_event(session_id, stream_id, %{data: %{"kind" => "assistant_text", "payload" => %{"delta" => d}}}, _wd, ui) when is_binary(d) do
+      send(ui, {:ui, {:append_text, d}})
+    end
+    defp handle_event(session_id, stream_id, %{data: %{"kind" => "function_call", "payload" => %{"calls" => calls}}}, workdir, ui) do
+      Enum.each(calls, fn %{"id" => id, "name" => name, "arguments" => args_json} ->
+        if io_tool?(name) do
+          result = exec_local(name, args_json, workdir)
+          post_tool_result(session_id, stream_id, id, name, result)
+        end
+      end)
+    end
+    defp handle_event(_sid, _stream, _ev, _wd, _ui), do: :ok
+
+    defp exec_local(name, args_json, base) do
+      case dispatch(String.downcase(to_string(name)), args_json || "{}", base) do
+        {:ok, payload} -> {:ok, payload}
+        {:error, r} -> {:error, to_string(r)}
+      end
+    end
+
+    defp io_tool?(name) when is_binary(name), do: String.downcase(name) in Enum.map(@io_tools, &to_string/1)
+    defp io_tool?(_), do: false
+
+    defp post_tool_result(session_id, stream_id, call_id, name, {:ok, payload}) do
+      url = API.base_url() <> "/api/sessions/" <> session_id <> "/turns/" <> stream_id <> "/tools/results"
+      body = %{"call_id" => call_id, "name" => name, "output" => payload}
+      _ = Req.post(url: url, headers: [API.auth_header()], json: body, finch: MaestroTui.Finch)
+      :ok
+    end
+    defp post_tool_result(_sid, _stream, _id, _name, {:error, _}), do: :ok
+
+    defp dispatch("write_file", json, base) do
+      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.WriteFile.run(args, base_cwd: base)
+    end
+    defp dispatch("write", json, base), do: dispatch("write_file", json, base)
+    defp dispatch("create_file", json, base), do: dispatch("write_file", json, base)
+    defp dispatch("shell", json, base) do
+      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Shell.run(args, base_cwd: base)
+    end
+    defp dispatch("run_shell_command", json, base), do: dispatch("shell", json, base)
+    defp dispatch("list_directory", json, base) do
+      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.ListDirectory.run(args, base_cwd: base)
+    end
+    defp dispatch("glob", json, base) do
+      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Glob.run(args, base_cwd: base)
+    end
+    defp dispatch("grep", json, base) do
+      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Grep.run(args, base_cwd: base)
+    end
+    defp dispatch("edit", json, base) do
+      with {:ok, args} <- Jason.decode(json),
+           {:ok, payload, _} <- TheMaestro.Tools.Edit.run(args, base_cwd: base) do
+        {:ok, payload}
+      end
+    end
+    defp dispatch("multi_edit", json, base) do
+      with {:ok, args} <- Jason.decode(json),
+           {:ok, payload, _} <- TheMaestro.Tools.MultiEdit.run(args, base_cwd: base) do
+        {:ok, payload}
+      end
+    end
+    defp dispatch("apply_patch", json, base) do
+      with {:ok, %{"input" => input}} <- Jason.decode(json), do: TheMaestro.Tools.ApplyPatch.run(input, base_cwd: base)
+    end
+    defp dispatch("notebook_edit", json, base) do
+      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.NotebookEdit.run(args, base_cwd: base)
+    end
+    defp dispatch(_other, _json, _base), do: {:error, "unsupported tool"}
+
+    # ----- UI message handling -----
+    defp update(%State{} = s, {:ui, {:append_text, text}}) when is_binary(text) do
+      %State{s | log: s.log ++ [text]}
+    end
   end
 else
   defmodule MaestroTui.UI do
