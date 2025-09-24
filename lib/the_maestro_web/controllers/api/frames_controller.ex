@@ -17,7 +17,7 @@ defmodule TheMaestroWeb.Api.FramesController do
 
     send(self(), :flush)
 
-    loop(conn)
+    loop(conn, %{final_sent?: false})
   end
 
   def latest(conn, %{"thread_id" => tid}) do
@@ -25,28 +25,34 @@ defmodule TheMaestroWeb.Api.FramesController do
     json(conn, %{frames: frames})
   end
 
-  defp loop(conn) do
+  defp loop(conn, %{final_sent?: final?} = st) do
     receive do
       {:turn_frame, frame} ->
-        chunk(conn, encode_event(%{"data" => frame}))
-        loop(conn)
+        kind = Map.get(frame, "kind") || Map.get(frame, :kind) || "event"
+        IO.puts("[FRAMES] SSE emitting turn_frame: #{inspect(kind)}")
+        case chunk(conn, encode_event(%{"data" => frame})) do
+          {:ok, conn} -> loop(conn, %{st | final_sent?: final? || (kind == "final")})
+          {:error, _} = err -> err
+        end
 
       {:session_stream, envelope} ->
+        IO.puts("[FRAMES] SSE received session_stream: #{inspect(envelope.event.type)}")
+        # Do not close on :done — final turn_frame is the close condition.
+        # Optionally echo a done marker, but keep the stream open until we see "final".
         case envelope.event.type do
           :done ->
-            chunk(conn, encode_event(%{"data" => %{kind: "done"}}))
-            conn
-
+            _ = chunk(conn, encode_event(%{"data" => %{kind: "done"}}))
+            loop(conn, st)
           _ ->
-            loop(conn)
+            loop(conn, st)
         end
 
       :flush ->
-        chunk(conn, ":\n\n")
-        loop(conn)
+        _ = chunk(conn, ":\n\n")
+        loop(conn, st)
     after
       120_000 ->
-        chunk(conn, encode_event(%{"data" => %{kind: "timeout"}}))
+        _ = chunk(conn, encode_event(%{"data" => %{kind: "timeout"}}))
         conn
     end
   end
