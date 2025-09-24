@@ -320,10 +320,13 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
   defp build_env_context_message(session_name) do
     session_id = resolve_decl_session_id(session_name)
     cwd = safe_session_cwd(session_id)
+    {os, arch} = os_arch()
 
     text = """
     <environment_context>
       <cwd>#{cwd}</cwd>
+      <os>#{os}</os>
+      <arch>#{arch}</arch>
     </environment_context>
     """
 
@@ -348,6 +351,25 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
           _ -> File.cwd!() |> Path.expand()
         end
     end
+  end
+
+  defp os_arch do
+    os =
+      case :os.type() do
+        {:unix, :darwin} -> "macOS"
+        {:unix, :linux} -> "linux"
+        {:win32, _} -> "windows"
+        other -> to_string(other)
+      end
+
+    arch =
+      case :erlang.system_info(:system_architecture) do
+        val when is_list(val) -> List.to_string(val)
+        val when is_binary(val) -> val
+        other -> to_string(other)
+      end
+
+    {os, arch}
   end
 
   defp maybe_log_payload(tag, payload) do

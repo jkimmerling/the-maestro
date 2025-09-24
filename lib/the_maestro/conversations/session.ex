@@ -11,6 +11,7 @@ defmodule TheMaestro.Conversations.Session do
     field :name, :string
     field :last_used_at, :utc_datetime
     field :working_dir, :string
+    field :tool_runtime, :string, default: "local"
 
     # New session-centric fields that consolidate Agent data onto Session
     field :model_id, :string
@@ -49,9 +50,11 @@ defmodule TheMaestro.Conversations.Session do
       :model_id,
       :persona,
       :memory,
-      :tools
+      :tools,
+      :tool_runtime
     ])
     |> validate_required([:auth_id])
+    |> validate_inclusion(:tool_runtime, ["local", "remote"])
     |> validate_change(:working_dir, fn :working_dir, v ->
       cond do
         is_nil(v) or v == "" -> []
