@@ -44,6 +44,8 @@
   - [x] Remote session picker (only `tool_runtime=remote`)
   - [x] Provider/Auth/Model wizard
   - [x] Chat screen: transcript, input, status bar, modals (initial)
+  - [x] Threads picker when a session has multiple threads
+  - [x] Markdown/code‑fence rendering in transcript
   - [ ] Keyboard shortcuts and slash commands
 - [x] Server work (APIs + UI)
   - [x] Sessions API: list (filter `tool_runtime=remote`)
