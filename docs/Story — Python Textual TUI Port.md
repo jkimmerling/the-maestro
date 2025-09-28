@@ -33,7 +33,7 @@
   - [x] Close only on `final` frame; handle `done` and `timeout`
   - [x] Do not render `final` if content is empty
 - [ ] Local tool parity (`maestro_tui/tools/`)
-  - [x] File ops: `write_file`, `edit`, `multi_edit` (apply_patch, notebook_edit — pending)
+  - [x] File ops: `write_file`, `edit`, `multi_edit`, `apply_patch`, `notebook_edit`
   - [x] FS utils: `list_directory`, `glob`, `grep`, `path_resolver` (seek_sequence — pending)
   - [x] Execution: `shell`
   - [x] Reads: `read`, `read_many`
@@ -130,6 +130,7 @@ pydantic = ">=2.0.0"
   - [x] Python local tools tests (file ops, fs utils, shell)
   - [x] Python apply_patch + seek_sequence tests
   - [x] Python todo_write test
+  - [x] Python notebook_edit test
   - [ ] E2E
 - Files:
   - `test/the_maestro_web/controllers/api_sessions_remote_test.exs`
