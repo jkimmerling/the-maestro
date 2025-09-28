@@ -40,3 +40,10 @@ async def run_shell_command(args: List[str] | str, cwd: Optional[str | Path] = N
     duration = time.monotonic() - start
     return ExecOutput(output=out_b.decode(), stderr=err_b.decode(), exit_code=proc.returncode or 0, duration_seconds=duration)
 
+
+def exec_output_json(out: ExecOutput) -> str:
+    import json as _json
+    return _json.dumps({
+        "output": out.output or "",
+        "metadata": {"exit_code": int(out.exit_code), "duration_seconds": float(out.duration_seconds)},
+    })
