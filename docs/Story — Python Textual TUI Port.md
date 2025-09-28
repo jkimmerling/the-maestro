@@ -40,6 +40,7 @@
   - [x] Web: `web_search` (Tavily), `web_fetch` (basic), `google_web_search` (env‑gated CSE)
   - [x] Planning: `todo_write`
   - [ ] Provider-specific normalization layers as needed
+  - [x] Provider-specific normalization layers (OpenAI/Anthropic/Gemini)
 - [x] Textual UI
   - [x] Remote session picker (only `tool_runtime=remote`)
   - [x] Provider/Auth/Model wizard
@@ -131,6 +132,7 @@ pydantic = ">=2.0.0"
   - [x] Python apply_patch + seek_sequence tests
   - [x] Python todo_write test
   - [x] Python notebook_edit test
+  - [x] Provider adapters tests (normalize + exec)
   - [ ] E2E
 - Files:
   - `test/the_maestro_web/controllers/api_sessions_remote_test.exs`
