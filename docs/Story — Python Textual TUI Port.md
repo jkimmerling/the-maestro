@@ -33,10 +33,10 @@
   - [x] Close only on `final` frame; handle `done` and `timeout`
   - [x] Do not render `final` if content is empty
 - [ ] Local tool parity (`maestro_tui/tools/`)
-  - [ ] File ops: `write_file`, `edit`, `multi_edit`, `apply_patch`, `notebook_edit`
-  - [ ] FS utils: `list_directory`, `glob`, `grep`, `path_resolver`, `seek_sequence`
-  - [ ] Execution: `shell`, Gemini `run_shell_command`
-  - [ ] Reads: `read`, `read_many`
+  - [x] File ops: `write_file`, `edit`, `multi_edit` (apply_patch, notebook_edit — pending)
+  - [x] FS utils: `list_directory`, `glob`, `grep`, `path_resolver` (seek_sequence — pending)
+  - [x] Execution: `shell`
+  - [x] Reads: `read`, `read_many`
   - [ ] Web: `web_search`, `web_fetch`, `google_web_search`
   - [ ] Planning: `todo_write`
   - [ ] Provider-specific normalization layers as needed
@@ -127,6 +127,7 @@ pydantic = ">=2.0.0"
   - [x] Integration (Phoenix.ConnCase, Phoenix.LiveViewTest)
   - [x] Python SSE reconnect integration (MockTransport)
   - [x] Python slash/threads integration (env‑gated)
+  - [x] Python local tools tests (file ops, fs utils, shell)
   - [ ] E2E
 - Files:
   - `test/the_maestro_web/controllers/api_sessions_remote_test.exs`
