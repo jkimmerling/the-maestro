@@ -54,7 +54,7 @@
   - [x] Snapshot API: `GET /api/threads/:thread_id/snapshot` (canonical transcript)
   - [ ] API Keys: DB model, CRUD LiveView, modal reveal, revoke/rotate
 - [ ] Packaging
-  - [ ] PyInstaller target build matrix
+  - [x] PyInstaller spec and CLI script entry
   - [ ] Release automation
 - [ ] Tests
   - [x] Integration tests (Phoenix.ConnCase) for new APIs
