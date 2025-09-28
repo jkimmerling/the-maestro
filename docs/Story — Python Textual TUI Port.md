@@ -37,8 +37,8 @@
   - [x] FS utils: `list_directory`, `glob`, `grep`, `path_resolver` (seek_sequence — pending)
   - [x] Execution: `shell`
   - [x] Reads: `read`, `read_many`
-  - [ ] Web: `web_search`, `web_fetch`, `google_web_search`
-  - [ ] Planning: `todo_write`
+  - [x] Web: `web_search` (Tavily), `web_fetch` (basic), `google_web_search` (env‑gated CSE)
+  - [x] Planning: `todo_write`
   - [ ] Provider-specific normalization layers as needed
 - [x] Textual UI
   - [x] Remote session picker (only `tool_runtime=remote`)
@@ -128,6 +128,8 @@ pydantic = ">=2.0.0"
   - [x] Python SSE reconnect integration (MockTransport)
   - [x] Python slash/threads integration (env‑gated)
   - [x] Python local tools tests (file ops, fs utils, shell)
+  - [x] Python apply_patch + seek_sequence tests
+  - [x] Python todo_write test
   - [ ] E2E
 - Files:
   - `test/the_maestro_web/controllers/api_sessions_remote_test.exs`
