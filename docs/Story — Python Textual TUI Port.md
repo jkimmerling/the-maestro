@@ -32,14 +32,13 @@
   - [x] Connection backoff + resume; heartbeat/idle handling
   - [x] Close only on `final` frame; handle `done` and `timeout`
   - [x] Do not render `final` if content is empty
-- [ ] Local tool parity (`maestro_tui/tools/`)
+- [x] Local tool parity (`maestro_tui/tools/`)
   - [x] File ops: `write_file`, `edit`, `multi_edit`, `apply_patch`, `notebook_edit`
-  - [x] FS utils: `list_directory`, `glob`, `grep`, `path_resolver` (seek_sequence — pending)
+  - [x] FS utils: `list_directory`, `glob`, `grep`, `path_resolver`, `seek_sequence`
   - [x] Execution: `shell`
   - [x] Reads: `read`, `read_many`
   - [x] Web: `web_search` (Tavily), `web_fetch` (basic), `google_web_search` (env‑gated CSE)
   - [x] Planning: `todo_write`
-  - [ ] Provider-specific normalization layers as needed
   - [x] Provider-specific normalization layers (OpenAI/Anthropic/Gemini)
 - [x] Textual UI
   - [x] Remote session picker (only `tool_runtime=remote`)
@@ -52,13 +51,13 @@
   - [x] Sessions API: list (filter `tool_runtime=remote`)
   - [x] Threads API: list/create/rename/clear
   - [x] Snapshot API: `GET /api/threads/:thread_id/snapshot` (canonical transcript)
-  - [ ] API Keys: DB model, CRUD LiveView, modal reveal, revoke/rotate
+  - [x] API Keys: DB model, CRUD LiveView, modal reveal, revoke/rotate
 - [ ] Packaging
   - [x] PyInstaller spec and CLI script entry
   - [ ] Release automation
 - [ ] Tests
   - [x] Integration tests (Phoenix.ConnCase) for new APIs
-  - [ ] LiveView tests for API Keys UI
+  - [x] LiveView tests for API Keys UI
   - [ ] Python integration tests for tool parity
   - [x] Python SSE integration smoke (env‑gated)
 
@@ -87,12 +86,11 @@ pydantic = ">=2.0.0"
 ```
 
 ## Blockers
-- 2025-09-28 Dialyzer pre-commit hook failing on legacy warnings outside TUI — Status: open — Owner: dev
-  - Next step: remove default-arg head conflicts; simplify guards; eliminate stale `Ecto.Multi` opaqueness; fix CLI parser no‑return
-  - Link: mix dialyzer logs in local run; modules: `core/agents/agent_loop.ex`, `mcp/import.ex`, `streaming/gemini_handler.ex`, `tools/runtime.ex`, `tools/view_image.ex`
+- 2025-09-28 Dialyzer pre-commit hook failures — Status: unblocked — Owner: dev
+  - Resolution: refactors in `Conversations`, `MCP.Import`, and plug simplification. Current `mix precommit` green.
 
-- 2025-09-28 SSE reconnect/backoff not yet implemented — Status: open — Owner: dev
-  - Next step: add retry/backoff with jitter; idle heartbeat handling
+- 2025-09-28 SSE reconnect/backoff — Status: unblocked — Owner: dev
+  - Resolution: implemented exponential backoff with jitter; tests via MockTransport.
 
 ## Deviations From Plan
 - 2025-09-28 Removed `GET /api/sessions/{id}` from client design
@@ -140,12 +138,22 @@ pydantic = ">=2.0.0"
   - `test/the_maestro_web/controllers/api_frames_snapshot_test.exs`
   - `test/the_maestro_web/live/api_keys_live_test.exs`
   - `clients/maestro_tui_python/tests/test_sse_client.py`
-  - `clients/maestro_tui_python/tests/test_tools_parity.py`
+  - `clients/maestro_tui_python/tests/test_sse_reconnect.py`
+  - `clients/maestro_tui_python/tests/test_threads_logic.py`
+  - `clients/maestro_tui_python/tests/test_threads_env_integration.py`
+  - `clients/maestro_tui_python/tests/test_slash_commands.py`
+  - `clients/maestro_tui_python/tests/test_slash_env_integration.py`
+  - `clients/maestro_tui_python/tests/test_tools_fs_write_edit.py`
+  - `clients/maestro_tui_python/tests/test_tools_exec_shell.py`
+  - `clients/maestro_tui_python/tests/test_seek_and_apply_patch.py`
+  - `clients/maestro_tui_python/tests/test_notebook_edit.py`
+  - `clients/maestro_tui_python/tests/test_provider_adapters.py`
+  - `clients/maestro_tui_python/tests/test_todo_write.py`
 - Commands and results:
   - `mix test test/the_maestro_web/controllers/api/*_test.exs` — green (as of 2025-09-28)
   - `mix test test/the_maestro_web/controllers/api_frames_snapshot_test.exs` — green (as of 2025-09-28)
   - `mix test` — green except external/optional suites
-  - `mix precommit` — red (Dialyzer stage; tracked in Blockers)
+  - `mix precommit` — green (as of 2025-09-28)
   - CI link: <pending>
 
 ---
@@ -504,3 +512,7 @@ Overall Progress:                [          ] 0%
 - Add retry/backoff + heartbeat handling for SSE reconnects.
 - Add threads picker when multiple threads exist per session.
 - Markdown rendering (code fences) and basic keybindings.
+- 2025-09-28 API Keys moved to DB-backed model with LiveView
+  - Reason: TUI requires real tokens not tied to static config
+  - Impact: migration added; ApiAuthPlug checks DB tokens or configured token; LiveView flows include modal reveal + rotate/revoke
+  - Approval: self-approved
