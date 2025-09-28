@@ -46,7 +46,7 @@
   - [x] Chat screen: transcript, input, status bar, modals (initial)
   - [x] Threads picker when a session has multiple threads
   - [x] Markdown/code‑fence rendering in transcript
-  - [ ] Keyboard shortcuts and slash commands
+  - [x] Keyboard shortcuts and slash commands
 - [x] Server work (APIs + UI)
   - [x] Sessions API: list (filter `tool_runtime=remote`)
   - [x] Threads API: list/create/rename/clear
@@ -126,6 +126,7 @@ pydantic = ">=2.0.0"
   - [ ] Unit
   - [x] Integration (Phoenix.ConnCase, Phoenix.LiveViewTest)
   - [x] Python SSE reconnect integration (MockTransport)
+  - [x] Python slash/threads integration (env‑gated)
   - [ ] E2E
 - Files:
   - `test/the_maestro_web/controllers/api_sessions_remote_test.exs`
