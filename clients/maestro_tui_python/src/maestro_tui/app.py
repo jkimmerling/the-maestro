@@ -10,6 +10,7 @@ from textual import on
 from .config import load_config
 from .api.client import MaestroAPI
 from .sse import drain_until_final
+from .orchestrator import send_and_orchestrate
 
 
 class MaestroTextual(App):
@@ -31,6 +32,8 @@ class MaestroTextual(App):
         self.sessions: list[dict] = []
         self.current_session_id: str | None = None
         self.current_thread_id: str | None = None
+        self._session_meta: dict[str, dict] = {}
+        self._selected_provider: str | None = None
 
     async def on_mount(self) -> None:
         cfg = load_config()
@@ -48,6 +51,10 @@ class MaestroTextual(App):
         lv.clear()
         for s in self.sessions:
             lv.append(ListItem(Static(f"{s.get('name') or s['id']}", expand=True)))
+            sid = str(s["id"])
+            self._session_meta[sid] = {
+                "working_dir": s.get("working_dir")
+            }
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -78,9 +85,14 @@ class MaestroTextual(App):
             self.query_one("#status", Static).update("Pick a remote session first")
             return
         assert self.api
-        data = await self.api.start_turn(self.current_session_id, event.value)
-        msgs = await drain_until_final(
-            self.api._client, self.api.frames_url(self.current_session_id, data["stream_id"]), self.api.headers
+        prov = (self._session_meta.get(self.current_session_id, {}) or {}).get("provider") or self._selected_provider or ""
+        base_dir = (self._session_meta.get(self.current_session_id, {}) or {}).get("working_dir") or "."
+        msgs = await send_and_orchestrate(
+            self.api,
+            session_id=self.current_session_id,
+            message=event.value,
+            provider=prov,
+            base_dir=base_dir,
         )
         await self._append_messages(msgs)
         event.input.value = ""
@@ -189,6 +201,10 @@ class MaestroTextual(App):
             if s["id"] == session_id:
                 self.query_one("#sessions", ListView).index = i
                 self.current_session_id = session_id
+                if self._selected_provider:
+                    meta = self._session_meta.get(session_id, {}) or {}
+                    meta["provider"] = self._selected_provider
+                    self._session_meta[session_id] = meta
                 await self._load_latest_thread_and_transcript()
                 break
 
@@ -258,6 +274,11 @@ class NewSessionWizard(Screen):
     @on(Button.Pressed, "#btn-create")
     async def create_session(self) -> None:
         assert self.api and self.selected_auth and self.selected_model
+        # remember provider on the app for orchestration
+        try:
+            self.app._selected_provider = self.selected_provider
+        except Exception:
+            pass
         session_id = await self.api.create_session(
             auth_id=self.selected_auth,
             model=self.selected_model,

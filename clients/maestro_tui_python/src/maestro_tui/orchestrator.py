@@ -9,6 +9,16 @@ from .sse import SSEClient, collate_frames_to_messages
 from .providers.adapters import normalize, execute_normalized
 
 
+def _guess_provider_from_name(name: str) -> str:
+    if not name:
+        return "openai"
+    if name in {"run_shell_command", "list_directory", "glob", "search_file_content", "read_many_files", "google_web_search"}:
+        return "gemini"
+    if name and name[0].isupper():
+        return "anthropic"
+    return "openai"
+
+
 async def orchestrate_turn(
     api: MaestroAPI,
     *,
@@ -35,7 +45,8 @@ async def orchestrate_turn(
                     raw_args = json.loads(args_json)
                 except Exception:
                     raw_args = {}
-                tool, norm_args = normalize(provider, name, raw_args)
+                prov = provider or _guess_provider_from_name(name)
+                tool, norm_args = normalize(prov, name, raw_args)
                 output = await execute_normalized(tool, norm_args, base_dir)
                 await api.post_tool_result(session_id, stream_id, call_id=call_id, name=name, output=output)
         else:
@@ -56,4 +67,3 @@ async def send_and_orchestrate(
     turn = await api.start_turn(session_id, message)
     stream_id = turn["stream_id"]
     return await orchestrate_turn(api, session_id=session_id, stream_id=stream_id, provider=provider, base_dir=base_dir)
-
