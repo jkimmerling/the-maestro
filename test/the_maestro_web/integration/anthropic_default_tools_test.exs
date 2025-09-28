@@ -46,4 +46,3 @@ defmodule TheMaestroWeb.Integration.AnthropicDefaultToolsTest do
     end
   end
 end
-

@@ -24,7 +24,6 @@ defmodule TheMaestro.AgentLoop do
 
   @spec run_turn(:openai | :anthropic | :gemini, String.t(), String.t(), [map()], keyword()) ::
           {:ok, result} | {:error, term()}
-  def run_turn(_provider, _session_name, _model, _messages, opts \\ [])
 
   def run_turn(:openai, session_name, model, messages, opts) when is_list(messages) do
     adapter = Keyword.get(opts, :streaming_adapter)
@@ -802,4 +801,6 @@ defmodule TheMaestro.AgentLoop do
         nil
     end
   end
+
+  # No fallback clause: provider is constrained by spec and callers
 end

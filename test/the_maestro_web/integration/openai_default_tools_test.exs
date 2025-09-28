@@ -44,4 +44,3 @@ defmodule TheMaestroWeb.Integration.OpenAIDefaultToolsTest do
     end
   end
 end
-

@@ -12,7 +12,7 @@ defmodule TheMaestro.Tools.ViewImage do
   alias TheMaestro.Tools.{ExecOutput, PathResolver}
 
   @spec run(map(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
-  def run(_args, _opts \\ [])
+  def run(args, opts \\ [])
 
   def run(args, opts) when is_map(args) do
     base = Keyword.get(opts, :base_cwd, File.cwd!())

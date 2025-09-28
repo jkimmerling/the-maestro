@@ -28,10 +28,10 @@ defmodule TheMaestro.Tools.Grep do
   def run(_, _), do: {:error, "invalid arguments"}
 
   defp do_grep(dir, base, pattern) do
-    {matcher, is_regex} =
+    matcher =
       case Regex.compile(pattern) do
-        {:ok, re} -> {re, true}
-        _ -> {pattern, false}
+        {:ok, re} -> re
+        _ -> pattern
       end
 
     files = collect_files(dir, base, 10_000)
@@ -41,7 +41,7 @@ defmodule TheMaestro.Tools.Grep do
         if c >= @max_hits do
           {:halt, {acc, c}}
         else
-          found = grep_file(file, matcher, is_regex, base, @max_hits - c)
+          found = grep_file(file, matcher, base, @max_hits - c)
           {:cont, {acc ++ found, c + length(found)}}
         end
       end)
@@ -82,7 +82,7 @@ defmodule TheMaestro.Tools.Grep do
     end
   end
 
-  defp grep_file(file, matcher, true, base_root, limit) do
+  defp grep_file(file, %Regex{} = matcher, base_root, limit) do
     stream = File.stream!(file, :line, [])
     rel = Path.relative_to(file, base_root)
 
@@ -93,7 +93,7 @@ defmodule TheMaestro.Tools.Grep do
     |> Enum.map(fn {line, i} -> %{path: rel, line: i, text: String.trim_trailing(line)} end)
   end
 
-  defp grep_file(file, matcher, false, base_root, limit) when is_binary(matcher) do
+  defp grep_file(file, matcher, base_root, limit) when is_binary(matcher) do
     stream = File.stream!(file, :line, [])
     rel = Path.relative_to(file, base_root)
 

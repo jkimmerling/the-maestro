@@ -5,7 +5,7 @@ defmodule TheMaestro.Conversations do
 
   import Ecto.Query, warn: false
   alias Ecto.Changeset
-  alias Ecto.Multi
+  # alias Ecto.Multi
 
   alias TheMaestro.Auth.SavedAuthentication
   alias TheMaestro.Conversations.{ChatEntry, Session}
@@ -23,6 +23,14 @@ defmodule TheMaestro.Conversations do
   """
   def list_sessions do
     Repo.all(Session)
+  end
+
+  @doc """
+  Returns sessions filtered by `tool_runtime` ("local" | "remote").
+  """
+  @spec list_sessions_by_tool_runtime(String.t()) :: [Session.t()]
+  def list_sessions_by_tool_runtime(tool_runtime) when tool_runtime in ["local", "remote"] do
+    Repo.all(from s in Session, where: s.tool_runtime == ^tool_runtime)
   end
 
   @doc """
@@ -74,20 +82,20 @@ defmodule TheMaestro.Conversations do
     {system_prompt_spec, attrs} = extract_system_prompts(attrs, :defaults)
     {mcp_ids, attrs} = extract_mcp_server_ids(attrs)
 
-    Multi.new()
-    |> Multi.insert(:session, Session.changeset(%Session{}, attrs))
-    |> maybe_attach_mcp_servers(:session, mcp_ids)
-    |> maybe_apply_system_prompts(:session, system_prompt_spec)
-    |> Repo.transaction()
+    Repo.transaction(fn ->
+      case Repo.insert(Session.changeset(%Session{}, attrs)) do
+        {:ok, session} ->
+          {:ok, session} = maybe_attach_mcp_servers_tx(session, mcp_ids)
+          {:ok, _} = maybe_apply_system_prompts_tx(session, system_prompt_spec)
+          Repo.preload(session, [:mcp_servers, :session_mcp_servers])
+
+        {:error, %Changeset{} = changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
     |> case do
-      {:ok, %{session: _session, session_mcp_servers: updated_session}} ->
-        {:ok, Repo.preload(updated_session, [:mcp_servers, :session_mcp_servers])}
-
-      {:ok, %{session: session}} ->
-        {:ok, Repo.preload(session, [:mcp_servers, :session_mcp_servers])}
-
-      {:error, _step, %Changeset{} = changeset, _} ->
-        {:error, changeset}
+      {:ok, session} -> {:ok, session}
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
     end
   end
 
@@ -107,20 +115,20 @@ defmodule TheMaestro.Conversations do
     {system_prompt_spec, attrs} = extract_system_prompts(attrs, :keep)
     {mcp_ids, attrs} = extract_mcp_server_ids(attrs)
 
-    Multi.new()
-    |> Multi.update(:session, Session.changeset(session, attrs))
-    |> maybe_attach_mcp_servers(:session, mcp_ids)
-    |> maybe_apply_system_prompts(:session, system_prompt_spec)
-    |> Repo.transaction()
+    Repo.transaction(fn ->
+      case Repo.update(Session.changeset(session, attrs)) do
+        {:ok, updated} ->
+          {:ok, _} = maybe_attach_mcp_servers_tx(updated, mcp_ids)
+          {:ok, _} = maybe_apply_system_prompts_tx(updated, system_prompt_spec)
+          Repo.preload(updated, [:mcp_servers, :session_mcp_servers])
+
+        {:error, %Changeset{} = changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
     |> case do
-      {:ok, %{session: _session, session_mcp_servers: reloaded}} ->
-        {:ok, Repo.preload(reloaded, [:mcp_servers, :session_mcp_servers])}
-
-      {:ok, %{session: updated_session}} ->
-        {:ok, Repo.preload(updated_session, [:mcp_servers, :session_mcp_servers])}
-
-      {:error, _step, %Changeset{} = changeset, _} ->
-        {:error, changeset}
+      {:ok, result} -> {:ok, result}
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
     end
   end
 
@@ -234,14 +242,8 @@ defmodule TheMaestro.Conversations do
     end
   end
 
-  defp maybe_attach_mcp_servers(multi, _session_key, ids) when ids in [nil, ""], do: multi
-
-  defp maybe_attach_mcp_servers(multi, session_key, ids) do
-    Multi.run(multi, :session_mcp_servers, fn _repo, changes ->
-      session = Map.fetch!(changes, session_key)
-      MCP.replace_session_servers(session, ids)
-    end)
-  end
+  defp maybe_attach_mcp_servers_tx(session, ids) when ids in [nil, ""], do: {:ok, session}
+  defp maybe_attach_mcp_servers_tx(session, ids), do: MCP.replace_session_servers(session, ids)
 
   defp extract_system_prompts(attrs, fallback) when is_map(attrs) do
     {value, attrs} = pop_system_prompt_spec(attrs)
@@ -268,18 +270,8 @@ defmodule TheMaestro.Conversations do
     end
   end
 
-  defp maybe_apply_system_prompts(multi, _session_key, :keep), do: multi
-
-  defp maybe_apply_system_prompts(multi, session_key, spec) do
-    Multi.run(multi, :session_prompts, fn _repo, changes ->
-      session = Map.fetch!(changes, session_key)
-
-      case apply_system_prompts(session, spec) do
-        {:ok, result} -> {:ok, result}
-        {:error, reason} -> {:error, reason}
-      end
-    end)
-  end
+  defp maybe_apply_system_prompts_tx(_session, :keep), do: {:ok, :keep}
+  defp maybe_apply_system_prompts_tx(session, spec), do: apply_system_prompts(session, spec)
 
   # :keep is handled by maybe_apply_system_prompts/3 before calling this function
 
@@ -565,6 +557,31 @@ defmodule TheMaestro.Conversations do
         group_by: [e.thread_id],
         order_by: [desc: max(e.inserted_at)],
         select: %{thread_id: e.thread_id, label: max(e.thread_label)}
+    )
+  end
+
+  @doc """
+  Lists threads for a given session with their latest label and last update timestamp.
+  Returns [%{thread_id: id, label: label, updated_at: dt}].
+  """
+  @spec list_threads_for_session(Ecto.UUID.t()) :: [
+          %{
+            thread_id: String.t(),
+            label: String.t() | nil,
+            updated_at: DateTime.t() | nil
+          }
+        ]
+  def list_threads_for_session(session_id) when is_binary(session_id) do
+    Repo.all(
+      from e in ChatEntry,
+        where: e.session_id == ^session_id and not is_nil(e.thread_id),
+        group_by: [e.thread_id],
+        order_by: [desc: max(e.inserted_at)],
+        select: %{
+          thread_id: e.thread_id,
+          label: max(e.thread_label),
+          updated_at: max(e.inserted_at)
+        }
     )
   end
 

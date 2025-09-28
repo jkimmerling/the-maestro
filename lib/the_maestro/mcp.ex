@@ -5,7 +5,7 @@ defmodule TheMaestro.MCP do
 
   import Ecto.Query, warn: false
   alias Ecto.Changeset
-  alias Ecto.Multi
+  # alias Ecto.Multi
 
   alias TheMaestro.Conversations.Session
   alias TheMaestro.MCP.{Servers, SessionServer}
@@ -156,15 +156,16 @@ defmodule TheMaestro.MCP do
   original order or `{:error, failed_changeset}`.
   """
   def ensure_servers_exist(entries) when is_list(entries) do
-    Multi.new()
-    |> Multi.run(:validated, fn _repo, _ -> validate_entries(entries) end)
-    |> Multi.run(:upserts, fn _repo, %{validated: validated} -> upsert_servers(validated) end)
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{upserts: servers}} -> {:ok, servers}
-      {:error, _step, %Changeset{} = changeset, _} -> {:error, changeset}
-      other -> other
-    end
+    Repo.transaction(fn ->
+      with {:ok, validated} <- validate_entries(entries),
+           {:ok, servers} <- upsert_servers(validated) do
+        servers
+      else
+        {:error, %Changeset{} = cs} -> Repo.rollback(cs)
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+    |> normalize_transaction_result()
   end
 
   @doc """

@@ -15,7 +15,7 @@ defmodule TheMaestro.MixProject do
 
       # Dialyzer configuration
       dialyzer: [
-        plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
+        plt_local_path: "priv/plts",
         plt_add_apps: [:mix, :ex_unit, :ecto, :phoenix, :phoenix_ecto],
         ignore_warnings: "dialyzer.ignore-warnings.exs"
       ]

@@ -9,7 +9,7 @@ defmodule TheMaestro.Tools.TodoWrite do
   alias TheMaestro.Todos
   alias TheMaestro.Tools.ExecOutput
 
-  @valid_statuses MapSet.new(["pending", "in_progress", "completed"])
+  @valid_statuses ["pending", "in_progress", "completed"]
 
   @spec run(map(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
   def run(args, opts \\ []) do
@@ -68,7 +68,6 @@ defmodule TheMaestro.Tools.TodoWrite do
   defp normalize_status(_), do: "pending"
 
   defp valid_item?(%{content: c, activeForm: a, status: s}) do
-    is_binary(c) and String.trim(c) != "" and is_binary(a) and String.trim(a) != "" and
-      MapSet.member?(@valid_statuses, s)
+    is_binary(c) and String.trim(c) != "" and is_binary(a) and String.trim(a) != "" and s in @valid_statuses
   end
 end

@@ -14,7 +14,16 @@ defmodule TheMaestroWeb.FramesControllerSseTest do
     conn = get(conn, "/api/sessions/#{session_id}/turns/#{stream_id}/frames")
 
     # Publish :done first (session-level)
-    PubSub.broadcast(TheMaestro.PubSub, session_topic, {:session_stream, %TheMaestro.Domain.StreamEnvelope{session_id: session_id, stream_id: stream_id, event: %TheMaestro.Domain.StreamEvent{type: :done}}})
+    PubSub.broadcast(
+      TheMaestro.PubSub,
+      session_topic,
+      {:session_stream,
+       %TheMaestro.Domain.StreamEnvelope{
+         session_id: session_id,
+         stream_id: stream_id,
+         event: %TheMaestro.Domain.StreamEvent{type: :done}
+       }}
+    )
 
     # Publish a non-final turn frame
     PubSub.broadcast(TheMaestro.PubSub, turn_topic, {:turn_frame, %{"kind" => "usage", "payload" => %{"total_tokens" => 1}}})
@@ -26,4 +35,3 @@ defmodule TheMaestroWeb.FramesControllerSseTest do
     assert conn.resp_body == nil
   end
 end
-

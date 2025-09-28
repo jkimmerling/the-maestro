@@ -1,0 +1,14 @@
+README.md
+pyproject.toml
+src/maestro_tui/__init__.py
+src/maestro_tui/app.py
+src/maestro_tui/config.py
+src/maestro_tui/sse.py
+src/maestro_tui.egg-info/PKG-INFO
+src/maestro_tui.egg-info/SOURCES.txt
+src/maestro_tui.egg-info/dependency_links.txt
+src/maestro_tui.egg-info/requires.txt
+src/maestro_tui.egg-info/top_level.txt
+src/maestro_tui/api/client.py
+tests/test_config_loader.py
+tests/test_sse_client.py
