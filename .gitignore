@@ -63,7 +63,7 @@ Thumbs.db
 .claude/
 .elixir_ls/
 .ai/
-docs/
+docs/*
 
 
 *.py
