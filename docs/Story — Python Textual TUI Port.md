@@ -54,7 +54,7 @@
   - [x] API Keys: DB model, CRUD LiveView, modal reveal, revoke/rotate
 - [ ] Packaging
   - [x] PyInstaller spec and CLI script entry
-  - [ ] Release automation
+  - [x] Release automation (GH Actions matrix + artifacts)
 - [ ] Tests
   - [x] Integration tests (Phoenix.ConnCase) for new APIs
   - [x] LiveView tests for API Keys UI
