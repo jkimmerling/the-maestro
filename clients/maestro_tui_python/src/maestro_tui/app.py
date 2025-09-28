@@ -13,6 +13,11 @@ from .sse import drain_until_final
 
 
 class MaestroTextual(App):
+    BINDINGS = [
+        ("ctrl+shift+n", "new_session", "New Session"),
+        ("ctrl+shift+t", "threads", "Threads"),
+        ("ctrl+shift+h", "help", "Help"),
+    ]
     CSS = """
     Screen { align: center middle; }
     #status { height: 1; }
@@ -64,6 +69,11 @@ class MaestroTextual(App):
             self.query_one("#status", Static).update(f"Selected {self.current_session_id}")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.value.strip().startswith("/"):
+            handled = await self.handle_slash_command(event.value.strip())
+            if handled:
+                event.input.value = ""
+                return
         if not self.current_session_id:
             self.query_one("#status", Static).update("Pick a remote session first")
             return
@@ -74,6 +84,33 @@ class MaestroTextual(App):
         )
         await self._append_messages(msgs)
         event.input.value = ""
+
+    async def handle_slash_command(self, text: str) -> bool:
+        assert self.api
+        cmdline = text.lstrip("/").strip()
+        if not cmdline:
+            return False
+        name, *rest = cmdline.split()
+        name = name.lower()
+        if name in ("help", "h"):
+            self.query_one("#status", Static).update("/help /model /clear /threads")
+            return True
+        if name in ("model", "session"):
+            self.open_wizard()
+            return True
+        if name in ("threads", "thread"):
+            await self.open_threads()
+            return True
+        if name == "clear":
+            if not self.current_thread_id:
+                self.query_one("#status", Static).update("No thread selected")
+                return True
+            await self.api.clear_thread(self.current_thread_id)
+            self._transcript = []
+            self.query_one("#chat", Markdown).update("")
+            self.query_one("#status", Static).update("Thread cleared")
+            return True
+        return False
 
     async def _load_latest_thread_and_transcript(self) -> None:
         assert self.api and self.current_session_id
@@ -135,6 +172,15 @@ class MaestroTextual(App):
             self.query_one("#status", Static).update("Pick a session first")
             return
         self.push_screen(ThreadPicker(self.api, self.current_session_id, self._on_thread_selected))
+
+    def action_new_session(self) -> None:
+        self.open_wizard()
+
+    def action_threads(self) -> None:
+        self.call_from_executor(asyncio.create_task, self.open_threads())
+
+    def action_help(self) -> None:
+        self.query_one("#status", Static).update("Hotkeys: Ctrl+Shift+N new, Ctrl+Shift+T threads. Slash: /help /model /threads /clear")
 
     async def _on_session_created(self, session_id: str) -> None:
         await self.refresh_sessions()

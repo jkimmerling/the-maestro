@@ -103,3 +103,7 @@ class MaestroAPI:
     async def rename_thread(self, thread_id: str, label: str) -> None:
         r = await self._client.patch(f"/threads/{thread_id}", json={"label": label}, headers=self.headers)
         r.raise_for_status()
+
+    async def clear_thread(self, thread_id: str) -> None:
+        r = await self._client.post(f"/threads/{thread_id}/clear", headers=self.headers)
+        r.raise_for_status()
