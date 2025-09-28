@@ -17,8 +17,8 @@ defmodule TheMaestroWeb.Router do
     plug TheMaestroWeb.ApiAuthPlug
   end
 
-  scope "/", TheMaestroWeb do
-    pipe_through :browser
+    scope "/", TheMaestroWeb do
+      pipe_through :browser
     live "/", DashboardLive, :index
     live "/dashboard", DashboardLive, :index
     live "/chat_history", ChatEntryLive.Index, :index
@@ -46,6 +46,12 @@ defmodule TheMaestroWeb.Router do
     # Sessions LiveViews
     live "/sessions/:id/chat", SessionChatLive, :chat
     # live "/sessions/:id/edit", SessionEditLive, :edit  # Now handled by modal in dashboard
+
+    # API Keys management
+    live "/api_keys", ApiKeyLive.Index, :index
+    live "/api_keys/new", ApiKeyLive.Form, :new
+    live "/api_keys/:id", ApiKeyLive.Show, :show
+    live "/api_keys/:id/edit", ApiKeyLive.Form, :edit
   end
 
   # Other scopes may use custom stacks.
