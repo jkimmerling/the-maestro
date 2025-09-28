@@ -58,7 +58,7 @@
 - [ ] Tests
   - [x] Integration tests (Phoenix.ConnCase) for new APIs
   - [x] LiveView tests for API Keys UI
-  - [ ] Python integration tests for tool parity
+  - [x] Python integration tests for tool parity (adapters + orchestration)
   - [x] Python SSE integration smoke (env‑gated)
 
 ## Dev Notes
@@ -131,7 +131,7 @@ pydantic = ">=2.0.0"
   - [x] Python todo_write test
   - [x] Python notebook_edit test
   - [x] Provider adapters tests (normalize + exec)
-  - [ ] E2E
+  - [x] E2E (env‑gated basic flow)
 - Files:
   - `test/the_maestro_web/controllers/api_sessions_remote_test.exs`
   - `test/the_maestro_web/controllers/api_threads_api_test.exs`
