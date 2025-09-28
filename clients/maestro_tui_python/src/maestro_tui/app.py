@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button
+from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button, Markdown
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual import on
@@ -49,8 +49,9 @@ class MaestroTextual(App):
         with Horizontal():
             with Vertical(id="left"):
                 yield Button("➕ New Session", id="btn-new")
+                yield Button("🧵 Threads", id="btn-threads")
                 yield ListView(id="sessions")
-            yield Static("", id="chat")
+            yield Markdown("", id="chat")
         yield Input(placeholder="Type message...", id="composer")
         yield Static("Ready", id="status")
         yield Footer()
@@ -79,12 +80,10 @@ class MaestroTextual(App):
         threads = await self.api.list_threads(self.current_session_id)
         if not threads:
             self.current_thread_id = None
-            self.query_one("#chat", Static).update("")
+            self.query_one("#chat", Markdown).update("")
             return
         threads.sort(key=lambda t: t.get("updated_at") or "", reverse=True)
-        self.current_thread_id = threads[0]["id"]
-        messages = await self.api.thread_snapshot(self.current_thread_id)
-        await self._render_transcript(messages)
+        await self.set_current_thread(threads[0]["id"])
 
     async def _append_messages(self, new_msgs: list[dict]) -> None:
         cur = getattr(self, "_transcript", [])
@@ -93,33 +92,49 @@ class MaestroTextual(App):
         await self._render_transcript(cur)
 
     async def _render_transcript(self, messages: list[dict]) -> None:
-        lines: list[str] = []
         normalized: list[dict] = []
         for m in messages:
             role = m.get("role")
             text = m.get("text")
             if text is None:
-                # canonical message format: {role, content: [%{type: "text", text: ...}, ...]}
                 parts = m.get("content") or []
                 text = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
             normalized.append({"role": role, "text": text})
         self._transcript = normalized
-        for m in normalized:
-            role = m.get("role")
-            text = m.get("text")
+        md = self._build_markdown(normalized)
+        self.query_one("#chat", Markdown).update(md)
+
+    def _build_markdown(self, messages: list[dict]) -> str:
+        out: list[str] = []
+        for m in messages:
+            role = (m.get("role") or "").lower()
+            text = m.get("text") or ""
             if role == "user":
-                lines.append(f"[bold cyan]You:[/bold cyan] {text}")
+                out.append(f"**You**\n\n{text}\n\n---\n")
             elif role == "assistant":
-                lines.append(f"[bold green]Assistant:[/bold green] {text}")
+                out.append(f"**Assistant**\n\n{text}\n\n---\n")
             elif role == "tool":
-                lines.append(f"[bold yellow]Tool:[/bold yellow] {text}")
+                out.append(f"**Tool**\n\n```\n{text}\n```\n\n---\n")
             elif role == "system":
-                lines.append(f"[bold magenta]System:[/bold magenta] {text}")
-        self.query_one("#chat", Static).update("\n".join(lines))
+                out.append(f"**System**\n\n{text}\n\n---\n")
+        return "".join(out)
+
+    async def set_current_thread(self, thread_id: str) -> None:
+        assert self.api
+        self.current_thread_id = thread_id
+        messages = await self.api.thread_snapshot(thread_id)
+        await self._render_transcript(messages)
 
     @on(Button.Pressed, "#btn-new")
     def open_wizard(self) -> None:
         self.push_screen(NewSessionWizard(self.api, self._on_session_created))
+
+    @on(Button.Pressed, "#btn-threads")
+    async def open_threads(self) -> None:
+        if not self.current_session_id:
+            self.query_one("#status", Static).update("Pick a session first")
+            return
+        self.push_screen(ThreadPicker(self.api, self.current_session_id, self._on_thread_selected))
 
     async def _on_session_created(self, session_id: str) -> None:
         await self.refresh_sessions()
@@ -208,6 +223,38 @@ class NewSessionWizard(Screen):
     def _update_create_button(self) -> None:
         btn = self.query_one("#btn-create", Button)
         btn.disabled = not (self.selected_provider and self.selected_auth and self.selected_model)
+
+
+class ThreadPicker(Screen):
+    BINDINGS = [("escape", "app.pop_screen", "Close")]
+
+    def __init__(self, api: MaestroAPI | None, session_id: str, on_selected_cb):
+        super().__init__()
+        self.api = api
+        self.session_id = session_id
+        self.on_selected_cb = on_selected_cb
+        self.threads: list[dict] = []
+
+    async def on_mount(self) -> None:
+        assert self.api
+        self.threads = await self.api.list_threads(self.session_id)
+        self.threads.sort(key=lambda t: t.get("updated_at") or "", reverse=True)
+        lv = self.query_one("#threads", ListView)
+        for t in self.threads:
+            label = t.get("label") or t.get("id")
+            lv.append(ListItem(Static(label)))
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=False)
+        yield ListView(id="threads")
+        yield Footer()
+
+    async def on_list_view_selected(self, event: ListView.Selected) -> None:
+        idx = event.index
+        if 0 <= idx < len(self.threads):
+            tid = self.threads[idx]["id"]
+            await self.on_selected_cb(tid)
+            self.app.pop_screen()
 
 
 def main() -> None:
