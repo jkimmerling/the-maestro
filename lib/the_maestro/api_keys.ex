@@ -21,7 +21,8 @@ defmodule TheMaestro.ApiKeys do
   end
 
   def revoke!(%ApiKey{} = key) do
-    key |> Ecto.Changeset.change(revoked_at: DateTime.utc_now()) |> Repo.update!()
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    key |> Ecto.Changeset.change(revoked_at: now) |> Repo.update!()
   end
 
   def rotate!(%ApiKey{} = key) do
@@ -32,7 +33,8 @@ defmodule TheMaestro.ApiKeys do
   end
 
   def mark_used!(%ApiKey{} = key) do
-    key |> Ecto.Changeset.change(last_used_at: DateTime.utc_now()) |> Repo.update!()
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    key |> Ecto.Changeset.change(last_used_at: now) |> Repo.update!()
   end
 
   def lookup_valid_by_token(token) when is_binary(token) do

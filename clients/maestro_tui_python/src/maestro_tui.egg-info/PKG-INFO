@@ -50,3 +50,20 @@ python -m maestro_tui.app
 pytest -q
 ```
 
+## Packaging (PyInstaller)
+
+Install explicitly; no auto-installs.
+
+- macOS/Linux:
+  - `cd clients/maestro_tui_python`
+  - `python -m venv .venv && source .venv/bin/activate`
+  - `pip install -e .[dev] pyinstaller`
+  - `pyinstaller --clean -y pyinstaller.spec`
+  - Binary at `dist/maestro-tui/maestro-tui`
+
+- Windows PowerShell:
+  - `cd clients/maestro_tui_python`
+  - `python -m venv .venv; .venv\\Scripts\\Activate.ps1`
+  - `pip install -e .[dev] pyinstaller`
+  - `pyinstaller --clean -y pyinstaller.spec`
+  - Binary at `dist\\maestro-tui\\maestro-tui.exe`

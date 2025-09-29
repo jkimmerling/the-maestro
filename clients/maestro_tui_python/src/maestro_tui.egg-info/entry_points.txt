@@ -1,0 +1,2 @@
+[console_scripts]
+maestro-tui = maestro_tui.app:main
