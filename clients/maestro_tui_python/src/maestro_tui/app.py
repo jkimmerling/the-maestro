@@ -5,11 +5,11 @@ import signal
 import time
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button
-from textual.widgets.scroll_view import ScrollView
+from textual.scroll_view import ScrollView
 from textual.containers import Horizontal, Vertical
 from rich.markdown import Markdown as RichMarkdown
 from textual.screen import Screen
-from textual import on
+from textual import on, events
 
 from .config import load_config
 from .api.client import MaestroAPI
@@ -22,12 +22,14 @@ class MaestroTextual(App):
         ("ctrl+shift+n", "new_session", "New Session"),
         ("ctrl+shift+t", "threads", "Threads"),
         ("ctrl+shift+h", "help", "Help"),
+        ("ctrl+c", "double_quit", "Quit"),
     ]
     CSS = """
     Screen { align: center middle; }
     #status { height: 1; }
     #sessions { width: 40; }
-    #chat_scroll { width: 80; height: 40; }
+    #chat_scroll { width: 80; height: 1fr; }
+    Horizontal { height: 1fr; }
     """
 
     def __init__(self) -> None:
@@ -46,6 +48,10 @@ class MaestroTextual(App):
         self.api = MaestroAPI(cfg)
         await self.refresh_sessions()
         self._install_sigint_double_tap()
+        try:
+            await self.query_one("#chat_scroll", ScrollView).focus()
+        except Exception:
+            pass
 
     async def on_unmount(self) -> None:
         if self.api:
@@ -76,9 +82,22 @@ class MaestroTextual(App):
         except Exception:
             pass
 
+    def action_double_quit(self) -> None:
+        now = time.time()
+        if (not self._quit_armed) or (now - self._quit_armed_at > 3.0):
+            self._quit_armed = True
+            self._quit_armed_at = now
+            self.query_one("#status", Static).update("Press Ctrl+C again to quit")
+        else:
+            self.exit()
+
     async def refresh_sessions(self) -> None:
         assert self.api
         self.sessions = await self.api.list_remote_sessions()
+        # Sort by last_used_at / updated_at / inserted_at descending
+        def ts(s: dict) -> str:
+            return s.get("last_used_at") or s.get("updated_at") or s.get("inserted_at") or ""
+        self.sessions.sort(key=ts, reverse=True)
         lv = self.query_one("#sessions", ListView)
         lv.clear()
         for s in self.sessions:
@@ -87,6 +106,11 @@ class MaestroTextual(App):
             self._session_meta[sid] = {
                 "working_dir": s.get("working_dir")
             }
+        # Auto-select most recent session if none selected
+        if self.sessions and not self.current_session_id:
+            self.query_one("#sessions", ListView).index = 0
+            self.current_session_id = self.sessions[0]["id"]
+            await self._load_latest_thread_and_transcript()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -108,6 +132,28 @@ class MaestroTextual(App):
             await self._load_latest_thread_and_transcript()
             self.query_one("#status", Static).update(f"Selected {self.current_session_id}")
 
+    async def on_mouse_scroll(self, event: events.MouseScroll) -> None:
+        # Always scroll the transcript with mouse wheel, even if the input is focused
+        try:
+            sv = self.query_one("#chat_scroll", ScrollView)
+            dy = getattr(event, "delta_y", 0) or 0
+            if dy != 0:
+                off = getattr(sv, "scroll_offset", None)
+                if off is not None:
+                    step = 4
+                    new_y = max(0, off.y + (-dy) * step)
+                    sv.scroll_to(y=new_y, animate=False)
+                    event.stop()
+                    return
+                # Fallback
+                if dy > 0:
+                    sv.scroll_to(y=0, animate=False)
+                else:
+                    sv.scroll_end(animate=False)
+                event.stop()
+        except Exception:
+            pass
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         text = event.value or ""
         stripped = text.strip()
@@ -119,9 +165,13 @@ class MaestroTextual(App):
             event.input.refresh()
         except Exception:
             pass
+        # optimistic echo
+        await self._append_messages([{"role": "user", "text": stripped}])
         if stripped.startswith("/"):
             handled = await self.handle_slash_command(stripped)
             if handled:
+                # remove optimistic echo for commands by reloading transcript
+                await self._load_latest_thread_and_transcript()
                 return
         if not self.current_session_id:
             self.query_one("#status", Static).update("Pick a remote session first")
@@ -200,7 +250,27 @@ class MaestroTextual(App):
                 text = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
             normalized.append({"role": role, "text": text})
         self._transcript = normalized
-        md = self._build_markdown(normalized)
+        # prune preamble before first user message and collapse duplicate assistant lines
+        cut: list[dict] = []
+        start = 0
+        for i, mm in enumerate(normalized):
+            if (mm.get("role") or "").lower() == "user":
+                start = i
+                break
+        base = normalized[start:]
+        prev: dict | None = None
+        for mm in base:
+            if (
+                prev
+                and (prev.get("role") or "").lower() == "assistant"
+                and (mm.get("role") or "").lower() == "assistant"
+                and (prev.get("text") or "") == (mm.get("text") or "")
+            ):
+                continue
+            cut.append(mm)
+            prev = mm
+        self._transcript = cut
+        md = self._build_markdown(cut)
         self.query_one("#chat", Static).update(RichMarkdown(md))
         try:
             self.query_one("#chat_scroll", ScrollView).scroll_end(animate=False)
