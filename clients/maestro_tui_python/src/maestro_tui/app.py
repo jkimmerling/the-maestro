@@ -4,7 +4,8 @@ import asyncio
 import signal
 import time
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button, ScrollView
+from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button
+from textual.widgets.scroll_view import ScrollView
 from textual.containers import Horizontal, Vertical
 from rich.markdown import Markdown as RichMarkdown
 from textual.screen import Screen
