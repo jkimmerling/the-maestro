@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button, Markdown
-from textual.containers import Horizontal, Vertical
+from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button
+from textual.containers import Horizontal, Vertical, ScrollView
+from rich.markdown import Markdown as RichMarkdown
 from textual.screen import Screen
 from textual import on
 
@@ -23,7 +24,7 @@ class MaestroTextual(App):
     Screen { align: center middle; }
     #status { height: 1; }
     #sessions { width: 40; }
-    #chat { width: 80; }
+    #chat_scroll { width: 80; height: 40; }
     """
 
     def __init__(self) -> None:
@@ -63,7 +64,8 @@ class MaestroTextual(App):
                 yield Button("➕ New Session", id="btn-new")
                 yield Button("🧵 Threads", id="btn-threads")
                 yield ListView(id="sessions")
-            yield Markdown("", id="chat")
+            with ScrollView(id="chat_scroll"):
+                yield Static("", id="chat")
         yield Input(placeholder="Type message...", id="composer")
         yield Static("Ready", id="status")
         yield Footer()
@@ -81,10 +83,14 @@ class MaestroTextual(App):
         if stripped == "":
             self.query_one("#status", Static).update("Type a message or a /command")
             return
+        try:
+            event.input.value = ""
+            event.input.refresh()
+        except Exception:
+            pass
         if stripped.startswith("/"):
             handled = await self.handle_slash_command(stripped)
             if handled:
-                event.input.value = ""
                 return
         if not self.current_session_id:
             self.query_one("#status", Static).update("Pick a remote session first")
@@ -92,15 +98,23 @@ class MaestroTextual(App):
         assert self.api
         prov = (self._session_meta.get(self.current_session_id, {}) or {}).get("provider") or self._selected_provider or ""
         base_dir = (self._session_meta.get(self.current_session_id, {}) or {}).get("working_dir") or "."
-        msgs = await send_and_orchestrate(
-            self.api,
-            session_id=self.current_session_id,
-            message=stripped,
-            provider=prov,
-            base_dir=base_dir,
-        )
-        await self._append_messages(msgs)
-        event.input.value = ""
+        async def _send():
+            try:
+                msgs = await send_and_orchestrate(
+                    self.api,
+                    session_id=self.current_session_id,
+                    message=stripped,
+                    provider=prov,
+                    base_dir=base_dir,
+                )
+                if self.current_thread_id:
+                    await self._load_latest_thread_and_transcript()
+                else:
+                    await self._append_messages(msgs)
+                self.query_one("#status", Static).update("Sent")
+            except Exception as e:
+                self.query_one("#status", Static).update(f"Error: {e}")
+        asyncio.create_task(_send())
 
     async def handle_slash_command(self, text: str) -> bool:
         assert self.api
@@ -124,7 +138,7 @@ class MaestroTextual(App):
                 return True
             await self.api.clear_thread(self.current_thread_id)
             self._transcript = []
-            self.query_one("#chat", Markdown).update("")
+            self.query_one("#chat", Static).update("")
             self.query_one("#status", Static).update("Thread cleared")
             return True
         return False
@@ -134,7 +148,7 @@ class MaestroTextual(App):
         threads = await self.api.list_threads(self.current_session_id)
         if not threads:
             self.current_thread_id = None
-            self.query_one("#chat", Markdown).update("")
+            self.query_one("#chat", Static).update("")
             return
         threads.sort(key=lambda t: t.get("updated_at") or "", reverse=True)
         await self.set_current_thread(threads[0]["id"])
@@ -156,7 +170,11 @@ class MaestroTextual(App):
             normalized.append({"role": role, "text": text})
         self._transcript = normalized
         md = self._build_markdown(normalized)
-        self.query_one("#chat", Markdown).update(md)
+        self.query_one("#chat", Static).update(RichMarkdown(md))
+        try:
+            self.query_one("#chat_scroll", ScrollView).scroll_end(animate=False)
+        except Exception:
+            pass
 
     def _build_markdown(self, messages: list[dict]) -> str:
         out: list[str] = []
