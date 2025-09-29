@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import signal
+import time
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button
 from textual.containers import Horizontal, Vertical, ScrollView
@@ -35,15 +37,43 @@ class MaestroTextual(App):
         self.current_thread_id: str | None = None
         self._session_meta: dict[str, dict] = {}
         self._selected_provider: str | None = None
+        self._quit_armed: bool = False
+        self._quit_armed_at: float = 0.0
 
     async def on_mount(self) -> None:
         cfg = load_config()
         self.api = MaestroAPI(cfg)
         await self.refresh_sessions()
+        self._install_sigint_double_tap()
 
     async def on_unmount(self) -> None:
         if self.api:
             await self.api.close()
+
+    def _install_sigint_double_tap(self) -> None:
+        def handler(signum, frame):  # noqa: ARG001
+            def do():
+                now = time.time()
+                if (not self._quit_armed) or (now - self._quit_armed_at > 3.0):
+                    self._quit_armed = True
+                    self._quit_armed_at = now
+                    try:
+                        self.query_one("#status", Static).update("Press Ctrl+C again to quit")
+                    except Exception:
+                        pass
+                else:
+                    self.exit()
+
+            try:
+                self.call_from_thread(do)
+            except Exception:
+                # last resort
+                self.exit()
+
+        try:
+            signal.signal(signal.SIGINT, handler)
+        except Exception:
+            pass
 
     async def refresh_sessions(self) -> None:
         assert self.api
