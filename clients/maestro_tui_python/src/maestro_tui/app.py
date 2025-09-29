@@ -76,8 +76,13 @@ class MaestroTextual(App):
             self.query_one("#status", Static).update(f"Selected {self.current_session_id}")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.value.strip().startswith("/"):
-            handled = await self.handle_slash_command(event.value.strip())
+        text = event.value or ""
+        stripped = text.strip()
+        if stripped == "":
+            self.query_one("#status", Static).update("Type a message or a /command")
+            return
+        if stripped.startswith("/"):
+            handled = await self.handle_slash_command(stripped)
             if handled:
                 event.input.value = ""
                 return
@@ -90,7 +95,7 @@ class MaestroTextual(App):
         msgs = await send_and_orchestrate(
             self.api,
             session_id=self.current_session_id,
-            message=event.value,
+            message=stripped,
             provider=prov,
             base_dir=base_dir,
         )
