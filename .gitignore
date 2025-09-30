@@ -63,7 +63,7 @@ Thumbs.db
 .claude/
 .elixir_ls/
 .ai/
-docs/
+docs/*
 
 
 *.py
@@ -77,3 +77,9 @@ playwright/
 *.md
 scripts/
 source/
+
+# allow tracked Python client subtree and this story doc
+!clients/maestro_tui_python/**/*.py
+!clients/maestro_tui_python/**/*.md
+!docs/Story — Python Textual TUI Port.md
+!docs/TUI Usage and Deployment Guide.md

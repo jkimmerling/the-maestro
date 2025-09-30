@@ -13,6 +13,7 @@ defmodule TheMaestroWeb.Router do
   pipeline :api do
     plug :accepts, ["json"]
   end
+
   pipeline :api_auth do
     plug TheMaestroWeb.ApiAuthPlug
   end
@@ -46,6 +47,12 @@ defmodule TheMaestroWeb.Router do
     # Sessions LiveViews
     live "/sessions/:id/chat", SessionChatLive, :chat
     # live "/sessions/:id/edit", SessionEditLive, :edit  # Now handled by modal in dashboard
+
+    # API Keys management
+    live "/api_keys", ApiKeyLive.Index, :index
+    live "/api_keys/new", ApiKeyLive.Form, :new
+    live "/api_keys/:id", ApiKeyLive.Show, :show
+    live "/api_keys/:id/edit", ApiKeyLive.Form, :edit
   end
 
   # Other scopes may use custom stacks.
@@ -71,6 +78,7 @@ defmodule TheMaestroWeb.Router do
     get "/providers/:provider/saved_auths", ProvidersController, :saved_auths
     get "/providers/:_provider/saved_auths/:auth_id/models", ProvidersController, :models
 
+    get "/sessions", SessionsController, :index
     post "/sessions", SessionsController, :create
     post "/sessions/:session_id/turns", TurnsController, :create
 
@@ -79,11 +87,15 @@ defmodule TheMaestroWeb.Router do
 
     # Latest frames for a thread (polling fallback)
     get "/threads/:thread_id/turns/latest/frames", FramesController, :latest
+    get "/threads/:thread_id/snapshot", FramesController, :snapshot
 
     # Tool results from remote clients (TUI)
     post "/sessions/:session_id/turns/:stream_id/tools/results", ToolResultsController, :create
 
     # Thread maintenance
+    get "/sessions/:session_id/threads", ThreadsController, :index
+    post "/sessions/:session_id/threads", ThreadsController, :create
+    patch "/threads/:thread_id", ThreadsController, :update
     post "/threads/:thread_id/clear", ThreadsController, :clear
   end
 

@@ -590,10 +590,10 @@ defmodule TheMaestro.Tools.Runtime do
           {:ok, base_path} ->
             max_hits = 500
 
-            {matcher, is_regex} =
+            matcher =
               case Regex.compile(pattern) do
-                {:ok, re} -> {re, true}
-                _ -> {pattern, false}
+                {:ok, re} -> re
+                _ -> pattern
               end
 
             files = collect_files(base_path, base_cwd, 10_000)
@@ -605,7 +605,7 @@ defmodule TheMaestro.Tools.Runtime do
                 else
                   case File.exists?(file) and File.regular?(file) do
                     true ->
-                      results = grep_file(file, matcher, is_regex, base_cwd, max_hits - c)
+                      results = grep_file(file, matcher, base_cwd, max_hits - c)
                       nc = c + length(results)
                       {:cont, {acc ++ results, nc}}
 
@@ -662,7 +662,7 @@ defmodule TheMaestro.Tools.Runtime do
     end
   end
 
-  defp grep_file(file, matcher, true = _is_regex, base_root, limit) do
+  defp grep_file(file, %Regex{} = matcher, base_root, limit) do
     stream = File.stream!(file, :line, [])
     rel = Path.relative_to(file, base_root)
 
@@ -673,7 +673,7 @@ defmodule TheMaestro.Tools.Runtime do
     |> Enum.map(fn {line, i} -> %{path: rel, line: i, text: String.trim_trailing(line)} end)
   end
 
-  defp grep_file(file, matcher, false, base_root, limit) when is_binary(matcher) do
+  defp grep_file(file, matcher, base_root, limit) when is_binary(matcher) do
     stream = File.stream!(file, :line, [])
     rel = Path.relative_to(file, base_root)
 

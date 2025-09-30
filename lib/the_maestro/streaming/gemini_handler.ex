@@ -153,8 +153,8 @@ defmodule TheMaestro.Streaming.GeminiHandler do
   end
 
   # Reasoning JSON detection (heuristic)
-  defp detect_reasoning_json(text) do
-    trimmed = String.trim(to_string(text || ""))
+  defp detect_reasoning_json(text) when is_binary(text) do
+    trimmed = String.trim(text)
 
     cond do
       looks_like_reasoning_json?(trimmed) -> parse_reasoning_json(trimmed)
@@ -162,6 +162,8 @@ defmodule TheMaestro.Streaming.GeminiHandler do
       true -> {:not_reasoning}
     end
   end
+
+  defp detect_reasoning_json(_), do: {:not_reasoning}
 
   defp looks_like_reasoning_json?(s),
     do: String.starts_with?(s, "{") and String.contains?(s, "\"reasoning\"")

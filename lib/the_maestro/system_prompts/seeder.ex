@@ -3,7 +3,7 @@ defmodule TheMaestro.SystemPrompts.Seeder do
   Seeds canonical system prompts for each provider with deterministic identifiers.
   """
 
-  alias Ecto.Multi
+  # alias Ecto.Multi
   alias TheMaestro.{Repo, SuppliedContext}
   alias TheMaestro.SuppliedContext.SuppliedContextItem
   alias TheMaestro.SystemPrompts.Defaults
@@ -28,26 +28,22 @@ defmodule TheMaestro.SystemPrompts.Seeder do
   def seed!(opts \\ []) do
     now = Keyword.get(opts, :now, DateTime.utc_now() |> DateTime.truncate(:second))
 
-    Multi.new()
-    |> Multi.run(:seed_openai, fn _repo, _changes ->
-      upsert_prompt(openai_prompt_spec(), now)
+    Repo.transaction(fn ->
+      with {:ok, _} <- upsert_prompt(openai_prompt_spec(), now),
+           {:ok, _} <- upsert_prompt(anthropic_identity_spec(), now),
+           {:ok, _} <- upsert_prompt(anthropic_guidance_spec(), now),
+           {:ok, _} <- upsert_prompt(gemini_prompt_spec(), now) do
+        :ok
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
     end)
-    |> Multi.run(:seed_anthropic_identity, fn _repo, _changes ->
-      upsert_prompt(anthropic_identity_spec(), now)
-    end)
-    |> Multi.run(:seed_anthropic_guidance, fn _repo, _changes ->
-      upsert_prompt(anthropic_guidance_spec(), now)
-    end)
-    |> Multi.run(:seed_gemini, fn _repo, _changes ->
-      upsert_prompt(gemini_prompt_spec(), now)
-    end)
-    |> Repo.transaction()
     |> case do
       {:ok, _} ->
         SuppliedContext.invalidate_prompt_cache()
         :ok
 
-      {:error, _step, reason, _changes} ->
+      {:error, reason} ->
         {:error, reason}
     end
   end

@@ -25,13 +25,21 @@ defmodule TheMaestroWeb.Api.FramesController do
     json(conn, %{frames: frames})
   end
 
+  def snapshot(conn, %{"thread_id" => tid}) do
+    case Chat.latest_snapshot_for_thread(tid) do
+      %{combined_chat: %{"messages" => messages}} -> json(conn, %{messages: messages})
+      _ -> json(conn, %{messages: []})
+    end
+  end
+
   defp loop(conn, %{final_sent?: final?} = st) do
     receive do
       {:turn_frame, frame} ->
         kind = Map.get(frame, "kind") || Map.get(frame, :kind) || "event"
         IO.puts("[FRAMES] SSE emitting turn_frame: #{inspect(kind)}")
+
         case chunk(conn, encode_event(%{"data" => frame})) do
-          {:ok, conn} -> loop(conn, %{st | final_sent?: final? || (kind == "final")})
+          {:ok, conn} -> loop(conn, %{st | final_sent?: final? || kind == "final"})
           {:error, _} = err -> err
         end
 
@@ -43,6 +51,7 @@ defmodule TheMaestroWeb.Api.FramesController do
           :done ->
             _ = chunk(conn, encode_event(%{"data" => %{kind: "done"}}))
             loop(conn, st)
+
           _ ->
             loop(conn, st)
         end

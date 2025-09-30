@@ -75,17 +75,14 @@ defmodule TheMaestro.MCP.Import do
   defp parse_cli_add(rest) do
     {option_tokens, command_tail} = split_inline(rest)
 
-    case OptionParser.parse(option_tokens, strict: @cli_strict, keep: @cli_keep, aliases: []) do
-      {opts, positional, []} ->
-        do_parse_cli_add(opts, positional, command_tail)
+    {opts, positional, invalid_opts} =
+      OptionParser.parse(option_tokens, strict: @cli_strict, keep: @cli_keep, aliases: [])
 
-      {_, _, invalid_opts} ->
-        msg =
-          invalid_opts
-          |> Enum.map(fn {opt, _val} -> "--#{opt}" end)
-          |> Enum.join(", ")
-
-        {:error, "invalid options: #{msg}"}
+    if invalid_opts != [] do
+      msg = invalid_opts |> Enum.map(fn {opt, _} -> "--#{opt}" end) |> Enum.join(", ")
+      {:error, "invalid options: #{msg}"}
+    else
+      do_parse_cli_add(opts, positional, command_tail)
     end
   end
 
@@ -107,10 +104,7 @@ defmodule TheMaestro.MCP.Import do
              {:ok, args_from_flags} <- parse_list(opts, :arg),
              {:ok, command, inline_args} <- resolve_command(opts, command_tail) do
           url = keyword_get(opts, :url)
-
-          transport =
-            Keyword.get(opts, :transport) ||
-              default_transport(url, command)
+          transport = Keyword.get(opts, :transport) || default_transport(url, command)
 
           if is_nil(transport) do
             {:error, "transport is required when neither URL nor command is provided"}
@@ -134,6 +128,8 @@ defmodule TheMaestro.MCP.Import do
 
             {:ok, {:upsert, [%{server: server_attrs, alias: keyword_get(opts, :alias)}]}}
           end
+        else
+          {:error, msg} -> {:error, msg}
         end
     end
   end
@@ -370,24 +366,26 @@ defmodule TheMaestro.MCP.Import do
   }
 
   defp normalize_source(value, fallback) do
-    fallback = if is_nil(fallback), do: "manual", else: fallback
-    normalized = normalize_source_input(value)
+    fb =
+      case fallback do
+        v when is_binary(v) and v != "" -> v
+        _ -> "manual"
+      end
 
-    case normalized do
-      "" -> fallback
-      other -> Map.get(@source_aliases, other, fallback_for_unknown(other, fallback))
+    case value do
+      v when is_binary(v) ->
+        trimmed = String.trim(v)
+
+        if trimmed == "" do
+          fb
+        else
+          Map.get(@source_aliases, String.downcase(trimmed), fb)
+        end
+
+      _ ->
+        fb
     end
   end
-
-  defp normalize_source_input(nil), do: ""
-
-  defp normalize_source_input(value) when is_binary(value),
-    do: value |> String.trim() |> String.downcase()
-
-  defp normalize_source_input(value),
-    do: value |> to_string() |> String.trim() |> String.downcase()
-
-  defp fallback_for_unknown(_value, fallback), do: fallback
 
   defp parse_metadata(nil), do: {:ok, %{}}
 

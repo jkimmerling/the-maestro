@@ -994,6 +994,15 @@ defmodule TheMaestroWeb.SessionChatLive do
     handle_stream(env, socket)
   end
 
+  def handle_info(%{event: ev, payload: %{session_id: _sid, thread_id: _tid}} = msg, socket)
+      when is_binary(ev) do
+    handle_map_event(msg, socket)
+  end
+
+  def handle_info(other, socket) do
+    handle_misc(other, socket)
+  end
+
   defp handle_stream(
          %TheMaestro.Domain.StreamEnvelope{
            session_id: sid,
@@ -1145,12 +1154,6 @@ defmodule TheMaestroWeb.SessionChatLive do
   defp handle_stream_done(socket),
     do: {:noreply, push_event(socket, %{kind: "ai", type: "done", at: now_ms()})}
 
-  @impl true
-  def handle_info(%{event: ev, payload: %{session_id: _sid, thread_id: _tid}} = msg, socket)
-      when is_binary(ev) do
-    handle_map_event(msg, socket)
-  end
-
   defp handle_map_event(
          %{event: "plans:updated", payload: %{session_id: sid, thread_id: tid}},
          %{assigns: %{session: %{id: sid}, current_thread_id: ctid}} = socket
@@ -1174,11 +1177,6 @@ defmodule TheMaestroWeb.SessionChatLive do
   end
 
   defp handle_map_event(_other, socket), do: {:noreply, socket}
-
-  @impl true
-  def handle_info(other, socket) do
-    handle_misc(other, socket)
-  end
 
   defp handle_misc({:turn_frame, %{} = frame}, socket),
     do: {:noreply, route_turn_frame(frame, socket)}

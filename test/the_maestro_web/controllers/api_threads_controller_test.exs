@@ -18,7 +18,9 @@ defmodule TheMaestroWeb.ApiThreadsControllerTest do
         provider: nil,
         request_headers: %{},
         response_headers: %{},
-        combined_chat: %{"messages" => [%{"role" => "user", "content" => [%{"type" => "text", "text" => "hi"}]}]},
+        combined_chat: %{
+          "messages" => [%{"role" => "user", "content" => [%{"type" => "text", "text" => "hi"}]}]
+        },
         edit_version: 0
       })
 

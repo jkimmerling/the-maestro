@@ -9,15 +9,28 @@ defmodule TheMaestroWeb.ApiAuthPlug do
 
   @impl true
   def call(conn, _opts) do
-    case get_req_header(conn, "authorization") do
-      ["Bearer " <> token] ->
-        expected =
-          Application.get_env(:the_maestro, :api, []) |> Keyword.get(:token, "0000000000000000")
+    with ["Bearer " <> token] <- get_req_header(conn, "authorization"),
+         true <- valid_token?(token) do
+      conn
+    else
+      _ -> unauthorized(conn)
+    end
+  end
 
-        if token == expected, do: conn, else: unauthorized(conn)
+  defp valid_token?(token) when is_binary(token) do
+    expected = Application.get_env(:the_maestro, :api, []) |> Keyword.get(:token)
 
-      _ ->
-        unauthorized(conn)
+    if is_binary(expected) and token == expected do
+      true
+    else
+      case TheMaestro.ApiKeys.lookup_valid_by_token(token) do
+        %TheMaestro.ApiKeys.ApiKey{} = key ->
+          _ = TheMaestro.ApiKeys.mark_used!(key)
+          true
+
+        _ ->
+          false
+      end
     end
   end
 

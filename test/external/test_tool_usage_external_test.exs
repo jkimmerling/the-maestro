@@ -99,7 +99,7 @@ defmodule TheMaestro.External.ToolUsageExternalTest do
             }
           ]
 
-          case AgentLoop.run_turn(:openai, new_session, model, messages) do
+          case AgentLoop.run_turn(:openai, new_session, model, messages, []) do
             {:ok, res} ->
               IO.puts("\n📊 Response from agent:")
               IO.puts("   Final text: #{inspect(res.final_text)}")

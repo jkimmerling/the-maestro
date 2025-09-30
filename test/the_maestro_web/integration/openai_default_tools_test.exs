@@ -24,7 +24,7 @@ defmodule TheMaestroWeb.Integration.OpenAIDefaultToolsTest do
         expires_at: DateTime.utc_now()
       })
 
-    {:ok, session} =
+    {:ok, _session} =
       Conversations.create_session(%{
         name: "OpenAI Default Tools",
         auth_id: saved_auth.id,
@@ -39,9 +39,9 @@ defmodule TheMaestroWeb.Integration.OpenAIDefaultToolsTest do
       )
 
     assert_receive {:captured_openai_tools, names}, 1_000
+
     for required <- ["shell", "apply_patch", "web_search", "update_plan", "view_image"] do
       assert required in names
     end
   end
 end
-

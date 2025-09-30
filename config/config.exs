@@ -23,8 +23,7 @@ config :the_maestro,
   ]
 
 # API auth (TUI & remote clients)
-config :the_maestro, :api,
-  token: System.get_env("TUI_API_TOKEN") || "0000000000000000"
+config :the_maestro, :api, token: System.get_env("TUI_API_TOKEN") || "0000000000000000"
 
 # Configures the endpoint
 config :the_maestro, TheMaestroWeb.Endpoint,

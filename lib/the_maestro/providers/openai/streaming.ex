@@ -362,12 +362,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         other -> to_string(other)
       end
 
-    arch =
-      case :erlang.system_info(:system_architecture) do
-        val when is_list(val) -> List.to_string(val)
-        val when is_binary(val) -> val
-        other -> to_string(other)
-      end
+    arch = to_string(:erlang.system_info(:system_architecture))
 
     {os, arch}
   end
