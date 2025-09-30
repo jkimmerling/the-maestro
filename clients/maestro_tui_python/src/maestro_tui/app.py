@@ -4,8 +4,7 @@ import asyncio
 import signal
 import time
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button
-from textual.scroll_view import ScrollView
+from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button, RichLog
 from textual.containers import Horizontal, Vertical
 from rich.markdown import Markdown as RichMarkdown
 from textual.screen import Screen
@@ -28,7 +27,7 @@ class ChatScreen(Screen):
     CSS = """
     ChatScreen { align: center middle; }
     #status { height: 1; }
-    #chat_scroll { width: 100%; height: 1fr; }
+    #chat_log { padding: 1; height: 1fr; }
     """
 
     def __init__(self) -> None:
@@ -39,8 +38,7 @@ class ChatScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with ScrollView(id="chat_scroll"):
-            yield Static("", id="chat")
+        yield RichLog(id="chat_log", wrap=True, markup=False)
         yield Input(placeholder="Type message or /sessions, /model, /threads, /clear...", id="composer")
         yield Static("Ready", id="status")
         yield Footer()
@@ -115,7 +113,7 @@ class ChatScreen(Screen):
                 self.query_one("#status", Static).update(f"Failed to create session: {e}")
                 return
 
-        # Optimistic echo
+        # Optimistic echo for immediate feedback; frames will not add a duplicate
         await self.append_messages([{"role": "user", "text": stripped}])
 
         assert self.app.api
@@ -135,10 +133,8 @@ class ChatScreen(Screen):
                     base_dir=base_dir,
                     on_frame=on_tool_frame,
                 )
-                if self.app.current_thread_id:
-                    await self.load_latest_thread_and_transcript()
-                else:
-                    await self.append_messages(msgs)
+                # Always render what we received; latest snapshot reloads will overwrite as needed
+                await self.append_messages(msgs)
                 self.query_one("#status", Static).update("Sent")
             except Exception as e:
                 self.query_one("#status", Static).update(f"Error: {e}")
@@ -150,7 +146,10 @@ class ChatScreen(Screen):
         threads = await self.app.api.list_threads(self.app.current_session_id)
         if not threads:
             self.app.current_thread_id = None
-            self.query_one("#chat", Static).update("")
+            try:
+                self.query_one("#chat_log", RichLog).clear()
+            except Exception:
+                pass
             return
         threads.sort(key=lambda t: t.get("updated_at") or "", reverse=True)
         await self.set_current_thread(threads[0]["id"])
@@ -197,9 +196,11 @@ class ChatScreen(Screen):
             prev = mm
         self._transcript = cut
         md = self.build_markdown(cut)
-        self.query_one("#chat", Static).update(RichMarkdown(md))
         try:
-            self.query_one("#chat_scroll", ScrollView).scroll_end(animate=False)
+            log = self.query_one("#chat_log", RichLog)
+            log.clear()
+            log.write(RichMarkdown(md))
+            log.scroll_end(animate=False)
         except Exception:
             pass
 
@@ -218,26 +219,7 @@ class ChatScreen(Screen):
                 out.append(f"**System**\n\n{text}\n\n---\n")
         return "".join(out)
 
-    async def on_mouse_scroll(self, event: events.MouseScroll) -> None:
-        # Always scroll the transcript with mouse wheel
-        try:
-            sv = self.query_one("#chat_scroll", ScrollView)
-            dy = getattr(event, "delta_y", 0) or 0
-            if dy != 0:
-                off = getattr(sv, "scroll_offset", None)
-                if off is not None:
-                    step = 4
-                    new_y = max(0, off.y + (-dy) * step)
-                    sv.scroll_to(y=new_y, animate=False)
-                    event.stop()
-                    return
-                if dy > 0:
-                    sv.scroll_to(y=0, animate=False)
-                else:
-                    sv.scroll_end(animate=False)
-                event.stop()
-        except Exception:
-            pass
+    # RichLog handles mouse wheel scrolling; no custom handler required
 
 
 class SessionsScreen(Screen):
@@ -554,7 +536,10 @@ class MaestroTextual(App):
                 return True
             await self.api.clear_thread(self.current_thread_id)
             chat_screen._transcript = []
-            chat_screen.query_one("#chat", Static).update("")
+            try:
+                chat_screen.query_one("#chat_log", RichLog).clear()
+            except Exception:
+                pass
             chat_screen.query_one("#status", Static).update("Thread cleared")
             return True
 

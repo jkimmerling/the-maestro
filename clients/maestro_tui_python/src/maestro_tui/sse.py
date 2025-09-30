@@ -90,8 +90,8 @@ def _append_text_segment(buckets: dict[int, str], idx: int, delta: str) -> None:
 
 def collate_frames_to_messages(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
-    assistant_chunks: dict[int, str] = {}
-    thinking_seen = False
+    assistant_chunks: list[str] = []
+    # We don't keep the thinking placeholder; TUI shows final text after tools for parity
 
     for f in frames:
         kind = f.get("kind")
@@ -99,35 +99,27 @@ def collate_frames_to_messages(frames: list[dict[str, Any]]) -> list[dict[str, A
         if kind == "user_text":
             messages.append({"role": "user", "text": payload.get("text", "")})
         elif kind == "assistant_thinking":
-            if not thinking_seen:
-                messages.append({"role": "assistant", "text": "…"})
-                thinking_seen = True
+            # Skip placeholder in transcript; keep UI simple
+            continue
         elif kind == "assistant_text":
-            idx = int(f.get("idx", 0))
             delta = payload.get("delta", "")
-            _append_text_segment(assistant_chunks, idx, delta)
+            if delta:
+                assistant_chunks.append(delta)
         elif kind == "function_call":
             calls = payload.get("calls", [])
             for c in calls:
-                messages.append({
-                    "role": "assistant",
-                    "text": f"[tool:{c.get('name')}] {c.get('arguments')}"
-                })
+                name = c.get("name") or "tool"
+                args = c.get("arguments") or "{}"
+                messages.append({"role": "assistant", "text": f"[tool:{name}] {args}"})
         elif kind == "tool_result":
             preview = payload.get("preview") or payload.get("output") or "(tool result)"
-            messages.append({"role": "tool", "text": str(preview)[:1000]})
+            messages.append({"role": "tool", "text": str(preview)[:4000]})
         elif kind == "final":
-            pass
+            continue
 
     if assistant_chunks:
-        ordered = "".join(v for _, v in sorted(assistant_chunks.items(), key=lambda kv: kv[0]))
-        # Replace the placeholder thinking bubble if present
-        for i in range(len(messages) - 1, -1, -1):
-            if messages[i]["role"] == "assistant" and messages[i]["text"] == "…":
-                messages[i] = {"role": "assistant", "text": ordered}
-                break
-        else:
-            messages.append({"role": "assistant", "text": ordered})
+        ordered = "".join(assistant_chunks)
+        messages.append({"role": "assistant", "text": ordered})
 
     return messages
 
