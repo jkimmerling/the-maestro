@@ -492,10 +492,10 @@ class MaestroTextual(App):
         self._selected_provider = settings.last_provider
 
         self._install_sigint_double_tap()
-        # One-time setup wizard if missing defaults
+        # Always land in Chat; if missing defaults, overlay wizard on top
+        self.push_screen(ChatScreen())
         if not settings.last_auth_id or not settings.last_model or not settings.session_defaults:
             self.push_screen(ModelPickerScreen(for_new_session=False, as_wizard=True))
-        self.push_screen(ChatScreen())
 
     async def on_unmount(self) -> None:
         if self.api:
