@@ -590,11 +590,11 @@ defmodule TheMaestro.Tools.Runtime do
           {:ok, base_path} ->
             max_hits = 500
 
-    matcher =
-      case Regex.compile(pattern) do
-        {:ok, re} -> re
-        _ -> pattern
-      end
+            matcher =
+              case Regex.compile(pattern) do
+                {:ok, re} -> re
+                _ -> pattern
+              end
 
             files = collect_files(base_path, base_cwd, 10_000)
 

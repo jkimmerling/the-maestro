@@ -2,7 +2,6 @@ defmodule TheMaestroWeb.ApiSessionsRemoteTest do
   use TheMaestroWeb.ConnCase, async: true
 
   import TheMaestro.ConversationsFixtures
-  alias TheMaestro.Conversations
 
   @token "0000000000000000"
 

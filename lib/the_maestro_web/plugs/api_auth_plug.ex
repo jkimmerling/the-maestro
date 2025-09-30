@@ -19,6 +19,7 @@ defmodule TheMaestroWeb.ApiAuthPlug do
 
   defp valid_token?(token) when is_binary(token) do
     expected = Application.get_env(:the_maestro, :api, []) |> Keyword.get(:token)
+
     if is_binary(expected) and token == expected do
       true
     else
@@ -26,7 +27,9 @@ defmodule TheMaestroWeb.ApiAuthPlug do
         %TheMaestro.ApiKeys.ApiKey{} = key ->
           _ = TheMaestro.ApiKeys.mark_used!(key)
           true
-        _ -> false
+
+        _ ->
+          false
       end
     end
   end

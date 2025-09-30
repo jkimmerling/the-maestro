@@ -31,7 +31,9 @@ defmodule TheMaestroWeb.ApiKeyLive.Index do
           <.link navigate={~p"/api_keys/#{api_key}/edit"}>Rotate</.link>
         </:action>
         <:action :let={{id, api_key}}>
-          <.link phx-click={JS.push("revoke", value: %{id: api_key.id}) |> hide("##{id}")}>Revoke</.link>
+          <.link phx-click={JS.push("revoke", value: %{id: api_key.id}) |> hide("##{id}")}>
+            Revoke
+          </.link>
         </:action>
       </.table>
     </Layouts.app>

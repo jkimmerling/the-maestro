@@ -37,8 +37,9 @@ defmodule TheMaestroWeb.Api.FramesController do
       {:turn_frame, frame} ->
         kind = Map.get(frame, "kind") || Map.get(frame, :kind) || "event"
         IO.puts("[FRAMES] SSE emitting turn_frame: #{inspect(kind)}")
+
         case chunk(conn, encode_event(%{"data" => frame})) do
-          {:ok, conn} -> loop(conn, %{st | final_sent?: final? || (kind == "final")})
+          {:ok, conn} -> loop(conn, %{st | final_sent?: final? || kind == "final"})
           {:error, _} = err -> err
         end
 
@@ -50,6 +51,7 @@ defmodule TheMaestroWeb.Api.FramesController do
           :done ->
             _ = chunk(conn, encode_event(%{"data" => %{kind: "done"}}))
             loop(conn, st)
+
           _ ->
             loop(conn, st)
         end

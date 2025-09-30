@@ -40,6 +40,7 @@ defmodule TheMaestroWeb.ApiKeysLiveTest do
   test "rotate shows token", %{conn: conn} do
     {key, _token} = TheMaestro.ApiKeys.create_key!("Temp2")
     {:ok, show_live, _} = live(conn, ~p"/api_keys/#{key}")
+
     assert {:ok, form_live, _} =
              show_live
              |> element("a", "Rotate")

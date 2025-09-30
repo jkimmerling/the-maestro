@@ -74,6 +74,7 @@ defmodule TheMaestro.MCP.Import do
 
   defp parse_cli_add(rest) do
     {option_tokens, command_tail} = split_inline(rest)
+
     {opts, positional, invalid_opts} =
       OptionParser.parse(option_tokens, strict: @cli_strict, keep: @cli_keep, aliases: [])
 
@@ -87,10 +88,14 @@ defmodule TheMaestro.MCP.Import do
 
   defp do_parse_cli_add(opts, positional, command_tail) do
     name = opts[:name] || List.first(positional)
+
     cond do
-      is_nil(name) -> {:error, "missing server name"}
+      is_nil(name) ->
+        {:error, "missing server name"}
+
       length(positional) > 1 and is_nil(opts[:name]) ->
         {:error, "unexpected positional arguments: #{Enum.join(tl(positional), ", ")}"}
+
       true ->
         with {:ok, headers} <- parse_kv(opts, :header, "header"),
              {:ok, env} <- parse_kv(opts, :env, "env"),
@@ -100,6 +105,7 @@ defmodule TheMaestro.MCP.Import do
              {:ok, command, inline_args} <- resolve_command(opts, command_tail) do
           url = keyword_get(opts, :url)
           transport = Keyword.get(opts, :transport) || default_transport(url, command)
+
           if is_nil(transport) do
             {:error, "transport is required when neither URL nor command is provided"}
           else
@@ -119,6 +125,7 @@ defmodule TheMaestro.MCP.Import do
               is_enabled: determine_enabled(opts),
               definition_source: "cli"
             }
+
             {:ok, {:upsert, [%{server: server_attrs, alias: keyword_get(opts, :alias)}]}}
           end
         else
@@ -359,26 +366,26 @@ defmodule TheMaestro.MCP.Import do
   }
 
   defp normalize_source(value, fallback) do
-    fb = case fallback do
-      v when is_binary(v) and v != "" -> v
-      _ -> "manual"
-    end
+    fb =
+      case fallback do
+        v when is_binary(v) and v != "" -> v
+        _ -> "manual"
+      end
 
     case value do
       v when is_binary(v) ->
         trimmed = String.trim(v)
+
         if trimmed == "" do
           fb
         else
           Map.get(@source_aliases, String.downcase(trimmed), fb)
         end
 
-      _ -> fb
+      _ ->
+        fb
     end
   end
-
-  # Deprecated branch retained for clarity; all unknowns map to fallback
-  defp fallback_for_unknown(_value, fallback), do: to_string(fallback)
 
   defp parse_metadata(nil), do: {:ok, %{}}
 

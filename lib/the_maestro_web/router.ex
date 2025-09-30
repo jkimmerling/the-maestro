@@ -13,12 +13,13 @@ defmodule TheMaestroWeb.Router do
   pipeline :api do
     plug :accepts, ["json"]
   end
+
   pipeline :api_auth do
     plug TheMaestroWeb.ApiAuthPlug
   end
 
-    scope "/", TheMaestroWeb do
-      pipe_through :browser
+  scope "/", TheMaestroWeb do
+    pipe_through :browser
     live "/", DashboardLive, :index
     live "/dashboard", DashboardLive, :index
     live "/chat_history", ChatEntryLive.Index, :index

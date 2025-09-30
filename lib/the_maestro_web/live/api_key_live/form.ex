@@ -71,6 +71,7 @@ defmodule TheMaestroWeb.ApiKeyLive.Form do
       |> Ecto.Changeset.change(%{})
       |> Ecto.Changeset.cast(api_key_params, [:label])
       |> Ecto.Changeset.validate_required([:label])
+
     {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
   end
 
@@ -80,6 +81,7 @@ defmodule TheMaestroWeb.ApiKeyLive.Form do
 
   defp save_api_key(socket, :edit, _params) do
     {key, token} = ApiKeys.rotate!(socket.assigns.api_key)
+
     {:noreply,
      socket
      |> assign(:api_key, key)
@@ -91,6 +93,7 @@ defmodule TheMaestroWeb.ApiKeyLive.Form do
   defp save_api_key(socket, :new, api_key_params) do
     label = api_key_params["label"]
     {api_key, token} = ApiKeys.create_key!(label)
+
     {:noreply,
      socket
      |> assign(:api_key, api_key)

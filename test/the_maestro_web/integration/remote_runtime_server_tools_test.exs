@@ -30,13 +30,38 @@ defmodule TheMaestroWeb.Integration.RemoteRuntimeServerToolsTest do
     def stream_request(_req, _opts) do
       stream =
         [
-          sse(%{"type" => "response.output_item.added", "item" => %{"id" => "call-todo-1", "type" => "function_call", "name" => "TodoWrite"}}),
-          sse(%{"type" => "response.function_call_arguments.delta", "item_id" => "call-todo-1", "arguments" => "{\"title\":\"Do something\"}"}),
-          sse(%{"type" => "response.output_item.done", "item" => %{"id" => "call-todo-1", "type" => "function_call"}}),
-          sse(%{"type" => "response.output_item.added", "item" => %{"id" => "call-edit-2", "type" => "function_call", "name" => "Edit"}}),
-          sse(%{"type" => "response.function_call_arguments.delta", "item_id" => "call-edit-2", "arguments" => "{\"path\":\"README.md\",\"match\":\"foo\",\"replace\":\"bar\"}"}),
-          sse(%{"type" => "response.output_item.done", "item" => %{"id" => "call-edit-2", "type" => "function_call"}}),
-          sse(%{"type" => "response.completed", "response" => %{"usage" => %{"input_tokens" => 1, "output_tokens" => 1, "total_tokens" => 2}}})
+          sse(%{
+            "type" => "response.output_item.added",
+            "item" => %{"id" => "call-todo-1", "type" => "function_call", "name" => "TodoWrite"}
+          }),
+          sse(%{
+            "type" => "response.function_call_arguments.delta",
+            "item_id" => "call-todo-1",
+            "arguments" => "{\"title\":\"Do something\"}"
+          }),
+          sse(%{
+            "type" => "response.output_item.done",
+            "item" => %{"id" => "call-todo-1", "type" => "function_call"}
+          }),
+          sse(%{
+            "type" => "response.output_item.added",
+            "item" => %{"id" => "call-edit-2", "type" => "function_call", "name" => "Edit"}
+          }),
+          sse(%{
+            "type" => "response.function_call_arguments.delta",
+            "item_id" => "call-edit-2",
+            "arguments" => "{\"path\":\"README.md\",\"match\":\"foo\",\"replace\":\"bar\"}"
+          }),
+          sse(%{
+            "type" => "response.output_item.done",
+            "item" => %{"id" => "call-edit-2", "type" => "function_call"}
+          }),
+          sse(%{
+            "type" => "response.completed",
+            "response" => %{
+              "usage" => %{"input_tokens" => 1, "output_tokens" => 1, "total_tokens" => 2}
+            }
+          })
         ]
         |> Stream.concat(Stream.iterate(0, & &1) |> Stream.take(0))
 
@@ -50,7 +75,7 @@ defmodule TheMaestroWeb.Integration.RemoteRuntimeServerToolsTest do
     {:ok, thread_id} = Chat.ensure_thread(session.id)
     :ok = Chat.subscribe(session.id)
 
-    {:ok, %{stream_id: stream_id}} =
+    {:ok, %{stream_id: _stream_id}} =
       Chat.start_turn(session.id, thread_id, "ping",
         t0_ms: System.monotonic_time(:millisecond),
         streaming_adapter: __MODULE__.SSEAdapter,
@@ -67,7 +92,8 @@ defmodule TheMaestroWeb.Integration.RemoteRuntimeServerToolsTest do
     # Small timeout set in config/test.exs should emit a timeout frame for pending IO calls
     timeout_frame? = fn ->
       receive do
-        {:turn_frame, frame} -> frame["kind"] == "tool_result" and (frame["payload"]["timeout"] == true)
+        {:turn_frame, frame} ->
+          frame["kind"] == "tool_result" and frame["payload"]["timeout"] == true
       after
         300 -> false
       end

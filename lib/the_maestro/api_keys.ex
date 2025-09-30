@@ -13,9 +13,11 @@ defmodule TheMaestro.ApiKeys do
   def create_key!(label) when is_binary(label) do
     token = Base.encode32(:crypto.strong_rand_bytes(20), case: :lower, padding: false)
     hash = hash_token(token)
+
     changeset =
       %ApiKey{}
       |> ApiKey.changeset(%{label: label, token_hash: hash})
+
     key = Repo.insert!(changeset)
     {key, token}
   end

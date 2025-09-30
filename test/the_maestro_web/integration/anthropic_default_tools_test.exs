@@ -24,7 +24,7 @@ defmodule TheMaestroWeb.Integration.AnthropicDefaultToolsTest do
         expires_at: DateTime.utc_now()
       })
 
-    {:ok, session} =
+    {:ok, _session} =
       Conversations.create_session(%{
         name: "Anth Default Tools",
         auth_id: saved_auth.id,

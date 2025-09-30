@@ -68,6 +68,7 @@ defmodule TheMaestro.Tools.TodoWrite do
   defp normalize_status(_), do: "pending"
 
   defp valid_item?(%{content: c, activeForm: a, status: s}) do
-    is_binary(c) and String.trim(c) != "" and is_binary(a) and String.trim(a) != "" and s in @valid_statuses
+    is_binary(c) and String.trim(c) != "" and is_binary(a) and String.trim(a) != "" and
+      s in @valid_statuses
   end
 end
