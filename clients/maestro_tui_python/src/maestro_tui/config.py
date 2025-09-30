@@ -21,6 +21,7 @@ class Settings:
     last_provider: Optional[str] = None
     last_auth_id: Optional[str] = None
     last_model: Optional[str] = None
+    session_defaults: dict | None = None
 
 
 def load_config(path: Path = CONFIG_PATH) -> ApiConfig:
@@ -40,6 +41,7 @@ def load_settings(path: Path = SETTINGS_PATH) -> Settings:
         last_provider=data.get("last_provider"),
         last_auth_id=data.get("last_auth_id"),
         last_model=data.get("last_model"),
+        session_defaults=data.get("session_defaults"),
     )
 
 
@@ -48,7 +50,7 @@ def save_settings(settings: Settings, path: Path = SETTINGS_PATH) -> None:
         "last_provider": settings.last_provider,
         "last_auth_id": settings.last_auth_id,
         "last_model": settings.last_model,
+        "session_defaults": settings.session_defaults or {},
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2))
-

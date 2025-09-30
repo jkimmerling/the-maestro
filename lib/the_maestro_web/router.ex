@@ -79,9 +79,12 @@ defmodule TheMaestroWeb.Router do
     get "/providers/:_provider/saved_auths/:auth_id/models", ProvidersController, :models
 
     get "/sessions", SessionsController, :index
+    get "/sessions/:id", SessionsController, :show
     post "/sessions", SessionsController, :create
     patch "/sessions/:id", SessionsController, :update
     delete "/sessions/:id", SessionsController, :delete
+    get "/sessions/:id/tools/inventory", SessionsController, :inventory
+    get "/sessions/:id/prompts", SessionsController, :prompts
     post "/sessions/:session_id/turns", TurnsController, :create
 
     # SSE frames for a specific turn
@@ -99,6 +102,14 @@ defmodule TheMaestroWeb.Router do
     post "/sessions/:session_id/threads", ThreadsController, :create
     patch "/threads/:thread_id", ThreadsController, :update
     post "/threads/:thread_id/clear", ThreadsController, :clear
+  end
+
+  scope "/api", TheMaestroWeb.Api do
+    pipe_through [:api, :api_auth]
+
+    # Prompt library and MCP options for TUI parity
+    get "/prompts/library", PromptsController, :library
+    get "/mcp/servers/options", MCPController, :options
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

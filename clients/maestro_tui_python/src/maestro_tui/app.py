@@ -9,6 +9,7 @@ from textual.scroll_view import ScrollView
 from textual.containers import Horizontal, Vertical
 from rich.markdown import Markdown as RichMarkdown
 from textual.screen import Screen
+import os
 from textual import on, events
 
 from .config import load_config, load_settings, save_settings, Settings
@@ -53,6 +54,26 @@ class ChatScreen(Screen):
         else:
             self.app.exit()
 
+    async def on_screen_resume(self) -> None:
+        """Called when screen becomes active again after being suspended"""
+        # If we now have a session but no transcript, load it
+        if self.app.current_session_id and not self._transcript:
+            # Refresh provider from server for parity
+            try:
+                if self.app.api and self.app.current_session_id:
+                    info = await self.app.api.get_session(self.app.current_session_id)
+                    self.app._selected_provider = info.get("provider")
+            except Exception:
+                pass
+            await self.load_latest_thread_and_transcript()
+        # If the session was updated (e.g., model changed), reload transcript
+        elif getattr(self.app, '_session_updated', False):
+            self.app._session_updated = False
+            # Clear transcript to force reload with new provider/model
+            self._transcript = []
+            await self.load_latest_thread_and_transcript()
+            self.query_one("#status", Static).update("Model updated successfully")
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         text = event.value or ""
         stripped = text.strip()
@@ -77,11 +98,19 @@ class ChatScreen(Screen):
                 self.query_one("#status", Static).update("No settings found. Use /model to configure.")
                 return
             try:
+                defaults = settings.session_defaults or {}
                 self.app.current_session_id = await self.app.api.create_session(
                     auth_id=settings.last_auth_id,
-                    model=settings.last_model,
-                    tool_runtime="remote"
+                    model_id=settings.last_model,
+                    working_dir=os.getcwd(),
+                    tool_runtime="remote",
+                    **defaults,
                 )
+                try:
+                    info = await self.app.api.get_session(self.app.current_session_id)
+                    self.app._selected_provider = info.get("provider")
+                except Exception:
+                    pass
             except Exception as e:
                 self.query_one("#status", Static).update(f"Failed to create session: {e}")
                 return
@@ -249,8 +278,9 @@ class SessionsScreen(Screen):
         idx = event.index
         if 0 <= idx < len(self.sessions):
             self.app.current_session_id = self.sessions[idx]["id"]
-            chat_screen = self.app.query_one(ChatScreen)
-            await chat_screen.load_latest_thread_and_transcript()
+            self.app.current_thread_id = None
+            # Mark that we selected a new session so ChatScreen knows to reload
+            self.app._session_updated = True
             self.app.pop_screen()
 
     @on(Button.Pressed, "#btn-new")
@@ -266,6 +296,10 @@ class SessionsScreen(Screen):
         session_id = self.sessions[idx]["id"]
         try:
             await self.app.api.delete_session(session_id)
+            if self.app.current_session_id == session_id:
+                self.app.current_session_id = None
+                self.app.current_thread_id = None
+                self.app._session_updated = True
             await self.refresh_sessions()
         except Exception as e:
             # Could show error in status bar
@@ -286,9 +320,10 @@ class ModelPickerScreen(Screen):
     #providers, #auths, #models { width: 30; height: 1fr; }
     """
 
-    def __init__(self, for_new_session: bool = False) -> None:
+    def __init__(self, for_new_session: bool = False, as_wizard: bool = False) -> None:
         super().__init__()
         self.for_new_session = for_new_session
+        self.as_wizard = as_wizard
         self.providers: list[str] = []
         self.auths: list[dict] = []
         self.models: list[str] = []
@@ -351,20 +386,35 @@ class ModelPickerScreen(Screen):
             last_auth_id=self.selected_auth_id,
             last_model=self.selected_model,
         )
+        # Initialize session defaults if wizard
+        if self.as_wizard:
+            settings.session_defaults = {
+                "persona": {},
+                "memory": {},
+                "tools": {"allowed": {}},
+                "mcp_server_ids": [],
+                "system_prompt_ids_by_provider": {},
+            }
         save_settings(settings)
         self.app._selected_provider = self.selected_provider
 
-        if self.for_new_session:
+        if self.as_wizard:
+            self.app.pop_screen()
+            return
+        elif self.for_new_session:
             # Create new session
             session_id = await self.app.api.create_session(
                 auth_id=self.selected_auth_id,
-                model=self.selected_model,
+                model_id=self.selected_model,
+                working_dir=os.getcwd(),
                 tool_runtime="remote",
             )
             self.app.current_session_id = session_id
-            chat_screen = self.app.query_one(ChatScreen)
-            await chat_screen.load_latest_thread_and_transcript()
+            self.app.current_thread_id = None
+            # Ensure ChatScreen reloads transcript for the new active session
+            self.app._session_updated = True
             # Pop back to sessions screen, then it will pop to chat
+            # ChatScreen will reload when it becomes active again
             self.app.pop_screen()
             self.app.pop_screen()
         else:
@@ -375,6 +425,8 @@ class ModelPickerScreen(Screen):
                     auth_id=self.selected_auth_id,
                     model_id=self.selected_model,
                 )
+                # Mark that the session was updated so ChatScreen knows to reload
+                self.app._session_updated = True
             self.app.pop_screen()
 
     def _update_confirm_button(self) -> None:
@@ -429,6 +481,7 @@ class MaestroTextual(App):
         self.current_session_id: str | None = None
         self.current_thread_id: str | None = None
         self._selected_provider: str | None = None
+        self._session_updated: bool = False
 
     async def on_mount(self) -> None:
         cfg = load_config()
@@ -439,6 +492,9 @@ class MaestroTextual(App):
         self._selected_provider = settings.last_provider
 
         self._install_sigint_double_tap()
+        # One-time setup wizard if missing defaults
+        if not settings.last_auth_id or not settings.last_model or not settings.session_defaults:
+            self.push_screen(ModelPickerScreen(for_new_session=False, as_wizard=True))
         self.push_screen(ChatScreen())
 
     async def on_unmount(self) -> None:
@@ -462,41 +518,43 @@ class MaestroTextual(App):
         except Exception:
             pass
 
-    async def handle_slash_command(self, text: str, chat_screen: ChatScreen) -> None:
+    async def handle_slash_command(self, text: str, chat_screen: ChatScreen) -> bool:
         cmdline = text.lstrip("/").strip()
         if not cmdline:
-            return
+            return False
         name, *rest = cmdline.split()
         name = name.lower()
 
         if name in ("help", "h"):
             chat_screen.query_one("#status", Static).update("/help /sessions /model /threads /clear")
-            return
+            return True
 
         if name in ("sessions", "session"):
             self.push_screen(SessionsScreen())
-            return
+            return True
 
         if name == "model":
             self.push_screen(ModelPickerScreen(for_new_session=False))
-            return
+            return True
 
         if name in ("threads", "thread"):
             if not self.current_session_id:
                 chat_screen.query_one("#status", Static).update("No session selected")
-                return
+                return True
             self.push_screen(ThreadPicker(self.api, self.current_session_id, chat_screen.set_current_thread))
-            return
+            return True
 
         if name == "clear":
             if not self.current_thread_id:
                 chat_screen.query_one("#status", Static).update("No thread selected")
-                return
+                return True
             await self.api.clear_thread(self.current_thread_id)
             chat_screen._transcript = []
             chat_screen.query_one("#chat", Static).update("")
             chat_screen.query_one("#status", Static).update("Thread cleared")
-            return
+            return True
+
+        return False
 
     def action_new_session(self) -> None:
         self.push_screen(SessionsScreen())
