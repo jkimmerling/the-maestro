@@ -55,6 +55,20 @@ class MaestroAPI:
         r.raise_for_status()
         return r.json().get("sessions", [])
 
+    async def update_session(self, session_id: str, *, auth_id: Optional[str] = None, model_id: Optional[str] = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if auth_id:
+            payload["auth_id"] = auth_id
+        if model_id:
+            payload["model_id"] = model_id
+        r = await self._client.patch(f"/sessions/{session_id}", json=payload, headers=self.headers)
+        r.raise_for_status()
+        return r.json()
+
+    async def delete_session(self, session_id: str) -> None:
+        r = await self._client.delete(f"/sessions/{session_id}", headers=self.headers)
+        r.raise_for_status()
+
     # Turns
     async def start_turn(self, session_id: str, message: str, thread_id: Optional[str] = None) -> dict[str, Any]:
         payload: dict[str, Any] = {"message": message}
