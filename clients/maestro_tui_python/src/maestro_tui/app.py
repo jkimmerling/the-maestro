@@ -124,12 +124,16 @@ class ChatScreen(Screen):
 
         async def _send():
             try:
+                async def on_tool_frame(msg: dict) -> None:
+                    await self.append_messages([msg])
+
                 msgs = await send_and_orchestrate(
                     self.app.api,
                     session_id=self.app.current_session_id,
                     message=stripped,
                     provider=prov,
                     base_dir=base_dir,
+                    on_frame=on_tool_frame,
                 )
                 if self.app.current_thread_id:
                     await self.load_latest_thread_and_transcript()

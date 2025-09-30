@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Awaitable, Callable
 
 from .api.client import MaestroAPI
 from .sse import SSEClient, collate_frames_to_messages
@@ -26,6 +26,7 @@ async def orchestrate_turn(
     stream_id: str,
     provider: str,
     base_dir: str,
+    on_frame: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
 ) -> List[Dict[str, Any]]:
     frames: List[Dict[str, Any]] = []
     sse = SSEClient(api._client)
@@ -49,6 +50,9 @@ async def orchestrate_turn(
                 tool, norm_args = normalize(prov, name, raw_args)
                 output = await execute_normalized(tool, norm_args, base_dir)
                 await api.post_tool_result(session_id, stream_id, call_id=call_id, name=name, output=output)
+                if on_frame is not None:
+                    preview = output if isinstance(output, str) else json.dumps(output) if output is not None else ""
+                    await on_frame({"role": "tool", "text": preview})
         else:
             frames.append(frame)
             if kind == "final":
