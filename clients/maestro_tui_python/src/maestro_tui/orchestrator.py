@@ -67,7 +67,15 @@ async def send_and_orchestrate(
     message: str,
     provider: str,
     base_dir: str,
+    on_frame: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
 ) -> List[Dict[str, Any]]:
     turn = await api.start_turn(session_id, message)
     stream_id = turn["stream_id"]
-    return await orchestrate_turn(api, session_id=session_id, stream_id=stream_id, provider=provider, base_dir=base_dir)
+    return await orchestrate_turn(
+        api,
+        session_id=session_id,
+        stream_id=stream_id,
+        provider=provider,
+        base_dir=base_dir,
+        on_frame=on_frame,
+    )
