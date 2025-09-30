@@ -52,4 +52,42 @@ defmodule TheMaestroWeb.Api.SessionsController do
         |> json(%{error: inspect(changeset.errors)})
     end
   end
+
+  def update(conn, %{"id" => id} = params) do
+    session = Conversations.get_session!(id)
+
+    attrs = %{}
+    attrs = if params["auth_id"], do: Map.put(attrs, "auth_id", params["auth_id"]), else: attrs
+    attrs = if params["model_id"], do: Map.put(attrs, "model_id", params["model_id"]), else: attrs
+
+    case Conversations.update_session(session, attrs) do
+      {:ok, updated_session} ->
+        json(conn, %{
+          session_id: to_string(updated_session.id),
+          auth_id: updated_session.auth_id,
+          model_id: updated_session.model_id
+        })
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: inspect(changeset.errors)})
+    end
+  end
+
+  def delete(conn, %{"id" => id}) do
+    session = Conversations.get_session!(id)
+
+    case Conversations.delete_session(session) do
+      {:ok, _session} ->
+        conn
+        |> put_status(:no_content)
+        |> json(%{})
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: inspect(changeset.errors)})
+    end
+  end
 end

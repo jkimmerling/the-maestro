@@ -80,6 +80,8 @@ defmodule TheMaestroWeb.Router do
 
     get "/sessions", SessionsController, :index
     post "/sessions", SessionsController, :create
+    patch "/sessions/:id", SessionsController, :update
+    delete "/sessions/:id", SessionsController, :delete
     post "/sessions/:session_id/turns", TurnsController, :create
 
     # SSE frames for a specific turn
