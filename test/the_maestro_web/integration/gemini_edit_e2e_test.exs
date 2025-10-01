@@ -60,6 +60,9 @@ defmodule TheMaestroWeb.Integration.GeminiEditE2ETest do
 
     assert Enum.any?(logs, &(&1.tool_name == "edit"))
     assert Enum.all?(logs, &(&1.chat_entry_id == entry.id))
+
+    # Verify file was created by the edit tool
+    assert File.exists?(abs), "Edit tool should have created file at #{abs}"
     assert String.trim_trailing(File.read!(abs), "\n") == "hi"
 
     # Provider-accurate parts (Cloud Code)
