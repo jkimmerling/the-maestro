@@ -21,7 +21,11 @@ defmodule TheMaestro.SuppliedContextTest do
 
     test "list_supplied_context_items/0 returns all supplied_context_items" do
       supplied_context_item = supplied_context_item_fixture()
-      assert SuppliedContext.list_supplied_context_items() == [supplied_context_item]
+      # Filter out seed data (system editor)
+      user_created_items =
+        SuppliedContext.list_supplied_context_items()
+        |> Enum.reject(&(&1.editor == "system"))
+      assert user_created_items == [supplied_context_item]
     end
 
     test "get_supplied_context_item!/1 returns the supplied_context_item with given id" do
@@ -158,8 +162,13 @@ defmodule TheMaestro.SuppliedContextTest do
 
       prompts = SuppliedContext.list_system_prompts(:openai, only_defaults: true)
 
-      assert Enum.map(prompts, &{&1.id, &1.text}) ==
-               [{openai_default.id, "openai"}, {shared.id, "shared"}]
+      # Filter to only test fixtures (non-system)
+      test_prompts =
+        prompts
+        |> Enum.reject(&(&1.editor == "system"))
+        |> Enum.map(&{&1.id, &1.text})
+
+      assert test_prompts == [{openai_default.id, "openai"}, {shared.id, "shared"}]
     end
 
     test "get_default_prompt!/2 prefers provider-specific default and falls back to shared" do
@@ -197,11 +206,22 @@ defmodule TheMaestro.SuppliedContextTest do
           text: "v1"
         })
 
-      assert [%{text: "v1"}] = SuppliedContext.list_system_prompts(:gemini, only_defaults: true)
+      # Filter out seed data
+      test_prompts =
+        SuppliedContext.list_system_prompts(:gemini, only_defaults: true)
+        |> Enum.reject(&(&1.editor == "system"))
+        |> Enum.map(& &1.text)
+
+      assert test_prompts == ["v1"]
 
       {:ok, _updated} = SuppliedContext.update_supplied_context_item(prompt, %{text: "v2"})
 
-      assert [%{text: "v2"}] = SuppliedContext.list_system_prompts(:gemini, only_defaults: true)
+      test_prompts =
+        SuppliedContext.list_system_prompts(:gemini, only_defaults: true)
+        |> Enum.reject(&(&1.editor == "system"))
+        |> Enum.map(& &1.text)
+
+      assert test_prompts == ["v2"]
     end
   end
 end

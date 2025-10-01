@@ -38,14 +38,16 @@ class MaestroAPI:
         return r.json().get("models", [])
 
     # Sessions
-    async def create_session(self, *, auth_id: str, model: str, working_dir: Optional[str] = None,
-                             tool_runtime: str = "remote") -> str:
-        payload = {
+    async def create_session(self, *, auth_id: str, model_id: str, working_dir: Optional[str] = None,
+                             tool_runtime: str = "remote", **extra: Any) -> str:
+        payload: Dict[str, Any] = {
             "auth_id": auth_id,
-            "model": model,
+            "model_id": model_id,
             "working_dir": working_dir,
             "tool_runtime": tool_runtime,
         }
+        # Merge optional parity keys: persona, memory, tools, mcp_server_ids, system_prompt_ids_by_provider
+        payload.update(extra)
         r = await self._client.post("/sessions", json=payload, headers=self.headers)
         r.raise_for_status()
         return r.json()["session_id"]
@@ -54,6 +56,25 @@ class MaestroAPI:
         r = await self._client.get("/sessions", params={"tool_runtime": "remote"}, headers=self.headers)
         r.raise_for_status()
         return r.json().get("sessions", [])
+
+    async def update_session(self, session_id: str, *, auth_id: Optional[str] = None, model_id: Optional[str] = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if auth_id:
+            payload["auth_id"] = auth_id
+        if model_id:
+            payload["model_id"] = model_id
+        r = await self._client.patch(f"/sessions/{session_id}", json=payload, headers=self.headers)
+        r.raise_for_status()
+        return r.json()
+
+    async def get_session(self, session_id: str) -> dict[str, Any]:
+        r = await self._client.get(f"/sessions/{session_id}", headers=self.headers)
+        r.raise_for_status()
+        return r.json()
+
+    async def delete_session(self, session_id: str) -> None:
+        r = await self._client.delete(f"/sessions/{session_id}", headers=self.headers)
+        r.raise_for_status()
 
     # Turns
     async def start_turn(self, session_id: str, message: str, thread_id: Optional[str] = None) -> dict[str, Any]:
@@ -107,3 +128,19 @@ class MaestroAPI:
     async def clear_thread(self, thread_id: str) -> None:
         r = await self._client.post(f"/threads/{thread_id}/clear", headers=self.headers)
         r.raise_for_status()
+
+    # Parity helper endpoints
+    async def prompt_library(self) -> dict[str, list[dict[str, Any]]]:
+        r = await self._client.get("/prompts/library", headers=self.headers)
+        r.raise_for_status()
+        return r.json().get("library", {})
+
+    async def mcp_server_options(self) -> list[dict[str, Any]]:
+        r = await self._client.get("/mcp/servers/options", headers=self.headers)
+        r.raise_for_status()
+        return r.json().get("servers", [])
+
+    async def tool_inventory(self, session_id: str) -> dict[str, list[dict[str, Any]]]:
+        r = await self._client.get(f"/sessions/{session_id}/tools/inventory", headers=self.headers)
+        r.raise_for_status()
+        return r.json()

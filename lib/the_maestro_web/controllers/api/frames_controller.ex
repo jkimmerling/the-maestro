@@ -39,8 +39,17 @@ defmodule TheMaestroWeb.Api.FramesController do
         IO.puts("[FRAMES] SSE emitting turn_frame: #{inspect(kind)}")
 
         case chunk(conn, encode_event(%{"data" => frame})) do
-          {:ok, conn} -> loop(conn, %{st | final_sent?: final? || kind == "final"})
-          {:error, _} = err -> err
+          {:ok, conn} ->
+            if kind == "final" do
+              # Close connection after sending final frame
+              IO.puts("[FRAMES] SSE closing after final frame")
+              conn
+            else
+              loop(conn, %{st | final_sent?: final?})
+            end
+
+          {:error, _} = err ->
+            err
         end
 
       {:session_stream, envelope} ->

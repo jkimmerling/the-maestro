@@ -63,8 +63,10 @@ defmodule TheMaestro.Conversations do
   @doc """
   Gets a single session preloaded with saved_authentication.
   """
-  def get_session_with_auth!(id),
-    do: Repo.get!(Session, id) |> Repo.preload([:saved_authentication])
+  def get_session_with_auth!(id) do
+    from(s in Session, where: s.id == ^id, preload: [:saved_authentication])
+    |> Repo.one!()
+  end
 
   @doc """
   Creates a session.

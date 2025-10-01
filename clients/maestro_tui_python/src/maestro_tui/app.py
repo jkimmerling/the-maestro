@@ -4,83 +4,44 @@ import asyncio
 import signal
 import time
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button
-from textual.scroll_view import ScrollView
+from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Button, RichLog
 from textual.containers import Horizontal, Vertical
 from rich.markdown import Markdown as RichMarkdown
 from textual.screen import Screen
+import os
 from textual import on, events
 
-from .config import load_config
+from .config import load_config, load_settings, save_settings, Settings
 from .api.client import MaestroAPI
-from .sse import drain_until_final
+from .sse import drain_until_final, frame_to_message_incremental
 from .orchestrator import send_and_orchestrate
 
 
-class MaestroTextual(App):
+class ChatScreen(Screen):
+    """Main chat interface"""
+
     BINDINGS = [
-        ("ctrl+shift+n", "new_session", "New Session"),
-        ("ctrl+shift+t", "threads", "Threads"),
-        ("ctrl+shift+h", "help", "Help"),
         ("ctrl+c", "double_quit", "Quit"),
     ]
+
     CSS = """
-    Screen { align: center middle; }
+    ChatScreen { align: center middle; }
     #status { height: 1; }
-    #sessions { width: 40; }
-    #chat_scroll { width: 80; height: 1fr; }
-    Horizontal { height: 1fr; }
+    #chat_log { padding: 1; height: 1fr; }
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self.api: MaestroAPI | None = None
-        self.sessions: list[dict] = []
-        self.current_session_id: str | None = None
-        self.current_thread_id: str | None = None
-        self._session_meta: dict[str, dict] = {}
-        self._selected_provider: str | None = None
         self._quit_armed: bool = False
         self._quit_armed_at: float = 0.0
+        self._transcript: list[dict] = []
 
-    async def on_mount(self) -> None:
-        cfg = load_config()
-        self.api = MaestroAPI(cfg)
-        await self.refresh_sessions()
-        self._install_sigint_double_tap()
-        try:
-            await self.query_one("#chat_scroll", ScrollView).focus()
-        except Exception:
-            pass
-
-    async def on_unmount(self) -> None:
-        if self.api:
-            await self.api.close()
-
-    def _install_sigint_double_tap(self) -> None:
-        def handler(signum, frame):  # noqa: ARG001
-            def do():
-                now = time.time()
-                if (not self._quit_armed) or (now - self._quit_armed_at > 3.0):
-                    self._quit_armed = True
-                    self._quit_armed_at = now
-                    try:
-                        self.query_one("#status", Static).update("Press Ctrl+C again to quit")
-                    except Exception:
-                        pass
-                else:
-                    self.exit()
-
-            try:
-                self.call_from_thread(do)
-            except Exception:
-                # last resort
-                self.exit()
-
-        try:
-            signal.signal(signal.SIGINT, handler)
-        except Exception:
-            pass
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield RichLog(id="chat_log", wrap=True, markup=False)
+        yield Input(placeholder="Type message or /sessions, /model, /threads, /clear...", id="composer")
+        yield Static("Ready", id="status")
+        yield Footer()
 
     def action_double_quit(self) -> None:
         now = time.time()
@@ -89,70 +50,27 @@ class MaestroTextual(App):
             self._quit_armed_at = now
             self.query_one("#status", Static).update("Press Ctrl+C again to quit")
         else:
-            self.exit()
+            self.app.exit()
 
-    async def refresh_sessions(self) -> None:
-        assert self.api
-        self.sessions = await self.api.list_remote_sessions()
-        # Sort by last_used_at / updated_at / inserted_at descending
-        def ts(s: dict) -> str:
-            return s.get("last_used_at") or s.get("updated_at") or s.get("inserted_at") or ""
-        self.sessions.sort(key=ts, reverse=True)
-        lv = self.query_one("#sessions", ListView)
-        lv.clear()
-        for s in self.sessions:
-            lv.append(ListItem(Static(f"{s.get('name') or s['id']}", expand=True)))
-            sid = str(s["id"])
-            self._session_meta[sid] = {
-                "working_dir": s.get("working_dir")
-            }
-        # Auto-select most recent session if none selected
-        if self.sessions and not self.current_session_id:
-            self.query_one("#sessions", ListView).index = 0
-            self.current_session_id = self.sessions[0]["id"]
-            await self._load_latest_thread_and_transcript()
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Horizontal():
-            with Vertical(id="left"):
-                yield Button("➕ New Session", id="btn-new")
-                yield Button("🧵 Threads", id="btn-threads")
-                yield ListView(id="sessions")
-            with ScrollView(id="chat_scroll"):
-                yield Static("", id="chat")
-        yield Input(placeholder="Type message...", id="composer")
-        yield Static("Ready", id="status")
-        yield Footer()
-
-    async def on_list_view_selected(self, event: ListView.Selected) -> None:
-        idx = event.index
-        if 0 <= idx < len(self.sessions):
-            self.current_session_id = self.sessions[idx]["id"]
-            await self._load_latest_thread_and_transcript()
-            self.query_one("#status", Static).update(f"Selected {self.current_session_id}")
-
-    async def on_mouse_scroll(self, event: events.MouseScroll) -> None:
-        # Always scroll the transcript with mouse wheel, even if the input is focused
-        try:
-            sv = self.query_one("#chat_scroll", ScrollView)
-            dy = getattr(event, "delta_y", 0) or 0
-            if dy != 0:
-                off = getattr(sv, "scroll_offset", None)
-                if off is not None:
-                    step = 4
-                    new_y = max(0, off.y + (-dy) * step)
-                    sv.scroll_to(y=new_y, animate=False)
-                    event.stop()
-                    return
-                # Fallback
-                if dy > 0:
-                    sv.scroll_to(y=0, animate=False)
-                else:
-                    sv.scroll_end(animate=False)
-                event.stop()
-        except Exception:
-            pass
+    async def on_screen_resume(self) -> None:
+        """Called when screen becomes active again after being suspended"""
+        # If we now have a session but no transcript, load it
+        if self.app.current_session_id and not self._transcript:
+            # Refresh provider from server for parity
+            try:
+                if self.app.api and self.app.current_session_id:
+                    info = await self.app.api.get_session(self.app.current_session_id)
+                    self.app._selected_provider = info.get("provider")
+            except Exception:
+                pass
+            await self.load_latest_thread_and_transcript()
+        # If the session was updated (e.g., model changed), reload transcript
+        elif getattr(self.app, '_session_updated', False):
+            self.app._session_updated = False
+            # Clear transcript to force reload with new provider/model
+            self._transcript = []
+            await self.load_latest_thread_and_transcript()
+            self.query_one("#status", Static).update("Model updated successfully")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         text = event.value or ""
@@ -165,82 +83,122 @@ class MaestroTextual(App):
             event.input.refresh()
         except Exception:
             pass
-        # optimistic echo
-        await self._append_messages([{"role": "user", "text": stripped}])
+
+        # Handle slash commands
         if stripped.startswith("/"):
-            handled = await self.handle_slash_command(stripped)
-            if handled:
-                # remove optimistic echo for commands by reloading transcript
-                await self._load_latest_thread_and_transcript()
-                return
-        if not self.current_session_id:
-            self.query_one("#status", Static).update("Pick a remote session first")
+            await self.app.handle_slash_command(stripped, self)
             return
-        assert self.api
-        prov = (self._session_meta.get(self.current_session_id, {}) or {}).get("provider") or self._selected_provider or ""
-        base_dir = (self._session_meta.get(self.current_session_id, {}) or {}).get("working_dir") or "."
+
+        # Lazy session creation
+        if not self.app.current_session_id:
+            settings = load_settings()
+            if not settings.last_auth_id or not settings.last_model:
+                self.query_one("#status", Static).update("No settings found. Use /model to configure.")
+                return
+            try:
+                defaults = settings.session_defaults or {}
+                self.app.current_session_id = await self.app.api.create_session(
+                    auth_id=settings.last_auth_id,
+                    model_id=settings.last_model,
+                    working_dir=os.getcwd(),
+                    tool_runtime="remote",
+                    **defaults,
+                )
+                try:
+                    info = await self.app.api.get_session(self.app.current_session_id)
+                    self.app._selected_provider = info.get("provider")
+                except Exception:
+                    pass
+            except Exception as e:
+                self.query_one("#status", Static).update(f"Failed to create session: {e}")
+                return
+
+        # Optimistic echo for immediate feedback; frames will not add a duplicate
+        await self.append_messages([{"role": "user", "text": stripped}])
+
+        assert self.app.api
+        prov = self.app._selected_provider or ""
+        base_dir = "."
+
         async def _send():
             try:
+                # Track state for incremental frame processing
+                frame_state = {"assistant_chunks": []}
+                last_assistant_idx = None  # Track last assistant message for updates
+
+                async def on_frame_incremental(frame: dict) -> None:
+                    nonlocal last_assistant_idx
+                    msg = frame_to_message_incremental(frame, frame_state)
+                    if msg:
+                        # Check if this is a partial update to existing assistant message
+                        if msg.get("role") == "assistant" and msg.get("_partial"):
+                            if last_assistant_idx is not None:
+                                # Update existing assistant message
+                                self._transcript[last_assistant_idx] = {
+                                    "role": "assistant",
+                                    "text": msg["text"]
+                                }
+                                await self.render_transcript(self._transcript)
+                            else:
+                                # First assistant message
+                                await self.append_messages([{"role": "assistant", "text": msg["text"]}])
+                                last_assistant_idx = len(self._transcript) - 1
+                        elif msg.get("role") == "assistant" and msg.get("_final"):
+                            # Final assistant response - replace partial if exists
+                            if last_assistant_idx is not None:
+                                self._transcript[last_assistant_idx] = {
+                                    "role": "assistant",
+                                    "text": msg["text"]
+                                }
+                                await self.render_transcript(self._transcript)
+                            else:
+                                await self.append_messages([{"role": "assistant", "text": msg["text"]}])
+                            last_assistant_idx = None  # Reset for next turn
+                        else:
+                            # Tool call, tool result, or other message types
+                            await self.append_messages([msg])
+                            last_assistant_idx = None  # Reset assistant tracking
+
                 msgs = await send_and_orchestrate(
-                    self.api,
-                    session_id=self.current_session_id,
+                    self.app.api,
+                    session_id=self.app.current_session_id,
                     message=stripped,
                     provider=prov,
                     base_dir=base_dir,
+                    on_frame=on_frame_incremental,
                 )
-                if self.current_thread_id:
-                    await self._load_latest_thread_and_transcript()
-                else:
-                    await self._append_messages(msgs)
+                # Final collation already handled by incremental updates
+                # But ensure we're in sync (this is a no-op if everything streamed properly)
                 self.query_one("#status", Static).update("Sent")
             except Exception as e:
                 self.query_one("#status", Static).update(f"Error: {e}")
+
         asyncio.create_task(_send())
 
-    async def handle_slash_command(self, text: str) -> bool:
-        assert self.api
-        cmdline = text.lstrip("/").strip()
-        if not cmdline:
-            return False
-        name, *rest = cmdline.split()
-        name = name.lower()
-        if name in ("help", "h"):
-            self.query_one("#status", Static).update("/help /model /clear /threads")
-            return True
-        if name in ("model", "session"):
-            self.open_wizard()
-            return True
-        if name in ("threads", "thread"):
-            await self.open_threads()
-            return True
-        if name == "clear":
-            if not self.current_thread_id:
-                self.query_one("#status", Static).update("No thread selected")
-                return True
-            await self.api.clear_thread(self.current_thread_id)
-            self._transcript = []
-            self.query_one("#chat", Static).update("")
-            self.query_one("#status", Static).update("Thread cleared")
-            return True
-        return False
-
-    async def _load_latest_thread_and_transcript(self) -> None:
-        assert self.api and self.current_session_id
-        threads = await self.api.list_threads(self.current_session_id)
+    async def load_latest_thread_and_transcript(self) -> None:
+        assert self.app.api and self.app.current_session_id
+        threads = await self.app.api.list_threads(self.app.current_session_id)
         if not threads:
-            self.current_thread_id = None
-            self.query_one("#chat", Static).update("")
+            self.app.current_thread_id = None
+            try:
+                self.query_one("#chat_log", RichLog).clear()
+            except Exception:
+                pass
             return
         threads.sort(key=lambda t: t.get("updated_at") or "", reverse=True)
         await self.set_current_thread(threads[0]["id"])
 
-    async def _append_messages(self, new_msgs: list[dict]) -> None:
-        cur = getattr(self, "_transcript", [])
-        cur.extend(new_msgs)
-        self._transcript = cur
-        await self._render_transcript(cur)
+    async def set_current_thread(self, thread_id: str) -> None:
+        assert self.app.api
+        self.app.current_thread_id = thread_id
+        messages = await self.app.api.thread_snapshot(thread_id)
+        await self.render_transcript(messages)
 
-    async def _render_transcript(self, messages: list[dict]) -> None:
+    async def append_messages(self, new_msgs: list[dict]) -> None:
+        self._transcript.extend(new_msgs)
+        await self.render_transcript(self._transcript)
+
+    async def render_transcript(self, messages: list[dict]) -> None:
         normalized: list[dict] = []
         for m in messages:
             role = m.get("role")
@@ -250,7 +208,8 @@ class MaestroTextual(App):
                 text = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
             normalized.append({"role": role, "text": text})
         self._transcript = normalized
-        # prune preamble before first user message and collapse duplicate assistant lines
+
+        # Prune preamble before first user message and collapse duplicate assistant lines
         cut: list[dict] = []
         start = 0
         for i, mm in enumerate(normalized):
@@ -270,14 +229,16 @@ class MaestroTextual(App):
             cut.append(mm)
             prev = mm
         self._transcript = cut
-        md = self._build_markdown(cut)
-        self.query_one("#chat", Static).update(RichMarkdown(md))
+        md = self.build_markdown(cut)
         try:
-            self.query_one("#chat_scroll", ScrollView).scroll_end(animate=False)
+            log = self.query_one("#chat_log", RichLog)
+            log.clear()
+            log.write(RichMarkdown(md))
+            log.scroll_end(animate=False)
         except Exception:
             pass
 
-    def _build_markdown(self, messages: list[dict]) -> str:
+    def build_markdown(self, messages: list[dict]) -> str:
         out: list[str] = []
         for m in messages:
             role = (m.get("role") or "").lower()
@@ -292,99 +253,138 @@ class MaestroTextual(App):
                 out.append(f"**System**\n\n{text}\n\n---\n")
         return "".join(out)
 
-    async def set_current_thread(self, thread_id: str) -> None:
-        assert self.api
-        self.current_thread_id = thread_id
-        messages = await self.api.thread_snapshot(thread_id)
-        await self._render_transcript(messages)
+    # RichLog handles mouse wheel scrolling; no custom handler required
+
+
+class SessionsScreen(Screen):
+    """Sessions list and management"""
+
+    BINDINGS = [("escape", "app.pop_screen", "Back")]
+
+    CSS = """
+    SessionsScreen { align: center middle; }
+    #sessions { width: 60; height: 1fr; }
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sessions: list[dict] = []
+
+    async def on_mount(self) -> None:
+        await self.refresh_sessions()
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Vertical():
+            with Horizontal():
+                yield Button("New Session", id="btn-new")
+                yield Button("Delete Session", id="btn-delete")
+                yield Button("Back to Chat", id="btn-back")
+            yield ListView(id="sessions")
+        yield Footer()
+
+    async def refresh_sessions(self) -> None:
+        assert self.app.api
+        self.sessions = await self.app.api.list_remote_sessions()
+        def ts(s: dict) -> str:
+            return s.get("last_used_at") or s.get("updated_at") or s.get("inserted_at") or ""
+        self.sessions.sort(key=ts, reverse=True)
+        lv = self.query_one("#sessions", ListView)
+        lv.clear()
+        for s in self.sessions:
+            lv.append(ListItem(Static(f"{s.get('name') or s['id']}", expand=True)))
+
+    async def on_list_view_selected(self, event: ListView.Selected) -> None:
+        idx = event.index
+        if 0 <= idx < len(self.sessions):
+            self.app.current_session_id = self.sessions[idx]["id"]
+            self.app.current_thread_id = None
+            # Mark that we selected a new session so ChatScreen knows to reload
+            self.app._session_updated = True
+            self.app.pop_screen()
 
     @on(Button.Pressed, "#btn-new")
-    def open_wizard(self) -> None:
-        self.push_screen(NewSessionWizard(self.api, self._on_session_created))
+    def open_new_session_wizard(self) -> None:
+        self.app.push_screen(ModelPickerScreen(for_new_session=True))
 
-    @on(Button.Pressed, "#btn-threads")
-    async def open_threads(self) -> None:
-        if not self.current_session_id:
-            self.query_one("#status", Static).update("Pick a session first")
+    @on(Button.Pressed, "#btn-delete")
+    async def delete_current_session(self) -> None:
+        lv = self.query_one("#sessions", ListView)
+        idx = lv.index
+        if idx is None or idx < 0 or idx >= len(self.sessions):
             return
-        self.push_screen(ThreadPicker(self.api, self.current_session_id, self._on_thread_selected))
+        session_id = self.sessions[idx]["id"]
+        try:
+            await self.app.api.delete_session(session_id)
+            if self.app.current_session_id == session_id:
+                self.app.current_session_id = None
+                self.app.current_thread_id = None
+                self.app._session_updated = True
+            await self.refresh_sessions()
+        except Exception as e:
+            # Could show error in status bar
+            pass
 
-    def action_new_session(self) -> None:
-        self.open_wizard()
-
-    def action_threads(self) -> None:
-        self.call_from_executor(asyncio.create_task, self.open_threads())
-
-    def action_help(self) -> None:
-        self.query_one("#status", Static).update("Hotkeys: Ctrl+Shift+N new, Ctrl+Shift+T threads. Slash: /help /model /threads /clear")
-
-    async def _on_session_created(self, session_id: str) -> None:
-        await self.refresh_sessions()
-        # Select the newly created session
-        for i, s in enumerate(self.sessions):
-            if s["id"] == session_id:
-                self.query_one("#sessions", ListView).index = i
-                self.current_session_id = session_id
-                if self._selected_provider:
-                    meta = self._session_meta.get(session_id, {}) or {}
-                    meta["provider"] = self._selected_provider
-                    self._session_meta[session_id] = meta
-                await self._load_latest_thread_and_transcript()
-                break
+    @on(Button.Pressed, "#btn-back")
+    def go_back(self) -> None:
+        self.app.pop_screen()
 
 
-class NewSessionWizard(Screen):
-    BINDINGS = [
-        ("escape", "app.pop_screen", "Close"),
-    ]
+class ModelPickerScreen(Screen):
+    """Model picker for switching or creating sessions"""
 
-    def __init__(self, api: MaestroAPI | None, on_created_cb):
+    BINDINGS = [("escape", "app.pop_screen", "Back")]
+
+    CSS = """
+    ModelPickerScreen { align: center middle; }
+    #providers, #auths, #models { width: 30; height: 1fr; }
+    """
+
+    def __init__(self, for_new_session: bool = False, as_wizard: bool = False) -> None:
         super().__init__()
-        self.api = api
-        self.on_created_cb = on_created_cb
+        self.for_new_session = for_new_session
+        self.as_wizard = as_wizard
         self.providers: list[str] = []
         self.auths: list[dict] = []
         self.models: list[str] = []
         self.selected_provider: str | None = None
-        self.selected_auth: str | None = None
+        self.selected_auth_id: str | None = None
         self.selected_model: str | None = None
 
     async def on_mount(self) -> None:
-        assert self.api
-        self.providers = await self.api.list_providers()
+        assert self.app.api
+        self.providers = await self.app.api.list_providers()
         lv = self.query_one("#providers", ListView)
         for p in self.providers:
             lv.append(ListItem(Static(p)))
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
+        yield Header()
         with Horizontal():
             yield ListView(id="providers")
             yield ListView(id="auths")
             yield ListView(id="models")
-        yield Button("Create Session", id="btn-create", disabled=True)
+        yield Button("Confirm", id="btn-confirm", disabled=True)
         yield Footer()
 
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
-        assert self.api
+        assert self.app.api
         wid = event.list_view.id
         if wid == "providers":
             self.selected_provider = self.providers[event.index]
-            # Load auths
-            self.auths = await self.api.list_saved_auths(self.selected_provider)
+            self.auths = await self.app.api.list_saved_auths(self.selected_provider)
             la = self.query_one("#auths", ListView)
             la.clear()
             for a in self.auths:
-                la.append(ListItem(Static(f"{a['label']} ({a['id']})")))
-            # Clear models
+                la.append(ListItem(Static(f"{a['label']} ({a['id'][:8]}...)")))
             self.query_one("#models", ListView).clear()
-            self.selected_auth = None
+            self.selected_auth_id = None
             self.selected_model = None
         elif wid == "auths":
             if not self.selected_provider:
                 return
-            self.selected_auth = self.auths[event.index]["id"]
-            models = await self.api.list_models(self.selected_provider, self.selected_auth)
+            self.selected_auth_id = self.auths[event.index]["id"]
+            models = await self.app.api.list_models(self.selected_provider, self.selected_auth_id)
             self.models = models
             lm = self.query_one("#models", ListView)
             lm.clear()
@@ -393,27 +393,65 @@ class NewSessionWizard(Screen):
             self.selected_model = None
         elif wid == "models":
             self.selected_model = self.models[event.index]
-        self._update_create_button()
+        self._update_confirm_button()
 
-    @on(Button.Pressed, "#btn-create")
-    async def create_session(self) -> None:
-        assert self.api and self.selected_auth and self.selected_model
-        # remember provider on the app for orchestration
-        try:
-            self.app._selected_provider = self.selected_provider
-        except Exception:
-            pass
-        session_id = await self.api.create_session(
-            auth_id=self.selected_auth,
-            model=self.selected_model,
-            tool_runtime="remote",
+    @on(Button.Pressed, "#btn-confirm")
+    async def confirm_selection(self) -> None:
+        if not (self.selected_auth_id and self.selected_model):
+            return
+
+        # Save to settings
+        settings = Settings(
+            last_provider=self.selected_provider,
+            last_auth_id=self.selected_auth_id,
+            last_model=self.selected_model,
         )
-        await self.on_created_cb(session_id)
-        self.app.pop_screen()
+        # Initialize session defaults if wizard
+        if self.as_wizard:
+            settings.session_defaults = {
+                "persona": {},
+                "memory": {},
+                "tools": {"allowed": {}},
+                "mcp_server_ids": [],
+                "system_prompt_ids_by_provider": {},
+            }
+        save_settings(settings)
+        self.app._selected_provider = self.selected_provider
 
-    def _update_create_button(self) -> None:
-        btn = self.query_one("#btn-create", Button)
-        btn.disabled = not (self.selected_provider and self.selected_auth and self.selected_model)
+        if self.as_wizard:
+            self.app.pop_screen()
+            return
+        elif self.for_new_session:
+            # Create new session
+            session_id = await self.app.api.create_session(
+                auth_id=self.selected_auth_id,
+                model_id=self.selected_model,
+                working_dir=os.getcwd(),
+                tool_runtime="remote",
+            )
+            self.app.current_session_id = session_id
+            self.app.current_thread_id = None
+            # Ensure ChatScreen reloads transcript for the new active session
+            self.app._session_updated = True
+            # Pop back to sessions screen, then it will pop to chat
+            # ChatScreen will reload when it becomes active again
+            self.app.pop_screen()
+            self.app.pop_screen()
+        else:
+            # Update existing session if one is active
+            if self.app.current_session_id:
+                await self.app.api.update_session(
+                    self.app.current_session_id,
+                    auth_id=self.selected_auth_id,
+                    model_id=self.selected_model,
+                )
+                # Mark that the session was updated so ChatScreen knows to reload
+                self.app._session_updated = True
+            self.app.pop_screen()
+
+    def _update_confirm_button(self) -> None:
+        btn = self.query_one("#btn-confirm", Button)
+        btn.disabled = not (self.selected_provider and self.selected_auth_id and self.selected_model)
 
 
 class ThreadPicker(Screen):
@@ -446,6 +484,117 @@ class ThreadPicker(Screen):
             tid = self.threads[idx]["id"]
             await self.on_selected_cb(tid)
             self.app.pop_screen()
+
+
+class MaestroTextual(App):
+    """Main TUI application"""
+
+    BINDINGS = [
+        ("ctrl+shift+n", "new_session", "New Session"),
+        ("ctrl+shift+t", "threads", "Threads"),
+        ("ctrl+shift+h", "help", "Help"),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.api: MaestroAPI | None = None
+        self.current_session_id: str | None = None
+        self.current_thread_id: str | None = None
+        self._selected_provider: str | None = None
+        self._session_updated: bool = False
+
+    async def on_mount(self) -> None:
+        cfg = load_config()
+        self.api = MaestroAPI(cfg)
+
+        # Load settings
+        settings = load_settings()
+        self._selected_provider = settings.last_provider
+
+        self._install_sigint_double_tap()
+        # Always land in Chat; if missing defaults, overlay wizard on top
+        self.push_screen(ChatScreen())
+        if not settings.last_auth_id or not settings.last_model or not settings.session_defaults:
+            self.push_screen(ModelPickerScreen(for_new_session=False, as_wizard=True))
+
+    async def on_unmount(self) -> None:
+        if self.api:
+            await self.api.close()
+
+    def _install_sigint_double_tap(self) -> None:
+        def handler(signum, frame):  # noqa: ARG001
+            def do():
+                try:
+                    chat = self.query_one(ChatScreen)
+                    chat.action_double_quit()
+                except Exception:
+                    self.exit()
+            try:
+                self.call_from_thread(do)
+            except Exception:
+                self.exit()
+        try:
+            signal.signal(signal.SIGINT, handler)
+        except Exception:
+            pass
+
+    async def handle_slash_command(self, text: str, chat_screen: ChatScreen) -> bool:
+        cmdline = text.lstrip("/").strip()
+        if not cmdline:
+            return False
+        name, *rest = cmdline.split()
+        name = name.lower()
+
+        if name in ("help", "h"):
+            chat_screen.query_one("#status", Static).update("/help /sessions /model /threads /clear")
+            return True
+
+        if name in ("sessions", "session"):
+            self.push_screen(SessionsScreen())
+            return True
+
+        if name == "model":
+            self.push_screen(ModelPickerScreen(for_new_session=False))
+            return True
+
+        if name in ("threads", "thread"):
+            if not self.current_session_id:
+                chat_screen.query_one("#status", Static).update("No session selected")
+                return True
+            self.push_screen(ThreadPicker(self.api, self.current_session_id, chat_screen.set_current_thread))
+            return True
+
+        if name == "clear":
+            if not self.current_thread_id:
+                chat_screen.query_one("#status", Static).update("No thread selected")
+                return True
+            await self.api.clear_thread(self.current_thread_id)
+            chat_screen._transcript = []
+            try:
+                chat_screen.query_one("#chat_log", RichLog).clear()
+            except Exception:
+                pass
+            chat_screen.query_one("#status", Static).update("Thread cleared")
+            return True
+
+        return False
+
+    def action_new_session(self) -> None:
+        self.push_screen(SessionsScreen())
+
+    def action_threads(self) -> None:
+        chat = self.query_one(ChatScreen)
+        if not self.current_session_id:
+            chat.query_one("#status", Static).update("No session selected")
+            return
+        self.push_screen(ThreadPicker(self.api, self.current_session_id, chat.set_current_thread))
+
+    def action_help(self) -> None:
+        try:
+            chat = self.query_one(ChatScreen)
+            chat.query_one("#status", Static).update("Hotkeys: Ctrl+Shift+N sessions, Ctrl+Shift+T threads. Slash: /help /sessions /model /threads /clear")
+        except Exception:
+            pass
 
 
 def main() -> None:

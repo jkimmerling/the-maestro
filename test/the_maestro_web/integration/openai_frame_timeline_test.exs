@@ -1,11 +1,15 @@
 defmodule TheMaestroWeb.Integration.OpenAIFrameTimelineTest do
-  use TheMaestroWeb.ConnCase, async: true
+  use TheMaestroWeb.ConnCase, async: false
 
+  alias Ecto.Adapters.SQL.Sandbox
   alias TheMaestro.Auth
   alias TheMaestro.Chat
   alias TheMaestro.Conversations
 
   setup do
+    # Enable shared sandbox mode for spawned processes (ConnCase already checked out)
+    Sandbox.mode(TheMaestro.Repo, {:shared, self()})
+
     {:ok, saved_auth} =
       Auth.create_saved_authentication(%{
         provider: "openai",

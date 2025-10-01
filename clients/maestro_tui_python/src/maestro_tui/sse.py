@@ -2,10 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import random
 from typing import AsyncGenerator, Dict, Any, Optional
 
 import httpx
+
+# Debug logging to file
+logger = logging.getLogger("maestro_tui.sse")
+logger.setLevel(logging.DEBUG)
+fh = logging.FileHandler("/tmp/maestro_tui_sse_debug.log")
+fh.setLevel(logging.DEBUG)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+fh.setFormatter(formatter)
+logger.addHandler(fh)
 
 
 class SSEClient:
@@ -40,6 +50,7 @@ class SSEClient:
     ) -> AsyncGenerator[Dict[str, Any], None]:
         attempt = 0
         total_attempts = 0
+        logger.info(f"Starting SSE stream to {url}, stop_on_final={stop_on_final}")
         while True:
             try:
                 async with self._client.stream("GET", url, headers=headers, timeout=None) as resp:
@@ -59,24 +70,32 @@ class SSEClient:
                             try:
                                 payload = json.loads(data_str)
                             except json.JSONDecodeError:
+                                logger.warning(f"Failed to parse JSON: {data_str[:100]}")
                                 continue
                             frame = payload.get("data", payload)
+                            kind = frame.get("kind")
+                            logger.debug(f"Received frame: kind={kind}")
                             yield {"event": event_name or "message", "data": frame}
-                            if stop_on_final and frame.get("kind") == "final":
-                                return
-                # Clean close without final — treat as retryable unless stop_on_final is False
+                            # Don't return immediately on final - let the caller handle it
+                            # Just continue yielding until stream naturally closes
+                # Clean close - if stop_on_final was set but we didn't get final, retry
+                logger.info(f"Stream closed cleanly, stop_on_final={stop_on_final}")
                 if stop_on_final:
                     total_attempts += 1
                     if self._max_retries is not None and total_attempts > self._max_retries:
+                        logger.warning(f"Max retries ({self._max_retries}) reached without final frame")
                         return
                     attempt += 1
+                    logger.info(f"Retrying stream (attempt {attempt})")
                     await self._sleep_backoff(attempt)
                     continue
                 else:
                     return
-            except (httpx.TransportError, httpx.ReadTimeout, httpx.RemoteProtocolError):
+            except (httpx.TransportError, httpx.ReadTimeout, httpx.RemoteProtocolError) as e:
+                logger.error(f"SSE stream error: {e}")
                 total_attempts += 1
                 if self._max_retries is not None and total_attempts > self._max_retries:
+                    logger.error(f"Max retries ({self._max_retries}) reached after errors")
                     return
                 attempt += 1
                 await self._sleep_backoff(attempt)
@@ -88,47 +107,121 @@ def _append_text_segment(buckets: dict[int, str], idx: int, delta: str) -> None:
     buckets[idx] = prev + delta
 
 
+def frame_to_message_incremental(frame: dict[str, Any], state: dict[str, Any]) -> dict[str, Any] | None:
+    """
+    Convert a single frame to a message for incremental rendering.
+
+    State tracks accumulated content across frames:
+    - 'assistant_chunks': list of text deltas being accumulated
+    - 'rendered_frame_ids': set of frame IDs we've already rendered
+
+    Returns a message dict or None if this frame shouldn't produce a visible message yet.
+    """
+    kind = frame.get("kind")
+    payload = frame.get("payload", {})
+
+    logger.debug(f"frame_to_message_incremental: kind={kind}")
+
+    if kind == "user_text":
+        return {"role": "user", "text": payload.get("text", "")}
+
+    elif kind == "assistant_thinking":
+        # Skip thinking frames in transcript
+        return None
+
+    elif kind == "assistant_text":
+        # Accumulate text deltas for streaming assistant response
+        delta = payload.get("delta", "")
+        if delta:
+            if "assistant_chunks" not in state:
+                state["assistant_chunks"] = []
+            state["assistant_chunks"].append(delta)
+            # Return accumulated text so far for live updates
+            accumulated = "".join(state["assistant_chunks"])
+            return {"role": "assistant", "text": accumulated, "_partial": True}
+        return None
+
+    elif kind == "function_call":
+        # Clear any accumulated assistant text (tool call means no text response yet)
+        state["assistant_chunks"] = []
+        calls = payload.get("calls", [])
+        messages = []
+        for c in calls:
+            name = c.get("name") or "tool"
+            args = c.get("arguments") or "{}"
+            messages.append({"role": "assistant", "text": f"[tool:{name}] {args}"})
+        # Return first call for now (or could return all)
+        return messages[0] if messages else None
+
+    elif kind == "tool_result":
+        preview = payload.get("preview") or payload.get("output") or "(tool result)"
+        return {"role": "tool", "text": str(preview)[:4000]}
+
+    elif kind == "final":
+        # Final frame has the authoritative assistant response
+        final_content = payload.get("content")
+        if final_content:
+            # Replace any accumulated chunks with final content
+            state["assistant_chunks"] = []
+            return {"role": "assistant", "text": final_content, "_final": True}
+        return None
+
+    elif kind in ("usage", "done"):
+        # Skip metadata frames
+        return None
+
+    return None
+
+
 def collate_frames_to_messages(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
-    assistant_chunks: dict[int, str] = {}
-    thinking_seen = False
+    assistant_chunks: list[str] = []
+    final_content: str | None = None
+    # We don't keep the thinking placeholder; TUI shows final text after tools for parity
+
+    logger.info(f"Collating {len(frames)} frames into messages")
 
     for f in frames:
         kind = f.get("kind")
         payload = f.get("payload", {})
+        logger.debug(f"Processing frame: kind={kind}, payload_keys={list(payload.keys()) if payload else []}")
+
         if kind == "user_text":
             messages.append({"role": "user", "text": payload.get("text", "")})
         elif kind == "assistant_thinking":
-            if not thinking_seen:
-                messages.append({"role": "assistant", "text": "…"})
-                thinking_seen = True
+            # Skip placeholder in transcript; keep UI simple
+            continue
         elif kind == "assistant_text":
-            idx = int(f.get("idx", 0))
             delta = payload.get("delta", "")
-            _append_text_segment(assistant_chunks, idx, delta)
+            if delta:
+                assistant_chunks.append(delta)
         elif kind == "function_call":
             calls = payload.get("calls", [])
             for c in calls:
-                messages.append({
-                    "role": "assistant",
-                    "text": f"[tool:{c.get('name')}] {c.get('arguments')}"
-                })
+                name = c.get("name") or "tool"
+                args = c.get("arguments") or "{}"
+                messages.append({"role": "assistant", "text": f"[tool:{name}] {args}"})
         elif kind == "tool_result":
             preview = payload.get("preview") or payload.get("output") or "(tool result)"
-            messages.append({"role": "tool", "text": str(preview)[:1000]})
+            messages.append({"role": "tool", "text": str(preview)[:4000]})
         elif kind == "final":
-            pass
+            # Extract final content - this is the authoritative assistant response
+            final_content = payload.get("content")
+            logger.info(f"Found final frame with content: {final_content[:100] if final_content else 'None'}")
+            continue
 
-    if assistant_chunks:
-        ordered = "".join(v for _, v in sorted(assistant_chunks.items(), key=lambda kv: kv[0]))
-        # Replace the placeholder thinking bubble if present
-        for i in range(len(messages) - 1, -1, -1):
-            if messages[i]["role"] == "assistant" and messages[i]["text"] == "…":
-                messages[i] = {"role": "assistant", "text": ordered}
-                break
-        else:
-            messages.append({"role": "assistant", "text": ordered})
+    # Use final content if available, otherwise use accumulated deltas
+    if final_content:
+        logger.info(f"Using final content ({len(final_content)} chars) as assistant response")
+        messages.append({"role": "assistant", "text": final_content})
+    elif assistant_chunks:
+        ordered = "".join(assistant_chunks)
+        logger.info(f"Using accumulated deltas ({len(ordered)} chars) as assistant response")
+        messages.append({"role": "assistant", "text": ordered})
+    else:
+        logger.warning("No assistant content found in frames")
 
+    logger.info(f"Collated to {len(messages)} messages")
     return messages
 
 
