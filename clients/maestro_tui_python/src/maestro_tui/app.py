@@ -13,7 +13,7 @@ from textual import on, events
 
 from .config import load_config, load_settings, save_settings, Settings
 from .api.client import MaestroAPI
-from .sse import drain_until_final
+from .sse import drain_until_final, frame_to_message_incremental
 from .orchestrator import send_and_orchestrate
 
 
@@ -122,8 +122,42 @@ class ChatScreen(Screen):
 
         async def _send():
             try:
-                async def on_tool_frame(msg: dict) -> None:
-                    await self.append_messages([msg])
+                # Track state for incremental frame processing
+                frame_state = {"assistant_chunks": []}
+                last_assistant_idx = None  # Track last assistant message for updates
+
+                async def on_frame_incremental(frame: dict) -> None:
+                    nonlocal last_assistant_idx
+                    msg = frame_to_message_incremental(frame, frame_state)
+                    if msg:
+                        # Check if this is a partial update to existing assistant message
+                        if msg.get("role") == "assistant" and msg.get("_partial"):
+                            if last_assistant_idx is not None:
+                                # Update existing assistant message
+                                self._transcript[last_assistant_idx] = {
+                                    "role": "assistant",
+                                    "text": msg["text"]
+                                }
+                                await self.render_transcript(self._transcript)
+                            else:
+                                # First assistant message
+                                await self.append_messages([{"role": "assistant", "text": msg["text"]}])
+                                last_assistant_idx = len(self._transcript) - 1
+                        elif msg.get("role") == "assistant" and msg.get("_final"):
+                            # Final assistant response - replace partial if exists
+                            if last_assistant_idx is not None:
+                                self._transcript[last_assistant_idx] = {
+                                    "role": "assistant",
+                                    "text": msg["text"]
+                                }
+                                await self.render_transcript(self._transcript)
+                            else:
+                                await self.append_messages([{"role": "assistant", "text": msg["text"]}])
+                            last_assistant_idx = None  # Reset for next turn
+                        else:
+                            # Tool call, tool result, or other message types
+                            await self.append_messages([msg])
+                            last_assistant_idx = None  # Reset assistant tracking
 
                 msgs = await send_and_orchestrate(
                     self.app.api,
@@ -131,10 +165,10 @@ class ChatScreen(Screen):
                     message=stripped,
                     provider=prov,
                     base_dir=base_dir,
-                    on_frame=on_tool_frame,
+                    on_frame=on_frame_incremental,
                 )
-                # Always render what we received; latest snapshot reloads will overwrite as needed
-                await self.append_messages(msgs)
+                # Final collation already handled by incremental updates
+                # But ensure we're in sync (this is a no-op if everything streamed properly)
                 self.query_one("#status", Static).update("Sent")
             except Exception as e:
                 self.query_one("#status", Static).update(f"Error: {e}")

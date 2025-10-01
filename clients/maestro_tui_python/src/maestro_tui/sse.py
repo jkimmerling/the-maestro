@@ -107,6 +107,72 @@ def _append_text_segment(buckets: dict[int, str], idx: int, delta: str) -> None:
     buckets[idx] = prev + delta
 
 
+def frame_to_message_incremental(frame: dict[str, Any], state: dict[str, Any]) -> dict[str, Any] | None:
+    """
+    Convert a single frame to a message for incremental rendering.
+
+    State tracks accumulated content across frames:
+    - 'assistant_chunks': list of text deltas being accumulated
+    - 'rendered_frame_ids': set of frame IDs we've already rendered
+
+    Returns a message dict or None if this frame shouldn't produce a visible message yet.
+    """
+    kind = frame.get("kind")
+    payload = frame.get("payload", {})
+
+    logger.debug(f"frame_to_message_incremental: kind={kind}")
+
+    if kind == "user_text":
+        return {"role": "user", "text": payload.get("text", "")}
+
+    elif kind == "assistant_thinking":
+        # Skip thinking frames in transcript
+        return None
+
+    elif kind == "assistant_text":
+        # Accumulate text deltas for streaming assistant response
+        delta = payload.get("delta", "")
+        if delta:
+            if "assistant_chunks" not in state:
+                state["assistant_chunks"] = []
+            state["assistant_chunks"].append(delta)
+            # Return accumulated text so far for live updates
+            accumulated = "".join(state["assistant_chunks"])
+            return {"role": "assistant", "text": accumulated, "_partial": True}
+        return None
+
+    elif kind == "function_call":
+        # Clear any accumulated assistant text (tool call means no text response yet)
+        state["assistant_chunks"] = []
+        calls = payload.get("calls", [])
+        messages = []
+        for c in calls:
+            name = c.get("name") or "tool"
+            args = c.get("arguments") or "{}"
+            messages.append({"role": "assistant", "text": f"[tool:{name}] {args}"})
+        # Return first call for now (or could return all)
+        return messages[0] if messages else None
+
+    elif kind == "tool_result":
+        preview = payload.get("preview") or payload.get("output") or "(tool result)"
+        return {"role": "tool", "text": str(preview)[:4000]}
+
+    elif kind == "final":
+        # Final frame has the authoritative assistant response
+        final_content = payload.get("content")
+        if final_content:
+            # Replace any accumulated chunks with final content
+            state["assistant_chunks"] = []
+            return {"role": "assistant", "text": final_content, "_final": True}
+        return None
+
+    elif kind in ("usage", "done"):
+        # Skip metadata frames
+        return None
+
+    return None
+
+
 def collate_frames_to_messages(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     assistant_chunks: list[str] = []

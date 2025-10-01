@@ -47,9 +47,15 @@ async def orchestrate_turn(
             logger.debug("Received 'done' marker, continuing to listen for final")
             continue
 
+        # Execute tool calls (but don't block streaming)
         if kind == "function_call":
             calls = (frame.get("payload") or {}).get("calls") or []
             logger.info(f"Processing {len(calls)} function calls")
+            # Stream the function_call frame first so UI shows tool call immediately
+            if on_frame is not None:
+                await on_frame(frame)
+
+            # Then execute tools
             for call in calls:
                 call_id = call.get("id") or ""
                 name = call.get("name") or ""
@@ -63,9 +69,10 @@ async def orchestrate_turn(
                 tool, norm_args = normalize(prov, name, raw_args)
                 output = await execute_normalized(tool, norm_args, base_dir)
                 await api.post_tool_result(session_id, stream_id, call_id=call_id, name=name, output=output)
-                if on_frame is not None:
-                    preview = output if isinstance(output, str) else json.dumps(output) if output is not None else ""
-                    await on_frame({"role": "tool", "text": preview})
+        else:
+            # Stream all other frame types immediately
+            if on_frame is not None:
+                await on_frame(frame)
 
         # Collect ALL frames including final
         frames.append(frame)

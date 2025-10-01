@@ -400,6 +400,7 @@ defmodule TheMaestro.Workers.TokenRefreshWorker do
       "access_token" => new_oauth_token.access_token,
       "refresh_token" =>
         new_oauth_token.refresh_token || Map.get(saved_auth.credentials, "refresh_token"),
+      "id_token" => Map.get(saved_auth.credentials, "id_token"),
       "token_type" => new_oauth_token.token_type || "Bearer",
       "scope" => new_oauth_token.scope
     }
