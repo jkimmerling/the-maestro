@@ -507,21 +507,30 @@ defmodule TheMaestro.Sessions.Manager do
   defp do_call_provider(:openai, session_name, messages, model, opts) do
     base_opts = [model: model, decl_session_id: Keyword.get(opts, :decl_session_id)]
     adapter = Keyword.get(opts, :streaming_adapter)
-    final_opts = if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
+    final_opts =
+      if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
     OpenAI.Streaming.stream_chat(session_name, messages, final_opts)
   end
 
   defp do_call_provider(:gemini, session_name, messages, model, opts) do
     base_opts = [model: model, decl_session_id: Keyword.get(opts, :decl_session_id)]
     adapter = Keyword.get(opts, :streaming_adapter)
-    final_opts = if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
+    final_opts =
+      if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
     Gemini.Streaming.stream_chat(session_name, messages, final_opts)
   end
 
   defp do_call_provider(:anthropic, session_name, messages, model, opts) do
     base_opts = [model: model, decl_session_id: Keyword.get(opts, :decl_session_id)]
     adapter = Keyword.get(opts, :streaming_adapter)
-    final_opts = if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
+    final_opts =
+      if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
     Anthropic.Streaming.stream_chat(session_name, messages, final_opts)
   end
 
@@ -1232,21 +1241,30 @@ defmodule TheMaestro.Sessions.Manager do
   defp do_followup_provider(:openai, session_name, items, model, opts) do
     base_opts = [model: model, decl_session_id: Keyword.get(opts, :decl_session_id)]
     adapter = Keyword.get(opts, :streaming_adapter)
-    final_opts = if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
+    final_opts =
+      if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
     OpenAI.Streaming.stream_tool_followup(session_name, items, final_opts)
   end
 
   defp do_followup_provider(:anthropic, session_name, items, model, opts) do
     base_opts = [model: model, decl_session_id: Keyword.get(opts, :decl_session_id)]
     adapter = Keyword.get(opts, :streaming_adapter)
-    final_opts = if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
+    final_opts =
+      if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
     Anthropic.Streaming.stream_tool_followup(session_name, items, final_opts)
   end
 
   defp do_followup_provider(:gemini, session_name, items, model, opts) do
     base_opts = [model: model, decl_session_id: Keyword.get(opts, :decl_session_id)]
     adapter = Keyword.get(opts, :streaming_adapter)
-    final_opts = if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
+    final_opts =
+      if adapter, do: Keyword.put(base_opts, :streaming_adapter, adapter), else: base_opts
+
     Gemini.Streaming.stream_tool_followup(session_name, items, final_opts)
   end
 

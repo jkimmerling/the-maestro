@@ -70,7 +70,10 @@ defmodule TheMaestroWeb.ApiSessionsParityTest do
       |> post(~p"/api/sessions", payload)
       |> json_response(200)
 
-    s = TheMaestro.Conversations.get_session!(resp["session_id"]) |> TheMaestro.Repo.preload(:mcp_servers)
+    s =
+      TheMaestro.Conversations.get_session!(resp["session_id"])
+      |> TheMaestro.Repo.preload(:mcp_servers)
+
     assert s.model_id == "gpt-4o"
     assert s.tool_runtime == "remote"
     assert s.persona == %{"role" => "coder"}

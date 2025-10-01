@@ -192,8 +192,11 @@ defmodule TheMaestroWeb.Api.SessionsController do
 
     canon =
       case Conversations.latest_snapshot(updated.id) do
-        %Conversations.ChatEntry{} = entry -> Map.get(entry, :combined_chat) || %{"messages" => []}
-        _ -> %{"messages" => []}
+        %Conversations.ChatEntry{} = entry ->
+          Map.get(entry, :combined_chat) || %{"messages" => []}
+
+        _ ->
+          %{"messages" => []}
       end
 
     {:ok, provider_msgs} = Conversations.Translator.to_provider(canon, prov)
@@ -206,7 +209,8 @@ defmodule TheMaestroWeb.Api.SessionsController do
         []
       end
 
-    {:ok, stream_id} = Chat.start_stream(updated.id, prov, session_name, provider_msgs, model, opts)
+    {:ok, stream_id} =
+      Chat.start_stream(updated.id, prov, session_name, provider_msgs, model, opts)
 
     json(conn, %{
       session_id: to_string(updated.id),
