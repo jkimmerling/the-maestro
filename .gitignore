@@ -78,9 +78,4 @@ playwright/
 scripts/
 source/
 
-# allow tracked Python client subtree and this story doc
-!clients/maestro_tui_python/**/*.py
-!clients/maestro_tui_python/**/*.md
-!docs/Story — Python Textual TUI Port.md
-!docs/TUI Usage and Deployment Guide.md
-!docs/story-tui-liveview-session-parity.md
+*venv/
