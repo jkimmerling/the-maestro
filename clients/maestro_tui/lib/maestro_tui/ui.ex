@@ -376,9 +376,19 @@ defmodule MaestroTui.UI do
 
     defp tlog(msg) when is_binary(msg) do
       case System.get_env("TUI_DEBUG") do
-        s when s in ["1", "true", "TRUE"] -> IO.puts(:stderr, "[tui] " <> msg)
+        s when s in ["1", "true", "TRUE"] ->
+          # Only log to file with microsecond timestamps - no stderr output
+          ts = :os.system_time(:microsecond)
+          File.write!("/Users/jasonk/Development/the_maestro/tui_debug.log", "[#{ts}] #{msg}\n", [:append])
         _ -> :ok
       end
+    end
+
+    defp hex_dump(binary, max_len \\ 50) when is_binary(binary) do
+      bytes = binary |> String.slice(0, max_len) |> :binary.bin_to_list()
+      hex = bytes |> Enum.map(&Integer.to_string(&1, 16)) |> Enum.join(" ")
+      printable = bytes |> Enum.map(fn b -> if b >= 32 and b <= 126, do: <<b>>, else: "." end) |> Enum.join("")
+      "hex:[#{hex}] chars:[#{printable}]"
     end
 
     def render(%State{screen: :wizard, providers: providers, prov_idx: pidx, auths: auths, auth_idx: aidx, models: models, model_idx: midx, wizard_focus: focus} = s) do
@@ -542,9 +552,20 @@ defmodule MaestroTui.UI do
     # remove ETS event handlers — use event-driven updates below
 
     defp exec_local(name, args_json, base) do
-      case dispatch(String.downcase(to_string(name)), args_json || "{}", base) do
-        {:ok, payload} -> {:ok, payload}
-        {:error, r} -> {:error, to_string(r)}
+      tlog("exec_local: name=#{name} base=#{base}")
+      tlog("exec_local: args_json=#{inspect(args_json) |> String.slice(0, 300)}")
+
+      name_lower = String.downcase(to_string(name))
+      args_str = args_json || "{}"
+      tlog("exec_local: calling dispatch(#{name_lower}, ...)")
+
+      case dispatch(name_lower, args_str, base) do
+        {:ok, payload} ->
+          tlog("exec_local: SUCCESS payload=#{inspect(payload) |> String.slice(0, 200)}")
+          {:ok, payload}
+        {:error, r} ->
+          tlog("exec_local: ERROR #{inspect(r)}")
+          {:error, to_string(r)}
       end
     end
 
@@ -552,12 +573,44 @@ defmodule MaestroTui.UI do
     defp io_tool?(_), do: false
 
     defp post_tool_result(session_id, stream_id, call_id, name, {:ok, payload}) do
+      tlog("post_tool_result: SUCCESS session=#{session_id} stream=#{stream_id} call=#{call_id} name=#{name}")
+      tlog("post_tool_result: payload=#{inspect(payload) |> String.slice(0, 300)}")
+
       url = API.base_url() <> "/api/sessions/" <> session_id <> "/turns/" <> stream_id <> "/tools/results"
       body = %{"call_id" => call_id, "name" => name, "output" => payload}
-      _ = Req.post(url: url, headers: [API.auth_header()], json: body, finch: MaestroTui.Finch)
-      :ok
+      tlog("post_tool_result: POSTing to #{url}")
+
+      case Req.post(url: url, headers: [API.auth_header()], json: body, finch: MaestroTui.Finch) do
+        {:ok, %Req.Response{status: status}} ->
+          tlog("post_tool_result: HTTP #{status}")
+          :ok
+        {:error, err} ->
+          tlog("post_tool_result: HTTP ERROR #{inspect(err)}")
+          :ok
+      end
     end
-    defp post_tool_result(_sid, _stream, _id, _name, {:error, _}), do: :ok
+    defp post_tool_result(session_id, stream_id, call_id, name, {:error, err}) do
+      tlog("post_tool_result: ERROR session=#{session_id} stream=#{stream_id} call=#{call_id} name=#{name}")
+      tlog("post_tool_result: error=#{inspect(err)}")
+
+      # Send error result to LLM so it can retry or adjust
+      url = API.base_url() <> "/api/sessions/" <> session_id <> "/turns/" <> stream_id <> "/tools/results"
+      error_msg = case err do
+        s when is_binary(s) -> s
+        other -> inspect(other)
+      end
+      body = %{"call_id" => call_id, "name" => name, "output" => "Error: #{error_msg}", "is_error" => true}
+      tlog("post_tool_result: POSTing error to #{url}")
+
+      case Req.post(url: url, headers: [API.auth_header()], json: body, finch: MaestroTui.Finch) do
+        {:ok, %Req.Response{status: status}} ->
+          tlog("post_tool_result: HTTP #{status}")
+          :ok
+        {:error, http_err} ->
+          tlog("post_tool_result: HTTP ERROR #{inspect(http_err)}")
+          :ok
+      end
+    end
 
     defp api_clear_thread(thread_id) do
       url = API.base_url() <> "/api/threads/" <> thread_id <> "/clear"
@@ -568,43 +621,65 @@ defmodule MaestroTui.UI do
     end
 
     defp dispatch("write_file", json, base) do
-      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.WriteFile.run(args, base_cwd: base)
+      tlog("dispatch: write_file")
+      with {:ok, args} <- Jason.decode(json) do
+        tlog("dispatch: calling WriteFile.run")
+        TheMaestro.Tools.WriteFile.run(args, base_cwd: base)
+      end
     end
     defp dispatch("write", json, base), do: dispatch("write_file", json, base)
     defp dispatch("create_file", json, base), do: dispatch("write_file", json, base)
     defp dispatch("shell", json, base) do
-      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Shell.run(args, base_cwd: base)
+      tlog("dispatch: shell")
+      with {:ok, args} <- Jason.decode(json) do
+        tlog("dispatch: calling Shell.run with #{inspect(args)}")
+        TheMaestro.Tools.Shell.run(args, base_cwd: base)
+      end
     end
     defp dispatch("bash", json, base), do: dispatch("shell", json, base)
     defp dispatch("run_shell_command", json, base), do: dispatch("shell", json, base)
     defp dispatch("list_directory", json, base) do
+      tlog("dispatch: list_directory")
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.ListDirectory.run(args, base_cwd: base)
     end
     defp dispatch("glob", json, base) do
+      tlog("dispatch: glob")
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Glob.run(args, base_cwd: base)
     end
     defp dispatch("grep", json, base) do
+      tlog("dispatch: grep")
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Grep.run(args, base_cwd: base)
     end
     defp dispatch("edit", json, base) do
+      tlog("dispatch: edit")
       with {:ok, args} <- Jason.decode(json),
            {:ok, payload, _} <- TheMaestro.Tools.Edit.run(args, base_cwd: base) do
         {:ok, payload}
       end
     end
     defp dispatch("multi_edit", json, base) do
+      tlog("dispatch: multi_edit")
       with {:ok, args} <- Jason.decode(json),
            {:ok, payload, _} <- TheMaestro.Tools.MultiEdit.run(args, base_cwd: base) do
         {:ok, payload}
       end
     end
     defp dispatch("apply_patch", json, base) do
-      with {:ok, %{"input" => input}} <- Jason.decode(json), do: TheMaestro.Tools.ApplyPatch.run(input, base_cwd: base)
+      tlog("dispatch: apply_patch")
+      tlog("dispatch: apply_patch json=#{String.slice(json, 0, 200)}")
+      with {:ok, %{"input" => input}} <- Jason.decode(json) do
+        tlog("dispatch: calling ApplyPatch.run")
+        TheMaestro.Tools.ApplyPatch.run(input, base_cwd: base)
+      end
     end
     defp dispatch("notebook_edit", json, base) do
+      tlog("dispatch: notebook_edit")
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.NotebookEdit.run(args, base_cwd: base)
     end
-    defp dispatch(_other, _json, _base), do: {:error, "unsupported tool"}
+    defp dispatch(other, _json, _base) do
+      tlog("dispatch: UNSUPPORTED TOOL #{other}")
+      {:error, "unsupported tool"}
+    end
 
     # ----- UI message handling -----
     # ----- Event-driven rendering for SSE frames -----
@@ -616,66 +691,165 @@ defmodule MaestroTui.UI do
     end
 
     defp handle_turn_frame(%State{} = s, sid, %{"kind" => kind} = frame) do
+      tlog("FRAME: kind=#{kind} stream=#{sid}")
+
       case kind do
         "usage" ->
           usage = frame["payload"] || %{}
+          tlog("FRAME usage: #{inspect(usage)}")
           append_line(s, stamp_line("usage", format_usage(usage)))
         "function_call" ->
           calls = get_in(frame, ["payload", "calls"]) || []
+          tlog("FRAME function_call: #{length(calls)} calls")
+          tlog("FRAME function_call: frame keys = #{inspect(Map.keys(frame))}")
+          tlog("FRAME function_call: payload keys = #{inspect(Map.keys(frame["payload"] || %{}))}")
+
           session_id = get_in(frame, ["session_id"]) || s.session_id
           workdir = get_in(frame, ["workdir"]) || s.working_dir
+          tlog("FRAME function_call: session_id=#{inspect(session_id)} workdir=#{inspect(workdir)}")
 
-          s1 = Enum.reduce(calls, s, fn %{"name" => name, "arguments" => args_json, "id" => call_id} = _call, acc ->
+          s1 = Enum.reduce(calls, s, fn call, acc ->
+            tlog("FRAME function_call: processing call with keys=#{inspect(Map.keys(call))}")
+
+            name = Map.get(call, "name")
+            args_json = Map.get(call, "arguments")
+            call_id = Map.get(call, "id") || Map.get(call, "call_id") || "no-id-#{:rand.uniform(10000)}"
+
+            tlog("FRAME function_call: name=#{inspect(name)} call_id=#{inspect(call_id)}")
+            args_type = try do
+              inspect(args_json.__struct__)
+            rescue
+              _ -> :not_struct
+            end
+            tlog("FRAME function_call: args_json type=#{args_type} length=#{byte_size(to_string(args_json || ""))}")
+
             prev = String.slice(to_string(args_json || "{}"), 0, 120)
+            tlog("FRAME function_call: args preview: #{prev}")
             acc1 = append_line(acc, stamp_line("tool use", to_string(name) <> " args=" <> prev))
 
             # Execute IO tools locally
-            if io_tool?(name) do
+            is_io = io_tool?(name)
+            tlog("FRAME function_call: io_tool?(#{name}) = #{is_io}")
+
+            if is_io do
+              tlog("FRAME function_call: spawning tool execution for #{name}")
               spawn(fn ->
+                tlog("TOOL EXEC START: #{name} with workdir=#{workdir}")
                 result = exec_local(name, args_json, workdir)
+                tlog("TOOL EXEC DONE: #{name} result=#{inspect(result) |> String.slice(0, 200)}")
                 post_tool_result(session_id, sid, call_id, name, result)
               end)
+            else
+              tlog("FRAME function_call: skipping non-IO tool #{name}")
             end
 
             acc1
           end)
-          put_in_stream(s1, sid, &Map.put(&1, :tool_pending?, true))
+          # Clear assistant buffer - pre-tool text already displayed, don't re-show it
+          tlog("FRAME function_call: clearing assistant buffers")
+          put_in_stream(s1, sid, fn st ->
+            st
+            |> Map.put(:tool_pending?, true)
+            |> Map.put(:assistant_buf, "")
+            |> Map.put(:assistant_streaming_idx, nil)
+          end)
         "tool_result" ->
           prev = get_in(frame, ["payload", "preview"]) || ""
+          tlog("FRAME tool_result: preview=#{String.slice(prev, 0, 50)}")
           s1 = append_line(s, stamp_line("tool result", String.slice(to_string(prev), 0, 160)))
-          s2 = put_in_stream(s1, sid, fn st ->
-            buf = (st[:assistant_buf] || "") <> to_string(st[:pending_assistant_text] || "")
-            st |> Map.put(:assistant_buf, buf) |> Map.put(:pending_assistant_text, "") |> Map.put(:tool_pending?, false)
+          # Just clear tool_pending flag - don't re-display anything
+          # Post-tool assistant text will arrive in new assistant_text frames
+          tlog("FRAME tool_result: clearing tool_pending, ready for new assistant text")
+          put_in_stream(s1, sid, fn st ->
+            st
+            |> Map.put(:tool_pending?, false)
+            |> Map.put(:pending_assistant_text, "")
+            |> Map.put(:assistant_streaming_idx, nil)
           end)
-          st = get_stream(s2, sid)
-          if (st[:assistant_buf] || "") != "" do
-            update_assistant_line(s2, sid, st[:assistant_buf])
-          else
-            s2
-          end
         "assistant_text" ->
-          d = to_string(get_in(frame, ["payload", "delta"]) || "")
+          tlog("FRAME assistant_text: payload keys=#{inspect(Map.keys(frame["payload"] || %{}))}")
+          raw_delta = get_in(frame, ["payload", "delta"])
+          delta_type = try do
+            inspect(raw_delta.__struct__)
+          rescue
+            _ -> :not_struct
+          end
+          tlog("FRAME assistant_text: raw_delta type=#{delta_type}")
+          tlog("FRAME assistant_text: raw_delta inspect=#{inspect(raw_delta) |> String.slice(0, 100)}")
+
+          d = to_string(raw_delta || "")
+          tlog("FRAME assistant_text: delta string=#{String.slice(d, 0, 50)}")
+          tlog("FRAME assistant_text: delta hex_dump=#{hex_dump(d)}")
+          tlog("FRAME assistant_text: tool_pending=#{Map.get(get_stream(s, sid), :tool_pending?, false)}")
+
           s1 = put_in_stream(s, sid, fn st ->
-            if Map.get(st, :tool_pending?, false), do: Map.update(st, :pending_assistant_text, d, &(&1 <> d)), else: Map.update(st, :assistant_buf, d, &(&1 <> d))
+            if Map.get(st, :tool_pending?, false) do
+              tlog("FRAME assistant_text: adding to pending_assistant_text")
+              Map.update(st, :pending_assistant_text, d, &(&1 <> d))
+            else
+              tlog("FRAME assistant_text: adding to assistant_buf")
+              Map.update(st, :assistant_buf, d, &(&1 <> d))
+            end
           end)
           st = get_stream(s1, sid)
           if not Map.get(st, :tool_pending?, false) do
+            tlog("FRAME assistant_text: calling update_assistant_line buf_size=#{byte_size(st[:assistant_buf] || "")}")
+            tlog("FRAME assistant_text: buf content=#{String.slice(st[:assistant_buf] || "", 0, 100)}")
             update_assistant_line(s1, sid, st[:assistant_buf] || "")
           else
+            tlog("FRAME assistant_text: buffering in pending_assistant_text, size=#{byte_size(st[:pending_assistant_text] || "")}")
             s1
           end
         "assistant_thinking" ->
           content = to_string(get_in(frame, ["payload", "content"]) || "")
+          tlog("FRAME assistant_thinking: content_len=#{byte_size(content)}")
           s1 = put_in_stream(s, sid, fn st -> st |> Map.put(:has_thinking, true) |> Map.update(:thinking_buf, content, &(&1 <> content)) end)
           update_thinking_line(s1, sid)
         "final" ->
+          tlog("FRAME final")
           content = to_string(get_in(frame, ["payload", "content"]) || "")
+          tlog("FRAME final: content_len=#{byte_size(content)}")
           st = get_stream(s, sid)
-          base = (st[:assistant_buf] || "") <> to_string(st[:pending_assistant_text] || "")
-          text = if content != "", do: content, else: base
-          s1 = if text != "", do: update_assistant_line(s, sid, text), else: s
-          s2 = append_line(s1, stamp_line("final", ""))
-          put_in_stream(s2, sid, fn st2 -> st2 |> Map.put(:assistant_buf, "") |> Map.put(:assistant_shown, "") |> Map.put(:pending_assistant_text, "") |> Map.put(:tool_pending?, false) |> Map.put(:has_thinking, false) end)
+          shown = st[:assistant_shown] || ""
+          tlog("FRAME final: assistant_shown_len=#{byte_size(shown)}")
+
+          # Check if final content has new text beyond what was already shown
+          s1 = cond do
+            # If there's buffered text, show it (edge case: text arrived after last tool)
+            (st[:assistant_buf] || "") != "" ->
+              buf = (st[:assistant_buf] || "") <> to_string(st[:pending_assistant_text] || "")
+              tlog("FRAME final: showing buffered text (#{byte_size(buf)} bytes)")
+              update_assistant_line(s, sid, buf)
+
+            # If final content is longer than what we've shown, extract the new portion
+            byte_size(content) > byte_size(shown) ->
+              # The final content contains everything, but shown has "\n\n" separators
+              # We need to find if there's truly new content beyond what was shown
+              # For now, if content is longer and different, show it as new line
+              if not String.contains?(shown, content) do
+                tlog("FRAME final: showing new content from final frame")
+                # Since shown accumulates with "\n\n", we can't do simple string slice
+                # Just show the complete final content if it's different
+                update_assistant_line(s, sid, content)
+              else
+                tlog("FRAME final: content already shown")
+                s
+              end
+
+            true ->
+              tlog("FRAME final: no new content to display")
+              s
+          end
+
+          # Don't append empty "final:" line
+          put_in_stream(s1, sid, fn st2 ->
+            st2
+            |> Map.put(:assistant_buf, "")
+            |> Map.put(:assistant_shown, "")
+            |> Map.put(:pending_assistant_text, "")
+            |> Map.put(:tool_pending?, false)
+            |> Map.put(:has_thinking, false)
+          end)
         _ -> s
       end
     end
@@ -1151,6 +1325,7 @@ defmodule MaestroTui.UI do
         assistant_streaming_idx: nil,
         pending_assistant_text: "",
         tool_pending?: false,
+        tools_called?: false,
         has_thinking: false,
         thinking_buf: "",
         thinking_streaming_idx: nil
@@ -1171,13 +1346,22 @@ defmodule MaestroTui.UI do
       st = get_stream(s, stream_id)
       case st[:assistant_streaming_idx] do
         i when is_integer(i) and i >= 1 ->
+          # Updating existing line - replace in transcript, but keep same assistant_shown
           tr = replace_at(s.transcript || [], i, stamp_line("assistant", text))
           s1 = %State{s | transcript: tr}
           put_in_stream(s1, stream_id, fn st2 -> Map.put(st2, :assistant_shown, text) end)
         _ ->
+          # Creating new line - add to transcript and accumulate assistant_shown
           idx = length(s.transcript || []) + 1
           s1 = add_transcript(s, stamp_line("assistant", text))
-          put_in_stream(s1, stream_id, fn st2 -> st2 |> Map.put(:assistant_streaming_idx, idx) |> Map.put(:assistant_shown, text) end)
+          put_in_stream(s1, stream_id, fn st2 ->
+            prev_shown = st2[:assistant_shown] || ""
+            # Accumulate all assistant text that's been shown
+            new_shown = if prev_shown != "", do: prev_shown <> "\n\n" <> text, else: text
+            st2
+            |> Map.put(:assistant_streaming_idx, idx)
+            |> Map.put(:assistant_shown, new_shown)
+          end)
       end
     end
 

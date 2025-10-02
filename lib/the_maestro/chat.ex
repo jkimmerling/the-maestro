@@ -95,6 +95,9 @@ defmodule TheMaestro.Chat do
     tid = resolve_thread_id(session_id, thread_id)
     canonical = get_canonical_chat(tid)
 
+    # Reset followup counter when user sends a new message
+    GenServer.cast(SessionsManager, {:reset_followup_counter, session_id})
+
     case append_user_message(session_id, tid, canonical, user_text) do
       {:error, :duplicate_turn} ->
         {:error, :duplicate_turn}

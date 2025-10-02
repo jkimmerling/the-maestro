@@ -431,15 +431,23 @@ defmodule TheMaestro.Sessions.Manager do
   end
 
   def handle_cast({:stream_done_followup, session_id, stream_id}, st) do
+    require Logger
+
     case Map.get(st, session_id) do
       %{stream_id: ^stream_id, acc: acc} ->
         calls = (acc && acc.tool_calls) || []
         rounds = (acc && acc.meta && acc.meta[:followup_rounds]) || 0
+        continuing? = is_list(calls) and calls != [] and rounds < 300
+
+        Logger.debug("[FOLLOWUP] stream_done_followup session=#{session_id} rounds=#{rounds} calls=#{length(calls)} continuing?=#{continuing?}")
 
         new_state =
-          if is_list(calls) and calls != [] and rounds < 3 do
+          if continuing? do
             run_tools_and_followup(session_id, stream_id, st)
           else
+            if rounds >= 300 do
+              Logger.warning("[FOLLOWUP] Hit 300 round limit for session=#{session_id}, finalizing")
+            end
             finalize_and_persist(session_id, stream_id, st)
             st
           end
@@ -451,10 +459,28 @@ defmodule TheMaestro.Sessions.Manager do
     end
   end
 
+  def handle_cast({:reset_followup_counter, session_id}, st) do
+    require Logger
+    Logger.debug("[FOLLOWUP] Resetting followup counter for session=#{session_id}")
+
+    case Map.get(st, session_id) do
+      %{acc: acc} = entry ->
+        updated_acc = put_in(acc, [:meta, :followup_rounds], 0)
+        updated_entry = %{entry | acc: updated_acc}
+        {:noreply, Map.put(st, session_id, updated_entry)}
+
+      _ ->
+        {:noreply, st}
+    end
+  end
+
   def handle_cast(
         {:tool_result_posted, session_id, stream_id, %{id: id, output: output} = _result},
         st
       ) do
+    require Logger
+    Logger.debug("[TOOL_RESULT] Posted id=#{id} output_len=#{byte_size(to_string(output))} preview=#{String.slice(to_string(output), 0, 100)}")
+
     case Map.get(st, session_id) do
       %{stream_id: ^stream_id, acc: %{meta: meta} = _acc} ->
         pending = Map.get(meta, :pending_calls, [])
@@ -471,6 +497,8 @@ defmodule TheMaestro.Sessions.Manager do
           if MapSet.subset?(remote_ids, have_ids) do
             order_ids = Map.get(meta, :followup_order_ids) || Enum.map(pending, & &1["id"])
             outputs = Enum.map(order_ids, fn cid -> {cid, {:ok, Map.get(results, cid)}} end)
+
+            Logger.debug("[TOOL_RESULT] All results received, running followup with #{length(outputs)} outputs")
 
             Enum.each(outputs, fn {cid, {:ok, out}} ->
               if cid in MapSet.to_list(remote_ids) do
@@ -495,6 +523,7 @@ defmodule TheMaestro.Sessions.Manager do
             st = run_followup_with_outputs(session_id, stream_id, outputs, st)
             {:noreply, st}
           else
+            Logger.debug("[TOOL_RESULT] Waiting for more results: have #{MapSet.size(have_ids)}/#{MapSet.size(remote_ids)}")
             {:noreply, st}
           end
         end
@@ -932,6 +961,7 @@ defmodule TheMaestro.Sessions.Manager do
   end
 
   defp run_tools_and_followup(session_id, stream_id, st) do
+    require Logger
     entry = Map.get(st, session_id)
     acc = entry.acc
     provider = acc.meta.provider
@@ -954,8 +984,11 @@ defmodule TheMaestro.Sessions.Manager do
       end)
       |> maybe_guard_resolve_once()
 
+    Logger.debug("[TOOLS] run_tools_and_followup session=#{session_id} calls=#{length(calls_all)} deduplicated=#{length(calls_to_run)} executed=#{MapSet.size(executed)}")
+
     # If nothing new to execute, finalize instead of looping
     if calls_to_run == [] do
+      Logger.debug("[TOOLS] No new calls to execute, finalizing")
       finalize_and_persist(session_id, stream_id, st)
       st
     else
@@ -1159,6 +1192,7 @@ defmodule TheMaestro.Sessions.Manager do
   end
 
   defp run_followup_with_outputs(session_id, stream_id, outputs, st) do
+    require Logger
     acc = st[session_id].acc
     provider = acc.meta.provider
     model = acc.meta.model
@@ -1174,6 +1208,9 @@ defmodule TheMaestro.Sessions.Manager do
         :anthropic -> build_anthropic_items(latest, acc.text, acc.tool_calls || [], outputs)
         :gemini -> build_gemini_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
       end
+
+    Logger.debug("[FOLLOWUP] Starting followup turn session=#{session_id} stream=#{stream_id} provider=#{provider} outputs=#{length(outputs)}")
+    Logger.debug("[FOLLOWUP] Items being sent to LLM: #{inspect(items) |> String.slice(0, 500)}")
 
     owner_pid = acc.meta && acc.meta[:sandbox_owner]
 
@@ -1322,6 +1359,7 @@ defmodule TheMaestro.Sessions.Manager do
   defp role_for(_), do: "assistant"
 
   defp build_openai_items(last_user_text, _partial_answer, calls, outputs) do
+    require Logger
     # Mimic Codex: include the last user message to keep the model on task,
     # then echo function_call(s) and provide function_call_output(s).
 
@@ -1353,6 +1391,8 @@ defmodule TheMaestro.Sessions.Manager do
           "output" => tool_output_payload(result)
         }
       end)
+
+    Logger.debug("[BUILD_ITEMS] OpenAI followup: user_items=#{length(user_items)} fc_items=#{length(fc_items)} out_items=#{length(out_items)}")
 
     user_items ++ fc_items ++ out_items
   end
@@ -1430,12 +1470,14 @@ defmodule TheMaestro.Sessions.Manager do
 
   defp tool_output_payload({:ok, payload}), do: payload
 
-  defp tool_output_payload({:error, msg}),
-    do:
-      Jason.encode!(%{
-        "output" => msg,
-        "metadata" => %{"exit_code" => 1, "duration_seconds" => 0.0}
-      })
+  defp tool_output_payload({:error, msg}) do
+    require Logger
+    Logger.debug("[TOOL_OUTPUT] Encoding error payload: #{inspect(msg)}")
+    Jason.encode!(%{
+      "output" => msg,
+      "metadata" => %{"exit_code" => 1, "duration_seconds" => 0.0}
+    })
+  end
 
   defp find_name_for_call(id, calls) do
     case Enum.find(calls, fn c -> c["id"] == id end) do
