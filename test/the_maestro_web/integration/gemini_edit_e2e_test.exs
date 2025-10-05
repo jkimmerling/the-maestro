@@ -28,7 +28,7 @@ defmodule TheMaestroWeb.Integration.GeminiEditE2ETest do
 
   test "edit creates file; Cloud Code parts shape asserted", %{session: session} do
     base = File.cwd!()
-    rel = "tmp/e2e_gemini_edit.txt"
+    rel = "tmp/gemini_edit/e2e_gemini_edit.txt"
     abs = Path.join(base, rel)
     File.rm_rf!(Path.dirname(abs))
     File.mkdir_p!(Path.dirname(abs))

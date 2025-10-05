@@ -28,8 +28,10 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
         decl_session_id =
           Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_id, auth_type)
 
+        ui_msg = user_instructions_message()
         env_msg = build_env_context_message(decl_session_id)
-        messages = [env_msg | List.wrap(messages)]
+        mh = model_history_messages(decl_session_id)
+        messages = [ui_msg, env_msg] ++ mh ++ List.wrap(messages)
 
         base_body = %{
           "model" => model,
@@ -76,7 +78,13 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
         )
 
         maybe_log_request(:initial, req, url, body)
-        StreamingAdapter.stream_request(req, method: :post, url: url, json: body)
+
+        StreamingAdapter.stream_request(req,
+          method: :post,
+          url: url,
+          json: body,
+          provider: :anthropic
+        )
       end
     end
   end
@@ -110,12 +118,18 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
 
         system_blocks = resolve_system_blocks(decl_session_id)
 
+        # Follow doc flow: user_instructions + environment + model_history + provided messages
+        ui_msg = user_instructions_message()
+        env_msg = build_env_context_message(decl_session_id)
+        mh = model_history_messages(decl_session_id)
+        messages2 = [ui_msg, env_msg] ++ mh ++ List.wrap(messages)
+
         body =
           case auth_type do
             :oauth ->
               %{
                 "model" => model,
-                "messages" => transform_messages_for_claude_code(messages),
+                "messages" => transform_messages_for_claude_code(messages2),
                 "max_tokens" => Keyword.get(opts, :max_tokens, 512),
                 "tools" => function_declarations_for_session(decl_session_id),
                 "metadata" => %{"user_id" => compute_user_id(session_id)},
@@ -126,7 +140,7 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
             _ ->
               %{
                 "model" => model,
-                "messages" => messages,
+                "messages" => messages2,
                 "max_tokens" => Keyword.get(opts, :max_tokens, 512),
                 "tools" => function_declarations_for_session(decl_session_id),
                 "metadata" => %{"user_id" => compute_user_id(session_id)},
@@ -154,7 +168,13 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
         )
 
         maybe_log_request(:followup, req, url, body)
-        StreamingAdapter.stream_request(req, method: :post, url: url, json: body)
+
+        StreamingAdapter.stream_request(req,
+          method: :post,
+          url: url,
+          json: body,
+          provider: :anthropic
+        )
       end
     end
   end
@@ -224,6 +244,63 @@ defmodule TheMaestro.Providers.Anthropic.Streaming do
     """
 
     %{"role" => "user", "content" => [%{"type" => "text", "text" => String.trim(text)}]}
+  end
+
+  defp user_instructions_message do
+    %{
+      "role" => "user",
+      "content" => [%{"type" => "text", "text" => PromptDefaults.openai_prompt()}]
+    }
+  end
+
+  defp model_history_messages(nil), do: []
+
+  defp model_history_messages(session_id) when is_binary(session_id) do
+    case Conversations.latest_snapshot(session_id) do
+      %Conversations.ChatEntry{response_headers: %{} = rh} ->
+        mh = Map.get(rh, "model_history", [])
+        if is_list(mh), do: to_anthropic_messages(mh), else: []
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
+  defp to_anthropic_messages(items) when is_list(items) do
+    Enum.flat_map(items, fn
+      %{"type" => "message", "role" => role, "content" => [%{"type" => _ct, "text" => txt}]}
+      when is_binary(txt) ->
+        [%{"role" => role, "content" => [%{"type" => "text", "text" => txt}]}]
+
+      %{"type" => "function_call", "call_id" => id, "name" => name, "arguments" => args_json} ->
+        args =
+          case Jason.decode(to_string(args_json || "{}")) do
+            {:ok, m} -> m
+            _ -> %{}
+          end
+
+        [
+          %{
+            "role" => "assistant",
+            "content" => [%{"type" => "tool_use", "id" => id, "name" => name, "input" => args}]
+          }
+        ]
+
+      %{"type" => "function_call_output", "call_id" => id, "output" => out_json} ->
+        content = [%{"type" => "text", "text" => to_string(out_json || "")}]
+
+        [
+          %{
+            "role" => "user",
+            "content" => [%{"type" => "tool_result", "tool_use_id" => id, "content" => content}]
+          }
+        ]
+
+      _ ->
+        []
+    end)
   end
 
   defp os_arch do

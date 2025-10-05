@@ -31,7 +31,7 @@ defmodule TheMaestroWeb.Integration.GeminiReplaceServerE2ETest do
     saved_auth: sa
   } do
     base = File.cwd!()
-    rel = "tmp/e2e_gemini_replace_server.txt"
+    rel = "tmp/gemini_replace_server/e2e_gemini_replace_server.txt"
     abs = Path.join(base, rel)
     File.rm_rf!(Path.dirname(abs))
     File.mkdir_p!(Path.dirname(abs))

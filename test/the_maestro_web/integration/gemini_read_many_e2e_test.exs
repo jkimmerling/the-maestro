@@ -27,10 +27,11 @@ defmodule TheMaestroWeb.Integration.GeminiReadManyE2ETest do
 
   test "functionResponse exists and returns concatenated content", %{session: _session} do
     base = File.cwd!()
-    p1 = Path.join(base, "tmp/rm_1.txt")
-    p2 = Path.join(base, "tmp/rm_2.txt")
-    File.rm_rf!(Path.dirname(p1))
-    File.mkdir_p!(Path.dirname(p1))
+    dir = Path.join(base, "tmp/gemini_read_many")
+    p1 = Path.join(dir, "rm_1.txt")
+    p2 = Path.join(dir, "rm_2.txt")
+    File.rm_rf!(dir)
+    File.mkdir_p!(dir)
     File.write!(p1, "A")
     File.write!(p2, "B")
 

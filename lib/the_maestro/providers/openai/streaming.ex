@@ -55,8 +55,14 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
     case detect_mode(session_name) do
       {:ok, mode} ->
         case build_followup_request(mode, session_name, items, Keyword.put(opts, :model, model)) do
-          {:ok, req, url, payload, timeout} ->
-            adapter.stream_request(req, method: :post, url: url, json: payload, timeout: timeout)
+          {:ok, req, url, payload, timeout, provider} ->
+            adapter.stream_request(req,
+              method: :post,
+              url: url,
+              json: payload,
+              timeout: timeout,
+              provider: provider
+            )
 
           {:error, _} = err ->
             err
@@ -105,8 +111,11 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         |> Req.Request.put_header("accept", "text/event-stream")
         |> Req.Request.put_header("version", version)
 
+      ui_msg = user_instructions_message()
       env_msg = build_env_context_message(session_name)
-      input_items = [env_msg | itemize_messages_for_responses(messages)]
+      history_items = model_history_items(Keyword.get(opts, :decl_session_id))
+      # Follow doc flow: user_instructions, environment, full transcript, current round items
+      input_items = [ui_msg, env_msg] ++ history_items ++ itemize_messages_for_responses(messages)
 
       payload = %{
         "model" => model,
@@ -116,7 +125,9 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         "tool_choice" => "auto",
         "parallel_tool_calls" => true,
         "stream" => true,
-        "prompt_cache_key" => session_id_hdr
+        "prompt_cache_key" => session_id_hdr,
+        "reasoning" => %{"effort" => "high", "summary" => "auto"},
+        "include" => ["reasoning.encrypted_content"]
       }
 
       :telemetry.execute(
@@ -138,7 +149,8 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         method: :post,
         url: "/v1/responses",
         json: payload,
-        timeout: Keyword.get(opts, :timeout, :infinity)
+        timeout: Keyword.get(opts, :timeout, :infinity),
+        provider: :openai
       )
     end
   end
@@ -168,8 +180,10 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         |> Req.Request.put_header("originator", "codex_cli_rs")
         |> Req.Request.put_header("chatgpt-account-id", account_id)
 
+      ui_msg = user_instructions_message()
       env_msg = build_env_context_message(session_name)
-      input_items = [env_msg | itemize_messages_for_responses(messages)]
+      history_items = model_history_items(Keyword.get(opts, :decl_session_id))
+      input_items = [ui_msg, env_msg] ++ history_items ++ itemize_messages_for_responses(messages)
 
       payload = %{
         "model" => model,
@@ -181,7 +195,9 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         "store" => false,
         "stream" => true,
         "prompt_cache_key" => session_id_hdr,
-        "text" => %{"verbosity" => "medium"}
+        "text" => %{"verbosity" => "medium"},
+        "reasoning" => %{"effort" => "high", "summary" => "auto"},
+        "include" => ["reasoning.encrypted_content"]
       }
 
       :telemetry.execute(
@@ -205,7 +221,8 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         method: :post,
         url: "https://chatgpt.com/backend-api/codex/responses",
         json: payload,
-        timeout: Keyword.get(opts, :timeout, :infinity)
+        timeout: Keyword.get(opts, :timeout, :infinity),
+        provider: :openai
       )
     else
       nil -> {:error, :session_not_found}
@@ -435,16 +452,24 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         resolve_instruction_items(Keyword.get(opts, :decl_session_id))
         |> normalize_instructions_for_chatgpt()
 
+      ui_msg = user_instructions_message()
+      env_msg = build_env_context_message(session_name)
+
+      items2 =
+        [ui_msg, env_msg] ++ model_history_items(Keyword.get(opts, :decl_session_id)) ++ items
+
       payload =
         followup_payload_common(
           Keyword.get(opts, :model, "gpt-4o"),
-          items,
+          items2,
           tools_for_session(Keyword.get(opts, :decl_session_id) || session_name),
           session_id_hdr,
           instructions,
           parallel?: true,
           store?: nil
         )
+        |> Map.put("reasoning", %{"effort" => "high", "summary" => "auto"})
+        |> Map.put("include", ["reasoning.encrypted_content"])
 
       :telemetry.execute(
         [
@@ -461,7 +486,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         }
       )
 
-      {:ok, req, "/v1/responses", payload, Keyword.get(opts, :timeout, :infinity)}
+      {:ok, req, "/v1/responses", payload, Keyword.get(opts, :timeout, :infinity), :openai}
     end
   end
 
@@ -486,10 +511,16 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
         resolve_instruction_items(Keyword.get(opts, :decl_session_id))
         |> normalize_instructions_for_chatgpt()
 
+      ui_msg = user_instructions_message()
+      env_msg = build_env_context_message(session_name)
+
+      items2 =
+        [ui_msg, env_msg] ++ model_history_items(Keyword.get(opts, :decl_session_id)) ++ items
+
       payload =
         followup_payload_common(
           Keyword.get(opts, :model, "gpt-5"),
-          items,
+          items2,
           tools_for_session(Keyword.get(opts, :decl_session_id) || session_name),
           session_id_hdr,
           instructions,
@@ -497,6 +528,8 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
           store?: false
         )
         |> Map.put("text", %{"verbosity" => "medium"})
+        |> Map.put("reasoning", %{"effort" => "high", "summary" => "auto"})
+        |> Map.put("include", ["reasoning.encrypted_content"])
 
       :telemetry.execute(
         [
@@ -520,7 +553,7 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
       maybe_log_payload(:openai_oauth_followup, payload)
 
       {:ok, req, "https://chatgpt.com/backend-api/codex/responses", payload,
-       Keyword.get(opts, :timeout, :infinity)}
+       Keyword.get(opts, :timeout, :infinity), :openai}
     else
       nil -> {:error, :session_not_found}
     end
@@ -538,6 +571,12 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
       "prompt_cache_key" => cache_key
     }
     |> maybe_put_store(Keyword.get(opts, :store?))
+  end
+
+  # Build the user_instructions message (Codex includes the full instructions as a user message in input)
+  defp user_instructions_message do
+    text = PromptDefaults.openai_prompt()
+    to_responses_message("user", text)
   end
 
   defp maybe_put_store(map, nil), do: map
@@ -564,6 +603,20 @@ defmodule TheMaestro.Providers.OpenAI.Streaming do
   end
 
   # Legacy tool builders removed; provider decls come from ToolSurface
+  defp model_history_items(nil), do: []
+
+  defp model_history_items(session_id) when is_binary(session_id) do
+    case TheMaestro.Conversations.latest_snapshot(session_id) do
+      %TheMaestro.Conversations.ChatEntry{response_headers: %{} = rh} ->
+        mh = Map.get(rh, "model_history", [])
+        if is_list(mh), do: mh, else: []
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
 
   @spec chatgpt_account_id_from_id_token(binary() | nil) :: {:ok, binary()} | {:error, term()}
   defp chatgpt_account_id_from_id_token(nil), do: {:error, :missing_id_token}

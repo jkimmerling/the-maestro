@@ -8,6 +8,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
   """
 
   alias TheMaestro.Types
+  alias TheMaestro.Utils.ApiLogger
 
   @typedoc "Parsed SSE-like event"
   @type sse_event :: %{event_type: String.t(), data: String.t()}
@@ -20,11 +21,12 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
     body = Keyword.get(opts, :body)
     json = Keyword.get(opts, :json)
     timeout = Keyword.get(opts, :timeout, 60_000)
+    provider = Keyword.get(opts, :provider)
 
     if is_nil(path_or_url) do
       {:error, :missing_url}
     else
-      do_stream_request(req, method, path_or_url, body, json, timeout)
+      do_stream_request(req, method, path_or_url, body, json, timeout, provider)
     end
   end
 
@@ -38,7 +40,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
   def handle_streaming_interruption(_reason), do: :retry
 
   # ===== Internal Req streaming integration =====
-  defp do_stream_request(req, method, path_or_url, body, json, timeout) do
+  defp do_stream_request(req, method, path_or_url, body, json, timeout, provider) do
     req = maybe_debug_request(req, method, path_or_url, body, json)
     # Ensure SSE-friendly headers are present
     req =
@@ -62,11 +64,12 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
         fn ->
           start_req_streaming(req, method, path_or_url, body, json, timeout,
             max_retries: max_retries,
-            backoff_ms: backoff_ms
+            backoff_ms: backoff_ms,
+            provider: provider
           )
         end,
         fn state -> next_events(state) end,
-        fn _state -> :ok end
+        fn state -> cleanup_stream(state) end
       )
 
     {:ok, stream}
@@ -74,6 +77,9 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
 
   defp start_req_streaming(req, method, url, body, json, timeout, opts) do
     parent = self()
+    provider = Keyword.get(opts, :provider)
+
+    request_num = maybe_log_api_request(provider, method, url, req.headers, json || body)
 
     {:ok, task} =
       Task.start_link(fn ->
@@ -96,7 +102,12 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
       json: json,
       attempts: 0,
       max_retries: Keyword.get(opts, :max_retries, 3),
-      backoff_ms: Keyword.get(opts, :backoff_ms, 250)
+      backoff_ms: Keyword.get(opts, :backoff_ms, 250),
+      provider: provider,
+      request_num: request_num,
+      response_chunks: [],
+      response_status: nil,
+      response_headers: []
     }
   end
 
@@ -111,6 +122,7 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
     case Req.request(req, req_opts) do
       {:ok, %Req.Response{status: status} = resp} when status < 400 ->
         maybe_debug_response_headers(status, resp.headers)
+        send(parent, {:response_metadata, status, resp.headers})
 
         try do
           forward_body_chunks(resp.body, parent)
@@ -122,6 +134,8 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
         end
 
       {:ok, %Req.Response{status: status, body: body} = resp} ->
+        send(parent, {:response_metadata, status, resp.headers})
+
         # For non-2xx/3xx, body may still be an async stream; drain it if possible
         error_text =
           if enumerable?(body) do
@@ -230,9 +244,14 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
       {:halt, state}
     else
       receive do
+        {:response_metadata, status, headers} ->
+          new_state = %{state | response_status: status, response_headers: headers}
+          {[], new_state}
+
         {:data, data} when is_binary(data) ->
-          # Already logged raw chunks in forward_body_chunks
-          {[data], state}
+          # Accumulate chunks for API logging
+          new_state = %{state | response_chunks: state.response_chunks ++ [data]}
+          {[data], new_state}
 
         :done ->
           {:halt, %{state | done: true}}
@@ -254,6 +273,11 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
           {[timeout_event], %{state | done: true}}
       end
     end
+  end
+
+  defp cleanup_stream(state) do
+    maybe_log_api_response(state)
+    :ok
   end
 
   defp handle_transport_error(state, reason) do
@@ -343,6 +367,34 @@ defmodule TheMaestro.Providers.Http.StreamingAdapter do
       bin = IO.iodata_to_binary(chunk)
       # Emit raw chunk + pretty, controlled by HTTP_DEBUG_SSE_PRETTY
       TheMaestro.DebugLog.sse_dump("[SSE CHUNK]", bin)
+    end
+  end
+
+  defp maybe_log_api_request(provider, method, url, headers, body) do
+    if ApiLogger.enabled?() and not is_nil(provider) do
+      ApiLogger.log_request(provider, method, url, headers, body)
+    end
+  end
+
+  defp maybe_log_api_response(state) do
+    if ApiLogger.enabled?() and not is_nil(state.request_num) and state.response_status do
+      path = extract_path_from_url(state.url)
+
+      ApiLogger.log_response(
+        state.request_num,
+        state.response_status,
+        state.response_headers,
+        state.response_chunks,
+        state.method,
+        path
+      )
+    end
+  end
+
+  defp extract_path_from_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{path: path} when is_binary(path) -> path
+      _ -> url
     end
   end
 end

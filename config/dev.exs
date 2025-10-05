@@ -9,7 +9,8 @@ config :the_maestro, TheMaestro.Repo,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10,
-  log: false  # Disable Ecto query debug logs
+  # Disable Ecto query debug logs
+  log: false
 
 # For development, we disable any cache and enable
 # debugging and code reloading.
