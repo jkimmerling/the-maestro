@@ -638,6 +638,7 @@ defmodule TheMaestro.Sessions.Manager do
 
   defp maybe_allow_sandbox(owner_pid) when is_pid(owner_pid) do
     _ = Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox)
+
     try do
       RepoSandbox.allow(Repo, owner_pid, self())
       :ok

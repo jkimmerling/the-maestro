@@ -327,13 +327,22 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     Enum.flat_map(items, &to_gemini_content_item/1)
   end
 
-  defp to_gemini_content_item(%{"type" => "message", "role" => role, "content" => [%{"type" => _ct, "text" => txt}]})
+  defp to_gemini_content_item(%{
+         "type" => "message",
+         "role" => role,
+         "content" => [%{"type" => _ct, "text" => txt}]
+       })
        when is_binary(txt) do
     r = if role == "assistant", do: "model", else: "user"
     [%{"role" => r, "parts" => [%{"text" => txt}]}]
   end
 
-  defp to_gemini_content_item(%{"type" => "function_call", "call_id" => id, "name" => name, "arguments" => args_json}) do
+  defp to_gemini_content_item(%{
+         "type" => "function_call",
+         "call_id" => id,
+         "name" => name,
+         "arguments" => args_json
+       }) do
     args =
       case Jason.decode(to_string(args_json || "{}")) do
         {:ok, m} -> m
@@ -348,7 +357,11 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     ]
   end
 
-  defp to_gemini_content_item(%{"type" => "function_call_output", "call_id" => id, "output" => out_json}) do
+  defp to_gemini_content_item(%{
+         "type" => "function_call_output",
+         "call_id" => id,
+         "output" => out_json
+       }) do
     response =
       case Jason.decode(to_string(out_json || "{}")) do
         {:ok, m} -> m

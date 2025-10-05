@@ -151,6 +151,7 @@ defmodule TheMaestro.Utils.ApiLogger do
 
   defp render_response_body_lines(headers_sanitized, sse_events) do
     ct = response_content_type(headers_sanitized)
+
     if String.contains?(ct, "text/event-stream") do
       ["│ Body (Server-Sent Events):"] ++ format_sse_events(sse_events)
     else
@@ -215,7 +216,7 @@ defmodule TheMaestro.Utils.ApiLogger do
     data_lines = extract_data_lines(lines)
 
     header = ["│   Event #{idx}:"]
-    event_line = if event_type, do: ["│     event: #{event_type}"] , else: []
+    event_line = if event_type, do: ["│     event: #{event_type}"], else: []
     data_formatted = format_sse_data(data_lines)
 
     header ++ event_line ++ data_formatted
@@ -223,7 +224,8 @@ defmodule TheMaestro.Utils.ApiLogger do
 
   defp extract_event_type(lines) do
     Enum.find_value(lines, fn line ->
-      if String.starts_with?(line, "event:"), do: String.trim(line |> String.trim_leading("event:"))
+      if String.starts_with?(line, "event:"),
+        do: String.trim(line |> String.trim_leading("event:"))
     end)
   end
 
@@ -237,6 +239,7 @@ defmodule TheMaestro.Utils.ApiLogger do
 
   defp format_sse_data(data_lines) do
     data_text = Enum.join(data_lines, "\n")
+
     case Jason.decode(data_text) do
       {:ok, json} ->
         formatted = Jason.encode!(json, pretty: true)
