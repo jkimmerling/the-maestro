@@ -30,9 +30,27 @@ defmodule MaestroTui.UI do
 
     @impl true
     def init(_context) do
+      # Load settings to check if we can skip wizard
+      settings = MaestroTui.Config.load_settings()
+
       case API.providers() do
-        {:ok, providers} -> %State{providers: providers}
-        {:error, _} -> %State{providers: [], log: ["API unavailable — set TUI_API_BASE_URL and TUI_API_TOKEN"]}
+        {:ok, providers} ->
+          # If we have complete settings, skip wizard and go straight to chat
+          if MaestroTui.Config.has_complete_settings?() do
+            %State{
+              screen: :chat,
+              providers: providers,
+              provider: settings.last_provider,
+              auth_id: settings.last_auth_id,
+              model: settings.last_model,
+              session_id: nil
+            }
+          else
+            %State{providers: providers}
+          end
+
+        {:error, _} ->
+          %State{providers: [], log: ["API unavailable — create ~/.the_maestro/config.json or set TUI_API_BASE_URL and TUI_API_TOKEN"]}
       end
     end
 
@@ -41,9 +59,25 @@ defmodule MaestroTui.UI do
 
     # No explicit subscriptions; spawned tasks send messages to self
 
+    @impl true
     def update(%State{screen: :wizard} = s, {:event, %{ch: 10}}) do
       prov = s.provider || List.first(s.providers)
       with {:ok, {auth, auths}} <- pick_auths(prov), {:ok, {model, models}} <- pick_models(prov, auth) do
+        # Save settings when wizard completes
+        settings = %{
+          last_provider: prov,
+          last_auth_id: auth,
+          last_model: model,
+          session_defaults: %{
+            "persona" => %{},
+            "memory" => %{},
+            "tools" => %{"allowed" => %{}},
+            "mcp_server_ids" => [],
+            "system_prompt_ids_by_provider" => %{}
+          }
+        }
+        MaestroTui.Config.save_settings(settings)
+
         sid = nil
         s1 = %State{
           s
@@ -183,6 +217,8 @@ defmodule MaestroTui.UI do
       cond do
         (not is_nil(s.modal)) and event_key?(ev, :arrow_up) -> modal_move(s, -1)
         (not is_nil(s.modal)) and event_key?(ev, :arrow_down) -> modal_move(s, 1)
+        (not is_nil(s.modal)) and event_key?(ev, :tab) and shift?(ev) -> wizard_prev_step(s)
+        (not is_nil(s.modal)) and event_key?(ev, :tab) -> wizard_next_step(s)
         (not is_nil(s.modal)) and event_key?(ev, :esc) -> close_modal(s)
         (not is_nil(s.modal)) and event_enter?(ev) -> handle_modal_enter(s)
         event_enter?(ev) and shift?(ev) -> %State{s | input: s.input <> "\n"}
@@ -205,7 +241,20 @@ defmodule MaestroTui.UI do
     defp ensure_session(%State{session_id: sid} = _s) when is_binary(sid), do: {:ok, sid}
     defp ensure_session(%State{} = s) do
       url = API.base_url() <> "/api/sessions"
-      body = %{"auth_id" => s.auth_id, "model" => s.model, "working_dir" => s.working_dir, "tool_runtime" => "remote"}
+
+      # Load session defaults from settings
+      settings = MaestroTui.Config.load_settings()
+      defaults = settings.session_defaults || %{}
+
+      body =
+        %{
+          "auth_id" => s.auth_id,
+          "model" => s.model,
+          "working_dir" => s.working_dir,
+          "tool_runtime" => "remote"
+        }
+        |> Map.merge(defaults)
+
       case Req.post(url: url, headers: [API.auth_header()], json: body, finch: MaestroTui.Finch) do
         {:ok, %Req.Response{status: 200, body: %{"session_id" => sid}}} -> {:ok, sid}
         _ -> {:error, :session}
@@ -327,9 +376,19 @@ defmodule MaestroTui.UI do
 
     defp tlog(msg) when is_binary(msg) do
       case System.get_env("TUI_DEBUG") do
-        s when s in ["1", "true", "TRUE"] -> IO.puts(:stderr, "[tui] " <> msg)
+        s when s in ["1", "true", "TRUE"] ->
+          # Only log to file with microsecond timestamps - no stderr output
+          ts = :os.system_time(:microsecond)
+          File.write!("/Users/jasonk/Development/the_maestro/tui_debug.log", "[#{ts}] #{msg}\n", [:append])
         _ -> :ok
       end
+    end
+
+    defp hex_dump(binary, max_len \\ 50) when is_binary(binary) do
+      bytes = binary |> String.slice(0, max_len) |> :binary.bin_to_list()
+      hex = bytes |> Enum.map(&Integer.to_string(&1, 16)) |> Enum.join(" ")
+      printable = bytes |> Enum.map(fn b -> if b >= 32 and b <= 126, do: <<b>>, else: "." end) |> Enum.join("")
+      "hex:[#{hex}] chars:[#{printable}]"
     end
 
     def render(%State{screen: :wizard, providers: providers, prov_idx: pidx, auths: auths, auth_idx: aidx, models: models, model_idx: midx, wizard_focus: focus} = s) do
@@ -380,6 +439,7 @@ defmodule MaestroTui.UI do
     defp list_item(text, true), do: "> " <> to_string(text)
     defp list_item(text, false), do: "  " <> to_string(text)
 
+    @impl true
     def render(%State{screen: :chat, input: input, log: log, log_visible: lv, provider: pv, auth_id: aid, model: mdl} = s) do
       import Ratatouille.View
       view do
@@ -492,9 +552,20 @@ defmodule MaestroTui.UI do
     # remove ETS event handlers — use event-driven updates below
 
     defp exec_local(name, args_json, base) do
-      case dispatch(String.downcase(to_string(name)), args_json || "{}", base) do
-        {:ok, payload} -> {:ok, payload}
-        {:error, r} -> {:error, to_string(r)}
+      tlog("exec_local: name=#{name} base=#{base}")
+      tlog("exec_local: args_json=#{inspect(args_json) |> String.slice(0, 300)}")
+
+      name_lower = String.downcase(to_string(name))
+      args_str = args_json || "{}"
+      tlog("exec_local: calling dispatch(#{name_lower}, ...)")
+
+      case dispatch(name_lower, args_str, base) do
+        {:ok, payload} ->
+          tlog("exec_local: SUCCESS payload=#{inspect(payload) |> String.slice(0, 200)}")
+          {:ok, payload}
+        {:error, r} ->
+          tlog("exec_local: ERROR #{inspect(r)}")
+          {:error, to_string(r)}
       end
     end
 
@@ -502,12 +573,44 @@ defmodule MaestroTui.UI do
     defp io_tool?(_), do: false
 
     defp post_tool_result(session_id, stream_id, call_id, name, {:ok, payload}) do
+      tlog("post_tool_result: SUCCESS session=#{session_id} stream=#{stream_id} call=#{call_id} name=#{name}")
+      tlog("post_tool_result: payload=#{inspect(payload) |> String.slice(0, 300)}")
+
       url = API.base_url() <> "/api/sessions/" <> session_id <> "/turns/" <> stream_id <> "/tools/results"
       body = %{"call_id" => call_id, "name" => name, "output" => payload}
-      _ = Req.post(url: url, headers: [API.auth_header()], json: body, finch: MaestroTui.Finch)
-      :ok
+      tlog("post_tool_result: POSTing to #{url}")
+
+      case Req.post(url: url, headers: [API.auth_header()], json: body, finch: MaestroTui.Finch) do
+        {:ok, %Req.Response{status: status}} ->
+          tlog("post_tool_result: HTTP #{status}")
+          :ok
+        {:error, err} ->
+          tlog("post_tool_result: HTTP ERROR #{inspect(err)}")
+          :ok
+      end
     end
-    defp post_tool_result(_sid, _stream, _id, _name, {:error, _}), do: :ok
+    defp post_tool_result(session_id, stream_id, call_id, name, {:error, err}) do
+      tlog("post_tool_result: ERROR session=#{session_id} stream=#{stream_id} call=#{call_id} name=#{name}")
+      tlog("post_tool_result: error=#{inspect(err)}")
+
+      # Send error result to LLM so it can retry or adjust
+      url = API.base_url() <> "/api/sessions/" <> session_id <> "/turns/" <> stream_id <> "/tools/results"
+      error_msg = case err do
+        s when is_binary(s) -> s
+        other -> inspect(other)
+      end
+      body = %{"call_id" => call_id, "name" => name, "output" => "Error: #{error_msg}", "is_error" => true}
+      tlog("post_tool_result: POSTing error to #{url}")
+
+      case Req.post(url: url, headers: [API.auth_header()], json: body, finch: MaestroTui.Finch) do
+        {:ok, %Req.Response{status: status}} ->
+          tlog("post_tool_result: HTTP #{status}")
+          :ok
+        {:error, http_err} ->
+          tlog("post_tool_result: HTTP ERROR #{inspect(http_err)}")
+          :ok
+      end
+    end
 
     defp api_clear_thread(thread_id) do
       url = API.base_url() <> "/api/threads/" <> thread_id <> "/clear"
@@ -518,43 +621,65 @@ defmodule MaestroTui.UI do
     end
 
     defp dispatch("write_file", json, base) do
-      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.WriteFile.run(args, base_cwd: base)
+      tlog("dispatch: write_file")
+      with {:ok, args} <- Jason.decode(json) do
+        tlog("dispatch: calling WriteFile.run")
+        TheMaestro.Tools.WriteFile.run(args, base_cwd: base)
+      end
     end
     defp dispatch("write", json, base), do: dispatch("write_file", json, base)
     defp dispatch("create_file", json, base), do: dispatch("write_file", json, base)
     defp dispatch("shell", json, base) do
-      with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Shell.run(args, base_cwd: base)
+      tlog("dispatch: shell")
+      with {:ok, args} <- Jason.decode(json) do
+        tlog("dispatch: calling Shell.run with #{inspect(args)}")
+        TheMaestro.Tools.Shell.run(args, base_cwd: base)
+      end
     end
     defp dispatch("bash", json, base), do: dispatch("shell", json, base)
     defp dispatch("run_shell_command", json, base), do: dispatch("shell", json, base)
     defp dispatch("list_directory", json, base) do
+      tlog("dispatch: list_directory")
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.ListDirectory.run(args, base_cwd: base)
     end
     defp dispatch("glob", json, base) do
+      tlog("dispatch: glob")
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Glob.run(args, base_cwd: base)
     end
     defp dispatch("grep", json, base) do
+      tlog("dispatch: grep")
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.Grep.run(args, base_cwd: base)
     end
     defp dispatch("edit", json, base) do
+      tlog("dispatch: edit")
       with {:ok, args} <- Jason.decode(json),
            {:ok, payload, _} <- TheMaestro.Tools.Edit.run(args, base_cwd: base) do
         {:ok, payload}
       end
     end
     defp dispatch("multi_edit", json, base) do
+      tlog("dispatch: multi_edit")
       with {:ok, args} <- Jason.decode(json),
            {:ok, payload, _} <- TheMaestro.Tools.MultiEdit.run(args, base_cwd: base) do
         {:ok, payload}
       end
     end
     defp dispatch("apply_patch", json, base) do
-      with {:ok, %{"input" => input}} <- Jason.decode(json), do: TheMaestro.Tools.ApplyPatch.run(input, base_cwd: base)
+      tlog("dispatch: apply_patch")
+      tlog("dispatch: apply_patch json=#{String.slice(json, 0, 200)}")
+      with {:ok, %{"input" => input}} <- Jason.decode(json) do
+        tlog("dispatch: calling ApplyPatch.run")
+        TheMaestro.Tools.ApplyPatch.run(input, base_cwd: base)
+      end
     end
     defp dispatch("notebook_edit", json, base) do
+      tlog("dispatch: notebook_edit")
       with {:ok, args} <- Jason.decode(json), do: TheMaestro.Tools.NotebookEdit.run(args, base_cwd: base)
     end
-    defp dispatch(_other, _json, _base), do: {:error, "unsupported tool"}
+    defp dispatch(other, _json, _base) do
+      tlog("dispatch: UNSUPPORTED TOOL #{other}")
+      {:error, "unsupported tool"}
+    end
 
     # ----- UI message handling -----
     # ----- Event-driven rendering for SSE frames -----
@@ -566,53 +691,165 @@ defmodule MaestroTui.UI do
     end
 
     defp handle_turn_frame(%State{} = s, sid, %{"kind" => kind} = frame) do
+      tlog("FRAME: kind=#{kind} stream=#{sid}")
+
       case kind do
         "usage" ->
           usage = frame["payload"] || %{}
+          tlog("FRAME usage: #{inspect(usage)}")
           append_line(s, stamp_line("usage", format_usage(usage)))
         "function_call" ->
           calls = get_in(frame, ["payload", "calls"]) || []
-          s1 = Enum.reduce(calls, s, fn %{"name" => name, "arguments" => args_json}, acc ->
+          tlog("FRAME function_call: #{length(calls)} calls")
+          tlog("FRAME function_call: frame keys = #{inspect(Map.keys(frame))}")
+          tlog("FRAME function_call: payload keys = #{inspect(Map.keys(frame["payload"] || %{}))}")
+
+          session_id = get_in(frame, ["session_id"]) || s.session_id
+          workdir = get_in(frame, ["workdir"]) || s.working_dir
+          tlog("FRAME function_call: session_id=#{inspect(session_id)} workdir=#{inspect(workdir)}")
+
+          s1 = Enum.reduce(calls, s, fn call, acc ->
+            tlog("FRAME function_call: processing call with keys=#{inspect(Map.keys(call))}")
+
+            name = Map.get(call, "name")
+            args_json = Map.get(call, "arguments")
+            call_id = Map.get(call, "id") || Map.get(call, "call_id") || "no-id-#{:rand.uniform(10000)}"
+
+            tlog("FRAME function_call: name=#{inspect(name)} call_id=#{inspect(call_id)}")
+            args_type = try do
+              inspect(args_json.__struct__)
+            rescue
+              _ -> :not_struct
+            end
+            tlog("FRAME function_call: args_json type=#{args_type} length=#{byte_size(to_string(args_json || ""))}")
+
             prev = String.slice(to_string(args_json || "{}"), 0, 120)
-            append_line(acc, stamp_line("tool use", to_string(name) <> " args=" <> prev))
+            tlog("FRAME function_call: args preview: #{prev}")
+            acc1 = append_line(acc, stamp_line("tool use", to_string(name) <> " args=" <> prev))
+
+            # Execute IO tools locally
+            is_io = io_tool?(name)
+            tlog("FRAME function_call: io_tool?(#{name}) = #{is_io}")
+
+            if is_io do
+              tlog("FRAME function_call: spawning tool execution for #{name}")
+              spawn(fn ->
+                tlog("TOOL EXEC START: #{name} with workdir=#{workdir}")
+                result = exec_local(name, args_json, workdir)
+                tlog("TOOL EXEC DONE: #{name} result=#{inspect(result) |> String.slice(0, 200)}")
+                post_tool_result(session_id, sid, call_id, name, result)
+              end)
+            else
+              tlog("FRAME function_call: skipping non-IO tool #{name}")
+            end
+
+            acc1
           end)
-          put_in_stream(s1, sid, &Map.put(&1, :tool_pending?, true))
+          # Clear assistant buffer - pre-tool text already displayed, don't re-show it
+          tlog("FRAME function_call: clearing assistant buffers")
+          put_in_stream(s1, sid, fn st ->
+            st
+            |> Map.put(:tool_pending?, true)
+            |> Map.put(:assistant_buf, "")
+            |> Map.put(:assistant_streaming_idx, nil)
+          end)
         "tool_result" ->
           prev = get_in(frame, ["payload", "preview"]) || ""
+          tlog("FRAME tool_result: preview=#{String.slice(prev, 0, 50)}")
           s1 = append_line(s, stamp_line("tool result", String.slice(to_string(prev), 0, 160)))
-          s2 = put_in_stream(s1, sid, fn st ->
-            buf = (st[:assistant_buf] || "") <> to_string(st[:pending_assistant_text] || "")
-            st |> Map.put(:assistant_buf, buf) |> Map.put(:pending_assistant_text, "") |> Map.put(:tool_pending?, false)
+          # Just clear tool_pending flag - don't re-display anything
+          # Post-tool assistant text will arrive in new assistant_text frames
+          tlog("FRAME tool_result: clearing tool_pending, ready for new assistant text")
+          put_in_stream(s1, sid, fn st ->
+            st
+            |> Map.put(:tool_pending?, false)
+            |> Map.put(:pending_assistant_text, "")
+            |> Map.put(:assistant_streaming_idx, nil)
           end)
-          st = get_stream(s2, sid)
-          if (st[:assistant_buf] || "") != "" do
-            update_assistant_line(s2, sid, st[:assistant_buf])
-          else
-            s2
-          end
         "assistant_text" ->
-          d = to_string(get_in(frame, ["payload", "delta"]) || "")
+          tlog("FRAME assistant_text: payload keys=#{inspect(Map.keys(frame["payload"] || %{}))}")
+          raw_delta = get_in(frame, ["payload", "delta"])
+          delta_type = try do
+            inspect(raw_delta.__struct__)
+          rescue
+            _ -> :not_struct
+          end
+          tlog("FRAME assistant_text: raw_delta type=#{delta_type}")
+          tlog("FRAME assistant_text: raw_delta inspect=#{inspect(raw_delta) |> String.slice(0, 100)}")
+
+          d = to_string(raw_delta || "")
+          tlog("FRAME assistant_text: delta string=#{String.slice(d, 0, 50)}")
+          tlog("FRAME assistant_text: delta hex_dump=#{hex_dump(d)}")
+          tlog("FRAME assistant_text: tool_pending=#{Map.get(get_stream(s, sid), :tool_pending?, false)}")
+
           s1 = put_in_stream(s, sid, fn st ->
-            if Map.get(st, :tool_pending?, false), do: Map.update(st, :pending_assistant_text, d, &(&1 <> d)), else: Map.update(st, :assistant_buf, d, &(&1 <> d))
+            if Map.get(st, :tool_pending?, false) do
+              tlog("FRAME assistant_text: adding to pending_assistant_text")
+              Map.update(st, :pending_assistant_text, d, &(&1 <> d))
+            else
+              tlog("FRAME assistant_text: adding to assistant_buf")
+              Map.update(st, :assistant_buf, d, &(&1 <> d))
+            end
           end)
           st = get_stream(s1, sid)
           if not Map.get(st, :tool_pending?, false) do
+            tlog("FRAME assistant_text: calling update_assistant_line buf_size=#{byte_size(st[:assistant_buf] || "")}")
+            tlog("FRAME assistant_text: buf content=#{String.slice(st[:assistant_buf] || "", 0, 100)}")
             update_assistant_line(s1, sid, st[:assistant_buf] || "")
           else
+            tlog("FRAME assistant_text: buffering in pending_assistant_text, size=#{byte_size(st[:pending_assistant_text] || "")}")
             s1
           end
         "assistant_thinking" ->
           content = to_string(get_in(frame, ["payload", "content"]) || "")
+          tlog("FRAME assistant_thinking: content_len=#{byte_size(content)}")
           s1 = put_in_stream(s, sid, fn st -> st |> Map.put(:has_thinking, true) |> Map.update(:thinking_buf, content, &(&1 <> content)) end)
           update_thinking_line(s1, sid)
         "final" ->
+          tlog("FRAME final")
           content = to_string(get_in(frame, ["payload", "content"]) || "")
+          tlog("FRAME final: content_len=#{byte_size(content)}")
           st = get_stream(s, sid)
-          base = (st[:assistant_buf] || "") <> to_string(st[:pending_assistant_text] || "")
-          text = if content != "", do: content, else: base
-          s1 = if text != "", do: update_assistant_line(s, sid, text), else: s
-          s2 = append_line(s1, stamp_line("final", ""))
-          put_in_stream(s2, sid, fn st2 -> st2 |> Map.put(:assistant_buf, "") |> Map.put(:assistant_shown, "") |> Map.put(:pending_assistant_text, "") |> Map.put(:tool_pending?, false) |> Map.put(:has_thinking, false) end)
+          shown = st[:assistant_shown] || ""
+          tlog("FRAME final: assistant_shown_len=#{byte_size(shown)}")
+
+          # Check if final content has new text beyond what was already shown
+          s1 = cond do
+            # If there's buffered text, show it (edge case: text arrived after last tool)
+            (st[:assistant_buf] || "") != "" ->
+              buf = (st[:assistant_buf] || "") <> to_string(st[:pending_assistant_text] || "")
+              tlog("FRAME final: showing buffered text (#{byte_size(buf)} bytes)")
+              update_assistant_line(s, sid, buf)
+
+            # If final content is longer than what we've shown, extract the new portion
+            byte_size(content) > byte_size(shown) ->
+              # The final content contains everything, but shown has "\n\n" separators
+              # We need to find if there's truly new content beyond what was shown
+              # For now, if content is longer and different, show it as new line
+              if not String.contains?(shown, content) do
+                tlog("FRAME final: showing new content from final frame")
+                # Since shown accumulates with "\n\n", we can't do simple string slice
+                # Just show the complete final content if it's different
+                update_assistant_line(s, sid, content)
+              else
+                tlog("FRAME final: content already shown")
+                s
+              end
+
+            true ->
+              tlog("FRAME final: no new content to display")
+              s
+          end
+
+          # Don't append empty "final:" line
+          put_in_stream(s1, sid, fn st2 ->
+            st2
+            |> Map.put(:assistant_buf, "")
+            |> Map.put(:assistant_shown, "")
+            |> Map.put(:pending_assistant_text, "")
+            |> Map.put(:tool_pending?, false)
+            |> Map.put(:has_thinking, false)
+          end)
         _ -> s
       end
     end
@@ -623,6 +860,8 @@ defmodule MaestroTui.UI do
     @slash_cmds [
       %{name: "context", desc: "Show context and token usage", type: :action},
       %{name: "model", desc: "Change model", type: :menu},
+      %{name: "auth", desc: "Change authentication", type: :menu},
+      %{name: "provider", desc: "Change provider/auth/model", type: :wizard},
       %{name: "help", desc: "Show help and keybindings", type: :action},
       %{name: "clear", desc: "Clear chat context and start new", type: :action},
       %{name: "thinking", desc: "Set thinking visibility: collapsed|expanded|hidden", type: :action},
@@ -647,6 +886,17 @@ defmodule MaestroTui.UI do
           else
             %State{s | modal: {:model_picker, items, 0}, input: ""}
           end
+
+        %{name: "auth"} ->
+          auths = if s.auths != [], do: s.auths, else: (case pick_auths(s.provider) do {:ok, {_, list}} -> list; _ -> [] end)
+          if auths == [] do
+            %State{s | log: s.log ++ ["No auths available for provider: #{s.provider || "none"}"], input: ""}
+          else
+            %State{s | modal: {:auth_picker, auths, 0}, input: ""}
+          end
+
+        %{name: "provider"} ->
+          %State{s | modal: {:provider_wizard, %{step: :provider, prov_idx: 0, auth_idx: 0, model_idx: 0, selected_provider: nil, selected_auth: nil, selected_model: nil}}, input: ""}
 
         %{name: "help"} ->
           %State{s | log: s.log ++ help_lines(), input: ""}
@@ -731,17 +981,185 @@ defmodule MaestroTui.UI do
       end
     end
 
+    defp render_modal(%State{modal: {:auth_picker, items, idx}}) do
+      import Ratatouille.View
+      panel title: "Select Authentication" do
+        for {auth, i} <- Enum.with_index(items) do
+          label(content: list_item(auth, i == idx))
+        end
+        label(content: "Enter=select  Esc=cancel  ↑/↓=move")
+      end
+    end
+
+    defp render_modal(%State{modal: {:provider_wizard, wiz_state}, providers: providers} = s) do
+      import Ratatouille.View
+      step = wiz_state.step
+      prov_idx = wiz_state.prov_idx
+      auth_idx = wiz_state.auth_idx
+      model_idx = wiz_state.model_idx
+
+      auths = get_wizard_auths(wiz_state, s)
+      models = get_wizard_models(wiz_state, s)
+
+      panel title: "Provider / Auth / Model Wizard" do
+        label(content: "Arrows=move  Tab=next column  Shift+Tab=prev  Enter=confirm  Esc=cancel")
+        row do
+          column size: 4 do
+            panel title: focus_title(:provider, step) do
+              for {p, i} <- Enum.with_index(providers) do
+                label(content: list_item(p, i == prov_idx))
+              end
+            end
+          end
+          column size: 4 do
+            panel title: focus_title(:auth, step) do
+              if auths == [] do
+                label(content: "loading...")
+              else
+                for {a, i} <- Enum.with_index(auths) do
+                  label(content: list_item(a, i == auth_idx))
+                end
+              end
+            end
+          end
+          column size: 4 do
+            panel title: focus_title(:model, step) do
+              if models == [] do
+                label(content: "loading...")
+              else
+                for {m, i} <- Enum.with_index(models) do
+                  label(content: list_item(m, i == model_idx))
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
     defp modal_move(%State{modal: {:model_picker, items, idx}} = s, delta) do
       maxi = max(length(items) - 1, 0)
       i = clamp(idx + delta, 0, maxi)
       %State{s | modal: {:model_picker, items, i}}
     end
+
+    defp modal_move(%State{modal: {:auth_picker, items, idx}} = s, delta) do
+      maxi = max(length(items) - 1, 0)
+      i = clamp(idx + delta, 0, maxi)
+      %State{s | modal: {:auth_picker, items, i}}
+    end
+
+    defp modal_move(%State{modal: {:provider_wizard, wiz_state}} = s, delta) do
+      step = wiz_state.step
+      updated_wiz =
+        case step do
+          :provider ->
+            maxi = max(length(s.providers) - 1, 0)
+            %{wiz_state | prov_idx: clamp(wiz_state.prov_idx + delta, 0, maxi)}
+
+          :auth ->
+            auths = get_wizard_auths(wiz_state, s)
+            maxi = max(length(auths) - 1, 0)
+            %{wiz_state | auth_idx: clamp(wiz_state.auth_idx + delta, 0, maxi)}
+
+          :model ->
+            models = get_wizard_models(wiz_state, s)
+            maxi = max(length(models) - 1, 0)
+            %{wiz_state | model_idx: clamp(wiz_state.model_idx + delta, 0, maxi)}
+        end
+
+      %State{s | modal: {:provider_wizard, updated_wiz}}
+    end
+
     defp modal_move(s, _), do: s
 
     defp handle_modal_enter(%State{modal: {:model_picker, items, idx}} = s) do
       mdl = Enum.at(items, idx)
-      %State{s | model: mdl, modal: nil, log: s.log ++ ["model set: " <> to_string(mdl)]}
+
+      # Update session and save settings
+      case s.session_id do
+        sid when is_binary(sid) ->
+          case API.update_session(sid, s.auth_id, mdl) do
+            {:ok, _} ->
+              save_current_settings(s.provider, s.auth_id, mdl)
+              %State{s | model: mdl, modal: nil, log: s.log ++ ["Model updated: " <> to_string(mdl)]}
+
+            {:error, _} ->
+              %State{s | modal: nil, log: s.log ++ ["Failed to update session"]}
+          end
+
+        _ ->
+          # No session yet, just save settings
+          save_current_settings(s.provider, s.auth_id, mdl)
+          %State{s | model: mdl, modal: nil, log: s.log ++ ["Model set: " <> to_string(mdl)]}
+      end
     end
+
+    defp handle_modal_enter(%State{modal: {:auth_picker, items, idx}} = s) do
+      auth = Enum.at(items, idx)
+
+      # Update session and save settings
+      case s.session_id do
+        sid when is_binary(sid) ->
+          case API.update_session(sid, auth, s.model) do
+            {:ok, _} ->
+              save_current_settings(s.provider, auth, s.model)
+              %State{s | auth_id: auth, modal: nil, log: s.log ++ ["Auth updated: " <> String.slice(to_string(auth), 0, 8) <> "..."]}
+
+            {:error, _} ->
+              %State{s | modal: nil, log: s.log ++ ["Failed to update session"]}
+          end
+
+        _ ->
+          # No session yet, just save settings
+          save_current_settings(s.provider, auth, s.model)
+          %State{s | auth_id: auth, modal: nil, log: s.log ++ ["Auth set: " <> String.slice(to_string(auth), 0, 8) <> "..."]}
+      end
+    end
+
+    defp handle_modal_enter(%State{modal: {:provider_wizard, wiz_state}} = s) do
+      step = wiz_state.step
+
+      case step do
+        :provider ->
+          # Move to auth step
+          selected_prov = Enum.at(s.providers, wiz_state.prov_idx)
+          updated_wiz = %{wiz_state | step: :auth, selected_provider: selected_prov}
+          %State{s | modal: {:provider_wizard, updated_wiz}}
+
+        :auth ->
+          # Move to model step
+          auths = get_wizard_auths(wiz_state, s)
+          selected_auth = Enum.at(auths, wiz_state.auth_idx)
+          updated_wiz = %{wiz_state | step: :model, selected_auth: selected_auth}
+          %State{s | modal: {:provider_wizard, updated_wiz}}
+
+        :model ->
+          # Complete wizard, update session
+          models = get_wizard_models(wiz_state, s)
+          selected_model = Enum.at(models, wiz_state.model_idx)
+          prov = wiz_state.selected_provider
+          auth = wiz_state.selected_auth
+
+          case s.session_id do
+            sid when is_binary(sid) ->
+              case API.update_session(sid, auth, selected_model) do
+                {:ok, _} ->
+                  save_current_settings(prov, auth, selected_model)
+                  %State{s | provider: prov, auth_id: auth, model: selected_model, modal: nil, log: s.log ++ ["Provider/Auth/Model updated"]}
+
+                {:error, _} ->
+                  %State{s | modal: nil, log: s.log ++ ["Failed to update session"]}
+              end
+
+            _ ->
+              # No session yet, just save settings
+              save_current_settings(prov, auth, selected_model)
+              %State{s | provider: prov, auth_id: auth, model: selected_model, modal: nil, log: s.log ++ ["Provider/Auth/Model set"]}
+          end
+      end
+    end
+
     defp handle_modal_enter(s), do: s
     defp close_modal(%State{} = s), do: %State{s | modal: nil}
 
@@ -750,6 +1168,10 @@ defmodule MaestroTui.UI do
     def cycle_provider(%State{providers: provs, provider: pv} = s) do
       idx = Enum.find_index(provs, & &1 == pv) || 0
       nxt = Enum.at(provs, rem(idx + 1, length(provs)))
+
+      # Save settings when provider changes
+      save_current_settings(s.provider, s.auth_id, s.model)
+
       %State{s | provider: nxt}
     end
 
@@ -757,15 +1179,111 @@ defmodule MaestroTui.UI do
     def cycle_auth(%State{auths: [_]} = s), do: s
     def cycle_auth(%State{auths: auths, auth_id: aid} = s) do
       idx = Enum.find_index(auths, & &1 == aid) || 0
-      %State{s | auth_id: Enum.at(auths, rem(idx + 1, length(auths)))}
+      next_auth = Enum.at(auths, rem(idx + 1, length(auths)))
+
+      # Save settings when auth changes
+      save_current_settings(s.provider, next_auth, s.model)
+
+      %State{s | auth_id: next_auth}
     end
 
     def cycle_model(%State{models: []} = s), do: s
     def cycle_model(%State{models: [_]} = s), do: s
     def cycle_model(%State{models: models, model: mdl} = s) do
       idx = Enum.find_index(models, & &1 == mdl) || 0
-      %State{s | model: Enum.at(models, rem(idx + 1, length(models)))}
+      next_model = Enum.at(models, rem(idx + 1, length(models)))
+
+      # Save settings when model changes
+      save_current_settings(s.provider, s.auth_id, next_model)
+
+      %State{s | model: next_model}
     end
+
+    defp save_current_settings(provider, auth_id, model) do
+      settings = MaestroTui.Config.load_settings()
+
+      updated_settings = %{
+        settings
+        | last_provider: provider,
+          last_auth_id: auth_id,
+          last_model: model
+      }
+
+      MaestroTui.Config.save_settings(updated_settings)
+    end
+
+    defp get_wizard_auths(wiz_state, _s) do
+      case wiz_state.selected_provider do
+        nil -> []
+        prov ->
+          case pick_auths(prov) do
+            {:ok, {_, list}} -> list
+            _ -> []
+          end
+      end
+    end
+
+    defp get_wizard_models(wiz_state, _s) do
+      case {wiz_state.selected_provider, wiz_state.selected_auth} do
+        {prov, auth} when is_binary(prov) and is_binary(auth) ->
+          case pick_models(prov, auth) do
+            {:ok, {_, list}} -> list
+            _ -> []
+          end
+
+        _ ->
+          []
+      end
+    end
+
+    defp wizard_next_step(%State{modal: {:provider_wizard, wiz_state}} = s) do
+      step = wiz_state.step
+
+      updated_wiz =
+        case step do
+          :provider ->
+            # Save selected provider and move to auth
+            selected_prov = Enum.at(s.providers, wiz_state.prov_idx)
+            %{wiz_state | step: :auth, selected_provider: selected_prov, auth_idx: 0}
+
+          :auth ->
+            # Save selected auth and move to model
+            auths = get_wizard_auths(wiz_state, s)
+            selected_auth = Enum.at(auths, wiz_state.auth_idx)
+            %{wiz_state | step: :model, selected_auth: selected_auth, model_idx: 0}
+
+          :model ->
+            # Already at last step
+            wiz_state
+        end
+
+      %State{s | modal: {:provider_wizard, updated_wiz}}
+    end
+
+    defp wizard_next_step(s), do: s
+
+    defp wizard_prev_step(%State{modal: {:provider_wizard, wiz_state}} = s) do
+      step = wiz_state.step
+
+      updated_wiz =
+        case step do
+          :provider ->
+            # Already at first step
+            wiz_state
+
+          :auth ->
+            # Move back to provider
+            %{wiz_state | step: :provider}
+
+          :model ->
+            # Move back to auth
+            %{wiz_state | step: :auth}
+        end
+
+      %State{s | modal: {:provider_wizard, updated_wiz}}
+    end
+
+    defp wizard_prev_step(s), do: s
 
     # Event helpers
     defp event_key?(%{key: code}, name) when is_integer(code), do: code == key(name)
@@ -807,6 +1325,7 @@ defmodule MaestroTui.UI do
         assistant_streaming_idx: nil,
         pending_assistant_text: "",
         tool_pending?: false,
+        tools_called?: false,
         has_thinking: false,
         thinking_buf: "",
         thinking_streaming_idx: nil
@@ -827,13 +1346,22 @@ defmodule MaestroTui.UI do
       st = get_stream(s, stream_id)
       case st[:assistant_streaming_idx] do
         i when is_integer(i) and i >= 1 ->
+          # Updating existing line - replace in transcript, but keep same assistant_shown
           tr = replace_at(s.transcript || [], i, stamp_line("assistant", text))
           s1 = %State{s | transcript: tr}
           put_in_stream(s1, stream_id, fn st2 -> Map.put(st2, :assistant_shown, text) end)
         _ ->
+          # Creating new line - add to transcript and accumulate assistant_shown
           idx = length(s.transcript || []) + 1
           s1 = add_transcript(s, stamp_line("assistant", text))
-          put_in_stream(s1, stream_id, fn st2 -> st2 |> Map.put(:assistant_streaming_idx, idx) |> Map.put(:assistant_shown, text) end)
+          put_in_stream(s1, stream_id, fn st2 ->
+            prev_shown = st2[:assistant_shown] || ""
+            # Accumulate all assistant text that's been shown
+            new_shown = if prev_shown != "", do: prev_shown <> "\n\n" <> text, else: text
+            st2
+            |> Map.put(:assistant_streaming_idx, idx)
+            |> Map.put(:assistant_shown, new_shown)
+          end)
       end
     end
 

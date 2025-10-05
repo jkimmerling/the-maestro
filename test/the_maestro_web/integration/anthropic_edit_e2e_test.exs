@@ -30,7 +30,7 @@ defmodule TheMaestroWeb.Integration.AnthropicEditE2ETest do
   test "edit non-unique without replace_all returns Claude-copy error; tool_use/tool_result shapes asserted",
        %{session: session} do
     base = File.cwd!()
-    rel = "tmp/e2e_anthropic_edit.txt"
+    rel = "tmp/anthropic_edit/e2e_anthropic_edit.txt"
     abs = Path.join(base, rel)
     File.rm_rf!(Path.dirname(abs))
     File.mkdir_p!(Path.dirname(abs))

@@ -23,7 +23,7 @@ defmodule TheMaestro.Tools.ViewImageTest do
 
     # create temp image file
     base = File.cwd!()
-    path = Path.join(base, "tmp/test-image.png")
+    path = Path.join(base, "tmp/view_image/test-image.png")
     File.rm_rf!(Path.dirname(path))
     File.mkdir_p!(Path.dirname(path))
     # PNG signature

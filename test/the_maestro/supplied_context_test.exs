@@ -25,6 +25,7 @@ defmodule TheMaestro.SuppliedContextTest do
       user_created_items =
         SuppliedContext.list_supplied_context_items()
         |> Enum.reject(&(&1.editor == "system"))
+
       assert user_created_items == [supplied_context_item]
     end
 

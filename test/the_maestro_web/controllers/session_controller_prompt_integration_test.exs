@@ -1,5 +1,5 @@
 defmodule TheMaestroWeb.SessionControllerPromptIntegrationTest do
-  use TheMaestroWeb.ConnCase, async: true
+  use TheMaestroWeb.ConnCase, async: false
 
   alias TheMaestro.Auth
   alias TheMaestro.Conversations

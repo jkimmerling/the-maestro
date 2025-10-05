@@ -41,7 +41,7 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   defp validate_messages(messages) when is_list(messages) and messages != [], do: {:ok, messages}
   defp validate_messages(_), do: {:error, :empty_messages}
 
-  defp do_stream_chat(:api_key, req, _session_name, messages, opts) do
+  defp do_stream_chat(:api_key, req, session_name, messages, opts) do
     model = Keyword.get(opts, :model)
 
     if is_nil(model) or model == "" do
@@ -50,10 +50,14 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
       model_path = normalize_model_for_api(model, :genlang)
       system_instruction = resolve_system_instruction(Keyword.get(opts, :decl_session_id))
 
+      ui_msg = user_instructions_message()
+      env_msg = build_env_context_message(session_name)
+      mh = model_history_items(Keyword.get(opts, :decl_session_id))
+
       payload =
         %{
           "model" => model_path,
-          "contents" => ensure_gemini_contents(messages),
+          "contents" => [ui_msg, env_msg] ++ mh ++ ensure_gemini_contents(messages),
           "stream" => true
         }
         |> maybe_put_system_instruction(system_instruction)
@@ -76,7 +80,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
       StreamingAdapter.stream_request(req,
         method: :post,
         url: "/v1beta/#{model_path}:streamGenerateContent",
-        json: payload
+        json: payload,
+        provider: :gemini
       )
     end
   end
@@ -116,11 +121,13 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     m0 = strip_models_prefix(model)
     m = if m0 == "gemini-2.5-pro", do: m0, else: "gemini-2.5-pro"
 
-    contents =
-      [build_env_context_message(session_name) | ensure_gemini_contents(messages)]
-
     decl_session_id =
       Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
+
+    ui_msg = user_instructions_message()
+    env_msg = build_env_context_message(session_name)
+    mh = model_history_items(decl_session_id)
+    contents = [ui_msg, env_msg] ++ mh ++ ensure_gemini_contents(messages)
 
     system_instruction = resolve_system_instruction(decl_session_id)
 
@@ -168,7 +175,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
       method: :post,
       url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
       json: payload,
-      timeout: Keyword.get(opts, :timeout, :infinity)
+      timeout: Keyword.get(opts, :timeout, :infinity),
+      provider: :gemini
     )
   end
 
@@ -225,7 +233,16 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     decl_session_id =
       Keyword.get(opts, :decl_session_id) || resolve_decl_session_id(session_name, :oauth)
 
-    request = build_followup_request(contents, session_uuid, decl_session_id)
+    ui_msg = user_instructions_message()
+    env_msg = build_env_context_message(session_name)
+
+    request =
+      build_followup_request(
+        [ui_msg, env_msg] ++ model_history_items(decl_session_id) ++ contents,
+        session_uuid,
+        decl_session_id
+      )
+
     payload = build_followup_payload(model, project, session_uuid, request)
     req = maybe_http_debug(req, payload)
 
@@ -236,7 +253,8 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
       method: :post,
       url: "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
       json: payload,
-      timeout: Keyword.get(opts, :timeout, :infinity)
+      timeout: Keyword.get(opts, :timeout, :infinity),
+      provider: :gemini
     )
   end
 
@@ -290,6 +308,80 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
   end
 
   # -- Tools exposure for Gemini --
+  defp model_history_items(nil), do: []
+
+  defp model_history_items(session_id) when is_binary(session_id) do
+    case Conversations.latest_snapshot(session_id) do
+      %Conversations.ChatEntry{response_headers: %{} = rh} ->
+        mh = Map.get(rh, "model_history", [])
+        if is_list(mh), do: to_gemini_contents(mh), else: []
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
+  defp to_gemini_contents(items) when is_list(items) do
+    Enum.flat_map(items, &to_gemini_content_item/1)
+  end
+
+  defp to_gemini_content_item(%{
+         "type" => "message",
+         "role" => role,
+         "content" => [%{"type" => _ct, "text" => txt}]
+       })
+       when is_binary(txt) do
+    r = if role == "assistant", do: "model", else: "user"
+    [%{"role" => r, "parts" => [%{"text" => txt}]}]
+  end
+
+  defp to_gemini_content_item(%{
+         "type" => "function_call",
+         "call_id" => id,
+         "name" => name,
+         "arguments" => args_json
+       }) do
+    args =
+      case Jason.decode(to_string(args_json || "{}")) do
+        {:ok, m} -> m
+        _ -> %{}
+      end
+
+    [
+      %{
+        "role" => "model",
+        "parts" => [%{"functionCall" => %{"name" => name, "args" => args, "id" => id}}]
+      }
+    ]
+  end
+
+  defp to_gemini_content_item(%{
+         "type" => "function_call_output",
+         "call_id" => id,
+         "output" => out_json
+       }) do
+    response =
+      case Jason.decode(to_string(out_json || "{}")) do
+        {:ok, m} -> m
+        _ -> %{"output" => to_string(out_json || "")}
+      end
+
+    name = Map.get(response, "name") || "tool"
+
+    [
+      %{
+        "role" => "tool",
+        "parts" => [
+          %{"functionResponse" => %{"name" => name, "id" => id, "response" => response}}
+        ]
+      }
+    ]
+  end
+
+  defp to_gemini_content_item(_), do: []
+
   defp function_declarations_for_session(session_id),
     do: ToolSurface.resolve_for_provider_decl(:gemini, session_id)
 
@@ -433,6 +525,20 @@ defmodule TheMaestro.Providers.Gemini.Streaming do
     """
 
     %{"role" => "user", "parts" => [%{"text" => String.trim(text)}]}
+  end
+
+  defp user_instructions_message do
+    %{
+      "role" => "user",
+      "parts" => [
+        %{
+          "text" =>
+            PromptDefaults.gemini_system_instruction()["parts"]
+            |> List.first()
+            |> Map.get("text", PromptDefaults.openai_prompt())
+        }
+      ]
+    }
   end
 
   defp safe_session_cwd(session_id) do

@@ -387,6 +387,12 @@ defmodule TheMaestro.Sessions.Manager do
             end
 
           if delta == "" do
+            require Logger
+
+            Logger.debug(
+              "[FRAME] Dropping empty content delta session=#{session_id} idx=#{acc.frame_idx}"
+            )
+
             st = put_in(st, [session_id, :acc, :meta, :last_delta], "")
             {:noreply, st}
           else
@@ -416,9 +422,17 @@ defmodule TheMaestro.Sessions.Manager do
         new_state =
           case acc do
             %{tool_calls: calls} when is_list(calls) and calls != [] ->
+              require Logger
+
+              Logger.debug(
+                "[STREAM_DONE] tool_calls_present session=#{session_id} count=#{length(calls)}"
+              )
+
               run_tools_and_followup(session_id, stream_id, st)
 
             _ ->
+              require Logger
+              Logger.debug("[STREAM_DONE] no_tool_calls session=#{session_id} finalizing")
               finalize_and_persist(session_id, stream_id, st)
               st
           end
@@ -431,20 +445,48 @@ defmodule TheMaestro.Sessions.Manager do
   end
 
   def handle_cast({:stream_done_followup, session_id, stream_id}, st) do
+    require Logger
+
     case Map.get(st, session_id) do
       %{stream_id: ^stream_id, acc: acc} ->
         calls = (acc && acc.tool_calls) || []
         rounds = (acc && acc.meta && acc.meta[:followup_rounds]) || 0
+        continuing? = is_list(calls) and calls != [] and rounds < 300
+
+        Logger.debug(
+          "[FOLLOWUP] stream_done_followup session=#{session_id} rounds=#{rounds} calls=#{length(calls)} continuing?=#{continuing?}"
+        )
 
         new_state =
-          if is_list(calls) and calls != [] and rounds < 3 do
+          if continuing? do
             run_tools_and_followup(session_id, stream_id, st)
           else
+            if rounds >= 300 do
+              Logger.warning(
+                "[FOLLOWUP] Hit 300 round limit for session=#{session_id}, finalizing"
+              )
+            end
+
             finalize_and_persist(session_id, stream_id, st)
-            st
+            put_in(st, [session_id, :acc, :meta, :followup_rounds], 0)
           end
 
         {:noreply, new_state}
+
+      _ ->
+        {:noreply, st}
+    end
+  end
+
+  def handle_cast({:reset_followup_counter, session_id}, st) do
+    require Logger
+    Logger.debug("[FOLLOWUP] Resetting followup counter for session=#{session_id}")
+
+    case Map.get(st, session_id) do
+      %{acc: acc} = entry ->
+        updated_acc = put_in(acc, [:meta, :followup_rounds], 0)
+        updated_entry = %{entry | acc: updated_acc}
+        {:noreply, Map.put(st, session_id, updated_entry)}
 
       _ ->
         {:noreply, st}
@@ -455,6 +497,12 @@ defmodule TheMaestro.Sessions.Manager do
         {:tool_result_posted, session_id, stream_id, %{id: id, output: output} = _result},
         st
       ) do
+    require Logger
+
+    Logger.debug(
+      "[TOOL_RESULT] Posted id=#{id} output_len=#{byte_size(to_string(output))} preview=#{String.slice(to_string(output), 0, 100)}"
+    )
+
     case Map.get(st, session_id) do
       %{stream_id: ^stream_id, acc: %{meta: meta} = _acc} ->
         pending = Map.get(meta, :pending_calls, [])
@@ -471,6 +519,10 @@ defmodule TheMaestro.Sessions.Manager do
           if MapSet.subset?(remote_ids, have_ids) do
             order_ids = Map.get(meta, :followup_order_ids) || Enum.map(pending, & &1["id"])
             outputs = Enum.map(order_ids, fn cid -> {cid, {:ok, Map.get(results, cid)}} end)
+
+            Logger.debug(
+              "[TOOL_RESULT] All results received, running followup with #{length(outputs)} outputs"
+            )
 
             Enum.each(outputs, fn {cid, {:ok, out}} ->
               if cid in MapSet.to_list(remote_ids) do
@@ -495,6 +547,10 @@ defmodule TheMaestro.Sessions.Manager do
             st = run_followup_with_outputs(session_id, stream_id, outputs, st)
             {:noreply, st}
           else
+            Logger.debug(
+              "[TOOL_RESULT] Waiting for more results: have #{MapSet.size(have_ids)}/#{MapSet.size(remote_ids)}"
+            )
+
             {:noreply, st}
           end
         end
@@ -581,15 +637,13 @@ defmodule TheMaestro.Sessions.Manager do
   defp sandbox_owner(_), do: nil
 
   defp maybe_allow_sandbox(owner_pid) when is_pid(owner_pid) do
-    if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
-      try do
-        RepoSandbox.allow(Repo, owner_pid, self())
-        :ok
-      rescue
-        _ -> :ok
-      end
-    else
+    _ = Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox)
+
+    try do
+      RepoSandbox.allow(Repo, owner_pid, self())
       :ok
+    rescue
+      _ -> :ok
     end
   end
 
@@ -744,6 +798,7 @@ defmodule TheMaestro.Sessions.Manager do
             model = meta.model
             {auth_type, auth_name} = auth_meta_from_session(session)
             latency = max(now_ms() - (meta.t0_ms || now_ms()), 0)
+            last_user_text = last_user_text_from(latest)
 
             req_meta = %{
               "provider" => Atom.to_string(provider),
@@ -804,6 +859,22 @@ defmodule TheMaestro.Sessions.Manager do
 
             turn_idx = Conversations.next_turn_index(session_id)
 
+            turn_items =
+              build_turn_response_items(
+                last_user_text,
+                text,
+                Map.get(st[session_id].acc, :tool_calls, []),
+                Map.get(st[session_id].acc, :meta, %{})[:tool_history_acc] || []
+              )
+
+            prev_history =
+              case latest.response_headers do
+                %{} = rh -> Map.get(rh, "model_history", [])
+                _ -> []
+              end
+
+            new_history = merge_history(prev_history, turn_items)
+
             {:ok, entry} =
               Conversations.create_chat_entry(%{
                 session_id: session_id,
@@ -819,7 +890,8 @@ defmodule TheMaestro.Sessions.Manager do
                 response_headers: %{
                   "usage" => usage || %{},
                   "tools" => Map.get(st[session_id].acc, :tool_calls, []),
-                  "tool_history" => (meta && meta[:tool_history_acc]) || []
+                  "tool_history" => (meta && meta[:tool_history_acc]) || [],
+                  "model_history" => new_history
                 },
                 combined_chat:
                   maybe_put_frames(
@@ -873,6 +945,88 @@ defmodule TheMaestro.Sessions.Manager do
         :ok
     end
   end
+
+  defp build_turn_response_items(
+         last_user_text,
+         final_assistant_text,
+         _tool_calls,
+         tool_history_acc
+       ) do
+    user_items =
+      case last_user_text && String.trim(to_string(last_user_text)) do
+        text when is_binary(text) and text != "" ->
+          [
+            %{
+              "type" => "message",
+              "role" => "user",
+              "content" => [%{"type" => "input_text", "text" => text}]
+            }
+          ]
+
+        _ ->
+          []
+      end
+
+    round_items =
+      Enum.flat_map(tool_history_acc, fn entry ->
+        calls = entry[:calls] || entry["calls"] || []
+        outs = entry[:outputs] || entry["outputs"] || []
+
+        fc =
+          Enum.map(calls, fn %{"id" => id, "name" => name, "arguments" => args} ->
+            %{
+              "type" => "function_call",
+              "call_id" => id,
+              "name" => name,
+              "arguments" => args || ""
+            }
+          end)
+
+        fo =
+          Enum.map(outs, fn %{"id" => id, "output" => out} ->
+            %{"type" => "function_call_output", "call_id" => id, "output" => out}
+          end)
+
+        fc ++ fo
+      end)
+
+    assistant_items =
+      if is_binary(final_assistant_text) do
+        [
+          %{
+            "type" => "message",
+            "role" => "assistant",
+            "content" => [%{"type" => "output_text", "text" => final_assistant_text}]
+          }
+        ]
+      else
+        []
+      end
+
+    user_items ++ round_items ++ assistant_items
+  end
+
+  defp merge_history(prev_history, turn_items) do
+    case {List.last(prev_history), turn_items} do
+      {%{"type" => "message", "role" => "user"} = last,
+       [%{"type" => "message", "role" => "user"} = first | rest]} ->
+        if same_user_entry?(last, first),
+          do: prev_history ++ rest,
+          else: prev_history ++ turn_items
+
+      _ ->
+        prev_history ++ turn_items
+    end
+  end
+
+  defp same_user_entry?(
+         %{"content" => [%{"type" => "input_text", "text" => a}]},
+         %{"content" => [%{"type" => "input_text", "text" => b}]}
+       ) do
+    String.trim(to_string(a)) == String.trim(to_string(b))
+  end
+
+  defp same_user_entry?(_, _), do: false
 
   defp maybe_append_tool_history(canon, meta) do
     hist = (meta && meta[:tool_history_acc]) || []
@@ -932,6 +1086,7 @@ defmodule TheMaestro.Sessions.Manager do
   end
 
   defp run_tools_and_followup(session_id, stream_id, st) do
+    require Logger
     entry = Map.get(st, session_id)
     acc = entry.acc
     provider = acc.meta.provider
@@ -954,8 +1109,13 @@ defmodule TheMaestro.Sessions.Manager do
       end)
       |> maybe_guard_resolve_once()
 
+    Logger.debug(
+      "[TOOLS] run_tools_and_followup session=#{session_id} calls=#{length(calls_all)} deduplicated=#{length(calls_to_run)} executed=#{MapSet.size(executed)}"
+    )
+
     # If nothing new to execute, finalize instead of looping
     if calls_to_run == [] do
+      Logger.debug("[TOOLS] No new calls to execute, finalizing")
       finalize_and_persist(session_id, stream_id, st)
       st
     else
@@ -974,6 +1134,8 @@ defmodule TheMaestro.Sessions.Manager do
               {:ok, payload} -> to_string(payload) |> String.slice(0, 200)
               {:error, reason} -> to_string(reason)
             end
+
+          Logger.debug("[TOOL_RESULT_PREVIEW] id=#{id} len=#{String.length(to_string(preview))}")
 
           GenServer.cast(
             __MODULE__,
@@ -994,11 +1156,22 @@ defmodule TheMaestro.Sessions.Manager do
           update_in(st, [session_id, :acc, :meta], fn meta ->
             meta = meta || %{}
 
+            executed2 =
+              Enum.reduce(calls_to_run, meta[:executed_calls] || MapSet.new(), fn %{
+                                                                                    "name" => n,
+                                                                                    "arguments" =>
+                                                                                      a
+                                                                                  },
+                                                                                  accset ->
+                MapSet.put(accset, make_call_sig(n, a))
+              end)
+
             meta
             |> Map.put(:pending_calls, io_calls)
             |> Map.put_new(:results_by_call, %{})
             |> Map.update(:results_by_call, results_map, &Map.merge(&1, results_map))
             |> Map.put(:followup_order_ids, follow_order_ids)
+            |> Map.put(:executed_calls, executed2)
           end)
 
         # If there are no IO calls pending, immediately run follow-up with local outputs
@@ -1027,6 +1200,8 @@ defmodule TheMaestro.Sessions.Manager do
               {:ok, payload} -> to_string(payload) |> String.slice(0, 200)
               {:error, reason} -> to_string(reason)
             end
+
+          Logger.debug("[TOOL_RESULT_PREVIEW] id=#{id} len=#{String.length(to_string(preview))}")
 
           GenServer.cast(__MODULE__, {
             :frame_event,
@@ -1089,16 +1264,48 @@ defmodule TheMaestro.Sessions.Manager do
                   publish_both(session_id, stream_id, msg)
 
                   case msg do
-                    %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
+                    %TheMaestro.Domain.StreamEvent{type: :content, content: chunk, raw: raw}
                     when is_binary(chunk) ->
-                      GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+                      reason? =
+                        is_map(raw) and
+                          (raw[:thinking] || raw["thinking"] || raw[:reasoning] ||
+                             raw["reasoning"])
+
+                      if reason? do
+                        payload =
+                          if is_binary(chunk) and chunk != "",
+                            do: %{"content" => chunk},
+                            else: nil
+
+                        GenServer.cast(
+                          __MODULE__,
+                          {:frame_event, session_id, stream_id, :thinking, payload}
+                        )
+                      else
+                        GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+
+                        GenServer.cast(
+                          __MODULE__,
+                          {:frame_event, session_id, stream_id, :content, chunk}
+                        )
+                      end
 
                     %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
                     when is_list(calls) ->
                       GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
 
+                      GenServer.cast(
+                        __MODULE__,
+                        {:frame_event, session_id, stream_id, :function_call, calls}
+                      )
+
                     %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
                       GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
+
+                      GenServer.cast(
+                        __MODULE__,
+                        {:frame_event, session_id, stream_id, :usage, usage}
+                      )
 
                     _ ->
                       :ok
@@ -1120,13 +1327,15 @@ defmodule TheMaestro.Sessions.Manager do
           end)
 
         # reset accumulators for follow-up turn (keep frames/meta)
+        meta2 = get_in(st, [session_id, :acc, :meta])
+
         st =
           put_in(st, [session_id, :acc], %{
             text: "",
             tool_calls: [],
             usage: nil,
             events: acc.events,
-            meta: acc.meta,
+            meta: meta2,
             frames: acc.frames || [],
             frame_idx: acc.frame_idx || 0
           })
@@ -1141,14 +1350,10 @@ defmodule TheMaestro.Sessions.Manager do
     case Map.get(st, session_id) do
       %{stream_id: ^stream_id, acc: %{meta: meta}} ->
         if Map.get(meta, :pending_calls, []) != [] do
-          publish_turn_frame(session_id, stream_id, %{
-            id: Ecto.UUID.generate(),
-            idx: 0,
-            at_ms: now_ms(),
-            role: "assistant",
-            kind: "tool_result",
-            payload: %{"timeout" => true}
-          })
+          GenServer.cast(
+            __MODULE__,
+            {:frame_event, session_id, stream_id, :tool_result, %{"timeout" => true}}
+          )
         end
 
         {:noreply, st}
@@ -1159,6 +1364,7 @@ defmodule TheMaestro.Sessions.Manager do
   end
 
   defp run_followup_with_outputs(session_id, stream_id, outputs, st) do
+    require Logger
     acc = st[session_id].acc
     provider = acc.meta.provider
     model = acc.meta.model
@@ -1175,7 +1381,20 @@ defmodule TheMaestro.Sessions.Manager do
         :gemini -> build_gemini_items(last_user_text, acc.text, acc.tool_calls || [], outputs)
       end
 
+    Logger.debug(
+      "[FOLLOWUP] Starting followup turn session=#{session_id} stream=#{stream_id} provider=#{provider} outputs=#{length(outputs)}"
+    )
+
+    Logger.debug("[FOLLOWUP] Items being sent to LLM: #{inspect(items) |> String.slice(0, 500)}")
+
     owner_pid = acc.meta && acc.meta[:sandbox_owner]
+
+    # Increment followup rounds and persist in meta for this follow-up turn
+    meta2 =
+      (acc.meta || %{})
+      |> Map.update(:followup_rounds, 1, &(&1 + 1))
+
+    st = put_in(st, [session_id, :acc, :meta], meta2)
 
     {:ok, _task} =
       Task.Supervisor.start_child(TheMaestro.Sessions.TaskSup, fn ->
@@ -1197,16 +1416,41 @@ defmodule TheMaestro.Sessions.Manager do
               publish_both(session_id, stream_id, msg)
 
               case msg do
-                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk}
+                %TheMaestro.Domain.StreamEvent{type: :content, content: chunk, raw: raw}
                 when is_binary(chunk) ->
-                  GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+                  reason? =
+                    is_map(raw) and
+                      (raw[:thinking] || raw["thinking"] || raw[:reasoning] || raw["reasoning"])
+
+                  if reason? do
+                    payload =
+                      if is_binary(chunk) and chunk != "", do: %{"content" => chunk}, else: nil
+
+                    GenServer.cast(
+                      __MODULE__,
+                      {:frame_event, session_id, stream_id, :thinking, payload}
+                    )
+                  else
+                    GenServer.cast(__MODULE__, {:acc_content, session_id, stream_id, chunk})
+
+                    GenServer.cast(
+                      __MODULE__,
+                      {:frame_event, session_id, stream_id, :content, chunk}
+                    )
+                  end
 
                 %TheMaestro.Domain.StreamEvent{type: :function_call, tool_calls: calls}
                 when is_list(calls) ->
                   GenServer.cast(__MODULE__, {:acc_calls, session_id, stream_id, calls})
 
+                  GenServer.cast(
+                    __MODULE__,
+                    {:frame_event, session_id, stream_id, :function_call, calls}
+                  )
+
                 %TheMaestro.Domain.StreamEvent{type: :usage, usage: usage} ->
                   GenServer.cast(__MODULE__, {:acc_usage, session_id, stream_id, usage})
+                  GenServer.cast(__MODULE__, {:frame_event, session_id, stream_id, :usage, usage})
 
                 _ ->
                   :ok
@@ -1232,7 +1476,7 @@ defmodule TheMaestro.Sessions.Manager do
       tool_calls: [],
       usage: nil,
       events: acc.events,
-      meta: acc.meta,
+      meta: meta2,
       frames: acc.frames || [],
       frame_idx: acc.frame_idx || 0
     })
@@ -1321,13 +1565,17 @@ defmodule TheMaestro.Sessions.Manager do
   defp role_for(:user_text), do: "user"
   defp role_for(_), do: "assistant"
 
-  defp build_openai_items(last_user_text, _partial_answer, calls, outputs) do
-    # Mimic Codex: include the last user message to keep the model on task,
-    # then echo function_call(s) and provide function_call_output(s).
+  defp build_openai_items(last_user_text, partial_answer, calls, outputs) do
+    require Logger
+    # Follow-up turn: send the assistant's partial text (if any) along with
+    # the function calls and their outputs so the model can resume coherently.
 
     user_items =
-      case last_user_text && String.trim(to_string(last_user_text)) do
-        text when is_binary(text) and text != "" ->
+      case String.trim(to_string(last_user_text || "")) do
+        "" ->
+          []
+
+        text ->
           [
             %{
               "type" => "message",
@@ -1335,9 +1583,21 @@ defmodule TheMaestro.Sessions.Manager do
               "content" => [%{"type" => "input_text", "text" => text}]
             }
           ]
+      end
 
-        _ ->
+    assistant_items =
+      case String.trim(to_string(partial_answer || "")) do
+        "" ->
           []
+
+        text ->
+          [
+            %{
+              "type" => "message",
+              "role" => "assistant",
+              "content" => [%{"type" => "output_text", "text" => text}]
+            }
+          ]
       end
 
     fc_items =
@@ -1354,7 +1614,24 @@ defmodule TheMaestro.Sessions.Manager do
         }
       end)
 
-    user_items ++ fc_items ++ out_items
+    Logger.debug(
+      "[BUILD_ITEMS] OpenAI followup: user_items=#{length(user_items)} assistant_items=#{length(assistant_items)} fc_items=#{length(fc_items)} out_items=#{length(out_items)}"
+    )
+
+    instruction_item =
+      %{
+        "type" => "message",
+        "role" => "user",
+        "content" => [
+          %{
+            "type" => "input_text",
+            "text" =>
+              "The function calls above have finished. Summarize the results for the user using natural language and do not invoke additional commands unless absolutely required."
+          }
+        ]
+      }
+
+    user_items ++ assistant_items ++ fc_items ++ out_items ++ [instruction_item]
   end
 
   defp assistant_needs_append?(%{"messages" => msgs}, text) when is_list(msgs) do
@@ -1430,12 +1707,15 @@ defmodule TheMaestro.Sessions.Manager do
 
   defp tool_output_payload({:ok, payload}), do: payload
 
-  defp tool_output_payload({:error, msg}),
-    do:
-      Jason.encode!(%{
-        "output" => msg,
-        "metadata" => %{"exit_code" => 1, "duration_seconds" => 0.0}
-      })
+  defp tool_output_payload({:error, msg}) do
+    require Logger
+    Logger.debug("[TOOL_OUTPUT] Encoding error payload: #{inspect(msg)}")
+
+    Jason.encode!(%{
+      "output" => msg,
+      "metadata" => %{"exit_code" => 1, "duration_seconds" => 0.0}
+    })
+  end
 
   defp find_name_for_call(id, calls) do
     case Enum.find(calls, fn c -> c["id"] == id end) do
@@ -1443,6 +1723,9 @@ defmodule TheMaestro.Sessions.Manager do
       _ -> "tool"
     end
   end
+
+  # OpenAI follow-ups include only the last user message (optional),
+  # echoed function_call(s), and matching function_call_output(s).
 
   defp maybe_decode_json(payload) when is_binary(payload) do
     case Jason.decode(payload) do

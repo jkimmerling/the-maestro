@@ -8,7 +8,8 @@ defmodule MaestroTui.MixProject do
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      releases: releases()
+      releases: releases(),
+      elixirc_options: [parallel_checker: false]
     ]
   end
 
@@ -25,7 +26,7 @@ defmodule MaestroTui.MixProject do
     [
       {:jason, "~> 1.4"},
       {:req, "~> 0.5"},
-      {:finch, "~> 0.19.0", override: true},
+      {:finch, "~> 0.20.0", override: true},
       {:ratatouille, "~> 0.5.1"},
       {:bypass, "~> 2.1", only: :test}
     ]
